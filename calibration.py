@@ -31,7 +31,6 @@ class Calibrator(object):
             The platform to use to calculate energies
         """
         self._ligand_oemol = ligand_oemol
-        ligand_prmtop = app.AmberPrmtopFile("hoobajoo")
         self._ligand_system = ligand_prmtop.createSystem(constraints=app.HBonds,implicitSolvent=app.OBC2)
         temperature = 300.0 * units.kelvin
         timestep = 1.0 * units.femtoseconds
