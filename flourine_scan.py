@@ -55,7 +55,7 @@ class FluorineScan(object):
         mol_to_change = oechem.OEMol()
         for atom_index in atoms_to_fluorinate:
             mol_to_change.GetAtom(atom_index).SetAtomicNum(self._fluorine_atomic_num)
-        charges = 
+        charges = gaff2xml.openeye.get_charges(mol_to_change)
 
 
 
