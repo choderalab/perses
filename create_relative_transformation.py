@@ -18,7 +18,7 @@ def generate_openmm_system(molecule):
     system = ff.createSystem(topology)
     return [system, topology]
 
-def create_relative_alchemical_transformation(system, topology, indices, molecule1, molecule2):
+def create_relative_alchemical_transformation(system, topology, molecule1_indices_in_system, molecule1, molecule2):
     """
     Create an OpenMM System object to handle the alchemical transformation from molecule1 to molecule2.
 
@@ -26,10 +26,10 @@ def create_relative_alchemical_transformation(system, topology, indices, molecul
        The system to be modified, already contains molecule1
     topology : simtk.openmm.app.Topology
        The topology object corresponding to System.
-    atom_indices : list of int
+    molecule1_indices_in_system : list of int
        Indices of molecule1 in system
     molecule1 : openeye.oechem.OEMol
-       Molecule already present in system, mapped via atom_indices to atoms in the system.
+       Molecule already present in system, mapped to atoms in the system.
     molecule2 : openeye.oechem.OEMol
        Molecule that molecule1 will be transformed into.
 
@@ -98,6 +98,48 @@ def create_relative_alchemical_transformation(system, topology, indices, molecul
     # Start building combined OpenMM System object.
     #
 
+    molecule1_atoms = [ atom for atom in molecule1.GetAtoms() ]
+    molecule2_atoms = [ atom for atom in molecule2.GetAtoms() ]
+
+    molecule2_indices_in_system = dict()
+
+    # Build mapping of common substructure for molecule 2.
+    for atom2 in common2:
+        molecule2_indices_in_system[atom2] = molecule1_indices_in_system[mapping2[atom2]]
+
+    # Handle additional particles.
+    print "Adding particles from system2..."
+    for atom2 in unique2:
+        atom = molecule2_atoms[atom2]
+        name = atom.GetName()
+        atomic_number = atom.GetAtomicNum()
+        element = app.Element.getByAtomicNumber(atomic_number)
+        mass = system2.getParticleMass(atom2)
+        print [name, element, mass]
+        index = system.addParticle(mass)
+        molecule2_indices_in_system[atom2] = index
+        #residue = 'XXX' # TODO: Fix this later
+        #topology.addAtom(name, element, residue)
+
+    # Turn molecule2_indices_in_system into list
+    molecule2_indices_in_system = [ molecule2_indices_in_system[atom2] for atom2 in range(molecule2.NumAtoms()) ]
+
+    print "Atom mappings into System object"
+    print "molecule1: %s" % str(molecule1_indices_in_system)
+    print "molecule2: %s" % str(molecule2_indices_in_system)
+
+    # Handle constraints.
+    # TODO: What happens if constraints change? Raise Exception then.
+    print "Adding constraints from system2..."
+    for index in range(system2.getNumConstraints()):
+        # Extract constraint distance from system2.
+        [atom2_i, atom2_j, distance] = system.getConstraintParameters(index)
+        # Map atoms from system2 into system.
+        atom_i = molecule2_indices_in_system[atom2_i]
+        atom_j = molecule2_indices_in_system[atom2_j]
+        # Add constraint to system.
+        system.addConstraint(atom_i, atom_j, distance)
+
     # Build a list of Force objects in system.
     forces = [ system.getForce(index) for index in range(system.getNumForces()) ]
     forces1 = { system1.getForce(index).__class__.__name__ : system1.getForce(index) for index in range(system1.getNumForces()) }
@@ -106,7 +148,21 @@ def create_relative_alchemical_transformation(system, topology, indices, molecul
     for force in forces:
         # Get force name.
         force_name = force.__class__.__name__
+        force1 = forces1[force_name]
+        force2 = forces2[force_name]
         print force_name
+        if force_name == 'HarmonicBondForce':
+            # Add bonds that exist between molecules that are unique to molecule 2.
+            for index in range(force2.getNumBonds()):
+                [atom2_i, atom2_j, length, K] = force2.getBondParameters(index)
+                if (atom2_i in set(unique2)) or (atom2_j in set(unique2)):
+                    atom_i = molecule2_indices_in_system[atom2_i]
+                    atom_j = molecule2_indices_in_system[atom2_j]
+                    force.addBond(atom_i, atom_j, length, K)
+
+            pass
+        else:
+            raise Exception("Force type %s unknown." % force_name)
 
     return [system, topology]
 
