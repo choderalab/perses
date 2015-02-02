@@ -152,17 +152,41 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
         force2 = forces2[force_name]
         print force_name
         if force_name == 'HarmonicBondForce':
-            # Add bonds that exist between molecules that are unique to molecule 2.
-            for index in range(force2.getNumBonds()):
-                [atom2_i, atom2_j, length, K] = force2.getBondParameters(index)
-                if (atom2_i in set(unique2)) or (atom2_j in set(unique2)):
-                    atom_i = molecule2_indices_in_system[atom2_i]
-                    atom_j = molecule2_indices_in_system[atom2_j]
-                    force.addBond(atom_i, atom_j, length, K)
+            # Create a CustomBondForce to handle interpolated bond parameters.
+            energy_expression  = '(K/2)*(r-r0)**2;'
+            energy_expression += 'K = (1-lambda)*K_1 + lambda*K_2;'
+            energy_expression += 'r0 = (1-lambda)*r0_1 + lambda*r0_2;'
+            custom_force = mm.CustomBondForce(energy_expression)
+            custom_force.addGlobalParameter('lambda', 0.0)
+            custom_force.addPerBondParameter('K_1')
+            custom_force.addPerBondParameter('r0_1')
+            custom_force.addPerBondParameter('K_2')
+            custom_force.addPerBondParameter('r0_2')
+            system.addForce(custom_force)
 
-            pass
+            # Add bonds that exist between molecules that are unique to molecule 2.
+            for index2 in range(force2.getNumBonds()):
+                [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
+                atom_i = molecule2_indices_in_system[atom2_i]
+                atom_j = molecule2_indices_in_system[atom2_j]
+                if (atom2_i in set(unique2)) or (atom2_j in set(unique2)):
+                    # Bonds unique to molecule 2.
+                    force.addBond(atom_i, atom_j, length2, K2)
+                else:
+                    # Bonds shared by molecule1 and molecule2.
+                    match_found = False
+                    for index1 in range(force2.getNumBonds()):
+                        [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
+                        if set([atom1_i, atom1_j]) == set([mapping2[atom2_i], mapping2[atom2_j]]):
+                            custom_force.addBond(atom_i, atom_j, [K1, length1, K2, length2])
+                            match_found = True
+                            break
+                    if not match_found:
+                        raise Exception("Could not find match between molecule2 and molecule1 bonds.")
+
         else:
-            raise Exception("Force type %s unknown." % force_name)
+            #raise Exception("Force type %s unknown." % force_name)
+            pass
 
     return [system, topology]
 
