@@ -235,6 +235,81 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
                 [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
                 custom_force.addBond(atom_i, atom_j, [K1, length1, K2, length2])
 
+        if force_name == 'HarmonicAngleForce':
+            #
+            # Process HarmonicAngleForce
+            #
+
+            # Create index of angles in system, system1, and system2.
+            def unique(*args):
+                if args[0] > args[-1]:
+                    return tuple(reversed(args))
+                else:
+                    return tuple(args)
+
+            def index_angles(force):
+                angles = dict()
+                for index in range(force.getNumAngles()):
+                    [atom_i, atom_j, atom_k, angle, K] = force.getAngleParameters(index)
+                    key = unique(atom_i, atom_j, atom_k) # unique tuple, possibly in reverse order
+                    angles[key] = index
+                return angles
+
+            angles  = index_angles(force)   # index of angles for system
+            angles1 = index_angles(force1)  # index of angles for system1
+            angles2 = index_angles(force2)  # index of angles for system2
+
+            # Find angles that are unique to each molecule.
+            print "Finding angles unique to each molecule..."
+            unique_angles1 = [ angles1[atoms] for atoms in angles1 if not set(atoms).issubset(common1) ]
+            unique_angles2 = [ angles2[atoms] for atoms in angles2 if not set(atoms).issubset(common2) ]
+
+            # Build list of angles shared among all molecules.
+            print "Building a list of shared angles..."
+            shared_angles = list()
+            for atoms2 in angles2:
+                if set(atoms2).issubset(common2):
+                    atoms  = tuple(molecule2_indices_in_system[atom2] for atom2 in atoms2)
+                    atoms1 = tuple(mapping2[atom2] for atom2 in atoms2)
+                    # Find angle index terms.
+                    index  = angles[unique(*atoms)]
+                    index1 = angles1[unique(*atoms1)]
+                    index2 = angles2[unique(*atoms2)]
+                    # Store.
+                    shared_angles.append( (index, index1, index2) )
+
+            # Add angles that are unique to molecule2.
+            print "Adding angles unique to molecule2..."
+            for index2 in unique_angles2:
+                [atom2_i, atom2_j, atom2_k, theta2, K2] = force2.getAngleParameters(index2)
+                atom_i = molecule2_indices_in_system[atom2_i]
+                atom_j = molecule2_indices_in_system[atom2_j]
+                atom_k = molecule2_indices_in_system[atom2_k]
+                force.addAngle(atom_i, atom_j, atom_k, theta2, K2)
+
+            # Create a CustomAngleForce to handle interpolated angle parameters.
+            print "Creating CustomAngleForce..."
+            energy_expression  = '(K/2)*(theta-theta0)**2;'
+            energy_expression += 'K = (1-lambda)*K_1 + lambda*K_2;' # linearly interpolate spring constant
+            energy_expression += 'theta0 = (1-lambda)*theta0_1 + lambda*theta0_2;' # linearly interpolate equilibrium angle
+            custom_force = mm.CustomAngleForce(energy_expression)
+            custom_force.addGlobalParameter('lambda', 0.0)
+            custom_force.addPerAngleParameter('K_1') # molecule1 spring constant
+            custom_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
+            custom_force.addPerAngleParameter('K_2') # molecule2 spring constant
+            custom_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
+            system.addForce(custom_force)
+
+            # Process angles that are shared by molecule1 and molecule2.
+            print "Translating shared angles to CustomAngleForce..."
+            for (index, index1, index2) in shared_angles:
+                # Zero out standard angle force.
+                [atom_i, atom_j, atom_k, theta0, K] = force.getAngleParameters(index)
+                force.setAngleParameters(index, atom_i, atom_j, atom_k, theta0, K*0.0)
+                # Create interpolated angle parameters.
+                [atom1_i, atom1_j, atom1_k, theta1, K1] = force1.getAngleParameters(index1)
+                [atom2_i, atom2_j, atom2_k, theta2, K2] = force2.getAngleParameters(index2)
+                custom_force.addAngle(atom_i, atom_j, atom_k, [K1, theta1, K2, theta2])
         else:
             #raise Exception("Force type %s unknown." % force_name)
             pass
