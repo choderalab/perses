@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env python
 """
-Testbed for creating relative alchemical transformation.
+Testbed for creating relative alchemical transformations.
 
 """
 
@@ -23,18 +23,27 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
     Create an OpenMM System object to handle the alchemical transformation from molecule1 to molecule2.
 
     system : simtk.openmm.System
-       The system to be modified, already contains molecule1
+       The system to be modified, already containing molecule1 whose atoms correspond to molecule1_indices_in_system.
     topology : simtk.openmm.app.Topology
-       The topology object corresponding to System.
+       The topology object corresponding to system.
     molecule1_indices_in_system : list of int
-       Indices of molecule1 in system
+       Indices of molecule1 in system, with atoms in same order.
     molecule1 : openeye.oechem.OEMol
-       Molecule already present in system, mapped to atoms in the system.
+       Molecule already present in system, where the atom mapping is given by molecule1_indices_in_system.
     molecule2 : openeye.oechem.OEMol
-       Molecule that molecule1 will be transformed into.
+       New molecule that molecule1 will be transformed into as lambda parameter goes from 0 -> 1.
+
+    Returns
+    -------
+    system : simtk.openmm.System
+       Modified version of system in which old system is recovered for global context paramaeter `lambda` = 0 and new molecule is substituted for `lambda` = 1.
+    topology : system.openmm.Topology
+       Topology corresponding to system.
 
     """
-    # TODO: Normalize molecules.
+
+    # Normalize molecules.
+    # TODO: May need to do more normalization here.
     oe.OEPerceiveChiral(molecule1)
     oe.OEPerceiveChiral(molecule2)
 
@@ -43,12 +52,12 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
     system = copy.deepcopy(system)
     topology = copy.deepcopy(topology)
 
-    # Create OpenMM Topology and System objects.
+    # Create OpenMM Topology and System objects for given molecules using GAFF/AM1-BCC.
+    # NOTE: This must generate the same forcefield parameters as occur in `system`.
     [system1, topology1] = generate_openmm_system(molecule1)
     [system2, topology2] = generate_openmm_system(molecule2)
 
     # Create lists of corresponding atoms for common substructure and groups specific to molecules 1 and 2.
-    #atomexpr = oe.OEExprOpts_EqONS
     atomexpr = oe.OEExprOpts_DefaultAtoms
     bondexpr = oe.OEExprOpts_BondOrder | oe.OEExprOpts_EqSingleDouble | oe.OEExprOpts_EqAromatic
     mcss = oe.OEMCSSearch(molecule1, atomexpr, bondexpr, oe.OEMCSType_Exhaustive)
@@ -74,12 +83,12 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
         index2 = matchpair.target.GetIdx()
         mapping1[ index1 ] = index2
         mapping2[ index2 ] = index1
-    all1 = range(molecule1.NumAtoms())
-    all2 = range(molecule2.NumAtoms())
-    common1 = sorted(mapping1.keys())
-    common2 = sorted(mapping2.keys())
-    unique1 = sorted(list(set(all1) - set(common1)))
-    unique2 = sorted(list(set(all2) - set(common2)))
+    all1 = frozenset(range(molecule1.NumAtoms()))
+    all2 = frozenset(range(molecule2.NumAtoms()))
+    common1 = frozenset(mapping1.keys())
+    common2 = frozenset(mapping2.keys())
+    unique1 = all1 - common1
+    unique2 = all2 - common2
 
     # DEBUG
     print "list of atoms common to both molecules:"
@@ -92,7 +101,6 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
     for atom1 in mapping1.keys():
         atom2 = mapping1[atom1]
         print "%5d => %5d" % (atom1, atom2)
-
 
     #
     # Start building combined OpenMM System object.
@@ -118,7 +126,8 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
         print [name, element, mass]
         index = system.addParticle(mass)
         molecule2_indices_in_system[atom2] = index
-        #residue = 'XXX' # TODO: Fix this later
+
+        # TODO: Add new atoms to topology object as well.
         #topology.addAtom(name, element, residue)
 
     # Turn molecule2_indices_in_system into list
@@ -152,46 +161,85 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
         force2 = forces2[force_name]
         print force_name
         if force_name == 'HarmonicBondForce':
-            # Create a CustomBondForce to handle interpolated bond parameters.
-            energy_expression  = '(K/2)*(r-r0)**2;'
-            energy_expression += 'K = (1-lambda)*K_1 + lambda*K_2;'
-            energy_expression += 'r0 = (1-lambda)*r0_1 + lambda*r0_2;'
-            custom_force = mm.CustomBondForce(energy_expression)
-            custom_force.addGlobalParameter('lambda', 0.0)
-            custom_force.addPerBondParameter('K_1')
-            custom_force.addPerBondParameter('r0_1')
-            custom_force.addPerBondParameter('K_2')
-            custom_force.addPerBondParameter('r0_2')
-            system.addForce(custom_force)
+            #
+            # Process HarmonicBondForce
+            #
 
-            # Add bonds that exist between molecules that are unique to molecule 2.
-            for index2 in range(force2.getNumBonds()):
+            # Create index of bonds in system, system1, and system2.
+            def unique(*args):
+                if args[0] > args[-1]:
+                    return tuple(reversed(args))
+                else:
+                    return tuple(args)
+
+            def index_bonds(force):
+                bonds = dict()
+                for index in range(force.getNumBonds()):
+                    [atom_i, atom_j, length, K] = force.getBondParameters(index)
+                    key = unique(atom_i, atom_j) # unique tuple, possibly in reverse order
+                    bonds[key] = index
+                return bonds
+
+            bonds  = index_bonds(force)   # index of bonds for system
+            bonds1 = index_bonds(force1)  # index of bonds for system1
+            bonds2 = index_bonds(force2)  # index of bonds for system2
+
+            # Find bonds that are unique to each molecule.
+            print "Finding bonds unique to each molecule..."
+            unique_bonds1 = [ bonds1[atoms] for atoms in bonds1 if not set(atoms).issubset(common1) ]
+            unique_bonds2 = [ bonds2[atoms] for atoms in bonds2 if not set(atoms).issubset(common2) ]
+
+            # Build list of bonds shared among all molecules.
+            print "Building a list of shared bonds..."
+            shared_bonds = list()
+            for atoms2 in bonds2:
+                if set(atoms2).issubset(common2):
+                    atoms  = tuple(molecule2_indices_in_system[atom2] for atom2 in atoms2)
+                    atoms1 = tuple(mapping2[atom2] for atom2 in atoms2)
+                    # Find bond index terms.
+                    index  = bonds[unique(*atoms)]
+                    index1 = bonds1[unique(*atoms1)]
+                    index2 = bonds2[unique(*atoms2)]
+                    # Store.
+                    shared_bonds.append( (index, index1, index2) )
+
+            # Add bonds that are unique to molecule2.
+            print "Adding bonds unique to molecule2..."
+            for index2 in unique_bonds2:
                 [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
                 atom_i = molecule2_indices_in_system[atom2_i]
                 atom_j = molecule2_indices_in_system[atom2_j]
-                if (atom2_i in set(unique2)) or (atom2_j in set(unique2)):
-                    # Bonds unique to molecule 2.
-                    force.addBond(atom_i, atom_j, length2, K2)
-                else:
-                    # Bonds shared by molecule1 and molecule2.
-                    match_found = False
-                    for index1 in range(force2.getNumBonds()):
-                        [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
-                        if set([atom1_i, atom1_j]) == set([mapping2[atom2_i], mapping2[atom2_j]]):
-                            custom_force.addBond(atom_i, atom_j, [K1, length1, K2, length2])
-                            match_found = True
-                            break
-                    if not match_found:
-                        raise Exception("Could not find match between molecule2 and molecule1 bonds.")
+                force.addBond(atom_i, atom_j, length2, K2)
+
+            # Create a CustomBondForce to handle interpolated bond parameters.
+            print "Creating CustomBondForce..."
+            energy_expression  = '(K/2)*(r-r0)**2;'
+            energy_expression += 'K = (1-lambda)*K_1 + lambda*K_2;' # linearly interpolate spring constant
+            energy_expression += 'r0 = (1-lambda)*r0_1 + lambda*r0_2;' # linearly interpolate bond length
+            custom_force = mm.CustomBondForce(energy_expression)
+            custom_force.addGlobalParameter('lambda', 0.0)
+            custom_force.addPerBondParameter('K_1') # molecule1 spring constant
+            custom_force.addPerBondParameter('r0_1') # molecule1 bond length
+            custom_force.addPerBondParameter('K_2') # molecule2 spring constant
+            custom_force.addPerBondParameter('r0_2') # molecule2 bond length
+            system.addForce(custom_force)
+
+            # Process bonds that are shared by molecule1 and molecule2.
+            print "Translating shared bonds to CustomBondForce..."
+            for (index, index1, index2) in shared_bonds:
+                # Zero out standard bond force.
+                [atom_i, atom_j, length, K] = force.getBondParameters(index)
+                force.setBondParameters(index, atom_i, atom_j, length, K*0.0)
+                # Create interpolated bond parameters.
+                [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
+                [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
+                custom_force.addBond(atom_i, atom_j, [K1, length1, K2, length2])
 
         else:
             #raise Exception("Force type %s unknown." % force_name)
             pass
 
     return [system, topology]
-
-
-    return
 
 def create_molecule(iupac_name):
     molecule = gaff2xml.openeye.iupac_to_oemol(iupac_name)
