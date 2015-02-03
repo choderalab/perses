@@ -213,15 +213,15 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
 
             # Create a CustomBondForce to handle interpolated bond parameters.
             print "Creating CustomBondForce..."
-            energy_expression  = '(K/2)*(r-r0)**2;'
-            energy_expression += 'K = (1-lambda)*K_1 + lambda*K_2;' # linearly interpolate spring constant
-            energy_expression += 'r0 = (1-lambda)*r0_1 + lambda*r0_2;' # linearly interpolate bond length
+            energy_expression  = '(K/2)*(r-length)**2;'
+            energy_expression += 'K = (1-lambda)*K1 + lambda*K2;' # linearly interpolate spring constant
+            energy_expression += 'length = (1-lambda)*length1 + lambda*length2;' # linearly interpolate bond length
             custom_force = mm.CustomBondForce(energy_expression)
             custom_force.addGlobalParameter('lambda', 0.0)
-            custom_force.addPerBondParameter('K_1') # molecule1 spring constant
-            custom_force.addPerBondParameter('r0_1') # molecule1 bond length
-            custom_force.addPerBondParameter('K_2') # molecule2 spring constant
-            custom_force.addPerBondParameter('r0_2') # molecule2 bond length
+            custom_force.addPerBondParameter('length1') # molecule1 bond length
+            custom_force.addPerBondParameter('K1') # molecule1 spring constant
+            custom_force.addPerBondParameter('length2') # molecule2 bond length
+            custom_force.addPerBondParameter('K2') # molecule2 spring constant
             system.addForce(custom_force)
 
             # Process bonds that are shared by molecule1 and molecule2.
@@ -233,7 +233,7 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
                 # Create interpolated bond parameters.
                 [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
                 [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
-                custom_force.addBond(atom_i, atom_j, [K1, length1, K2, length2])
+                custom_force.addBond(atom_i, atom_j, [length1, K1, length2, K2])
 
         if force_name == 'HarmonicAngleForce':
             #
@@ -294,10 +294,10 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
             energy_expression += 'theta0 = (1-lambda)*theta0_1 + lambda*theta0_2;' # linearly interpolate equilibrium angle
             custom_force = mm.CustomAngleForce(energy_expression)
             custom_force.addGlobalParameter('lambda', 0.0)
-            custom_force.addPerAngleParameter('K_1') # molecule1 spring constant
             custom_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
-            custom_force.addPerAngleParameter('K_2') # molecule2 spring constant
+            custom_force.addPerAngleParameter('K_1') # molecule1 spring constant
             custom_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
+            custom_force.addPerAngleParameter('K_2') # molecule2 spring constant
             system.addForce(custom_force)
 
             # Process angles that are shared by molecule1 and molecule2.
@@ -309,7 +309,86 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
                 # Create interpolated angle parameters.
                 [atom1_i, atom1_j, atom1_k, theta1, K1] = force1.getAngleParameters(index1)
                 [atom2_i, atom2_j, atom2_k, theta2, K2] = force2.getAngleParameters(index2)
-                custom_force.addAngle(atom_i, atom_j, atom_k, [K1, theta1, K2, theta2])
+                custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta2, K2])
+
+        if force_name == 'PeriodicTorsionForce':
+            #
+            # Process PeriodicTorsionForce
+            #
+
+            # Create index of torsions in system, system1, and system2.
+            def unique(*args):
+                if args[0] > args[-1]:
+                    return tuple(reversed(args))
+                else:
+                    return tuple(args)
+
+            def index_torsions(force):
+                torsions = dict()
+                for index in range(force.getNumTorsions()):
+                    [atom_i, atom_j, atom_k, atom_l, periodicity, phase, K] = force.getTorsionParameters(index)
+                    key = unique(atom_i, atom_j, atom_k, atom_l) # unique tuple, possibly in reverse order
+                    torsions[key] = index
+                return torsions
+
+            torsions  = index_torsions(force)   # index of torsions for system
+            torsions1 = index_torsions(force1)  # index of torsions for system1
+            torsions2 = index_torsions(force2)  # index of torsions for system2
+
+            # Find torsions that are unique to each molecule.
+            print "Finding torsions unique to each molecule..."
+            unique_torsions1 = [ torsions1[atoms] for atoms in torsions1 if not set(atoms).issubset(common1) ]
+            unique_torsions2 = [ torsions2[atoms] for atoms in torsions2 if not set(atoms).issubset(common2) ]
+
+            # Build list of torsions shared among all molecules.
+            print "Building a list of shared torsions..."
+            shared_torsions = list()
+            for atoms2 in torsions2:
+                if set(atoms2).issubset(common2):
+                    atoms  = tuple(molecule2_indices_in_system[atom2] for atom2 in atoms2)
+                    atoms1 = tuple(mapping2[atom2] for atom2 in atoms2)
+                    # Find torsion index terms.
+                    index  = torsions[unique(*atoms)]
+                    index1 = torsions1[unique(*atoms1)]
+                    index2 = torsions2[unique(*atoms2)]
+                    # Store.
+                    shared_torsions.append( (index, index1, index2) )
+
+            # Add torsions that are unique to molecule2.
+            print "Adding torsions unique to molecule2..."
+            for index2 in unique_torsions2:
+                [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
+                atom_i = molecule2_indices_in_system[atom2_i]
+                atom_j = molecule2_indices_in_system[atom2_j]
+                atom_k = molecule2_indices_in_system[atom2_k]
+                atom_l = molecule2_indices_in_system[atom2_l]
+                force.addTorsion(atom_i, atom_j, atom_k, atom_l, periodicity2, phase2, K2)
+
+            # Create a CustomTorsionForce to handle interpolated torsion parameters.
+            print "Creating CustomTorsionForce..."
+            energy_expression  = '(1-lambda)*U1 + lambda*U2;'
+            energy_expression += 'U1 = K1*(1+cos(periodicity1*theta-phase1));'
+            energy_expression += 'U2 = K2*(1+cos(periodicity2*theta-phase2));'
+            custom_force = mm.CustomTorsionForce(energy_expression)
+            custom_force.addGlobalParameter('lambda', 0.0)
+            custom_force.addPerTorsionParameter('periodicity1') # molecule1 periodicity
+            custom_force.addPerTorsionParameter('phase1') # molecule1 phase
+            custom_force.addPerTorsionParameter('K1') # molecule1 spring constant
+            custom_force.addPerTorsionParameter('periodicity2') # molecule2 periodicity
+            custom_force.addPerTorsionParameter('phase2') # molecule2 phase
+            custom_force.addPerTorsionParameter('K2') # molecule2 spring constant
+            system.addForce(custom_force)
+
+            # Process torsions that are shared by molecule1 and molecule2.
+            print "Translating shared torsions to CustomTorsionForce..."
+            for (index, index1, index2) in shared_torsions:
+                # Zero out standard torsion force.
+                [atom_i, atom_j, atom_k, atom_l, periodicity, phase, K] = force.getTorsionParameters(index)
+                force.setTorsionParameters(index, atom_i, atom_j, atom_k, atom_l, periodicity, phase, K*0.0)
+                # Create interpolated torsion parameters.
+                [atom1_i, atom1_j, atom1_k, atom1_l, periodicity1, phase1, K1] = force1.getTorsionParameters(index1)
+                [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity2, phase2, K2])
         else:
             #raise Exception("Force type %s unknown." % force_name)
             pass
