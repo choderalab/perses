@@ -7,7 +7,9 @@ Testbed for creating relative alchemical transformations.
 import gaff2xml.openeye
 import openeye.oechem as oe
 import simtk.openmm as mm
+from simtk import unit
 import simtk.openmm.app as app
+import numpy as np
 
 def generate_openmm_system(molecule):
     trajs, ffxmls = gaff2xml.openeye.oemols_to_ffxml([molecule])
@@ -16,9 +18,22 @@ def generate_openmm_system(molecule):
     topology = trajs[0].top.to_openmm()
     # Create OpenMM System object.
     system = ff.createSystem(topology)
-    return [system, topology]
+    # Create positions.
+    natoms = molecule.NumAtoms()
+    positions = unit.Quantity(np.zeros([natoms,3], np.float32), unit.angstrom)
+    for atom in molecule.GetAtoms():
+        (x, y, z) = molecule.GetCoords(atom)
+        index = atom.GetIdx()
+        positions[index,0] = x * unit.angstrom
+        positions[index,1] = y * unit.angstrom
+        positions[index,2] = z * unit.angstrom
+    # Return results.
+    return [system, topology, positions]
 
-def create_relative_alchemical_transformation(system, topology, molecule1_indices_in_system, molecule1, molecule2):
+ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
+
+def create_relative_alchemical_transformation(system, topology, positions, molecule1_indices_in_system, molecule1, molecule2,
+                                              softcore_alpha=0.5, softcore_beta=12*unit.angstrom**2):
     """
     Create an OpenMM System object to handle the alchemical transformation from molecule1 to molecule2.
 
@@ -26,12 +41,18 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
        The system to be modified, already containing molecule1 whose atoms correspond to molecule1_indices_in_system.
     topology : simtk.openmm.app.Topology
        The topology object corresponding to system.
+    positions : simtk.unit.Quantity of numpy array natoms x 3 compatible with units angstroms
+       The positions array corresponding to system and topology.
     molecule1_indices_in_system : list of int
        Indices of molecule1 in system, with atoms in same order.
     molecule1 : openeye.oechem.OEMol
        Molecule already present in system, where the atom mapping is given by molecule1_indices_in_system.
     molecule2 : openeye.oechem.OEMol
        New molecule that molecule1 will be transformed into as lambda parameter goes from 0 -> 1.
+    softcore_alpha : float, optional, default=0.5
+       Softcore parameter for Lennard-Jones softening.
+    softcore_beta : simtk.unit.Quantity with units compatible with angstrom**2
+       Softcore parameter for Coulomb interaction softening.
 
     Returns
     -------
@@ -42,6 +63,10 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
 
     """
 
+    # Copy molecules.
+    molecule1 = oe.OEMol(molecule1)
+    molecule2 = oe.OEMol(molecule2)
+
     # Normalize molecules.
     # TODO: May need to do more normalization here.
     oe.OEPerceiveChiral(molecule1)
@@ -51,11 +76,7 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
     import copy
     system = copy.deepcopy(system)
     topology = copy.deepcopy(topology)
-
-    # Create OpenMM Topology and System objects for given molecules using GAFF/AM1-BCC.
-    # NOTE: This must generate the same forcefield parameters as occur in `system`.
-    [system1, topology1] = generate_openmm_system(molecule1)
-    [system2, topology2] = generate_openmm_system(molecule2)
+    positions = copy.deepcopy(positions)
 
     # Create lists of corresponding atoms for common substructure and groups specific to molecules 1 and 2.
     atomexpr = oe.OEExprOpts_DefaultAtoms
@@ -70,6 +91,16 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
     # Determine common atoms in second molecule.
     matches = [ match for match in mcss.Match(molecule2, True) ]
     match = matches[0] # we only need the first match
+
+    # Align common substructure of molecule2 with molecule1.
+    overlay = True
+    rmat  = oe.OEDoubleArray(9)
+    trans = oe.OEDoubleArray(3)
+    rms = oe.OERMSD(mcss.GetPattern(), molecule2, match, overlay, rmat, trans)
+    if rms < 0.0:
+        raise Exception("RMS overlay failure")
+    oe.OERotate(molecule2, rmat)
+    oe.OETranslate(molecule2, trans)
 
     # Make a list of the atoms in common, molecule1 only, and molecule2 only
     common1 = list() # list of atom indices in molecule1 that also appear in molecule2
@@ -102,6 +133,11 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
         atom2 = mapping1[atom1]
         print "%5d => %5d" % (atom1, atom2)
 
+    # Create OpenMM Topology and System objects for given molecules using GAFF/AM1-BCC.
+    # NOTE: This must generate the same forcefield parameters as occur in `system`.
+    [system1, topology1, positions1] = generate_openmm_system(molecule1)
+    [system2, topology2, positions2] = generate_openmm_system(molecule2)
+
     #
     # Start building combined OpenMM System object.
     #
@@ -114,6 +150,13 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
     # Build mapping of common substructure for molecule 2.
     for atom2 in common2:
         molecule2_indices_in_system[atom2] = molecule1_indices_in_system[mapping2[atom2]]
+
+    # Find residue for molecule1.
+    residue = None
+    for atom in topology.atoms():
+        if atom.index in molecule1_indices_in_system:
+            residue = atom.residue
+            break
 
     # Handle additional particles.
     print "Adding particles from system2..."
@@ -128,7 +171,7 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
         molecule2_indices_in_system[atom2] = index
 
         # TODO: Add new atoms to topology object as well.
-        #topology.addAtom(name, element, residue)
+        topology.addAtom(name, element, residue)
 
     # Turn molecule2_indices_in_system into list
     molecule2_indices_in_system = [ molecule2_indices_in_system[atom2] for atom2 in range(molecule2.NumAtoms()) ]
@@ -149,11 +192,22 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
         # Add constraint to system.
         system.addConstraint(atom_i, atom_j, distance)
 
+    # Create new positions array.
+    natoms = positions.shape[0] + len(unique2) # new number of atoms
+    positions = unit.Quantity(np.resize(positions/positions.unit, [natoms,3]), positions.unit)
+    for atom2 in unique2:
+        (x, y, z) = molecule2.GetCoords(molecule2_atoms[atom2])
+        index = molecule2_indices_in_system[atom2]
+        positions[index,0] = x * unit.angstrom
+        positions[index,1] = y * unit.angstrom
+        positions[index,2] = z * unit.angstrom
+
     # Build a list of Force objects in system.
     forces = [ system.getForce(index) for index in range(system.getNumForces()) ]
     forces1 = { system1.getForce(index).__class__.__name__ : system1.getForce(index) for index in range(system1.getNumForces()) }
     forces2 = { system2.getForce(index).__class__.__name__ : system2.getForce(index) for index in range(system2.getNumForces()) }
-    # Dispatch forces.
+
+    # Process forces.
     for force in forces:
         # Get force name.
         force_name = force.__class__.__name__
@@ -314,6 +368,7 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
         if force_name == 'PeriodicTorsionForce':
             #
             # Process PeriodicTorsionForce
+            # TODO: Match up periodicities and deal with multiple terms per torsion
             #
 
             # Create index of torsions in system, system1, and system2.
@@ -389,11 +444,198 @@ def create_relative_alchemical_transformation(system, topology, molecule1_indice
                 [atom1_i, atom1_j, atom1_k, atom1_l, periodicity1, phase1, K1] = force1.getTorsionParameters(index1)
                 [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
                 custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity2, phase2, K2])
+
+        if force_name == 'NonbondedForce':
+            #
+            # Process NonbondedForce
+            #
+
+            # Add nonbonded entries for molecule2 to ensure total number of particle entries is correct.
+            for atom in unique2:
+                [charge, sigma, epsilon] = force2.getParticleParameters(atom)
+                force.addParticle(charge, sigma, epsilon)
+
+            # Zero out nonbonded entries for molecule1.
+            for atom in molecule1_indices_in_system:
+                [charge, sigma, epsilon] = force.getParticleParameters(atom)
+                force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
+            # Zero out nonbonded entries for molecule2.
+            for atom in molecule2_indices_in_system:
+                [charge, sigma, epsilon] = force.getParticleParameters(atom)
+                force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
+
+            # Create index of exceptions in system, system1, and system2.
+            def unique(*args):
+                if args[0] > args[-1]:
+                    return tuple(reversed(args))
+                else:
+                    return tuple(args)
+
+            def index_exceptions(force):
+                exceptions = dict()
+                for index in range(force.getNumExceptions()):
+                    [atom_i, atom_j, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
+                    key = unique(atom_i, atom_j) # unique tuple, possibly in reverse order
+                    exceptions[key] = index
+                return exceptions
+
+            exceptions  = index_exceptions(force)   # index of exceptions for system
+            exceptions1 = index_exceptions(force1)  # index of exceptions for system1
+            exceptions2 = index_exceptions(force2)  # index of exceptions for system2
+
+            # Find exceptions that are unique to each molecule.
+            print "Finding exceptions unique to each molecule..."
+            unique_exceptions1 = [ exceptions1[atoms] for atoms in exceptions1 if not set(atoms).issubset(common1) ]
+            unique_exceptions2 = [ exceptions2[atoms] for atoms in exceptions2 if not set(atoms).issubset(common2) ]
+
+            # Build list of exceptions shared among all molecules.
+            print "Building a list of shared exceptions..."
+            shared_exceptions = list()
+            for atoms2 in exceptions2:
+                if set(atoms2).issubset(common2):
+                    atoms  = tuple(molecule2_indices_in_system[atom2] for atom2 in atoms2)
+                    atoms1 = tuple(mapping2[atom2] for atom2 in atoms2)
+                    # Find exception index terms.
+                    index  = exceptions[unique(*atoms)]
+                    index1 = exceptions1[unique(*atoms1)]
+                    index2 = exceptions2[unique(*atoms2)]
+                    # Store.
+                    shared_exceptions.append( (index, index1, index2) )
+
+            # Add exceptions that are unique to molecule2.
+            print "Adding exceptions unique to molecule2..."
+            for index2 in unique_exceptions2:
+                [atom2_i, atom2_j, chargeProd, sigma, epsilon] = force2.getExceptionParameters(index2)
+                atom_i = molecule2_indices_in_system[atom2_i]
+                atom_j = molecule2_indices_in_system[atom2_j]
+                force.addException(atom_i, atom_j, chargeProd, sigma, epsilon)
+
+            # Create list of alchemically modified atoms in system.
+            alchemical_atom_indices = list(set(molecule1_indices_in_system).union(set(molecule2_indices_in_system)))
+
+            # Create atom groups.
+            natoms = system.getNumParticles()
+            atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
+            atomset2 = set(range(system.getNumParticles())) # all atoms, including alchemical region
+
+            # CustomNonbondedForce energy expression.
+            sterics_energy_expression = ""
+            electrostatics_energy_expression = ""
+
+            # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
+            # Select functional form based on nonbonded method.
+            method = force.getNonbondedMethod()
+            if method in [mm.NonbondedForce.NoCutoff]:
+                # soft-core Lennard-Jones
+                sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x1 = (sigma/reff_sterics)^6;"
+                # soft-core Coulomb
+                electrostatics_energy_expression += "U_electrostatics = ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
+            elif method in [mm.NonbondedForce.CutoffPeriodic, mm.NonbondedForce.CutoffNonPeriodic]:
+                # soft-core Lennard-Jones
+                sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+                # reaction-field electrostatics
+                epsilon_solvent = force.getReactionFieldDielectric()
+                r_cutoff = force.getCutoffDistance()
+                electrostatics_energy_expression += "U_electrostatics = ONE_4PI_EPS0*chargeprod*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);"
+                k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
+                c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
+                electrostatics_energy_expression += "k_rf = %f;" % (k_rf / k_rf.in_unit_system(unit.md_unit_system).unit)
+                electrostatics_energy_expression += "c_rf = %f;" % (c_rf / c_rf.in_unit_system(unit.md_unit_system).unit)
+            elif method in [mm.NonbondedForce.PME, mm.NonbondedForce.Ewald]:
+                # soft-core Lennard-Jones
+                sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+                # Ewald direct-space electrostatics
+                [alpha_ewald, nx, ny, nz] = force.getPMEParameters()
+                if alpha_ewald == 0.0:
+                    # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
+                    delta = force.getEwaldErrorTolerance()
+                    r_cutoff = force.getCutoffDistance()
+                    alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
+                electrostatics_energy_expression += "U_electrostatics = ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
+                electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit)
+                # TODO: Handle reciprocal-space electrostatics
+            else:
+                raise Exception("Nonbonded method %s not supported yet." % str(method))
+
+            # Add additional definitions common to all methods.
+            sterics_energy_expression += "epsilon = (1-lambda)*epsilonA + lambda*epsilonB;" #interpolation
+            sterics_energy_expression += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
+            sterics_energy_expression += "softcore_alpha = %f;" % softcore_alpha
+            # TODO: We may have to ensure that softcore_degree is 1 if we are close to an alchemically-eliminated endpoint.
+            sterics_energy_expression += "lambda_alpha = lambda*(1-lambda);"
+            electrostatics_energy_expression += "chargeProd = (1-lambda)*chargeProdA + lambda*chargeProdB;" #interpolation
+            electrostatics_energy_expression += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
+            electrostatics_energy_expression += "softcore_beta = %f;" % (softcore_beta / softcore_beta.in_unit_system(unit.md_unit_system).unit)
+            electrostatics_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
+            # TODO: We may have to ensure that softcore_degree is 1 if we are close to an alchemically-eliminated endpoint.
+            sterics_energy_expression += "lambda_beta = lambda*(1-lambda);"
+
+            # Define mixing rules.
+            sterics_mixing_rules = ""
+            sterics_mixing_rules += "epsilonA = sqrt(epsilonA1*epsilonA2);" # mixing rule for epsilon
+            sterics_mixing_rules += "epsilonB = sqrt(epsilonB1*epsilonB2);" # mixing rule for epsilon
+            sterics_mixing_rules += "sigmaA = 0.5*(sigmaA1 + sigmaA2);" # mixing rule for sigma
+            sterics_mixing_rules += "sigmaB = 0.5*(sigmaB1 + sigmaB2);" # mixing rule for sigma
+            electrostatics_mixing_rules = ""
+            electrostatics_mixing_rules += "chargeprodA = chargeA1*chargeA2;" # mixing rule for charges
+            electrostatics_mixing_rules += "chargeprodB = chargeB1*chargeB2;" # mixing rule for charges
+
+            # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
+            electrostatics_custom_nonbonded_force = mm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
+            electrostatics_custom_nonbonded_force.addGlobalParameter("lambda", 0.0);
+            electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
+            electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
+            sterics_custom_nonbonded_force = mm.CustomNonbondedForce("U_sterics;" + sterics_energy_expression + sterics_mixing_rules)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda", 0.0);
+            sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
+            sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
+            sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
+            sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
+
+            # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
+            # TODO: Exclude intra-alchemical region if we are separately handling that through a separate CustomNonbondedForce for decoupling.
+            sterics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
+            electrostatics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
+
+            # Add exceptions between unique parts of molecule1 and molecule2 so they do not interact.
+            for atom1_i in unique1:
+                for atom2_j in unique2:
+                    atom_i = molecule2_indices_in_system[atom1_i]
+                    atom_j = molecule2_indices_in_system[atom2_j]
+                    electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+                    sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+
+            # Add custom forces to system.
+            system.addForce(sterics_custom_nonbonded_force)
+            system.addForce(electrostatics_custom_nonbonded_force)
+
+            # Create CustomBondForce to handle exceptions for both kinds of interactions.
+            custom_bond_force = mm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
+            custom_bond_force.addGlobalParameter("lambda", 0.0);
+            custom_bond_force.addPerBondParameter("chargeprodA") # charge product
+            custom_bond_force.addPerBondParameter("sigmaA") # Lennard-Jones effective sigma
+            custom_bond_force.addPerBondParameter("epsilonA") # Lennard-Jones effective epsilon
+            custom_bond_force.addPerBondParameter("chargeprodB") # charge product
+            custom_bond_force.addPerBondParameter("sigmaB") # Lennard-Jones effective sigma
+            custom_bond_force.addPerBondParameter("epsilonB") # Lennard-Jones effective epsilon
+            system.addForce(custom_bond_force)
+
+            # Move NonbondedForce particle terms for alchemically-modified particles to CustomNonbondedForce.
+            for particle_index in range(force.getNumParticles()):
+                # Retrieve parameters.
+                [charge, sigma, epsilon] = force.getParticleParameters(particle_index)
+                # Add parameters to custom force handling interactions between alchemically-modified atoms and rest of system.
+                sterics_custom_nonbonded_force.addParticle([sigma, epsilon])
+                electrostatics_custom_nonbonded_force.addParticle([charge])
+                # Turn off Lennard-Jones contribution from alchemically-modified particles.
+                if particle_index in alchemical_atom_indices:
+                    force.setParticleParameters(particle_index, 0*charge, sigma, 0*epsilon)
+
         else:
             #raise Exception("Force type %s unknown." % force_name)
             pass
 
-    return [system, topology]
+    return [system, topology, positions]
 
 def create_molecule(iupac_name):
     molecule = gaff2xml.openeye.iupac_to_oemol(iupac_name)
@@ -404,14 +646,45 @@ def create_molecule(iupac_name):
     return molecule
 
 if __name__ == '__main__':
+    # Create two test molecules.
     molecule1 = create_molecule('toluene')
     molecule2 = create_molecule('methoxytoluene')
 
-    # Write molecules to mol2 files.
+    # Write molecules to mol2 files for ease of debugging.
     gaff2xml.openeye.molecule_to_mol2(molecule1, tripos_mol2_filename='molecule1.mol2')
     gaff2xml.openeye.molecule_to_mol2(molecule2, tripos_mol2_filename='molecule2.mol2')
 
-    [system1, topology1] = generate_openmm_system(molecule1)
+    # Create an OpenMM system for molecule1 in some sort of "environment".
+    # This system will be modified to introduce the ability to mutate molecule1 to molecule2.
+    [system1, topology1, positions1] = generate_openmm_system(molecule1)
 
+    # Modify the system to allow mutation to molecule2.
     natoms = molecule1.NumAtoms()
-    [system, topology] = create_relative_alchemical_transformation(system1, topology1, range(natoms), molecule1, molecule2)
+    [system, topology, positions] = create_relative_alchemical_transformation(system1, topology1, positions1, range(natoms), molecule1, molecule2)
+
+    # Write.
+    natoms = system.getNumParticles()
+    for index in range(natoms):
+        print '%8d %8.3f %8.3f %8.3f' % (index, positions[index,0]/unit.angstroms, positions[index,1]/unit.angstroms, positions[index,2]/unit.angstroms)
+    app.PDBFile.writeFile(topology, positions, file=open('initial.pdb','w'))
+
+    # Create an OpenMM test simulation.
+    temperature = 300.0 * unit.kelvin
+    collision_rate = 90.0 / unit.picoseconds
+    timestep = 1.0 * unit.femtoseconds
+    integrator = mm.LangevinIntegrator(temperature, collision_rate, timestep)
+    context = mm.Context(system, integrator)
+    context.setPositions(positions)
+    niterations = 500
+    outfile = open('trajectory.pdb', 'w')
+    app.PDBFile.writeHeader(topology, file=outfile)
+    for iteration in range(niterations):
+        integrate.step(50)
+        state = context.getState(getPositions=True, getEnergy=True)
+        print "Iteration %5d / %5d : potential %8.3f kcal/mol" % (iteration, niterations, state.getPotentialEnergy() / unit.kilocalories_per_mole)
+        app.PDBFile.writeModel(topology, positions, file=outfile, modelIndex=(iteration+1))
+    app.PDBFile.writeFooter(topology, file=outfile)
+    outfile.close()
+    del context, integrator
+
+
