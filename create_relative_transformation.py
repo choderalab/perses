@@ -267,7 +267,7 @@ def create_relative_alchemical_transformation(system, topology, positions, molec
 
             # Create a CustomBondForce to handle interpolated bond parameters.
             print "Creating CustomBondForce..."
-            energy_expression  = '(K/2)*(r-length)**2;'
+            energy_expression  = '(K/2)*(r-length)^2;'
             energy_expression += 'K = (1-lambda)*K1 + lambda*K2;' # linearly interpolate spring constant
             energy_expression += 'length = (1-lambda)*length1 + lambda*length2;' # linearly interpolate bond length
             custom_force = mm.CustomBondForce(energy_expression)
@@ -343,7 +343,7 @@ def create_relative_alchemical_transformation(system, topology, positions, molec
 
             # Create a CustomAngleForce to handle interpolated angle parameters.
             print "Creating CustomAngleForce..."
-            energy_expression  = '(K/2)*(theta-theta0)**2;'
+            energy_expression  = '(K/2)*(theta-theta0)^2;'
             energy_expression += 'K = (1-lambda)*K_1 + lambda*K_2;' # linearly interpolate spring constant
             energy_expression += 'theta0 = (1-lambda)*theta0_1 + lambda*theta0_2;' # linearly interpolate equilibrium angle
             custom_force = mm.CustomAngleForce(energy_expression)
@@ -597,7 +597,7 @@ def create_relative_alchemical_transformation(system, topology, positions, molec
             sterics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
             electrostatics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
 
-            # Add exceptions between unique parts of molecule1 and molecule2 so they do not interact.
+            # Add exclusions between unique parts of molecule1 and molecule2 so they do not interact.
             for atom1_i in unique1:
                 for atom2_j in unique2:
                     atom_i = molecule2_indices_in_system[atom1_i]
@@ -610,26 +610,46 @@ def create_relative_alchemical_transformation(system, topology, positions, molec
             system.addForce(electrostatics_custom_nonbonded_force)
 
             # Create CustomBondForce to handle exceptions for both kinds of interactions.
-            custom_bond_force = mm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
-            custom_bond_force.addGlobalParameter("lambda", 0.0);
-            custom_bond_force.addPerBondParameter("chargeprodA") # charge product
-            custom_bond_force.addPerBondParameter("sigmaA") # Lennard-Jones effective sigma
-            custom_bond_force.addPerBondParameter("epsilonA") # Lennard-Jones effective epsilon
-            custom_bond_force.addPerBondParameter("chargeprodB") # charge product
-            custom_bond_force.addPerBondParameter("sigmaB") # Lennard-Jones effective sigma
-            custom_bond_force.addPerBondParameter("epsilonB") # Lennard-Jones effective epsilon
-            system.addForce(custom_bond_force)
+            #custom_bond_force = mm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
+            #custom_bond_force.addGlobalParameter("lambda", 0.0);
+            #custom_bond_force.addPerBondParameter("chargeprodA") # charge product
+            #custom_bond_force.addPerBondParameter("sigmaA") # Lennard-Jones effective sigma
+            #custom_bond_force.addPerBondParameter("epsilonA") # Lennard-Jones effective epsilon
+            #custom_bond_force.addPerBondParameter("chargeprodB") # charge product
+            #custom_bond_force.addPerBondParameter("sigmaB") # Lennard-Jones effective sigma
+            #custom_bond_force.addPerBondParameter("epsilonB") # Lennard-Jones effective epsilon
+            #system.addForce(custom_bond_force)
 
-            # Move NonbondedForce particle terms for alchemically-modified particles to CustomNonbondedForce.
+            # Copy over all Nonbonded parameters for normal atoms to Custom*Force objects.
             for particle_index in range(force.getNumParticles()):
                 # Retrieve parameters.
                 [charge, sigma, epsilon] = force.getParticleParameters(particle_index)
                 # Add parameters to custom force handling interactions between alchemically-modified atoms and rest of system.
-                sterics_custom_nonbonded_force.addParticle([sigma, epsilon])
-                electrostatics_custom_nonbonded_force.addParticle([charge])
-                # Turn off Lennard-Jones contribution from alchemically-modified particles.
-                if particle_index in alchemical_atom_indices:
-                    force.setParticleParameters(particle_index, 0*charge, sigma, 0*epsilon)
+                sterics_custom_nonbonded_force.addParticle([sigma, epsilon, sigma, epsilon])
+                electrostatics_custom_nonbonded_force.addParticle([charge, charge])
+
+            # Copy over parameters for common substructure.
+            for atom1 in common1:
+                atom2 = mapping1[atom1] # index into system2
+                index = molecule1_indices_in_system[atom1] # index into system
+                [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
+                [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
+                sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma2, epsilon2])
+                electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, charge2])
+
+            # Copy over parameters for molecule1 unique atoms.
+            for atom1 in unique1:
+                index = molecule1_indices_in_system[atom1] # index into system
+                [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
+                sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma1, 0*epsilon1])
+                electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, 0*charge1])
+
+            # Copy over parameters for molecule2 unique atoms.
+            for atom2 in unique2:
+                index = molecule2_indices_in_system[atom2] # index into system
+                [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
+                sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, 0*epsilon2, sigma2, epsilon2])
+                electrostatics_custom_nonbonded_force.setParticleParameters(index, [0*charge2, charge2])
 
         else:
             #raise Exception("Force type %s unknown." % force_name)
@@ -675,13 +695,14 @@ if __name__ == '__main__':
     integrator = mm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = mm.Context(system, integrator)
     context.setPositions(positions)
-    niterations = 500
+    niterations = 100
     outfile = open('trajectory.pdb', 'w')
     app.PDBFile.writeHeader(topology, file=outfile)
     for iteration in range(niterations):
-        integrate.step(50)
+        integrator.step(100)
         state = context.getState(getPositions=True, getEnergy=True)
         print "Iteration %5d / %5d : potential %8.3f kcal/mol" % (iteration, niterations, state.getPotentialEnergy() / unit.kilocalories_per_mole)
+        positions = state.getPositions()
         app.PDBFile.writeModel(topology, positions, file=outfile, modelIndex=(iteration+1))
     app.PDBFile.writeFooter(topology, file=outfile)
     outfile.close()
