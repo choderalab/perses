@@ -11,6 +11,15 @@ from simtk import unit
 import simtk.openmm.app as app
 import numpy as np
 
+def create_molecule(iupac_name):
+    molecule = gaff2xml.openeye.iupac_to_oemol(iupac_name)
+    molecule = gaff2xml.openeye.get_charges(molecule, max_confs=1)
+    #import openeye.oeomega as om
+    #omega = om.OEOmega()
+    #omega.SetMaxConfs(1)
+    #omega(molecule)
+    return molecule
+
 def generate_openmm_system(molecule):
     trajs, ffxmls = gaff2xml.openeye.oemols_to_ffxml([molecule])
     ff = app.ForceField(ffxmls)
@@ -598,9 +607,10 @@ def create_relative_alchemical_transformation(system, topology, positions, molec
             electrostatics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
 
             # Add exclusions between unique parts of molecule1 and molecule2 so they do not interact.
+            print "Add exclusions between unique parts of molecule1 and molecule2 that should not interact..."
             for atom1_i in unique1:
                 for atom2_j in unique2:
-                    atom_i = molecule2_indices_in_system[atom1_i]
+                    atom_i = molecule1_indices_in_system[atom1_i]
                     atom_j = molecule2_indices_in_system[atom2_j]
                     electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
                     sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
@@ -657,18 +667,12 @@ def create_relative_alchemical_transformation(system, topology, positions, molec
 
     return [system, topology, positions]
 
-def create_molecule(iupac_name):
-    molecule = gaff2xml.openeye.iupac_to_oemol(iupac_name)
-    import openeye.oeomega as om
-    omega = om.OEOmega()
-    omega.SetMaxConfs(1)
-    omega(molecule)
-    return molecule
-
 if __name__ == '__main__':
     # Create two test molecules.
-    molecule1 = create_molecule('toluene')
-    molecule2 = create_molecule('methoxytoluene')
+    #molecule1 = create_molecule('toluene')
+    molecule1 = create_molecule('aspirin')
+    #molecule2 = create_molecule('methoxytoluene')
+    molecule2 = create_molecule('benzene')
 
     # Write molecules to mol2 files for ease of debugging.
     gaff2xml.openeye.molecule_to_mol2(molecule1, tripos_mol2_filename='molecule1.mol2')
