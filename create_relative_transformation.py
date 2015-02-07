@@ -690,18 +690,22 @@ if __name__ == '__main__':
 
     # Create an OpenMM test simulation.
     temperature = 300.0 * unit.kelvin
-    collision_rate = 90.0 / unit.picoseconds
+    collision_rate = 20.0 / unit.picoseconds
     timestep = 1.0 * unit.femtoseconds
     integrator = mm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = mm.Context(system, integrator)
     context.setPositions(positions)
     niterations = 100
-    outfile = open('trajectory.pdb', 'w')
+    filename = 'trajectory.pdb'
+    print "Writing out trajectory to %s ..." % filename
+    outfile = open(filename, 'w')
     app.PDBFile.writeHeader(topology, file=outfile)
     for iteration in range(niterations):
+        lambda_value = 1.0 - float(iteration) / float(niterations - 1)
+        context.setParameter('lambda', lambda_value)
         integrator.step(100)
         state = context.getState(getPositions=True, getEnergy=True)
-        print "Iteration %5d / %5d : potential %8.3f kcal/mol" % (iteration, niterations, state.getPotentialEnergy() / unit.kilocalories_per_mole)
+        print "Iteration %5d / %5d : lambda %8.5f : potential %8.3f kcal/mol" % (iteration, niterations, lambda_value, state.getPotentialEnergy() / unit.kilocalories_per_mole)
         positions = state.getPositions()
         app.PDBFile.writeModel(topology, positions, file=outfile, modelIndex=(iteration+1))
     app.PDBFile.writeFooter(topology, file=outfile)
