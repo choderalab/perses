@@ -412,9 +412,17 @@ def create_relative_alchemical_transformation(system, topology, positions, molec
                     atoms  = tuple(molecule2_indices_in_system[atom2] for atom2 in atoms2)
                     atoms1 = tuple(mapping2[atom2] for atom2 in atoms2)
                     # Find torsion index terms.
-                    index  = torsions[unique(*atoms)]
-                    index1 = torsions1[unique(*atoms1)]
-                    index2 = torsions2[unique(*atoms2)]
+                    try:
+                        index  = torsions[unique(*atoms)]
+                        index1 = torsions1[unique(*atoms1)]
+                        index2 = torsions2[unique(*atoms2)]
+                    except Exception as e:
+                        print e
+                        print "torsions :  %s" % str(unique(*atoms))
+                        print "torsions1:  %s" % str(unique(*atoms1))
+                        print "torsions2:  %s" % str(unique(*atoms2))
+                        raise Exception("Error occurred in building a list of torsions common to all molecules.")
+
                     # Store.
                     shared_torsions.append( (index, index1, index2) )
 
@@ -671,8 +679,8 @@ if __name__ == '__main__':
     # Create two test molecules.
     #molecule1 = create_molecule('toluene')
     molecule1 = create_molecule('aspirin')
-    #molecule2 = create_molecule('methoxytoluene')
-    molecule2 = create_molecule('benzene')
+    molecule2 = create_molecule('methoxytoluene')
+    #molecule2 = create_molecule('benzene')
 
     # Write molecules to mol2 files for ease of debugging.
     gaff2xml.openeye.molecule_to_mol2(molecule1, tripos_mol2_filename='molecule1.mol2')
