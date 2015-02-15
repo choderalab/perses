@@ -9,7 +9,7 @@ In this scheme, the substructure that shares common atom types is assigned to th
 
 Context parameters
 ------------------
-* `alchemical_varid` - index (0, 1, 2...) of variant currently selected to be active
+* `alchemical_variant` - index (0, 1, 2...) of variant currently selected to be active
 * `alchemical_lambda` - alchemical parameter that interpolates between 0 (core only) and 1 (variant `alchemical_varid` is fully chemically present)
 
 """
@@ -75,7 +75,7 @@ def generate_openmm_system(molecule):
 
 ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
 
-def add_molecule_to_system(system, molecule_system, core_atoms, is_core=False):
+def add_molecule_to_system(system, molecule_system, core_atoms, variant, atoms_to_exclude=[]):
     """
     Add the valence terms for the molecule from molecule_system.
 
@@ -87,6 +87,8 @@ def add_molecule_to_system(system, molecule_system, core_atoms, is_core=False):
        The system object from which core valence terms are to be taken.
     core_atoms : list of int
        The list of atom indices within molecule_system corresponding to core atoms.
+    variant : int
+       The variant index of this molecule if not a core fragment, or 0 if this is a core fragment and only core atoms are to be added.
 
     Returns
     -------
@@ -104,39 +106,45 @@ def add_molecule_to_system(system, molecule_system, core_atoms, is_core=False):
 
     # Create Custom*Force classes if necessary.
     if 'CustomBondForce' not in forces:
-        energy_expression  = 'lambda*(r-length)^2;'
-        energy_expression += 'lambda = ((1-alchemical_lambda)*is_core + alchemical_lambda*(1-is_core));'
+        energy_expression  = 'lambda*(K/2)*(r-length)^2;'
+        energy_expression += 'lambda = (1-alchemical_lambda)*delta(variant) + alchemical_lambda*delta(variant-alchemical_variant);'
         custom_force = mm.CustomBondForce(energy_expression)
         custom_force.addGlobalParameter('alchemical_lambda', 0.0)
-        custom_force.addPerBondParameter('is_core')
+        custom_force.addGlobalParameter('alchemical_variant', 0.0)
+        custom_force.addPerBondParameter('variant')
         custom_force.addPerBondParameter('length')
         custom_force.addPerBondParameter('K')
         system.addForce(custom_force)
+        forces['CustomBondForce'] = custom_force
     if 'CustomAngleForce' not in forces:
         energy_expression  = 'lambda*(K/2)*(theta-theta0)^2;'
-        energy_expression += 'lambda = ((1-variant_lambda)*is_core + variant_lambda*(1-is_core));'
+        energy_expression += 'lambda = (1-alchemical_lambda)*delta(variant) + alchemical_lambda*delta(variant-alchemical_variant);'
         custom_force = mm.CustomAngleForce(energy_expression)
         custom_force.addGlobalParameter('alchemical_lambda', 0.0)
-        custom_force.addPerAngleParameter('is_core')
+        custom_force.addGlobalParameter('alchemical_variant', 0.0)
+        custom_force.addPerAngleParameter('variant')
         custom_force.addPerAngleParameter('theta0')
         custom_force.addPerAngleParameter('K')
         system.addForce(custom_force)
+        forces['CustomAngleForce'] = custom_force
     if 'CustomTorsionForce' not in forces:
         energy_expression  = 'lambda*K*(1+cos(periodicity*theta-phase));'
-        energy_expression += 'lambda = ((1-variant_lambda)*is_core + variant_lambda*(1-is_core));'
+        energy_expression += 'lambda = (1-alchemical_lambda)*delta(variant) + alchemical_lambda*delta(variant-alchemical_variant);'
         custom_force = mm.CustomTorsionForce(energy_expression)
         custom_force.addGlobalParameter('alchemical_lambda', 0.0)
-        custom_force.addPerTorsionParameter('is_core')
+        custom_force.addGlobalParameter('alchemical_variant', 0.0)
+        custom_force.addPerTorsionParameter('variant')
         custom_force.addPerTorsionParameter('periodicity')
         custom_force.addPerTorsionParameter('phase')
         custom_force.addPerTorsionParameter('K')
         system.addForce(custom_force)
+        forces['CustomTorsionForce'] = custom_force
 
     # Add particles to system.
     mapping = dict() # mapping[index_in_molecule] = index_in_system
     for index_in_molecule in range(molecule_system.getNumParticles()):
         # Add all atoms, unless we're adding the core, in which case we just add core atoms.
-        if (not is_core) or (is_core and (index_in_molecule in core_atoms)):
+        if (variant) or (index_in_molecule in core_atoms):
             # TODO: We may want to make masses lighter.
             index_in_system = system.addParticle(system.getParticleMass(index_in_molecule))
             mapping[index_in_molecule] = index_in_system
@@ -148,41 +156,57 @@ def add_molecule_to_system(system, molecule_system, core_atoms, is_core=False):
 
     # Process forces.
     # Valence terms involving only core atoms are created as Custom*Force classes where lambda=0 activates the "core" image and lambda=1 activates the "variant" image.
-    for molecule_force in molecule_forces:
-        force_name = molecule_force.__class__.__name__
+    for (force_name, force) in molecule_forces.iteritems():
         print force_name
         if force_name == 'HarmonicBondForce':
-            for index in range(molecule_force.getNumBonds()):
+            for index in range(force.getNumBonds()):
                 [atom_i, atom_j, length, K] = force.getBondParameters(index)
                 if set([atom_i, atom_j]).issubset(core_atoms):
-                    forces['CustomBondForce'].addBond(mapping[atom_i], mapping[atom_j], [int(is_core), length, K])
-                else:
+                    forces['CustomBondForce'].addBond(mapping[atom_i], mapping[atom_j], [variant, length, K])
+                elif (variant):
                     forces[force_name].addBond(mapping[atom_i], mapping[atom_j], length, K)
 
         elif force_name == 'HarmonicAngleForce':
-            for index in range(molecule_force.getNumAngles()):
+            for index in range(force.getNumAngles()):
                 [atom_i, atom_j, atom_k, theta0, K] = force.getAngleParameters(index)
                 if set([atom_i, atom_j, atom_k]).issubset(core_atoms):
-                    forces['CustomAngleForce'].addAngle(mapping[atom_i], mapping[atom_j], mapping[atom_k], [int(is_core), theta0, K])
-                else:
+                    forces['CustomAngleForce'].addAngle(mapping[atom_i], mapping[atom_j], mapping[atom_k], [variant, theta0, K])
+                elif (variant):
                     forces[force_name].addAngle(mapping[atom_i], mapping[atom_j], mapping[atom_k], theta0, K)
 
         elif force_name == 'PeriodicTorsionForce':
-            for index in range(molecule_force.getNumTorsions()):
+            for index in range(force.getNumTorsions()):
                 [atom_i, atom_j, atom_k, atom_l, periodicity, phase, K] = force.getTorsionParameters(index)
                 if set([atom_i, atom_j, atom_k, atom_l]).issubset(core_atoms):
-                    forces['CustomTorsionForce'].addTorsion(mapping[atom_i], mapping[atom_j], mapping[atom_k], mapping[atom_l], [int(is_core), periodicity, phase, K])
-                else:
+                    forces['CustomTorsionForce'].addTorsion(mapping[atom_i], mapping[atom_j], mapping[atom_k], mapping[atom_l], [variant, periodicity, phase, K])
+                elif (variant):
                     forces[force_name].addTorsion(mapping[atom_i], mapping[atom_j], mapping[atom_k], mapping[atom_l], periodicity, phase, K)
 
         elif force_name == 'NonbondedForce':
-            for index in range(molecule_force.getNumParticles()):
-                # Retrieve parameters.
+            for index in range(force.getNumParticles()):
                 [charge, sigma, epsilon] = force.getParticleParameters(index)
-                forces[force_name].addParticle(0.0*charge, sigma, 0.0*epsilon)
+                if set([index]).issubset(core_atoms):
+                    forces[force_name].addParticle(0.0*charge, sigma, 0.0*epsilon)
+                elif (variant):
+                    forces[force_name].addParticle(0.0*charge, sigma, 0.0*epsilon)
+
+            # TODO: Copy nonbonded exceptions.
+            for index in range(force.getNumExceptions()):
+                [atom_i, atom_j, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
+                if set([atom_i, atom_j]).issubset(core_atoms):
+                    forces[force_name].addException(mapping[atom_i], mapping[atom_j], 0.0 * unit.elementary_charge**2, 1.0 * unit.angstrom, 0.0 * unit.kilocalories_per_mole)
+                elif (variant):
+                    forces[force_name].addException(mapping[atom_i], mapping[atom_j], 0.0 * unit.elementary_charge**2, 1.0 * unit.angstrom, 0.0 * unit.kilocalories_per_mole)
+
+    # Add exclusions to previous variants and core.
+    for atom_i in mapping.values():
+        for atom_j in atoms_to_exclude:
+            forces['NonbondedForce'].addException(atom_i, atom_j, 0.0 * unit.elementary_charge**2, 1.0 * unit.angstrom, 0.0 * unit.kilocalories_per_mole)
 
         # TODO: Add NonbondedForce for core with optional softening.
         # TODO: Add GB force processing too.
+
+    print system.getNumParticles(), forces['NonbondedForce'].getNumParticles()
 
     return mapping
 
@@ -310,8 +334,8 @@ def create_merged_topology(system, topology, positions,
 
     # TODO: Replace charges in molecule with RMS charges.
 
-    # Add valence terms only.
-    core_mapping = add_molecule_to_system(system, molecule_system, core_atoms, is_core=True)
+    # Add core fragment to system.
+    core_mapping = add_molecule_to_system(system, molecule_system, core_atoms, variant=0)
 
     # Add molecule to topology as a new residue.
     chain = topology.addChain()
@@ -327,6 +351,9 @@ def create_merged_topology(system, topology, positions,
     # Append positions of new particles.
     positions = unit.Quantity(np.append(positions/positions.unit, molecule_positions[core_atoms,:]/positions.unit, axis=0), positions.unit)
 
+    # Create a running list of atoms all variants should have interactions excluded with.
+    atoms_to_exclude = core_mapping.values()
+
     #
     # Create restraint force to keep corresponding core atoms from molecules near their corresponding core atoms.
     # TODO: Can we replace these with length-zero constraints or virtual particles if OpenMM supports this in the future?
@@ -341,8 +368,15 @@ def create_merged_topology(system, topology, positions,
     # Now, process all molecules.
     #
 
+    variants = list()
+
+    variant = 1
     for (molecule, gaff_molecule) in zip(molecules, gaff_molecules):
-        print molecule.GetTitle()
+        print ""
+        print "*******************************************************"
+        print "Incorporating molecule %s" % molecule.GetTitle()
+        print "*******************************************************"
+        print ""
 
         # Determine common atoms in second molecule.
         matches = [ match for match in mcss.Match(gaff_molecule, True) ]
@@ -385,7 +419,7 @@ def create_merged_topology(system, topology, positions,
         positions = unit.Quantity(np.append(positions/positions.unit, molecule_positions/positions.unit, axis=0), positions.unit)
 
         # Add valence terms only.
-        mapping = add_molecule_to_system(system, molecule_system, core_atoms, is_core=False)
+        mapping = add_molecule_to_system(system, molecule_system, core_atoms, variant=variant, atoms_to_exclude=atoms_to_exclude)
 
         # DEBUG
         print "Atom mappings into System object:"
@@ -403,6 +437,12 @@ def create_merged_topology(system, topology, positions,
             atomic_number = atom.GetAtomicNum()
             element = app.Element.getByAtomicNumber(atomic_number)
             topology.addAtom(name, element, residue)
+
+        # Increment variant index.
+        variant += 1
+
+        # Append to list of atoms to be excluded.
+        atoms_to_exclude += mapping.values()
 
     print "Done!"
 
@@ -442,6 +482,7 @@ if __name__ == '__main__':
     timestep = 1.0 * unit.femtoseconds
     integrator = mm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = mm.Context(system, integrator)
+    context.setParameter('alchemical_variant', 1) # Select variant index.
     context.setPositions(positions)
     niterations = 100
     filename = 'trajectory.pdb'
@@ -450,7 +491,7 @@ if __name__ == '__main__':
     app.PDBFile.writeHeader(topology, file=outfile)
     for iteration in range(niterations):
         lambda_value = 1.0 - float(iteration) / float(niterations - 1)
-        context.setParameter('lambda', lambda_value)
+        context.setParameter('alchemical_lambda', lambda_value)
         integrator.step(100)
         state = context.getState(getPositions=True, getEnergy=True)
         print "Iteration %5d / %5d : lambda %8.5f : potential %8.3f kcal/mol" % (iteration, niterations, lambda_value, state.getPotentialEnergy() / unit.kilocalories_per_mole)
