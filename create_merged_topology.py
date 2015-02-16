@@ -141,8 +141,8 @@ def add_molecule_to_system(system, molecule_system, core_atoms, variant, atoms_t
         forces['CustomTorsionForce'] = custom_force
     if 'CustomNonbondedForce' not in forces:
         # DEBUG
-        # TODO: Create this correctly.
-        energy_expression = "0.0"
+        # TODO: Create proper CustomNonbondedForce here.
+        energy_expression = "0.0;"
         custom_force = mm.CustomNonbondedForce(energy_expression)
         custom_force.addGlobalParameter('alchemical_lambda', 0.0)
         custom_force.addGlobalParameter('alchemical_variant', 0.0)
@@ -152,6 +152,11 @@ def add_molecule_to_system(system, molecule_system, core_atoms, variant, atoms_t
         custom_force.addPerParticleParameter('epsilon')
         system.addForce(custom_force)
         forces['CustomNonbondedForce'] = custom_force
+
+        # Add parameters for existing particles.
+        for index in range(system.getNumParticles()):
+            [charge, sigma, epsilon] = forces['NonbondedForce'].getParticleParameters(index)
+            custom_force.addParticle([0, charge, sigma, epsilon])
 
     # Add particles to system.
     mapping = dict() # mapping[index_in_molecule] = index_in_system
@@ -220,6 +225,7 @@ def add_molecule_to_system(system, molecule_system, core_atoms, variant, atoms_t
     for atom_i in mapping.values():
         for atom_j in atoms_to_exclude:
             forces['NonbondedForce'].addException(atom_i, atom_j, 0.0 * unit.elementary_charge**2, 1.0 * unit.angstrom, 0.0 * unit.kilocalories_per_mole)
+            forces['CustomNonbondedForce'].addExclusion(atom_i, atom_j)
 
     print system.getNumParticles(), forces['NonbondedForce'].getNumParticles()
 
