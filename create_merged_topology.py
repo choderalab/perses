@@ -139,6 +139,19 @@ def add_molecule_to_system(system, molecule_system, core_atoms, variant, atoms_t
         custom_force.addPerTorsionParameter('K')
         system.addForce(custom_force)
         forces['CustomTorsionForce'] = custom_force
+    if 'CustomNonbondedForce' not in forces:
+        # DEBUG
+        # TODO: Create this correctly.
+        energy_expression = "0.0"
+        custom_force = mm.CustomNonbondedForce(energy_expression)
+        custom_force.addGlobalParameter('alchemical_lambda', 0.0)
+        custom_force.addGlobalParameter('alchemical_variant', 0.0)
+        custom_force.addPerParticleParameter('variant')
+        custom_force.addPerParticleParameter('charge')
+        custom_force.addPerParticleParameter('sigma')
+        custom_force.addPerParticleParameter('epsilon')
+        system.addForce(custom_force)
+        forces['CustomNonbondedForce'] = custom_force
 
     # Add particles to system.
     mapping = dict() # mapping[index_in_molecule] = index_in_system
@@ -184,27 +197,29 @@ def add_molecule_to_system(system, molecule_system, core_atoms, variant, atoms_t
 
         elif force_name == 'NonbondedForce':
             for index in range(force.getNumParticles()):
+                # TODO: Nonbonded terms will have to be handled as CustomNonbondedForce terms.
                 [charge, sigma, epsilon] = force.getParticleParameters(index)
                 if set([index]).issubset(core_atoms):
                     forces[force_name].addParticle(0.0*charge, sigma, 0.0*epsilon)
+                    forces['CustomNonbondedForce'].addParticle([variant, charge, sigma, epsilon])
                 elif (variant):
                     forces[force_name].addParticle(0.0*charge, sigma, 0.0*epsilon)
+                    forces['CustomNonbondedForce'].addParticle([variant, charge, sigma, epsilon])
 
-            # TODO: Copy nonbonded exceptions.
             for index in range(force.getNumExceptions()):
                 [atom_i, atom_j, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
                 if set([atom_i, atom_j]).issubset(core_atoms):
+                    # TODO: Nonbonded exceptions will have to be handled as CustomBondForce terms.
                     forces[force_name].addException(mapping[atom_i], mapping[atom_j], 0.0 * unit.elementary_charge**2, 1.0 * unit.angstrom, 0.0 * unit.kilocalories_per_mole)
                 elif (variant):
-                    forces[force_name].addException(mapping[atom_i], mapping[atom_j], 0.0 * unit.elementary_charge**2, 1.0 * unit.angstrom, 0.0 * unit.kilocalories_per_mole)
+                    forces[force_name].addException(mapping[atom_i], mapping[atom_j], chargeProd, sigma, epsilon)
+
+        # TODO: Add GB force processing.
 
     # Add exclusions to previous variants and core.
     for atom_i in mapping.values():
         for atom_j in atoms_to_exclude:
             forces['NonbondedForce'].addException(atom_i, atom_j, 0.0 * unit.elementary_charge**2, 1.0 * unit.angstrom, 0.0 * unit.kilocalories_per_mole)
-
-        # TODO: Add NonbondedForce for core with optional softening.
-        # TODO: Add GB force processing too.
 
     print system.getNumParticles(), forces['NonbondedForce'].getNumParticles()
 
