@@ -1,11 +1,29 @@
 #!/usr/bin/env python
 """
-Testbed for creating a merged topology representation with continuous lambda parameters for alchemical transformations.
+Tool for creating a merged topology representation with discrete variant selection and continuous lambda parameter for relative alchemical transformations.
 
-A number of molecules are specified to be added to an "environment".
+Example
+-------
 
+Create a few molecules sharing a common core.
 
+>>> molecule_names = ['benzene', 'toluene', 'methoxytoluene']
+>>> molecules = [ create_molecule(name) for name in molecule_names ]
 
+Create an OpenMM system, topology, and positions to represent the environment that the molecules will be inserted into.
+This example uses a nearby phenol molecule to represent the environment.
+
+>>> molecule = create_molecule('phenol')
+>>> [environment_system, environment_topology, environment_positions, environment_molecule_gaff] = parameterize_molecule(molecule)
+>>> environment_positions[:,2] += 15.0 * unit.angstroms
+
+Now create the merged topology, aligning the core to the specified reference molecule.
+
+>>> factory = AlchemicalMergedTopologyFactory(environment_system, environment_topology, environment_positions)
+>>> for molecule in molecules:
+...    [system, topology, positions, gaff_molecule] = parameterize_molecule(molecule)
+...    variant_index = factory.addMoleculeVariant(gaff_molecule, system, topology, positions)
+>>> [system, topology, positions] = factory.generateMergedTopology(reference_molecule=molecules[0])
 
 Notes
 -----
@@ -65,8 +83,9 @@ def assign_am1bcc_charges(molecule):
     molecule = molecule.CreateCopy()
 
     # Expand conformations.
-    omega = oechem.OEOmega()
-    omega.SetIncludeInput(True)
+    from openeye import oeomega
+    omega = oeomega.OEOmega()
+    omega.SetIncludeInput(False)
     omega.SetCanonOrder(False)
     omega.SetSampleHydrogens(True)
     eWindow = 15.0
@@ -76,18 +95,9 @@ def assign_am1bcc_charges(molecule):
     omega(molecule)
 
     # Assign partial charges.
-    oeproton.OEAssignPartialCharges(molecule, oeproton.OECharges_AM1BCCSym)
-
-    # Check charges.
-    absFCharge = 0
-    sumFCharge = 0
-    sumPCharge = 0.0
-    for atm in molecule.GetAtoms():
-        sumFCharge += atm.GetFormalCharge()
-        absFCharge += abs(atm.GetFormalCharge())
-        sumPCharge += atm.GetPartialCharge()
-    raise Exception("%s: %d formal charges give total charge %d ; Sum of Partial Charges %5.4f"
-                         % (mol.GetTitle(), absFCharge, sumFCharge, sumPCharge))
+    from openeye import oequacpac
+    from openeye.oequacpac import OEAssignPartialCharges, OECharges_AM1BCCSym
+    OEAssignPartialCharges(molecule, OECharges_AM1BCCSym)
 
     return molecule
 
@@ -174,8 +184,8 @@ def create_molecule(iupac_name):
     molecule = assign_am1bcc_charges(molecule)
 
     # Assign conformations.
-    import openeye.oeomega as om
-    omega = om.OEOmega()
+    from openeye import oeomega
+    omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega(molecule)
 
@@ -200,9 +210,9 @@ class AlchemicalMergedTopologyFactory(object):
     Examples
     --------
 
+    This example creates a merged topology file containing several small benzene derivatives where the environment is an 18-crown-6 host.
+
     Create molecules to be added to the system.
-    These can be in any orientation and conformation.
-    TODO: Where do the core positions come from?
 
     >>> molecule_names = ['benzene', 'toluene', 'methoxytoluene']
     >>> molecules = [ create_molecule(name) for name in molecule_names ]
@@ -211,17 +221,24 @@ class AlchemicalMergedTopologyFactory(object):
     This example uses a nearby phenol molecule to represent the environment.
 
     >>> molecule = create_molecule('phenol')
-    >>> [system, topology, positions] = generate_openmm_system(molecule)
-    >>> positions[:,2] += 15.0 * unit.angstroms
+    >>> [environment_system, environment_topology, environment_positions, environment_molecule_gaff] = parameterize_molecule(molecule)
+    >>> environment_positions[:,2] += 15.0 * unit.angstroms
 
     Now create the merged topology, aligning the core to the specified reference molecule.
 
     >>> factory = AlchemicalMergedTopologyFactory(environment_system, environment_topology, environment_positions)
-    >>> [system, topology, positions] = factory.generateMergedTopology(molecules, reference_molecule=molecules[0])
+    >>> for molecule in molecules:
+    ...    [system, topology, positions, gaff_molecule] = parameterize_molecule(molecule)
+    ...    variant_index = factory.addMoleculeVariant(gaff_molecule, system, topology, positions)
+    >>> [system, topology, positions] = factory.generateMergedTopology(reference_molecule=molecules[0])
+
+    The new `system` object will now have two context parameters that can be modified:
+    * `alchemical_variant` - index (0, 1, 2...) of variant currently selected to be active
+    * `alchemical_lambda` - alchemical parameter that interpolates between 0 (core only) and 1 (variant `alchemical_variant` is fully chemically present)
 
     """
     def __init__(self, environment_system, environment_topology, environment_positions,
-                 softcore_alpha=0.5, softcore_beta=12*unit.angstrom**2):
+                       softcore_alpha=0.5, softcore_beta=12*unit.angstrom**2):
         """\
         Create a factory for generating merged topologies.
 
@@ -245,76 +262,56 @@ class AlchemicalMergedTopologyFactory(object):
         self.environment_topology = copy.deepcopy(environment_topology)
         self.environment_positions = copy.deepcopy(environment_positions)
 
+        # Softcore defaults.
         self.softcore_alpha = softcore_alpha
         self.softcore_beta = softcore_beta
 
+        # Storage for molecule variants.
+        self._molecules = list()
+        self._systems = list()
+        self._topologies = list()
+        self._positions = list()
+
         return
 
-    def _normalizeMolecules(self, molecules):
+    def addMoleculeVariant(self, molecule, system, topology, positions):
         """\
-        Normalize the molecules.
+        Add a variant molecule.
 
         Parameters
         ----------
-        molecules : list of openeye.oechem.OEMol
-            The molecules to be normalized.
-            NOTE: These molecules will be modified!
-
-        """
-        # TODO: May need to do more normalization/cleanup here.
-        for molecule in molecules:
-            oe.OEPerceiveChiral(molecule)
-        return
-
-    def _generateGAFFMolecules(self, molecules):
-        """\
-        Parameterize small molecules with GAFF, replacing atom and bond types in OEMol object with GAFF types.
-
-        Parameters
-        ----------
-        molecules : list of openeye.oechem.OEMol
-            The molecules to be parameterized with GAFF.
+        molecule : openeye.oechem.OEMol
+            The OEMol molecule with GAFF atom types and bond types (or other desired types to use for matching).
+            These molecules can be in any orientation or position; their cores can later be aligned to a reference molecule when the merged topology is constructed.
+        system : simtk.openmm.System
+            The System object corresponding to molecule.
+        topology : simtk.openmm.app.Topology
+            The topology corresponding to the molecule.
+        positions :
+            The positions of the molecule.
+            TODO: Is this redundant?
 
         Returns
         -------
-        gaff_molecules : list of openeye.oechem.OEMol
-            The molecules to have GAFF string atom and integral bond types assigned.
-
-        Notes
-        -----
-        After replacing Tripos atom and bond types, these molecules may behave strangely with openeye tools.
-        Do no try writing them out!
+        variant_index : int
+            The variant index for this molecule.
 
         """
-        import oldmmtools
-        gaff_molecules = list()
-        for (index, molecule) in enumerate(molecules):
-            print "MOLECULE:"
-            print molecule
-            amber_prmtop_filename = 'molecule-%05d.prmtop' % index
-            amber_inpcrd_filename = 'molecule-%05d.inpcrd' % index
-            amber_off_filename = 'molecule-%05d.off' % index
-            # Parameterize molecule for AMBER (currently using old machinery for convenience)
-            # TODO: Replace this with gaff2xml stuff
-            print "Parameterizing molecule %d / %d (%s) for GAFF with antechamber..." % (index, len(molecules), molecule.GetTitle())
-            oldmmtools.parameterizeForAmber(molecule, amber_prmtop_filename, amber_inpcrd_filename, charge_model=None, offfile=amber_off_filename)
-            # Read in the molecule with GAFF atom and bond types
-            print "Overwriting OEMol with GAFF atom and bond types..."
-            molecule = oldmmtools.loadGAFFMolecule(molecule, amber_off_filename)
-            gaff_molecules.append(molecule)
+        variant_index = len(self._molecules)
+        self._molecules.append(molecule.CreateCopy())
+        self._systems.append(copy.deepcopy(system))
+        self._topologies.append(copy.deepcopy(topology))
+        self._positions.append(copy.deepcopy(positions))
+        return variant_index
 
-        return gaff_molecules
-
-    def generateMergedTopology(self, molecules, reference_molecule=None, verbose=False):
+    def generateMergedTopology(self, reference_molecule=None, verbose=False):
         """\
-        Generate an alchemical merged topology for the given molecules.
+        Generate an alchemical merged topology for the added molecule variants.
 
         Parameters
         ----------
-        molecules : list of openeye.oechem.OEMol
-            The molecules to be parameterized and added to the environment.
-        reference_molecule : openeye.oechem.OEMol
-            A molecule whose positions the core is to be aligned.
+        reference_molecule : openeye.oechem.OEMol, optional, default=None
+            If specified, a molecule whose positions the core is to be aligned.
         verbose : bool, optional, default=False
             If True, will print out lots of debug info.
 
@@ -329,22 +326,17 @@ class AlchemicalMergedTopologyFactory(object):
 
         """
         # Copy molecules so as not to accidentally overwrite them.
-        molecules = [ molecule.CreateCopy() for molecule in molecules ]
-
-        # Normalize input molecules.
-        molecules = self._normalizeMolecules(molecules)
-
-        # Generate variant molecules with GAFF parameters.
-        gaff_molecules = self._generateGAFFMolecules(self, molecules)
+        molecules = [ molecule.CreateCopy() for molecule in self._molecules ]
 
         # Determine common substructure using exact match of GAFF atom and bond types.
         print "Determining common substructure..."
-        core = oldmmtools.determineCommonSubstructure(gaff_molecules, verbose=True)
+        core = oldmmtools.determineCommonSubstructure(molecules, verbose=True)
 
         # Find RMS-fit charges for common intermediate.
         print "Determining RMS-fit charges for common intermediate..."
         core = oldmmtools.determineMinimumRMSCharges(core, molecules)
 
+        # DEBUG: Write out info for common core / scaffold.
         if verbose:
             print "Common core atoms, types, and partial charges:"
             print "\n%s" % core.GetTitle()
