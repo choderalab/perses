@@ -20,6 +20,7 @@ import shutil
 #=============================================================================================
 # METHODS FOR WRITING OR EXPORTING MOLECULES
 #=============================================================================================
+
 def totalPartialCharge(ligand):
     """Compute the total partial charge of all atoms in molecule.
 
@@ -413,9 +414,11 @@ def readMolecule(filename, normalize = False):
    if normalize: normalizeMolecule(molecule)
 
    return molecule
+
 #=============================================================================================
 # METHODS FOR INTERROGATING MOLECULES
 #=============================================================================================
+
 def formalCharge(molecule):
    """Report the net formal charge of a molecule.
 
@@ -628,7 +631,7 @@ def parameterizeForAmber(molecule, topology_filename, coordinate_filename, charg
 
    # Generate frcmod file for additional GAFF parameters.
    frcmod_filename_tmp = os.path.join(working_directory, 'gaff.frcmod')
-   commands.getoutput('parmchk -i %(gaff_mol2_filename)s -f mol2 -o %(frcmod_filename_tmp)s' % vars())
+   commands.getoutput('parmchk2 -i %(gaff_mol2_filename)s -f mol2 -o %(frcmod_filename_tmp)s' % vars())
 
    # Create AMBER topology/coordinate files using LEaP.
    if offfile:
@@ -690,6 +693,72 @@ quit""" % vars()
 #=============================================================================================
 # METHODS FOR READING, EXTRACTING, OR CREATING MOLECULES
 #=============================================================================================
+
+#=============================================================================================
+def createMoleculeFromIUPAC(name, verbose = False, charge = None, strictTyping = None, strictStereo = True):
+   """Generate a small molecule from its IUPAC name.
+
+   ARGUMENTS
+     IUPAC_name (string) - IUPAC name of molecule to generate
+
+   OPTIONAL ARGUMENTS
+     verbose (boolean) - if True, subprocess output is shown (default: False)
+     charge (int) - if specified, a form of this molecule with the desired charge state will be produced (default: None)
+     strictTyping (boolean) -- if set, passes specified value to omega (see documentation for expandConformations)
+     strictStereo (boolean) -- if True, require stereochemistry to be specified before running omega. If False, don't (pick random stereoisomer if not specified). If not specified (None), do whatever omega does by default (varies with version). Default: True.
+
+   RETURNS
+     molecule (OEMol) - the molecule
+
+   NOTES
+     OpenEye LexiChem's OEParseIUPACName is used to generate the molecle.
+     The molecule is normalized by adding hydrogens.
+     Omega is used to generate a single conformation.
+     Also note that atom names will be blank coming from this molecule. They are assigned when the molecule is written, or one can assign using OETriposAtomNames for example.
+
+   EXAMPLES
+     # Generate a mol2 file for phenol.
+     molecule = createMoleculeFromIUPAC('phenol')
+
+   """
+
+   # Create an OEMol molecule from IUPAC name.
+   molecule = OEMol() # create a molecule
+   status = OEParseIUPACName(molecule, name) # populate the molecule from the IUPAC name
+
+   # Normalize the molecule.
+   normalizeMolecule(molecule)
+
+   # Generate a conformation with Omega
+   omega = OEOmega()
+   if strictStereo<>None:
+        omega.SetStrictStereo(strictStereo)
+
+   #omega.SetVerbose(verbose)
+   #DLM 2/27/09: Seems to be obsolete in current OEOmega
+   if strictTyping != None:
+     omega.SetStrictAtomTypes( strictTyping)
+
+   omega.SetIncludeInput(False) # don't include input
+   omega.SetMaxConfs(1) # set maximum number of conformations to 1
+   omega(molecule) # generate conformation
+
+   if (charge != None):
+      # Enumerate protonation states and select desired state.
+      protonation_states = enumerateStates(molecule, enumerate = "protonation", verbose = verbose)
+      for molecule in protonation_states:
+         if formalCharge(molecule) == charge:
+            # Return the molecule if we've found one in the desired protonation state.
+            return molecule
+      if formalCharge(molecule) != charge:
+         print "enumerateStates did not enumerate a molecule with desired formal charge."
+         print "Options are:"
+         for molecule in protonation_states:
+            print "%s, formal charge %d" % (molecule.GetTitle(), formalCharge(molecule))
+         raise "Could not find desired formal charge."
+
+   # Return the molecule.
+   return molecule
 
 def write_file(filename, contents):
     """Write the specified contents to a file.
@@ -854,3 +923,462 @@ def loadGAFFMolecule(molecule, amber_off_filename, debug=False):
 #    print ""
 
     return molecule
+
+#=============================================================================================
+# METHODS FOR MODIFYING MOLECULES
+#=============================================================================================
+def normalizeMolecule(molecule):
+   """Normalize the molecule by checking aromaticity, adding explicit hydrogens, and renaming by IUPAC name.
+
+   ARGUMENTS
+     molecule (OEMol) - the molecule to be normalized.
+
+   EXAMPLES
+     # read a partial molecule and normalize it
+     molecule = readMolecule('molecule.sdf')
+     normalizeMolecule(molecule)
+   """
+   
+   # Find ring atoms and bonds
+   # OEFindRingAtomsAndBonds(molecule) 
+   
+   # Assign aromaticity.
+   OEAssignAromaticFlags(molecule, OEAroModelOpenEye)   
+
+   # Add hydrogens.
+   OEAddExplicitHydrogens(molecule)
+
+   # Set title to IUPAC name.
+   name = OECreateIUPACName(molecule)
+   molecule.SetTitle(name)
+
+   return molecule
+
+def expandConformations(molecule, maxconfs = None, threshold = None, include_original = False, torsionlib = None, verbose = False, strictTyping = None, strictStereo = None):   
+   """Enumerate conformations of the molecule with OpenEye's Omega after normalizing molecule. 
+
+   ARGUMENTS
+   molecule (OEMol) - molecule to enumerate conformations for
+
+   OPTIONAL ARGUMENTS
+     include_original (boolean) - if True, original conformation is included (default: False)
+     maxconfs (integer) - if set to an integer, limits the maximum number of conformations to generated -- maximum of 120 (default: None)
+     threshold (real) - threshold in RMSD (in Angstroms) for retaining conformers -- lower thresholds retain more conformers (default: None)
+     torsionlib (string) - if a path to an Omega torsion library is given, this will be used instead (default: None)
+     verbose (boolean) - if True, omega will print extra information
+     strictTyping (boolean) -- if specified, pass option to SetStrictAtomTypes for Omega to control whether related MMFF types are allowed to be substituted for exact matches.
+     strictStereo (boolean) -- if specified, pass option to SetStrictStereo; otherwise use default.
+
+   RETURN VALUES
+     expanded_molecule - molecule with expanded conformations
+
+   EXAMPLES
+     # create a new molecule with Omega-expanded conformations
+     expanded_molecule = expandConformations(molecule)
+
+     
+   """
+   # Initialize omega
+   omega = OEOmega()
+   if strictTyping != None:
+     omega.SetStrictAtomTypes( strictTyping)
+   if strictStereo != None:
+     omega.SetStrictStereo( strictStereo )
+   #Set atom typing options
+
+   # Set verbosity.
+   #omega.SetVerbose(verbose)
+   #DLM 2/27/09: Seems to be obsolete in current OEOmega
+
+   # Set maximum number of conformers.
+   if maxconfs:
+      omega.SetMaxConfs(maxconfs)
+     
+   # Set whether given conformer is to be included.
+   omega.SetIncludeInput(include_original)
+   
+   # Set RMSD threshold for retaining conformations.
+   if threshold:
+      omega.SetRMSThreshold(threshold) 
+ 
+   # If desired, do a torsion drive.
+   if torsionlib:
+      omega.SetTorsionLibrary(torsionlib)
+
+   # Create copy of molecule.
+   expanded_molecule = OEMol(molecule)   
+
+   # Enumerate conformations.
+   omega(expanded_molecule)
+
+
+   # verbose output
+   if verbose: print "%d conformation(s) produced." % expanded_molecule.NumConfs()
+
+   # return conformationally-expanded molecule
+   return expanded_molecule
+
+def assignPartialCharges(molecule, charge_model = 'am1bcc', multiconformer = False, minimize_contacts = False, verbose = False):
+   """Assign partial charges to a molecule using OEChem oeproton.
+
+   ARGUMENTS
+     molecule (OEMol) - molecule for which charges are to be assigned
+
+   OPTIONAL ARGUMENTS
+     charge_model (string) - partial charge model, one of ['am1bcc'] (default: 'am1bcc')
+     multiconformer (boolean) - if True, multiple conformations are enumerated and the resulting charges averaged (default: False)
+     minimize_contacts (boolean) - if True, intramolecular contacts are eliminated by minimizing conformation with MMFF with all charges set to absolute values (default: False)
+     verbose (boolean) - if True, information about the current calculation is printed
+
+   RETURNS
+     charged_molecule (OEMol) - the charged molecule with GAFF atom types
+
+   NOTES
+     multiconformer and minimize_contacts can be combined, but this can be slow
+
+   EXAMPLES
+     # create a molecule
+     molecule = createMoleculeFromIUPAC('phenol')
+     # assign am1bcc charges
+     assignPartialCharges(molecule, charge_model = 'am1bcc')
+   """
+
+   #Check that molecule has atom names; if not we need to assign them
+   assignNames = False
+   for atom in molecule.GetAtoms():
+       if atom.GetName()=='':
+          assignNames = True #In this case we are missing an atom name and will need to assign
+   if assignNames:
+      if verbose: print "Assigning TRIPOS names to atoms"
+      OETriposAtomNames(molecule)
+
+   # Check input pameters.
+   supported_charge_models  = ['am1bcc']
+   if not (charge_model in supported_charge_models):
+      raise "Charge model %(charge_model)s not in supported set of %(supported_charge_models)s" % vars()
+
+   # Expand conformations if desired.   
+   if multiconformer:
+      expanded_molecule = expandConformations(molecule)
+   else:
+      expanded_molecule = OEMol(molecule)
+   nconformers = expanded_molecule.NumConfs()
+   if verbose: print 'assignPartialCharges: %(nconformers)d conformations will be used in charge determination.' % vars()
+   
+   # Set up storage for partial charges.
+   partial_charges = dict()
+   for atom in molecule.GetAtoms():
+      name = atom.GetName()
+      partial_charges[name] = 0.0
+
+   # Assign partial charges for each conformation.
+   conformer_index = 0
+   for conformation in expanded_molecule.GetConfs():
+      conformer_index += 1
+      if verbose and multiconformer: print "assignPartialCharges: conformer %d / %d" % (conformer_index, expanded_molecule.NumConfs())
+
+      # Assign partial charges to a copy of the molecule.
+      if verbose: print "assignPartialCharges: determining partial charges..."
+      charged_molecule = OEMol(conformation)   
+      if charge_model == 'am1bcc':
+         OEAssignPartialCharges(charged_molecule, OECharges_AM1BCC)         
+      
+      # Minimize with positive charges to splay out fragments, if desired.
+      if minimize_contacts:
+         if verbose: print "assignPartialCharges: Minimizing conformation with MMFF and absolute value charges..." % vars()         
+         # Set partial charges to absolute value.
+         for atom in charged_molecule.GetAtoms():
+            atom.SetPartialCharge(abs(atom.GetPartialCharge()))
+         # Minimize in Cartesian space to splay out substructures.
+         szybki = OESzybki() # create an instance of OESzybki
+         szybki.SetRunType(OERunType_CartesiansOpt) # set minimization         
+         szybki.SetUseCurrentCharges(True) # use charges for minimization
+         results = szybki(charged_molecule)
+         # DEBUG
+         writeMolecule(charged_molecule, 'minimized.mol2')
+         for result in results: result.Print(oeout)
+         # Recompute charges;
+         if verbose: print "assignPartialCharges: redetermining partial charges..."         
+         OEAssignPartialCharges(charged_molecule, OECharges_AM1BCC)         
+         
+      # Accumulate partial charges.
+      for atom in charged_molecule.GetAtoms():
+         name = atom.GetName()
+         partial_charges[name] += atom.GetPartialCharge()
+   # Compute and store average partial charges in a copy of the original molecule.
+   charged_molecule = OEMol(molecule)
+   for atom in charged_molecule.GetAtoms():
+      name = atom.GetName()
+      atom.SetPartialCharge(partial_charges[name] / nconformers)
+
+   # Return the charged molecule
+   return charged_molecule
+
+def enumerateStates(molecules, enumerate = "protonation", consider_aromaticity = True, maxstates = 200, verbose = True):
+    """Enumerate protonation or tautomer states for a list of molecules.
+
+    ARGUMENTS
+      molecules (OEMol or list of OEMol) - molecules for which states are to be enumerated
+
+    OPTIONAL ARGUMENTS
+      enumerate - type of states to expand -- 'protonation' or 'tautomer' (default: 'protonation')
+      verbose - if True, will print out debug output
+
+    RETURNS
+      states (list of OEMol) - molecules in different protonation or tautomeric states
+
+    TODO
+      Modify to use a single molecule or a list of molecules as input.
+      Apply some regularization to molecule before enumerating states?
+      Pick the most likely state?
+      Add more optional arguments to control behavior.
+    """
+
+    # If 'molecules' is not a list, promote it to a list.
+    if type(molecules) != type(list()):
+       molecules = [molecules]
+
+    # Check input arguments.
+    if not ((enumerate == "protonation") or (enumerate == "tautomer")):
+        raise "'enumerate' argument must be either 'protonation' or 'tautomer' -- instead got '%s'" % enumerate
+
+    # Create an internal output stream to expand states into.
+    ostream = oemolostream()
+    ostream.openstring()
+    ostream.SetFormat(OEFormat_SDF)
+    
+    # Default parameters.
+    only_count_states = False # enumerate states, don't just count them
+
+    # Enumerate states for each molecule in the input list.
+    states_enumerated = 0
+    for molecule in molecules:
+        if (verbose): print "Enumerating states for molecule %s." % molecule.GetTitle()
+        
+        # Dump enumerated states to output stream (ostream).
+        if (enumerate == "protonation"): 
+            # Create a functor associated with the output stream.
+            functor = OETyperMolFunction(ostream, consider_aromaticity, False, maxstates)
+            # Enumerate protonation states.
+            if (verbose): print "Enumerating protonation states..."
+            states_enumerated += OEEnumerateFormalCharges(molecule, functor, verbose)        
+        elif (enumerate == "tautomer"):
+            # Create a functor associated with the output stream.
+            functor = OETautomerMolFunction(ostream, consider_aromaticity, False, maxstates)
+            # Enumerate tautomeric states.
+            if (verbose): print "Enumerating tautomer states..."
+            states_enumerated += OEEnumerateTautomers(molecule, functor, verbose)    
+    print "Enumerated a total of %d states." % states_enumerated
+
+    # Collect molecules from output stream into a list.
+    states = list()
+    if (states_enumerated > 0):    
+        state = OEMol()
+        istream = oemolistream()
+        istream.openstring(ostream.GetString())
+        istream.SetFormat(OEFormat_SDF)
+        while OEReadMolecule(istream, state):
+           states.append(OEMol(state)) # append a copy
+
+    # Return the list of expanded states as a Python list of OEMol() molecules.
+    return states
+
+def fitMolToRefmol( fitmol, refmol, maxconfs = None, verbose = False, ShapeColor = False):
+
+    """Fit a multi-conformer target molecule to a reference molecule using OpenEye Shape tookit, and return an OE molecule with the top conformers of the resulting fit. Tanimoto scores also returned.
+
+    ARGUMENTS
+      fitmol (OEMol) -- the (multi-conformer) molecule to be fit.
+      refmol (OEMol) -- the molecule to fit to
+
+    OPTIONAL ARGUMENTS
+      maxconfs -- Limit on number of conformations to return; default return all
+      verbose -- Turn verbosity on/off
+      ShapeColor -- default False. If True, also do a color search (looking at chemistry) rather than just shape, and return the combined score (now running from 0 to 2).
+
+    RETURNS
+      outmol (OEMol) -- output (fit) molecule resulting from fitmol
+      scores
+
+    NOTES
+      Passing this a multi-conformer fitmol is recommended for any molecule with rotatable bonds as fitting only includes rotations and translations, so one of the provided conformers must already have right bond rotations."""
+
+    #Set up storage for overlay
+    best = OEBestOverlay()
+    #Set reference molecule
+    best.SetRefMol(refmol)
+
+    #Color search too if desired
+    if ShapeColor:
+        best.SetColorForceField( OEColorFFType_ImplicitMillsDean)
+        best.SetColorOptimize(True)
+
+    if verbose:
+        print "Reference title: ", refmol.GetTitle()
+        print "Fit title: ", fitmol.GetTitle()
+        print "Num confs: ", fitmol.NumConfs()
+
+
+    resCount = 0
+    #Each conformer-conformer pair generates multiple scores since there are multiple possible overlays; we only want the best. Load the best score for each conformer-conformer pair into an iterator and loop over it
+    scoreiter = OEBestOverlayScoreIter()
+    OESortOverlayScores(scoreiter, best.Overlay(fitmol), OEHighestTanimoto())
+    tanimotos = [] #Storage for scores
+    for score in scoreiter:
+        #Get the particular conformation of this match and transform to overlay onto reference structure
+
+        #tmpmol = OEGraphMol(fitmol.GetConf(OEHasConfIdx(score.fitconfidx)))
+        tmpmol = OEMol(fitmol.GetConf(OEHasConfIdx(score.fitconfidx)))
+        score.Transform(tmpmol)
+        #Store to output molecule
+        try: #If it already exists
+            outmol.NewConf(tmpmol)
+        except: #Otherwise
+            outmol = tmpmol
+
+        #Print some info
+        if verbose:
+            print "FitConfIdx: %-4d" % score.fitconfidx,
+            print "RefConfIdx: %-4d" % score.refconfidx,
+            if not ShapeColor:
+                print "Tanimoto: %.2f" % score.tanimoto
+            else:
+                print score.GetTanimotoCombo()
+        #Store score
+        if not ShapeColor:
+            tanimotos.append(score.tanimoto)
+        else:
+            tanimotos.append(score.GetTanimotoCombo() )
+        resCount+=1
+
+        if resCount == maxconfs: break
+    return ( outmol, tanimotos )
+
+def create_openmm_system(molecule, charge_model=False, judgetypes=None, cleanup=True, show_warnings=True, verbose=False, resname=None, netcharge=None, offfile=None, ligand_obj_name='molecule', frcmod_filename=None, gaff_mol2_filename=None, prmtop_filename=None, inpcrd_filename=None):
+   """
+   Parameterize molecule for OpenMM using GAFF.
+
+   Parameters
+   ----------
+     molecule (OEMol) - molecule to parameterize (only the first configuration will be used if multiple are present)
+     topology_filename (string) - name of AMBER topology file to be written
+     coordinate_filename (string) - name of AMBER coordinate file to be written
+
+   OPTIONAL ARGUMENTS
+     charge_model (string) - if not False, antechamber is used to assign charges (default: False) -- if set to 'bcc', for example, AM1-BCC charges will be used
+     judgetypes (integer) - if provided, argument passed to -j of antechamber to judge types (default: None)
+     cleanup (boolean) - clean up temporary files (default: True)
+     show_warnings (boolean) - show warnings during parameterization (default: True)
+     verbose (boolean) - show all output from subprocesses (default: False)
+     resname (string) - if set, residue name to use for parameterized molecule (default: None)
+     netcharge (integer) -- if set, pass this net charge to calculation in antechamber (with -nc (netcharge)), otherwise assumes zero.
+     offfile (string) - name of AMBER off file to be written, optionally. 
+     ligand_obj_name - name of object to store ligand as (in off file); default 'molecule'. 
+     frmcmod_filename - name of frcmod file to be saved if desired (default: None)
+     gaff_mol2_filename - name of GAFF mol2 file to generate (default: None)
+
+   REQUIREMENTS
+     acpypi.py conversion script (must be in MMTOOLSPATH)
+     AmberTools installation (in PATH)
+
+   EXAMPLES
+     # create a molecule
+     molecule = createMoleculeFromIUPAC('phenol')
+     # parameterize it for AMBER, using antechamber to assign AM1-BCC charges
+     parameterizeForAmber(molecule, topology_filename = 'phenol.prmtop', coordinate_filename = 'phenol.crd', charge_model = 'bcc')
+
+   """
+
+   # Create temporary working directory and copy ligand mol2 file there.
+   working_directory = tempfile.mkdtemp()
+   old_directory = os.getcwd()
+   os.chdir(working_directory)
+   if verbose: print "Working directory is %(working_directory)s" % vars()
+
+   # Write molecule to mol2 file.
+   tripos_mol2_filename = os.path.join(working_directory, 'tripos.mol2')
+   writeMolecule(molecule, tripos_mol2_filename)
+   #Ensure charges are rounded to neutrality
+   round_charges( tripos_mol2_filename)
+
+   if resname:
+      # Set substructure name (which will become residue name) if desired.
+      modifySubstructureName(tripos_mol2_filename, resname)
+
+   # Run antechamber to assign GAFF atom types.
+   gaff_mol2_tmpfilename = os.path.join(working_directory, 'gaff.mol2')
+   if netcharge:
+      chargstr = '-nc %d' % netcharge
+   else: chargestr=''
+   command = 'antechamber -i %(tripos_mol2_filename)s -fi mol2 -o %(gaff_mol2_tmpfilename)s -fo mol2 %(chargestr)s' % vars()
+   if judgetypes: command += ' -j %(judgetypes)d' % vars()
+   if charge_model:
+      formal_charge = formalCharge(molecule)
+      command += ' -c %(charge_model)s -nc %(formal_charge)d' % vars()
+   if verbose: print command
+   output = commands.getoutput(command)
+   if verbose or (output.find('Warning')>=0): print output
+
+   # Generate frcmod file for additional GAFF parameters.
+   frcmod_filename_tmp = os.path.join(working_directory, 'gaff.frcmod')
+   commands.getoutput('parmchk -i %(gaff_mol2_tmpfilename)s -f mol2 -o %(frcmod_filename_tmp)s' % vars())
+
+   # Create AMBER topology/coordinate files using LEaP.
+   if offfile:
+      offstring = 'saveOff %(ligand_obj_name)s amber.off\n' % vars()
+   else:
+      offstring = ''
+   leapscript = """\
+source leaprc.gaff
+mods = loadAmberParams %(frcmod_filename_tmp)s
+%(ligand_obj_name)s = loadMol2 %(gaff_mol2_tmpfilename)s
+desc %(ligand_obj_name)s
+check %(ligand_obj_name)s
+saveAmberParm %(ligand_obj_name)s amber.prmtop amber.crd
+%(offstring)s
+quit""" % vars()
+   leapin_filename = os.path.join(working_directory, 'leap.in')
+   outfile = open(leapin_filename, 'w')
+   outfile.write(leapscript)
+   outfile.close()
+
+   tleapout = commands.getoutput('tleap -f %(leapin_filename)s' % vars())
+   if verbose: print tleapout
+   tleapout = tleapout.split('\n')
+   # Shop any warnings.
+   if show_warnings:
+      fnd = False
+      for line in tleapout:
+         tmp = line.upper()
+         if tmp.find('WARNING')>-1:
+            print line
+            fnd = True
+         if tmp.find('ERROR')>-1:
+            print line
+            fnd = True
+      if fnd:
+         print "Any LEaP warnings/errors are above."
+
+   # Restore old directory.
+   os.chdir(old_directory)
+
+   # Copy gromacs topology/coordinates to desired output files.
+   if inpcrd_filename:
+      commands.getoutput('cp %s %s' % (os.path.join(working_directory, 'amber.crd'), inpcrd_filename))
+   if prmtop_filename:
+      commands.getoutput('cp %s %s' % (os.path.join(working_directory, 'amber.prmtop'), prmtop_filename))
+   if offfile:
+        commands.getoutput('cp %s %s' % (os.path.join(working_directory, 'amber.off'), offfile))
+   if frcmod_filename:
+        commands.getoutput('cp %s %s' % (os.path.join( working_directory, frcmod_filename_tmp), frcmod_filename ) )
+   if gaff_mol2_filename:
+        commands.getoutput('cp %s %s' % (gaff_mol2_tmpfilename, gaff_mol2_filename ) )
+
+   # Clean up temporary files.
+   os.chdir(old_directory)
+   if cleanup:
+      commands.getoutput('rm -r %s' % working_directory)
+   else:
+      print "Work done in %s..." % working_directory
+
+   return [tripos_molecule, gaff_molecule, system, topology, positions]
