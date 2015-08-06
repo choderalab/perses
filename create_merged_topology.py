@@ -232,6 +232,40 @@ class AlchemicalMergedTopologyFactory(object):
     ...    variant_index = factory.addMoleculeVariant(gaff_molecule, system, topology, positions)
     >>> [system, topology, positions] = factory.generateMergedTopology(reference_molecule=molecules[0])
 
+    Createa a system and set context parameters.
+
+    >>> integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+    >>> context = openmm.Context(system, integrator)
+    >>> context.setParameter('alchemical_variant', 1) # select first molecule
+    >>> context.setParameter('alchemical_lambda', 1.0) # turn molecule on fully
+
+    Notes
+    -----
+
+    The procedure to generate merged topology files roughly follows this:
+
+    System preparation:
+
+    * Add new Force objects to the system to handle the interpolation between the different bonded terms in the core.
+
+    Core:
+
+    * Identify a common core or scaffold via a maximum common substructure (MCSS) search
+    * Selecta set of charges for the core that minimize changes required to perturb to other molecules and preserve total charge
+    * Add the core atoms and forcefield terms to the system
+
+    Molecules:
+
+    * For each variant molecule
+      * Identify the atoms corresponding to the core and map them onto the core
+      * Add a complete copy of the molecule to the system
+      * Nonbonded terms for the molecule are handled by a CustomNonbondedForce
+      * Valence terms for the molecule are handled either by Custom*Force objects (if part of the core) or standard forces (otherwise)
+      * Harmonic restraints are added to keep core-corresponding restrained close to their corresponding core atoms
+
+    Context parameters
+    ------------------
+
     The new `system` object will now have two context parameters that can be modified:
     * `alchemical_variant` - index (0, 1, 2...) of variant currently selected to be active
     * `alchemical_lambda` - alchemical parameter that interpolates between 0 (core only) and 1 (variant `alchemical_variant` is fully chemically present)
@@ -274,6 +308,103 @@ class AlchemicalMergedTopologyFactory(object):
 
         return
 
+    def _showMolecule(self, molecule):
+        """\
+        Show the molecule (for debugging).
+
+        Parameters
+        ----------
+        molecule : openeye.oechem.OEMol
+            The molecule to be printed.
+
+        """
+        atom_index = 1
+        for atom in molecule.GetAtoms():
+            print "%5d %6s %12s" % (atom_index, atom.GetName(), atom.GetType())
+            atom_index += 1
+        print ""
+        return
+
+    def _determineCommonSubstructure(self, ligands, min_atoms=4, verbose=False):
+        """Find a common substructure shared by all molecules.
+
+        The atom type name strings and integer bond types are used to obtain an exact match.
+
+        Parameters
+        ----------
+        ligands : list of openeye.oechem.OEMol
+            The set of ligands for which the common substructure is to be determined.
+        min_atoms : int, optional, default=4
+            Minimum number of atoms for substructure match
+        verbose : bool, optional, default=False
+            If True, verbose information is printed
+
+        Returns
+        -------
+        common_substructure : openeye.oechem.OEMol
+            A molecule fragment representing the common substructure
+
+
+        Provenance
+        ----------
+        This function comes from the mmtools repo.
+        Was modified by David L. Mobley on 15 Nov 2010.
+
+        """
+        # Determine number of ligands
+        nligands = len(ligands)
+
+        # First, initialize with first ligand.
+        common_substructure = ligands[0].CreateCopy()
+
+        # Show initial molecule.
+        if verbose: self._showMolecule(common_substructure)
+
+        # Now delete bits that don't match every other ligand.
+        for ligand in ligands[1:]:
+            # get ligand name
+            ligand_name = ligand.GetTitle()
+
+            # Create an OEMCSSearch from this molecule.
+            from openeye.oechem import OEMCSSearch, OEExprOpts_StringType, OEExprOpts_IntType
+            mcss = OEMCSSearch(ligand, OEExprOpts_StringType, OEExprOpts_IntType)
+
+            # ignore substructures smaller than 4 atoms
+            mcss.SetMinAtoms(min_atoms)
+
+            # This modifies scoring function to prefer keeping cycles complete.
+            from openeye.oechem import OEMCSMaxAtomsCompleteCycles
+            mcss.SetMCSFunc( OEMCSMaxAtomsCompleteCycles() )
+
+            # perform match
+            for match in mcss.Match(common_substructure):
+                nmatched = match.NumAtoms()
+
+                if verbose: print "%(ligand_name)s : match size %(nmatched)d atoms" % vars()
+
+                # build list of matched atoms in common substructure
+                matched_atoms = list()
+                for matchpair in match.GetAtoms():
+                    atom = matchpair.target
+                    matched_atoms.append(atom)
+
+                # delete all unmatched atoms from common substructure
+                for atom in common_substructure.GetAtoms():
+                    if atom not in matched_atoms:
+                        common_substructure.DeleteAtom(atom)
+
+                # Show molecule after pruning.
+                if verbose: self._showMolecule(common_substructure)
+
+                # we only need to consider one match
+                break
+
+        # Rename common substructure.
+        common_substructure.SetTitle('core')
+
+        # return the common substructure
+        return common_substructure
+
     def addMoleculeVariant(self, molecule, system, topology, positions):
         """\
         Add a variant molecule.
@@ -289,7 +420,7 @@ class AlchemicalMergedTopologyFactory(object):
             The topology corresponding to the molecule.
         positions :
             The positions of the molecule.
-            TODO: Is this redundant?
+            TODO: Is this redundant with `molecule`?
 
         Returns
         -------
@@ -329,11 +460,11 @@ class AlchemicalMergedTopologyFactory(object):
         molecules = [ molecule.CreateCopy() for molecule in self._molecules ]
 
         # Determine common substructure using exact match of GAFF atom and bond types.
-        print "Determining common substructure..."
+        if verbose: print "Determining common core substructure..."
         core = oldmmtools.determineCommonSubstructure(molecules, verbose=True)
 
         # Find RMS-fit charges for common intermediate.
-        print "Determining RMS-fit charges for common intermediate..."
+        if verbose: print "Determining RMS-fit charges for common intermediate..."
         core = oldmmtools.determineMinimumRMSCharges(core, molecules)
 
         # DEBUG: Write out info for common core / scaffold.
