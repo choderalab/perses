@@ -1,0 +1,20 @@
+language: c
+
+
+install:
+  - source devtools/ci/install.sh
+  - export PYTHONUNBUFFERED=true
+
+script:
+  # this builds the binary, unpacks it, and runs the tests
+#  - conda build devtools/conda-recipe
+
+env:
+  matrix:
+    - python=2.7  CONDA_PY=27
+#    - python=3.3  CONDA_PY=33
+#    - python=3.4  CONDA_PY=34
+
+after_success:
+  - echo "after_success"
+  - bash devtools/ci/after_sucess.sh
