@@ -2,7 +2,7 @@ language: c
 
 
 install:
-  - source devtools/ci/install.sh
+  - source devtools/travis-ci/install.sh
   - export PYTHONUNBUFFERED=true
 
 script:
@@ -17,4 +17,4 @@ env:
 
 after_success:
   - echo "after_success"
-  - bash devtools/ci/after_sucess.sh
+  - bash devtools/travis-ci/after_sucess.sh
