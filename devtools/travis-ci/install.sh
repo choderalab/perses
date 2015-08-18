@@ -18,4 +18,4 @@ conda install --yes conda-build anaconda-client jinja2
 conda config --add channels http://conda.binstar.org/omnia
 conda config --add channels https://conda.binstar.org/rdkit
 conda config --add channels http://conda.anaconda.org/choderalab
-conda install --file devtools/travis-ci/conda-requirements.txt
+conda install --yes --file devtools/travis-ci/conda-requirements.txt
