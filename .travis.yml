@@ -1,5 +1,5 @@
 language: python
-
+sudo: false
 
 install:
   - source devtools/travis-ci/install.sh
