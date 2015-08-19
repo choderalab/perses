@@ -5,7 +5,7 @@ for each additional atom that must be added.
 from collections import namedtuple
 AtomicPositionProposal = namedtuple("PositionProposal",['atom_index','logp','cartesian_coord'])
 
-NewPositionsProposal = namedtuple('NewPositionsProposal',['new_coordinates','logp_ratio'])
+GeometryProposal = namedtuple('NewPositionsProposal',['new_coordinates','logp_ratio'])
 
 class GeometryEngine(object):
     """
@@ -28,7 +28,7 @@ class GeometryEngine(object):
               else:
                   self.atoms_for_proposal.append(a.index)
 
-    def propose_new_geometry(self):
+    def propose(self):
         """
         Proposes a new geometry for each atom in the list of atoms requiring proposal.
         Additionally calculates probability of reverse proposal.
