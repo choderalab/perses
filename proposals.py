@@ -4,7 +4,7 @@ This file contains the base classes for topology proposals
 
 
 from collections import namedtuple
-Proposal = namedtuple('Proposal',['old_topology','new_topology','ln_selection', 'new_to_old_atom_map'])
+TopologyProposal = namedtuple('Proposal',['old_topology','new_topology','ln_selection', 'new_to_old_atom_map'])
 
 class Transformation(object):
     """
@@ -30,8 +30,8 @@ class Transformation(object):
         
         Returns
         -------
-        proposal : Proposal
-            NamedTuple of type Proposal containing forward and reverse
+        proposal : TopologyProposal
+            NamedTuple of type TopologyProposal containing forward and reverse
             probabilities, as well as old and new topologies and atom
             mapping
         """
