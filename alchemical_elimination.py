@@ -6,6 +6,13 @@ for NCMC switching between compounds or residues.
 def AlchemicalEliminationEngine(object):
     """
     This class is the template for generating systems with the appropriate atoms alchemically modified
+    
+    Arguments
+    ---------
+    system : simtk.openmm.System object
+        The system that should be alchemically modified
+    proposal : Proposal namedtuple
+        namedtuple of topology proposal
     """
     
     def __init__(self, system, proposal):
