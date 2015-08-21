@@ -1,3 +1,4 @@
+import numpy as np
 
 class NCMCSwitching(object):
     """
@@ -35,6 +36,11 @@ class NCMCSwitching(object):
         """
         The log-contribution of the NCMC move to the
         acceptance probability
+        
+        Returns
+        -------
+        log_ncmc : float
+            The log contribution of the NCMC move to the acceptance probability
         """
         return 0
 
@@ -42,5 +48,10 @@ class NCMCSwitching(object):
     def final_positions():
         """
         The atomic coordinates after NCMC switching
+        
+        Returns
+        -------
+        final_positions : [n, 3] numpy.ndarray of floats
+             The atomic coordinates after NCMC switching
         """
-        return np.array([0.0])
+        return np.array([0.0,0.0,0.0])
