@@ -1,4 +1,4 @@
-import topology_proposals
+import topology_proposal
 import geometry
 import alchemical_elimination
 import ncmc_switching
