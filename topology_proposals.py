@@ -2,7 +2,7 @@
 This file contains the base classes for topology proposals
 """
 
-
+import simtk.openmm.app as app
 from collections import namedtuple
 TopologyProposal = namedtuple('Proposal',['old_topology','new_topology','ln_selection', 'new_to_old_atom_map'])
 
@@ -35,5 +35,4 @@ class Transformation(object):
             probabilities, as well as old and new topologies and atom
             mapping
         """
-        raise NotImplementedError
-
+        return TopologyProposal(app.Topology(), app.Topology(), 0.0, {0 : 0})
