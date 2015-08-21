@@ -3,7 +3,7 @@ This is a template for code that creates alchemical eliminations
 for NCMC switching between compounds or residues.
 """
 import simtk.openmm as openmm
-def AlchemicalEliminationEngine(object):
+class  AlchemicalEliminationEngine(object):
     """
     This class is the template for generating systems with the appropriate atoms alchemically modified
     
