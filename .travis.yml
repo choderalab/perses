@@ -6,7 +6,7 @@ install:
   - export PYTHONUNBUFFERED=true
 
 script:
-   - devtools/travis-ci/test.sh
+   - python run_example.py
   # this builds the binary, unpacks it, and runs the tests
 #  - conda build devtools/conda-recipe
 
