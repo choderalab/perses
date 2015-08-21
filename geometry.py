@@ -3,8 +3,9 @@ This contains the base class for the geometry engine, which proposes new positio
 for each additional atom that must be added.
 """
 from collections import namedtuple
+import numpy as np
 
-GeometryProposal = namedtuple('GeometryProposal',['new_coordinates','logp_ratio'])
+GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp_ratio'])
 
 class GeometryEngine(object):
     """
