@@ -11,11 +11,11 @@ def AlchemicalEliminationEngine(object):
     ---------
     system : simtk.openmm.System object
         The system that should be alchemically modified
-    proposal : Proposal namedtuple
+    topology_proposal : Proposal namedtuple
         namedtuple of topology proposal
     """
     
-    def __init__(self, system, proposal):
+    def __init__(self, system, topology_proposal):
         self._alchemically_modified_system = openmm.System()
         
     @property
