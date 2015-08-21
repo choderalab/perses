@@ -24,7 +24,7 @@ class NCMCSwitching(object):
     def __init__(self, alchemical_system, alchemical_protocol, initial_positions):
          pass
 
-    def integrate():
+    def integrate(self):
          """
          Performs NCMC switching according to the provided
          alchemical_protocol
@@ -32,7 +32,7 @@ class NCMCSwitching(object):
          pass
     
     @property
-    def log_ncmc():
+    def log_ncmc(self):
         """
         The log-contribution of the NCMC move to the
         acceptance probability
@@ -45,7 +45,7 @@ class NCMCSwitching(object):
         return 0
 
     @property
-    def final_positions():
+    def final_positions(self):
         """
         The atomic coordinates after NCMC switching
         
