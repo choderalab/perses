@@ -2,7 +2,7 @@
 This is a template for code that creates alchemical eliminations
 for NCMC switching between compounds or residues.
 """
-
+import simtk.openmm as openmm
 def AlchemicalEliminationEngine(object):
     """
     This class is the template for generating systems with the appropriate atoms alchemically modified
@@ -16,8 +16,8 @@ def AlchemicalEliminationEngine(object):
     """
     
     def __init__(self, system, proposal):
-        pass
-
+        self._alchemically_modified_system = openmm.System()
+        
     @property
     def alchemical_system(self):
          """
@@ -28,4 +28,4 @@ def AlchemicalEliminationEngine(object):
          alchemical_system : simtk.openmm.System object
              An alchemically modified system.
          """
-         return self._alchemically_moodified_system
+         return self._alchemically_modified_system
