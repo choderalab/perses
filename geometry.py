@@ -16,34 +16,15 @@ class GeometryEngine(object):
         The result of the topology proposal, containing the atom mapping and topologies.
     current_positions : numpy.ndarray of floats
         The positions of the old system, used for the new geometry proposal
-
-    Properties
-    ----------
-    proposal : GeometryProposal namedtuple
-        The result of the geometry proposal, containing the new positions
-        and the logp_ratio of the proposal
-
     """
     
     def __init__(self, topology_proposal, current_positions):
          pass
 
+
     def propose(self):
         """
-        Proposes a new geometry for each atom in the list of atoms requiring proposal.
-        Additionally calculates probability of reverse proposal.
-
-        Returns
-        -------
-        new_positions : namedtuple of type NewPositionsProposal
-             The new positions, as well as the jacobian-corrected log-probability ratio (logp difference) 
-        """
-        pass
-
-    @property
-    def proposal(self):
-        """
-        The current geometry proposal.
+        Make a geometry proposal for the appropriate atoms.
         
         Returns
         -------
