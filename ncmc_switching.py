@@ -1,6 +1,6 @@
 import numpy as np
 
-class NCMCSwitching(object):
+class NCMCEngine(object):
     """
     This is the base class for NCMC switching between two different systems.
     
