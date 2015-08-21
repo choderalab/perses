@@ -21,7 +21,7 @@ if __name__=="__main__":
     old_alchemical_system = old_alchemical_engine.alchemical_system
     print(old_alchemical_system)
     ncmc_elimination = ncmc_switching.NCMCEngine(old_alchemical_system, alchemical_elimination_protocol, old_initial_positions)
-    ncmc_elimination.integrate() #maybe a better name than that
+    ncmc_elimination.integrate()
     ncmc_old_positions = ncmc_elimination.final_positions
     print(ncmc_old_positions)
     ncmc_elimination_logp = ncmc_elimination.log_ncmc
