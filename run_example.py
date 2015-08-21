@@ -36,4 +36,4 @@ if __name__=="__main__":
     ncmc_new_positions = ncmc_introduction.final_positions
     print(ncmc_new_positions)
     print(ncmc_introduction_logp)
-     
+    logpaccept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight  
