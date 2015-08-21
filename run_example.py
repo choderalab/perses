@@ -8,6 +8,7 @@ import simtk.openmm.app as app
 
 
 if __name__=="__main__":
+    log_weight = 0.0
     old_system = openmm.System()
     old_topology = app.Topology
     alchemical_elimination_protocol = dict()
@@ -36,4 +37,5 @@ if __name__=="__main__":
     ncmc_new_positions = ncmc_introduction.final_positions
     print(ncmc_new_positions)
     print(ncmc_introduction_logp)
-    logpaccept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight  
+    logp_accept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight
+    print(logp_accept)
