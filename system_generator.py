@@ -17,14 +17,19 @@ class SystemGenerator(object):
 
     Properties
     ----------
-    system : simtk.openmm.System object, read only
-        The system object corresponding to the given topology
+    complex_system : simtk.openmm.System object, read only
+        The system object for the complex
+    ligand_system : simtk.openmm.System object, read-only
+        The system object for the ligand
     """
 
     def __init__(self, proposal):
-        self._system = openmm.System()
         pass
 
     @property
-    def system(self):
-	return self._system
+    def complex_system(self):
+        return openmm.System()
+
+    @property
+    def ligand_system(self):
+        return openmm.System()
