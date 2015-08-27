@@ -26,7 +26,7 @@ if __name__=="__main__":
         state_weight_calculator = weight_calculation.StateWeight(top_proposal)
         log_weight = state_weight_calculator.log_weight
 	new_system_generator = system_generator.SystemGenerator(top_proposal)
-        new_system = new_system_generator.system
+        new_system = new_system_generator.complex_system
         print(top_proposal)
         old_alchemical_engine = alchemical_elimination.AlchemicalEliminationEngine(old_system, top_proposal)
         old_alchemical_system = old_alchemical_engine.alchemical_system
