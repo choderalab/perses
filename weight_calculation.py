@@ -16,7 +16,7 @@ class StateWeight(object):
 
     Properties
     ----------
-    weight : float, read only
+   log_ weight : float, read only
         The calculated log weight of this state
     """
     
@@ -24,5 +24,5 @@ class StateWeight(object):
         pass
 
     @property
-    def weight(self):
+    def log_weight(self):
         return 0
