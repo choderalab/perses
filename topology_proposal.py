@@ -26,7 +26,7 @@ class Transformation(object):
     
     def propose(self):
         """
-        Base interface for proposal method. Raises NotImplementedError
+        Base interface for proposal method.
         
         Returns
         -------

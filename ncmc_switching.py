@@ -15,9 +15,9 @@ class NCMCEngine(object):
     
     Properties
     ---------
-    log_ncmc : float
+    log_ncmc : float, read-only
          The contribution of the NCMC move to the acceptance probability
-    final_positions : [n,3] numpy.ndarray
+    final_positions : [n,3] numpy.ndarray, read-only
         positions of the system after NCMC switching
     """
 
@@ -33,25 +33,8 @@ class NCMCEngine(object):
     
     @property
     def log_ncmc(self):
-        """
-        The log-contribution of the NCMC move to the
-        acceptance probability
-        
-        Returns
-        -------
-        log_ncmc : float
-            The log contribution of the NCMC move to the acceptance probability
-        """
         return 0
 
     @property
     def final_positions(self):
-        """
-        The atomic coordinates after NCMC switching
-        
-        Returns
-        -------
-        final_positions : [n, 3] numpy.ndarray of floats
-             The atomic coordinates after NCMC switching
-        """
         return np.array([0.0,0.0,0.0])
