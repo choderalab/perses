@@ -17,7 +17,7 @@ class StateWeight(object):
     Properties
     ----------
     weight : float, read only
-        The calculated weight of this state
+        The calculated log weight of this state
     """
     
     def __init__(self, proposal):
@@ -25,4 +25,4 @@ class StateWeight(object):
 
     @property
     def weight(self):
-        pass
+        return 0
