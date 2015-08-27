@@ -1,4 +1,6 @@
 import topology_proposal
+import weight_calculation
+import system_generator
 import geometry
 import alchemical_elimination
 import ncmc_switching
@@ -21,7 +23,10 @@ if __name__=="__main__":
         old_initial_positions = current_positions
         transformation = topology_proposal.Transformation(old_topology, old_system, {'data': 0})
         top_proposal = transformation.propose()
-        new_system = openmm.System()
+        state_weight_calculator = weight_calculation.StateWeight(top_proposal)
+        log_weight = state_weight_calculator.log_weight
+	new_system_generator = system_generator.SystemGenerator(top_proposal)
+        new_system = new_system_generator.system
         print(top_proposal)
         old_alchemical_engine = alchemical_elimination.AlchemicalEliminationEngine(old_system, top_proposal)
         old_alchemical_system = old_alchemical_engine.alchemical_system
