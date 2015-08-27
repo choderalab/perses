@@ -13,6 +13,11 @@ class StateWeight(object):
     proposal : namedtuple of type TopologyProposal
         Contains the newly-proposed topology and
         associated metadata.
+
+    Properties
+    ----------
+    weight : float, read only
+        The calculated weight of this state
     """
     
     def __init__(self, proposal):
@@ -20,8 +25,4 @@ class StateWeight(object):
 
     @property
     def weight(self):
-        """
-        Return the calculated weight of this state
-        """
         pass
-
