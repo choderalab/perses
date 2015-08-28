@@ -5,6 +5,7 @@ This file contains the base classes for topology proposals
 import simtk.openmm.app as app
 from collections import namedtuple
 TopologyProposal = namedtuple('Proposal',['old_topology','new_topology','logp', 'new_to_old_atom_map'])
+SamplerState = namedtuple('SamplerState',['topology','system','positions', 'metadata'])
 
 class Transformation(object):
     """
@@ -13,21 +14,22 @@ class Transformation(object):
     
     Arguments
     --------
-    current_topology : simtk.openmm.app.Topology object
-        The topology which currently defines the system
-    current_system : simtk.openmm.System object
-        The system object with all relevant parameters
-    metadata : object
-        Data necessary for the generation of proposals
+    proposal_metadata : dict
+        Contains information necessary to initialize proposal engine
     """
     
-    def __init__(self, current_topology, current_system, metadata):
+    def __init__(self, proposal_metadata):
         pass
     
-    def propose(self):
+    def propose(self, sampler_state):
         """
         Base interface for proposal method.
         
+        Arguments
+	---------
+	sampler_state : SamplerState namedtuple
+            namedtuple containing the current state of the sampler
+
         Returns
         -------
         proposal : TopologyProposal
