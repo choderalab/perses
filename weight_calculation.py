@@ -12,8 +12,7 @@ class StateWeight(object):
     def __init__(self):
         pass
 
-    @staticmethod
-    def log_weight(sampler_state):
+    def log_weight(self, sampler_state):
         """
 	Calculate the log-weight for a given state
 	
