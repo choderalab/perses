@@ -12,24 +12,25 @@ class SystemGenerator(object):
 
     Arguments
     ---------
-    proposal : TopologyProposal namedtuple
-        Contains the proposed new topology and metadata
-
-    Properties
-    ----------
-    complex_system : simtk.openmm.System object, read only
-        The system object for the complex
-    ligand_system : simtk.openmm.System object, read-only
-        The system object for the ligand
+    metadata : dict
+        contains metadata (such as forcefield) for system creation
     """
 
-    def __init__(self, proposal):
+    def __init__(self, metadata):
         pass
 
-    @property
-    def complex_system(self):
-        return openmm.System()
+    def new_system(self, top_proposal):
+        """
+	Create a system with ligand and protein
 
-    @property
-    def ligand_system(self):
+	Arguments
+	---------
+	top_proposal : TopologyProposal namedtuple
+	    Contains the topology of the new system to be made
+	
+	Returns
+	-------
+	system : simtk.openmm.System object
+	    openmm System containing the protein and ligand(s)
+	"""
         return openmm.System()
