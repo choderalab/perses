@@ -11,6 +11,11 @@ This could represent sampling of small molecules, protein mutants, or both.
 import numpy as np
 import simtk.openmm as openmm
 import simtk.openmm.app as app
+from topology_proposal import Transformation, SamplerState
+from weight_calculation import StateWeight
+from alchemical_engine import AlchemicalEliminationEngine
+from geometry import GeometryEngine
+from ncmc_switching import NCMCEngine
 
 
 def run():
@@ -18,35 +23,50 @@ def run():
     # Create initial model system, topology, and positions.
     # QUESTION: Do we want to maintain 'metadata' as well?
     # QUESTION: What if we incorporate the tuple (system, topology, metadata, positions) into a SamplerState object, or a named tuple?
-    (system, topology, positions) = [openmm.System(), app.Topology(), np.zeros([1,3], np.float32)]
+    sampler_state  = SamplerState(app.Topology(), openmm.System(), np.zeros([1,3], np.float32), {'data':0})
 
     # Specify alchemical elimination and introduction protocols.
     alchemical_elimination_protocol = dict()
     alchemical_introduction_protocol = dict()
 
+    #Create proposal metadata, such as the list of molecules to sample (SMILES here)
+    proposal_metadata = {'molecule_list': ['CC','C=C']}
+    transformation = Transformation(proposal_metadata)
+
+    #initialize weight calculation engine, along with its metadata
+    weight_metadata = {'type':'solvation free energy'}
+    weight_calculator = StateWeight(metadata)
+
+    #initialize system generator, along with its metadata
+    system_generator_metadata = {'protein_ff':'amber99sbildn.xml'}
+    system_generator = SystemGenerator(system_generator_metadata)
+
+    #Initialize AlchemicalEliminationEngine
+    alchemical_metadata = {'data':0}
+    alchemical_engine = AlchemicalEliminationEngine(alchemical_metadata)
+
+    #initialize GeometryEngine
+    geometry_metadata = {'data': 0}
+    geometry_engine = GeometryEngine(geometry_metadata)
+
     # Run a anumber of iterations.
     niterations = 10
     for i in range(niterations):
         # Store old (system, topology, positions).
-        (old_system, old_topology, old_positions) = (system, topology, positions)
+        old_sampler_state = sampler_state
 
         # Propose a transformation from one chemical species to another.
         # QUESTION: This could depend on the geometry; could it not?
-        metadata = {'data': 0} # QUESTION: Shouldn't this 'metadata' state be maintained throughout, and old and new versions kept?
                                # The metadata might contain information about the topology, such as the SMILES string or amino acid sequence.
         # QUESTION: Could we instead initialize a transformation object once as
         # transformation = topology_proposal.Transformation(metametadata)
         # and then do
         # [new_topology, new_system, new_metadata] = transformation.propose(old_topology, old_system, old_metadata)?
-        from topology_proposal import Transformation
-        transformation = Transformation(old_topology, old_system, metadata)    
         top_proposal = transformation.propose() # QUESTION: Is this a Topology object or some other container?
 
         # QUESTION: What about instead initializing StateWeight once, and then using
         # log_state_weight = state_weight.computeLogStateWeight(new_topology, new_system, new_metadata)?
-        from weight_calculation import StateWeight
-        state_weight_calculator = StateWeight(top_proposal)
-        log_weight = state_weight_calculator.log_weight
+        log_weight = state_weight_calculator.log_weight(
 
         # Create a new System object from the proposed topology.
         # QUESTION: Do we want to isolate the system creation from the Transformation proposal? This does seem like something that *could* be pretty well isolated.
