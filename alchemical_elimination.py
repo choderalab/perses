@@ -9,20 +9,29 @@ class  AlchemicalEliminationEngine(object):
     
     Arguments
     ---------
-    system : simtk.openmm.System object
-        The system that should be alchemically modified
-    topology_proposal : Proposal namedtuple
-        namedtuple of topology proposal
-    
-    Properties
-    ----------
-    alchemical_system : simtk.openmm.System object, read-only
-        The alchemically-modified system of interest.
+    metadata : dict
+        metadata for alchemical modification of systems
     """
     
-    def __init__(self, system, topology_proposal):
-        self._alchemically_modified_system = openmm.System()
-        
-    @property
-    def alchemical_system(self):
-         return self._alchemically_modified_system
+    def __init__(self, metadata):
+        pass
+
+    
+    def make_alchemical_system(self, sampler_state, topology_proposal):
+        """
+	Generate an alchemically-modified system at the correct atoms
+	based on the topology proposal
+
+	Arguments
+	---------
+	unmodified_system : openmm.System object
+	    The unmodified system to get alchemical modifications
+	topology_proposal : TopologyProposal namedtuple
+	    Contains old topology, proposed new topology, and atom mapping
+	
+	Returns
+	-------
+	alchemical_system : openmm.System object
+	    The system with appropriate atoms alchemically modified
+	"""
+        return 
