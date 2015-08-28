@@ -7,17 +7,11 @@ This could represent sampling of small molecules, protein mutants, or both.
 
 """
 
-#
-# IMPORTS
-#
 
 import numpy as np
 import simtk.openmm as openmm
 import simtk.openmm.app as app
 
-#
-# RUN EXAMPLE SIMULATION
-#
 
 def run():
 
