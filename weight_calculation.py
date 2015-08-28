@@ -6,23 +6,21 @@ state
 class StateWeight(object):
     """
     Provides facilities for calculating the weight of a given state
-    (such as a molecule, or mutant).
-    
-    Arguments
-    ---------
-    proposal : namedtuple of type TopologyProposal
-        Contains the newly-proposed topology and
-        associated metadata.
-
-    Properties
-    ----------
-   log_ weight : float, read only
-        The calculated log weight of this state
+    (such as a molecule, or mutant). 
     """
     
-    def __init__(self, proposal):
+    def __init__(self):
         pass
 
-    @property
-    def log_weight(self):
+    @staticmethod
+    def log_weight(sampler_state):
+        """
+	Calculate the log-weight for a given state
+	
+	Arguments
+	---------
+	sampler_state : SamplerState namedtuple
+            Contains the system, topology, positions, metadata
+	    for the system relevant to weight calculation
+	"""
         return 0
