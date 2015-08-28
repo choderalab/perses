@@ -18,8 +18,8 @@ class StateWeight(object):
 	
 	Arguments
 	---------
-	sampler_state : SamplerState namedtuple
-            Contains the system, topology, positions, metadata
+	top_proposal : TopologyProposal namedtuple
+            Contains the old and new topology and metadata
 	    for the system relevant to weight calculation
 	"""
         return 0
