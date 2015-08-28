@@ -13,20 +13,25 @@ class GeometryEngine(object):
     
     Arguments
     ---------
-    topology_proposal : TopologyProposal namedtuple
-        The result of the topology proposal, containing the atom mapping and topologies.
-    current_positions : numpy.ndarray of floats
-        The positions of the old system, used for the new geometry proposal
+    metadata : dict
+        GeometryEngine-related metadata as a dict
     """
     
-    def __init__(self, topology_proposal, current_positions):
+    def __init__(self, metadata):
          pass
 
 
-    def propose(self):
+    def propose(self, topology_proposal, sampler_state):
         """
         Make a geometry proposal for the appropriate atoms.
         
+	Arguments
+        ----------
+        topology_proposal : TopologyProposal namedtuple
+            The result of the topology proposal, containing the atom mapping and topologies.
+        sampler_state : SamplerState namedtuple
+	    The current state of the sampler
+	
         Returns
         -------
         proposal : GeometryProposal namedtuple
