@@ -17,7 +17,7 @@ class  AlchemicalEliminationEngine(object):
         pass
 
     
-    def make_alchemical_system(self, sampler_state, topology_proposal):
+    def make_alchemical_system(self, unmodified_system, topology_proposal):
         """
 	Generate an alchemically-modified system at the correct atoms
 	based on the topology proposal
