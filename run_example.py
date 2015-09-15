@@ -12,11 +12,11 @@ import numpy as np
 import simtk.openmm as openmm
 import simtk.openmm.app as app
 from topology_proposal import Transformation, SamplerState
-from weight_calculation import StateWeight
-from alchemical_engine import AlchemicalEliminationEngine
+from bias_engine import BiasEngine
+from alchemical_elimination import AlchemicalEliminationEngine
 from geometry import GeometryEngine
 from ncmc_switching import NCMCEngine
-
+from system_generator import SystemGenerator
 
 def run():
 
@@ -34,8 +34,11 @@ def run():
     transformation = Transformation(proposal_metadata)
 
     #initialize weight calculation engine, along with its metadata
-    weight_metadata = {'type':'solvation free energy'}
-    weight_calculator = StateWeight(metadata)
+    bias_metadata = {'type':'solvation free energy'}
+    bias_calculator = BiasEngine(bias_metadata)
+
+    #initialize with a log_weight
+    current_log_weight = 0.0
 
     #initialize system generator, along with its metadata
     system_generator_metadata = {'protein_ff':'amber99sbildn.xml'}
@@ -66,7 +69,7 @@ def run():
 
         # QUESTION: What about instead initializing StateWeight once, and then using
         # log_state_weight = state_weight.computeLogStateWeight(new_topology, new_system, new_metadata)?
-        log_weight = state_weight_calculator.log_weight(
+        log_weight = bias_calculator.generate_bias(top_proposal)
 
         # Create a new System object from the proposed topology.
         # QUESTION: Do we want to isolate the system creation from the Transformation proposal? This does seem like something that *could* be pretty well isolated.
@@ -115,13 +118,13 @@ def run():
         print(ncmc_introduction_logp)
 
         # Compute total log acceptance probability, including all components.
-        logp_accept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight
+        logp_accept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
         print(logp_accept)
 
         # Accept or reject.
         if (logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)):
             # Accept.
-            (system, topology, positions) = (new_system, top_proposal.new_topology, ncmc_new_positions)
+            (system, topology, positions, current_log_weight) = (new_system, top_proposal.new_topology, ncmc_new_positions, log_weight)
         else:
             # Reject.
             pass

@@ -16,13 +16,13 @@ class BiasEngine(object):
     def __init__(self, metadata):
         pass
 
-    def generate_bias(self, sampler_state):
+    def generate_bias(self, topology_proposal):
         """
         Generate a biasing weight g_k for the state indicated.
         
         Arguments
 	--------
-	sampler_state : namedtuple of type SamplerState
+	topology_proposal : namedtuple of type TopologyProposal
 	    Contains information about the state for which g_k should be generated
 
         Returns
