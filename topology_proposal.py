@@ -4,7 +4,7 @@ This file contains the base classes for topology proposals
 
 import simtk.openmm.app as app
 from collections import namedtuple
-TopologyProposal = namedtuple('Proposal',['old_topology','new_topology','logp', 'new_to_old_atom_map'])
+TopologyProposal = namedtuple('TopologyProposal',['old_topology','new_topology','logp', 'new_to_old_atom_map'])
 SamplerState = namedtuple('SamplerState',['topology','system','positions', 'metadata'])
 
 class Transformation(object):
