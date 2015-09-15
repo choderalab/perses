@@ -21,7 +21,7 @@ class GeometryEngine(object):
          pass
 
 
-    def propose(self, topology_proposal, sampler_state):
+    def propose(self, topology_proposal, new_system, old_positions):
         """
         Make a geometry proposal for the appropriate atoms.
         
