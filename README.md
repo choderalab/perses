@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/pgrinaway/expanded-ensembles.svg?branch=master)](https://travis-ci.org/pgrinaway/expanded-ensembles)
 expanded-ensembles
 ==================
 
