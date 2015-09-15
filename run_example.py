@@ -13,17 +13,15 @@ import simtk.openmm as openmm
 import simtk.openmm.app as app
 from topology_proposal import Transformation, SamplerState
 from bias_engine import BiasEngine
-from alchemical_elimination import AlchemicalEliminationEngine
+from alchemical_engine import AlchemicalEliminationEngine
 from geometry import GeometryEngine
 from ncmc_switching import NCMCEngine
-from system_generator import SystemGenerator
+from system_engine import SystemGenerator
 
 def run():
-
     # Create initial model system, topology, and positions.
     # QUESTION: Do we want to maintain 'metadata' as well?
     # QUESTION: What if we incorporate the tuple (system, topology, metadata, positions) into a SamplerState object, or a named tuple?
-    sampler_state  = SamplerState(app.Topology(), openmm.System(), np.zeros([1,3], np.float32), {'data':0})
 
     # Specify alchemical elimination and introduction protocols.
     alchemical_elimination_protocol = dict()
@@ -51,12 +49,13 @@ def run():
     #initialize GeometryEngine
     geometry_metadata = {'data': 0}
     geometry_engine = GeometryEngine(geometry_metadata)
-
+    
+    #initialize
+    (system, topology, positions, state_metadata) = (openmm.System(), app.Topology(), np.array([0.0,0.0,0.0]), {'mol': 'CC'})
     # Run a anumber of iterations.
     niterations = 10
     for i in range(niterations):
         # Store old (system, topology, positions).
-        old_sampler_state = sampler_state
 
         # Propose a transformation from one chemical species to another.
         # QUESTION: This could depend on the geometry; could it not?
@@ -65,7 +64,7 @@ def run():
         # transformation = topology_proposal.Transformation(metametadata)
         # and then do
         # [new_topology, new_system, new_metadata] = transformation.propose(old_topology, old_system, old_metadata)?
-        top_proposal = transformation.propose() # QUESTION: Is this a Topology object or some other container?
+        top_proposal = transformation.propose(system, topology, positions, state_metadata) # QUESTION: Is this a Topology object or some other container?
 
         # QUESTION: What about instead initializing StateWeight once, and then using
         # log_state_weight = state_weight.computeLogStateWeight(new_topology, new_system, new_metadata)?
@@ -76,24 +75,19 @@ def run():
         # QUESTION: Should we at least create only one SystemGenerator, like
         # system_generator = SystemGenerator(forcefield, etc)
         # new_system = system_generator.createSystem(new_topology)
-        from system_generator import SystemGenerator
-	new_system_generator = SystemGenerator(top_proposal)
-        new_system = new_system_generator.complex_system
+        new_system = system_generator.new_system(top_proposal)
         print(top_proposal)
         
         # Perform alchemical transformation.
-        from alchemical_elimination import AlchemicalEliminationEngine
-        from ncmc_switching import NCMCEngine
 
         # Alchemically eliminate atoms being removed.
         # QUESTION: We need the alchemical transformation to eliminate the atoms being removed, right? So we need old topology/system and intermediate topology/system.
         # What if we had a method that took the old/new (topology, system, metadata) and generated some information about the transformation?
         # At minimum, we need to know what atoms are being eliminated/introduced.  We might also need to identify some System for the "intermediate" with scaffold atoms that are shared,
         # since charges and types may need to be modified?
-        old_alchemical_engine = AlchemicalEliminationEngine(old_system, top_proposal)
-        old_alchemical_system = old_alchemical_engine.alchemical_system
+        old_alchemical_system = alchemical_engine.make_alchemical_system(system, top_proposal)
         print(old_alchemical_system)
-        ncmc_elimination = NCMCEngine(old_alchemical_system, alchemical_elimination_protocol, old_positions)
+        ncmc_elimination = NCMCEngine(old_alchemical_system, alchemical_elimination_protocol, positions)
         ncmc_elimination.integrate()
         ncmc_old_positions = ncmc_elimination.final_positions
         print(ncmc_old_positions)
@@ -102,14 +96,11 @@ def run():
 
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
         # QUESTION: Again, maybe we want to have the geometry engine initialized once only?
-        from geometry import GeometryEngine
-        geometry_engine = GeometryEngine(top_proposal, ncmc_old_positions)
-        geometry_proposal = geometry_engine.propose()
+        geometry_proposal = geometry_engine.propose(top_proposal, new_system, ncmc_old_positions)
 
         # Alchemically introduce new atoms.
         # QUESTION: Similarly, this needs to introduce new atoms.  We need to know both intermediate toplogy/system and new topology/system, right?
-        new_alchemical_engine = AlchemicalEliminationEngine(new_system, top_proposal)
-        new_alchemical_system = new_alchemical_engine.alchemical_system
+        new_alchemical_system = alchemical_engine.make_alchemical_system(new_system, top_proposal)
         ncmc_introduction = NCMCEngine(new_alchemical_system, alchemical_introduction_protocol, geometry_proposal.new_positions)
         ncmc_introduction.integrate()
         ncmc_introduction_logp = ncmc_introduction.log_ncmc
