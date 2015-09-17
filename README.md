@@ -1,5 +1,5 @@
 [![Build Status](https://travis-ci.org/pgrinaway/expanded-ensembles.svg?branch=master)](https://travis-ci.org/pgrinaway/expanded-ensembles)
-expanded-ensembles
+Perses
 ==================
 Experiments with expanded ensemble simulation to explore chemical and mutational space.
 
