@@ -1,4 +1,5 @@
-“””Perses: Tools for expanded-ensemble simulations with OpenMM
+# -*- coding: utf-8 -*-
+"""Perses: Tools for expanded-ensemble simulations with OpenMM
 """
 
 from __future__ import print_function, absolute_import
@@ -11,6 +12,7 @@ import glob
 import traceback
 import numpy as np
 from os.path import join as pjoin
+from os.path import relpath
 from setuptools import setup, Extension, find_packages
 try:
     sys.dont_write_bytecode = True
@@ -31,12 +33,12 @@ def find_package_data(data_root, package_root):
     files = []
     for root, dirnames, filenames in os.walk(data_root):
         for fn in filenames:
-            files.append(relpath(join(root, fn), package_root))
+            files.append(relpath(pjoin(root, fn), package_root))
     return files
 
 
 # #########################
-VERSION = ‘0.1’
+VERSION = '0.1'
 ISRELEASED = False
 __version__ = VERSION
 # #########################
@@ -63,8 +65,8 @@ Programming Language :: Python :: 3.4
 
 extensions = []
 
-setup(name=‘perses’,
-      author=‘Patrick Grinaway’,
+setup(name='perses',
+      author='Patrick Grinaway',
       author_email='patrick.grinaway@choderalab.org',
       description=DOCLINES[0],
       long_description="\n".join(DOCLINES[2:]),
@@ -72,15 +74,15 @@ setup(name=‘perses’,
       url='https://github.com/choderalab/perses',
       platforms=['Linux', 'Mac OS-X', 'Unix'],
       classifiers=CLASSIFIERS.splitlines(),
-      packages=[‘perses’, ‘perses.rjmc’, ‘perses.annihilation’, ‘perses.bias’, ‘perses.dualtopology’,’perses.multitopology’,],
-      package_data={‘perses’ find_package_data('examples')}
+      packages=['perses', 'perses.rjmc', 'perses.annihilation', 'perses.bias', 'perses.dualtopology','perses.multitopology',],
+      package_data={'perses' : find_package_data('perses','examples')},
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        ‘openmm’,
-        ‘numpy’,
-        ‘scipy’,
-        ‘yank’,
+        'openmm', 
+	'numpy',
+        'scipy',
+        'yank',
         ],
       entry_points={'console_scripts': [
             'thermoml-update-mirror = thermopyl.scripts.update_archive:main',
