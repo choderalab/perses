@@ -11,12 +11,12 @@ This could represent sampling of small molecules, protein mutants, or both.
 import numpy as np
 import simtk.openmm as openmm
 import simtk.openmm.app as app
-from topology_proposal import Transformation, SamplerState
-from bias_engine import BiasEngine
-from alchemical_engine import AlchemicalEliminationEngine
-from geometry import GeometryEngine
-from ncmc_switching import NCMCEngine
-from system_engine import SystemGenerator
+from perses.rjmc.topology_proposal import Transformation, SamplerState
+from perses.bias.bias_engine import BiasEngine
+from perses.annihilation.alchemical_engine import AlchemicalEliminationEngine
+from perses.rjmc.geometry import GeometryEngine
+from perses.annihilation.ncmc_switching import NCMCEngine
+from perses.rjmc.system_engine import SystemGenerator
 
 def run():
     # Create initial model system, topology, and positions.
