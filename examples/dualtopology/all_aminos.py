@@ -1,4 +1,4 @@
-import dualtopology
+from perses import dualtopology
 
 ligands = []
 ligands.append("Glycine")

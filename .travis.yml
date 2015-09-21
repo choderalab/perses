@@ -17,21 +17,30 @@ install:
   - export PYTHONUNBUFFERED=true
   - export CC=gcc
   - export CXX=g++
+  # Unpack encrypted OpenEye license file
+  - if [ ! $TRAVIS_PULL_REQUEST ]; then openssl aes-256-cbc -K $encrypted_514505261e50_key -iv $encrypted_514505261e50_iv -in oe_license.txt.enc -out oe_license.txt -d; fi
+  - if [ $TRAVIS_PULL_REQUEST ]; then echo "OpenEye license will not be installed in pull request."; fi
 
 script:
-  - conda config --add channels https://conda.binstar.org/omnia
+  - conda config --add channels https://conda.binstar.org/${ORGNAME}
   - conda build devtools/conda-recipe
-  - #cd devtools/c-tests/; make valgrind; cd -
-
+  # Install and test (in separate directory)
+  - conda install --yes --quiet --use-local ${PACKAGENAME}-dev
+  # Run tests
+  - conda install --yes --quiet nose nose-timer openmmtools
+  - mkdir test && cd test && nosetests perses --nocapture --verbosity=2 --with-doctest
 env:
   matrix:
     - python=2.7  CONDA_PY=27
-    - python=3.3  CONDA_PY=33
-    - python=3.4  CONDA_PY=34
+    #- python=3.3  CONDA_PY=33
+    #- python=3.4  CONDA_PY=34
 
   global:
+    - ORGNAME="omnia"
+    - PACKAGENAME="perses"
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
+    - secure: "RRvLDPu9mPoNaRWIseaJdgShOXI+PaHPWKAIJvW7VYWcAS6iEN7W4Fj4zD5hkocQxc3ou97EtkgID+ApH10bSGKxCykyU0urSY9jsSOJX2m0AE19X0dVr6ySIQkwCWE6kUMVlvQYQo80fM2EMElD+btr4G9XBAhArAO7HvZHkoQ="
 
 after_success:
   - echo "after_success"
-  - PACKAGENAME="perses" ./devtools/travis-ci/after_success.sh
+  - ./devtools/travis-ci/after_success.sh

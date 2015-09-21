@@ -1,4 +1,4 @@
-import dualtopology
+from perses import dualtopology
 
 l1 = "Glycine"
 l2 = "Lysine"

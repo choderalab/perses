@@ -74,17 +74,13 @@ setup(name='perses',
       url='https://github.com/choderalab/perses',
       platforms=['Linux', 'Mac OS-X', 'Unix'],
       classifiers=CLASSIFIERS.splitlines(),
-      packages=['perses', 'perses.rjmc', 'perses.annihilation', 'perses.bias', 'perses.dualtopology','perses.multitopology',],
+      packages=['perses', 'perses.rjmc', 'perses.annihilation', 'perses.bias',],
       package_data={'perses' : find_package_data('perses','examples')},
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        'openmm', 
-	'numpy',
+        'openmm >=6.3',
+        'numpy',
         'scipy',
-        'yank',
         ],
-      entry_points={'console_scripts': [
-            'thermoml-update-mirror = thermopyl.scripts.update_archive:main',
-            'thermoml-build-pandas = thermopyl.scripts.parse_xml:main',
-            ]})
+      )

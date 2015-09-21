@@ -12,25 +12,26 @@ build:
 requirements:
   build:
     - python
-    - openmm
+    - setuptools
+    - openmm >=6.3
     - numpy
     - scipy
-    - yank
+    #- openmoltools
+    #- alchemy
 
   run:
     - python
-    - openmm
+    - openmm >=6.3
     - numpy
     - scipy
-    - yank
+    #- openmoltools
+    #- alchemy
 
 test:
   requires:
     - nose
   imports:
     - perses
-  commands:
-    - nosetests perses --nocapture --verbosity=2 --with-doctest
 
 about:
   home: https://github.com/choderalab/perses
