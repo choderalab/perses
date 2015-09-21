@@ -86,7 +86,4 @@ setup(name='perses',
         'sklearn',
         'lxml',
         ],
-      entry_points={'console_scripts': [
-            'thermoml-update-mirror = thermopyl.scripts.update_archive:main',
-            'thermoml-build-pandas = thermopyl.scripts.parse_xml:main',
-            ]})
+      )
