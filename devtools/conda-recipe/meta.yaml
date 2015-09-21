@@ -27,8 +27,6 @@ test:
     - nose
   imports:
     - perses
-  commands:
-    - nosetests perses --nocapture --verbosity=2 --with-doctest
 
 about:
   home: https://github.com/choderalab/perses
