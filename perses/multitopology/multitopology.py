@@ -46,7 +46,8 @@ TODO
 # IMPORTS
 ################################################################################
 
-import gaff2xml.openeye
+from openmoltools import openeye
+
 import openeye.oechem as oe
 import simtk.openmm as mm
 from simtk import unit
@@ -57,7 +58,7 @@ import commands
 import copy
 
 ################################################################################
-# SUBROUTINES
+# UTILITY TESTING SUBROUTINES
 ################################################################################
 
 def assign_am1bcc_charges(molecule):
@@ -129,7 +130,7 @@ def parameterize_molecule(molecule, implicitSolvent=app.OBC1, constraints=None, 
 
     """
     # Create molecule and geometry.
-    molecule = gaff2xml.openeye.iupac_to_oemol(iupac_name)
+    molecule = openeye.iupac_to_oemol(iupac_name)
     # Create a a temporary directory.
     working_directory = tempfile.mkdtemp()
     old_directory = os.getcwd()
@@ -177,7 +178,7 @@ def create_molecule(iupac_name):
 
     """
 
-    molecule = gaff2xml.openeye.iupac_to_oemol(iupac_name)
+    molecule = openeye.iupac_to_oemol(iupac_name)
 
     # Assign AM1-BCC charges using canonical scheme.
     # TODO: Replace wit updated gaff2xml scheme.
@@ -990,62 +991,3 @@ def add_molecule_to_system(system, molecule_system, core_atoms, variant, atoms_t
     print system.getNumParticles(), forces['NonbondedForce'].getNumParticles()
 
     return mapping
-
-if __name__ == '__main__':
-    # Create list of molecules that share a common core.
-    molecule_names = ['benzene', 'toluene', 'methoxytoluene']
-    molecules = [ create_molecule(name) for name in molecule_names ]
-
-    # DEBUG: Write molecules to mol2 files for ease of debugging/visualization.
-    for (index, molecule) in enumerate(molecules):
-        gaff2xml.openeye.molecule_to_mol2(molecule, tripos_mol2_filename='molecule-%05d.mol2' % index)
-
-    # Create an OpenMM system to represent the environment.
-    molecule = create_molecule('benzene') # TODO: Change to supramolecular host, like 18-crown-6?
-    [system, topology, positions] = generate_openmm_system(molecule)
-    # Translate the molecule out of the way so it doesn't overlap with anything.
-    positions[:,2] += 15.0 * unit.angstroms # translate 15A along z-axis
-
-    # Create merged topology for ligands and add them to the environment.
-    [system, topology, positions] = create_merged_topology(system, topology, positions, molecules)
-
-    # DEBUG: Write new atom identities.
-    natoms = system.getNumParticles()
-    for (index, atom) in enumerate(topology.atoms()):
-        print '%8d %8s %8s %8s %8s %8s %8.3f %8.3f %8.3f' % (index, atom.name, atom.residue.chain.index, atom.element.name, atom.residue.index, atom.residue.name, positions[index,0]/unit.angstroms, positions[index,1]/unit.angstroms, positions[index,2]/unit.angstroms)
-    app.PDBFile.writeFile(topology, positions, file=open('initial.pdb','w'))
-
-    # Create an OpenMM test simulation of the merged-topology system to test stability.
-    # A PDB file containing the trajectory is generated.
-    temperature = 300.0 * unit.kelvin
-    collision_rate = 20.0 / unit.picoseconds
-    timestep = 1.0 * unit.femtoseconds
-    integrator = mm.LangevinIntegrator(temperature, collision_rate, timestep)
-    context = mm.Context(system, integrator)
-    context.setParameter('alchemical_variant', 1) # Select variant index.
-    context.setPositions(positions)
-    niterations = 100
-    nsteps_per_iteration = 100
-    filename = 'trajectory.pdb'
-    print "Writing out trajectory to %s ..." % filename
-    outfile = open(filename, 'w')
-    app.PDBFile.writeHeader(topology, file=outfile)
-    for iteration in range(niterations):
-        # Modify the lambda value.
-        lambda_value = 1.0 - float(iteration) / float(niterations - 1)
-        context.setParameter('alchemical_lambda', lambda_value)
-        # Run some dynamics
-        integrator.step(nsteps_per_iteration)
-        # Get potential energy.
-        state = context.getState(getPositions=True, getEnergy=True)
-        # Report current information.
-        print "Iteration %5d / %5d : lambda %8.5f : potential %8.3f kcal/mol" % (iteration, niterations, lambda_value, state.getPotentialEnergy() / unit.kilocalories_per_mole)
-        # Write frame to trajectory.
-        positions = state.getPositions()
-        app.PDBFile.writeModel(topology, positions, file=outfile, modelIndex=(iteration+1))
-    # Clean up.
-    app.PDBFile.writeFooter(topology, file=outfile)
-    outfile.close()
-    del context, integrator
-
-

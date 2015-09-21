@@ -1,8 +1,8 @@
 import openeye.oechem as oechem
 import numpy as np
-import gaff2xml.openeye
+from openmoltools import openeye
 import os
-from trustbutverify import cirpy
+import cirpy
 
 class DualTopology(object):
     """
@@ -67,13 +67,13 @@ class DualTopology(object):
     Requires:
       openeye.oechem
       gaff2xml
-      trustbutverify.cirpy (just copy it into here) (also probably won't need it at all with normal inputs from a system)
+      cirpy (just copy it into here) (also probably won't need it at all with normal inputs from a system)
     """
 
     def __init__(self, cas_or_aa, min_atoms=6):
         """
         Initialize using cas numbers OR amino acid name
-        Requires gaff2xml.openeye and trustbutverify.cirpy
+        Requires openmoltools.openeye and cirpy
 
         Arguments
             cas_or_aa (list of strings) either cas number or name of amino acid
@@ -101,8 +101,8 @@ class DualTopology(object):
         for cas in cas_or_aa:
             smiles = cirpy.resolve(cas,'smiles')
             self.smiles_strings.append(smiles)
-            ligand = gaff2xml.openeye.smiles_to_oemol(smiles)
-            ligand = gaff2xml.openeye.get_charges(ligand, strictStereo=False) 
+            ligand = openeye.smiles_to_oemol(smiles)
+            ligand = openeye.get_charges(ligand, strictStereo=False) 
             self.ligands.append(ligand)
         self.title = self.cas_or_aa[0]+"_and_analogs"
         self.min_atoms = min_atoms
@@ -328,8 +328,8 @@ class DualTopology(object):
         substructure_mol2 = "SUB_" + file_prefix + ".mol2"
 
         with gaff2xml.utils.enter_temp_directory():
-            _unused = gaff2xml.openeye.molecule_to_mol2(self.dual_topology,self.mol2_file)
-            _unused = gaff2xml.openeye.molecule_to_mol2(self.common_substructure,substructure_mol2)
+            _unused = openeye.molecule_to_mol2(self.dual_topology,self.mol2_file)
+            _unused = openeye.molecule_to_mol2(self.common_substructure,substructure_mol2)
             traj = md.load(self.mol2_file)
 
             print("Run Antechamber")
