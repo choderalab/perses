@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/choderalab/expanded-ensembles.svg?branch=master)](https://travis-ci.org/choderalab/perses)
+[![Build Status](https://travis-ci.org/choderalab/perses.svg?branch=master)](https://travis-ci.org/choderalab/perses)
 Perses
 ==================
 Experiments with expanded ensemble simulation to explore chemical and mutational space.
