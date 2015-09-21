@@ -17,6 +17,7 @@ requirements:
     - scipy
     - openmoltools
     - sklearn
+    - lxml
 
   run:
     - python
@@ -25,6 +26,7 @@ requirements:
     - scipy
     - openmoltools
     - sklearn
+    - lxml
 
 test:
   requires:
