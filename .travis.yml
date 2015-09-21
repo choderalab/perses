@@ -26,6 +26,7 @@ script:
   - conda build devtools/conda-recipe
   # Install and test (in separate directory)
   - conda install --yes --quiet --use-local perses
+  - conda install --yes --quiet nose
   - cd /home; nosetests perses --nocapture --verbosity=2 --with-doctest
 env:
   matrix:
