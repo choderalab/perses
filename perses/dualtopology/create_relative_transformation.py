@@ -4,7 +4,7 @@ Testbed for creating relative alchemical transformations.
 
 """
 
-import gaff2xml.openeye
+from openmoltools import openeye
 import openeye.oechem as oe
 import simtk.openmm as mm
 from simtk import unit
@@ -12,8 +12,8 @@ import simtk.openmm.app as app
 import numpy as np
 
 def create_molecule(iupac_name):
-    molecule = gaff2xml.openeye.iupac_to_oemol(iupac_name)
-    molecule = gaff2xml.openeye.get_charges(molecule, max_confs=1)
+    molecule = openeye.iupac_to_oemol(iupac_name)
+    molecule = openeye.get_charges(molecule, max_confs=1)
     #import openeye.oeomega as om
     #omega = om.OEOmega()
     #omega.SetMaxConfs(1)
@@ -21,7 +21,7 @@ def create_molecule(iupac_name):
     return molecule
 
 def generate_openmm_system(molecule):
-    trajs, ffxmls = gaff2xml.openeye.oemols_to_ffxml([molecule])
+    trajs, ffxmls = openeye.oemols_to_ffxml([molecule])
     ff = app.ForceField(ffxmls)
     # Get OpenMM Topology.
     topology = trajs[0].top.to_openmm()
@@ -683,8 +683,8 @@ if __name__ == '__main__':
     #molecule2 = create_molecule('benzene')
 
     # Write molecules to mol2 files for ease of debugging.
-    gaff2xml.openeye.molecule_to_mol2(molecule1, tripos_mol2_filename='molecule1.mol2')
-    gaff2xml.openeye.molecule_to_mol2(molecule2, tripos_mol2_filename='molecule2.mol2')
+    openeye.molecule_to_mol2(molecule1, tripos_mol2_filename='molecule1.mol2')
+    openeye.molecule_to_mol2(molecule2, tripos_mol2_filename='molecule2.mol2')
 
     # Create an OpenMM system for molecule1 in some sort of "environment".
     # This system will be modified to introduce the ability to mutate molecule1 to molecule2.
