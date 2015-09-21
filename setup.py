@@ -82,8 +82,5 @@ setup(name='perses',
         'openmm >=6.3',
         'numpy',
         'scipy',
-        'openmoltools',
-        'sklearn',
-        'lxml',
         ],
       )
