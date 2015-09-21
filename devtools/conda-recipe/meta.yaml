@@ -16,16 +16,16 @@ requirements:
     - openmm >=6.3
     - numpy
     - scipy
-    - openmoltools
-    - alchemy
+    #- openmoltools
+    #- alchemy
 
   run:
     - python
     - openmm >=6.3
     - numpy
     - scipy
-    - openmoltools
-    - alchemy
+    #- openmoltools
+    #- alchemy
 
 test:
   requires:
