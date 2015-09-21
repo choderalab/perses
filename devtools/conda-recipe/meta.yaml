@@ -12,17 +12,15 @@ build:
 requirements:
   build:
     - python
-    - openmm
+    - openmm >=6.3
     - numpy
     - scipy
-    - yank
 
   run:
     - python
-    - openmm
+    - openmm >=6.3
     - numpy
     - scipy
-    - yank
 
 test:
   requires:

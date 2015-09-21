@@ -79,10 +79,9 @@ setup(name='perses',
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        'openmm', 
-	'numpy',
+        'openmm >=6.3',
+        'numpy',
         'scipy',
-        'yank',
         ],
       entry_points={'console_scripts': [
             'thermoml-update-mirror = thermopyl.scripts.update_archive:main',

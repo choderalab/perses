@@ -24,7 +24,7 @@ install:
 script:
   - conda config --add channels https://conda.binstar.org/omnia
   - conda build devtools/conda-recipe
-  # Install and test
+  # Install and test (in separate directory)
   - conda install --yes --quiet --use-local perses
   - cd /home; nosetests perses --nocapture --verbosity=2 --with-doctest
 env:
@@ -39,4 +39,4 @@ env:
 
 after_success:
   - echo "after_success"
-  - PACKAGENAME="perses" ./devtools/travis-ci/after_success.sh
+  - ORGNAME="omnia" PACKAGENAME="perses" ./devtools/travis-ci/after_success.sh
