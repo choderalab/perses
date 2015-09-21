@@ -82,6 +82,7 @@ setup(name='perses',
         'openmm >=6.3',
         'numpy',
         'scipy',
+        'openmoltools',
         ],
       entry_points={'console_scripts': [
             'thermoml-update-mirror = thermopyl.scripts.update_archive:main',

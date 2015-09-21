@@ -15,12 +15,14 @@ requirements:
     - openmm >=6.3
     - numpy
     - scipy
+    - openmoltools
 
   run:
     - python
     - openmm >=6.3
     - numpy
     - scipy
+    - openmoltools
 
 test:
   requires:
