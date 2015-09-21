@@ -16,6 +16,7 @@ requirements:
     - numpy
     - scipy
     - openmoltools
+    - sklearn
 
   run:
     - python
@@ -23,6 +24,7 @@ requirements:
     - numpy
     - scipy
     - openmoltools
+    - sklearn
 
 test:
   requires:

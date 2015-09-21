@@ -83,6 +83,7 @@ setup(name='perses',
         'numpy',
         'scipy',
         'openmoltools',
+        'sklearn',
         ],
       entry_points={'console_scripts': [
             'thermoml-update-mirror = thermopyl.scripts.update_archive:main',
