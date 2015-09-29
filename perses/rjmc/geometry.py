@@ -4,8 +4,11 @@ for each additional atom that must be added.
 """
 from collections import namedtuple
 import numpy as np
+import scipy.stats as stats
+import numexpr as ne
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
+
 
 class GeometryEngine(object):
     """
@@ -18,20 +21,19 @@ class GeometryEngine(object):
     """
     
     def __init__(self, metadata):
-         pass
-
+        pass
 
     def propose(self, topology_proposal, new_system, old_positions):
         """
         Make a geometry proposal for the appropriate atoms.
         
-	Arguments
+        Arguments
         ----------
         topology_proposal : TopologyProposal namedtuple
             The result of the topology proposal, containing the atom mapping and topologies.
         sampler_state : SamplerState namedtuple
-	    The current state of the sampler
-	
+        The current state of the sampler
+
         Returns
         -------
         proposal : GeometryProposal namedtuple
@@ -41,4 +43,180 @@ class GeometryEngine(object):
         return GeometryProposal(np.array([0.0,0.0,0.0]), 0)
 
 
-                  
+class FFGeometryEngine(GeometryEngine):
+    """
+    This is an implementation of the GeometryEngine class which proposes new dimensions based on the forcefield parameters
+    """
+
+
+
+    def _get_unique_atoms(self,new_to_old_map):
+        """
+        Get the set of atoms unique to both the new and old system.
+
+        Arguments
+        ---------
+        new_to_old_map : dict
+            Dictionary of the form {new_atom : old_atom}
+
+        Returns
+        -------
+        unique_old_atoms : list of int
+            A list of the indices of atoms unique to the old system
+        unique_new_atoms : list of int
+            A list of the indices of atoms unique to the new system
+        """
+        
+
+    def _propose_bond_length(self, r0, k_eq):
+        """
+        Draw a bond length from the equilibrium bond length distribution
+
+        Arguments
+        ---------
+        r0 : float
+            The equilibrium bond length
+        k_eq : float
+            The bond spring constant
+
+        Returns
+        --------
+        r : float
+            the proposed bond length
+        logp : float
+            the log-probability of the proposal
+        """
+        sigma = 1.0/np.sqrt(2.0*k_eq)
+        r = sigma*np.random.random() + r0
+        logp = stats.distributions.norm.logpdf(r, r0, sigma)
+        return (r, logp)
+
+    def _propose_bond_angle(self, theta0, k_eq):
+        """
+        Draw a bond length from the equilibrium bond length distribution
+
+        Arguments
+        ---------
+        theta0 : float
+            The equilibrium bond angle
+        k_eq : float
+            The angle spring constant
+
+        Returns
+        --------
+        r : float
+            the proposed bond angle
+        logp : float
+            the log-probability of the proposal
+        """
+        sigma = 1.0/np.sqrt(2.0*k_eq)
+        theta = sigma*np.random.random() + theta0
+        logp = stats.distributions.norm.logpdf(theta, theta0, sigma)
+        return (theta, logp)
+
+    def _propose_torsion_angle(self, V, n, gamma):
+        """
+        Draws a torsion angle from the distribution of one torsion.
+        Uses the functional form U(phi) = V/2[1+cos(n*phi-gamma)],
+        as described by Amber.
+
+        Arguments
+        ---------
+        V : float
+            force constant
+        n : int
+            multiplicity of the torsion
+        gamma : float
+            phase angle
+
+        Returns
+        -------
+        phi : float
+            The proposed torsion angle
+        logp : float
+            The proposed log probability of the torsion angle
+        """
+        (Z, max_p) = self._torsion_normalizer(V, n, gamma)
+        phi = 0.0
+        logp = 0.0
+        #sample from the distribution
+        accepted = False
+        #use rejection sampling
+        while not accepted:
+            phi_samp = np.random.uniform(0.0, 2*np.pi)
+            runif = np.random.uniform(0.0, max_p+1.0)
+            p_phi_samp = self._torsion_p(Z, V, n, gamma, phi_samp)
+            if p_phi_samp > runif:
+                phi = phi_samp
+                logp = np.log(p_phi_samp)
+                accepted = True
+            else:
+                continue
+        return (phi, logp)
+
+    def _torsion_p(self,Z, V, n, gamma, phi):
+        """
+        Utility function for calculating the normalized probability of a torsion angle
+        """
+        return (1.0/Z)*np.exp(-(V/2.0)*(1+np.cos(n*phi-gamma)))
+
+    def _torsion_normalizer(self, V, n, gamma):
+        """
+        Utility function to numerically normalize torsion angles.
+        Also return max_p to facilitate rejection sampling
+        """
+        #generate a grid of 5000 points from 0 < phi < 2*pi
+        phis = np.linspace(0, 2.0*np.pi, 5000)
+        #evaluate the unnormalized probability at each of those points
+        phi_q = ne.evaluate("exp(-(V/2.0)*(1+cos(n*phis-gamma)))")
+        #integrate the values
+        Z = np.trapz(phi_q, phis)
+        max_p = np.max(phi_q/Z)
+        return Z, max_p
+
+
+    def _spherical_to_cartesian(self, spherical):
+        """
+        Convert spherical coordinates to cartesian coordinates, and get jacobian
+
+        Arguments
+        ---------
+        spherical : 1x3 np.array of floats
+            r, theta, phi
+
+        Returns
+        -------
+        [x,y,z] : np.array 1x3
+            the transformed cartesian coordinates
+        detJ : float
+            the determinant of the jacobian of the transformation
+        """
+        xyz = np.zeros(3)
+        xyz[0] = spherical[0]*np.cos(spherical[1])
+        xyz[1] = spherical[0]*np.sin(spherical[1])
+        xyz[2] = spherical[0]*np.cos(spherical[2])
+        detJ = spherical[0]**2*np.sin(spherical[2])
+        return xyz, detJ
+
+    def _cartesian_to_spherical(self, xyz):
+        """
+        Convert cartesian coordinates to spherical coordinates
+
+        Arguments
+        ---------
+        xyz : 1x3 np.array of floats
+            the cartesian coordinates to convert
+
+        Returns
+        -------
+        spherical : 1x3 np.array of floats
+            the spherical coordinates
+        detJ : float
+            The determinant of the jacobian of the transformation
+        """
+        spherical = np.zeros(3)
+        spherical[0] = np.linalg.norm(xyz)
+        spherical[1] = np.arccos(xyz[2]/spherical[0])
+        spherical[2] = np.arctan(xyz[1]/xyz[0])
+        detJ = spherical[0]**2*np.sin(spherical[2])
+        return spherical, detJ
