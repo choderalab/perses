@@ -50,7 +50,70 @@ class FFGeometryEngine(GeometryEngine):
 
 
 
-    def _get_unique_atoms(self,new_to_old_map):
+    def _propose_new_positions(self, new_atoms, new_system, new_positions, new_to_old_atom_map):
+        """
+        Propose new atomic positions
+
+        Arguments
+        ---------
+        new_atoms : list of int
+            Indices of atoms that need positions
+        topology_proposal : TopologyProposal namedtuple
+            The result of the topology proposal, containing the atom mapping and topologies
+        new_system : simtk.OpenMM.System object
+            The new system
+        new_positions : [m, 3] np.array of floats
+            The positions of the m atoms in the new system, with unpositioned atoms having [0,0,0]
+
+        Returns
+        -------
+        new_positions : [m, 3] np.array of floats
+            The positions of the m atoms in the new system
+        logp_forward : float
+            The logp of the forward proposal, including the jacobian
+        """
+        logp_forward = 0.0
+        atoms_with_positions = new_to_old_atom_map.keys()
+        while len(new_atoms) > 0:
+            #find atoms to propose
+            next_atoms = self._get_next_proposal_atoms(new_atoms, new_system, atoms_with_positions)
+            for j in range(next_atoms):
+                #propose positions of atoms
+                print("propose")
+                #remove from proposal list and add to list of atoms with valid positions
+                new_atoms.remove(next_atoms[j])
+                atoms_with_positions.append(next_atoms[j])
+
+
+
+    def _get_next_proposal_atoms(self, new_atoms, new_system, atoms_with_positions):
+        """
+        A utility function to determine which atoms are eligible for proposal (in other words,
+        which atoms have no position but are bonded to atoms with a position).
+
+        Arguments
+        ---------
+        new_atoms : list of int
+            List of atom indices without positions
+        new_system : simtk.openmm.System object
+            System containing forcefield parameters for atoms
+        atoms_with_positions : list of int
+            Atom indices with valid positions
+
+        Returns
+        -------
+        eligible_atoms : list of int
+            Indices of atoms eligible for proposal
+        """
+        #get bond force
+        forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
+        bond_force = forces['HarmonicBondForce']
+        return [3,4,5]
+        #find
+
+
+
+    def _get_unique_atoms(self, new_to_old_map, new_atom_list, old_atom_list):
         """
         Get the set of atoms unique to both the new and old system.
 
@@ -66,7 +129,11 @@ class FFGeometryEngine(GeometryEngine):
         unique_new_atoms : list of int
             A list of the indices of atoms unique to the new system
         """
-        
+        mapped_new_atoms = new_to_old_map.keys()
+        unique_new_atoms = [atom for atom in new_atom_list not in mapped_new_atoms]
+        mapped_old_atoms = new_to_old_map.values()
+        unique_old_atoms = [atom for atom in old_atom_list not in mapped_old_atoms]
+        return unique_old_atoms, unique_new_atoms
 
     def _propose_bond_length(self, r0, k_eq):
         """
@@ -154,7 +221,7 @@ class FFGeometryEngine(GeometryEngine):
                 continue
         return (phi, logp)
 
-    def _torsion_p(self,Z, V, n, gamma, phi):
+    def _torsion_p(self, Z, V, n, gamma, phi):
         """
         Utility function for calculating the normalized probability of a torsion angle
         """
