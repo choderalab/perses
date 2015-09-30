@@ -74,44 +74,103 @@ class FFGeometryEngine(GeometryEngine):
         """
         logp_forward = 0.0
         atoms_with_positions = new_to_old_atom_map.keys()
+        forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
+        torsion_force = forces['PeriodicTorsionForce']
+        atom_torsion_proposals = {atom_index  : [] for atom_index in new_atoms}
         while len(new_atoms) > 0:
             #find atoms to propose
-            next_atoms = self._get_next_proposal_atoms(new_atoms, new_system, atoms_with_positions)
-            for j in range(next_atoms):
-                #propose positions of atoms
-                print("propose")
-                #remove from proposal list and add to list of atoms with valid positions
-                new_atoms.remove(next_atoms[j])
-                atoms_with_positions.append(next_atoms[j])
+            current_atom_proposals = []
+            for torsion_index in range(torsion_force.getNumTorsions()):
+                atom1 = torsion_force.getTorsionParameters(torsion_index)[0]
+                atom2 = torsion_force.getTorsionParameters(torsion_index)[1]
+                atom3 = torsion_force.getTorsionParameters(torsion_index)[2]
+                atom4 = torsion_force.getTorsionParameters(torsion_index)[3]
+                #Only take torsions where the "new" statuses of atoms 1 and 4 are not equal
+                if (atom1 in atoms_with_positions) != (atom4 in atoms_with_positions):
+                    #only take torsions where 2 and 3 have known positions
+                    if (atom2 in atoms_with_positions) and (atom3 in atoms_with_positions):
+                        #finally, append the torsion index to the list of possible atom sets for proposal
+                        if atom1 in atoms_with_positions:
+                            atom_torsion_proposals[atom1].append(torsion_index)
+                            current_atom_proposals.append(atom1)
+                        else:
+                            atom_torsion_proposals[atom4].append(torsion_index)
+                            current_atom_proposals.append(atom4)
+            #now loop through the list of atoms found to be eligible for positions this round
+            for atom in current_atom_proposals:
+                possible_torsions = atom_torsion_proposals[atom]
+                #randomly select a torsion from the available list, and calculate its log-probability
+                selected_torsion = np.random.randint(0, len(possible_torsions))
+                logp_selected_torsion = - np.log(len(possible_torsions))
+                torsion_parameters = torsion_force.getTorsionParameters(selected_torsion)
+                #check to see whether the atom is the first or last in the torsion
+                if atom == torsion_parameters[0]:
+                    bonded_atom = torsion_parameters[1]
+                    angle_atom = torsion_parameters[2]
+                    torsion_atom = torsion_parameters[3]
+                else:
+                    bonded_atom = torsion_parameters[3]
+                    angle_atom = torsion_parameters[2]
+                    torsion_atom = torsion_parameters[1]
+                #get bond parameters and draw bond length
+                r0, k_eq = self._get_bond_parameters(new_system, atom, bonded_atom)
+                r, logp_bond = self._propose_bond_length(r0, k_eq)
+                #get angle parameters and draw bond angle
 
 
 
-    def _get_next_proposal_atoms(self, new_atoms, new_system, atoms_with_positions):
+
+
+    def _get_bond_parameters(self, system, atom1, atom2):
         """
-        A utility function to determine which atoms are eligible for proposal (in other words,
-        which atoms have no position but are bonded to atoms with a position).
+        Utility function to get the bonded parameters for a pair of atoms
 
         Arguments
         ---------
-        new_atoms : list of int
-            List of atom indices without positions
-        new_system : simtk.openmm.System object
-            System containing forcefield parameters for atoms
-        atoms_with_positions : list of int
-            Atom indices with valid positions
+        system : simtk.openmm.System
+            the system containing the parameters of interest
+        atom1 : int
+            the index of the first atom in the bond
+        atom2 : int
+            the index of the second atom in the bond
 
         Returns
         -------
-        eligible_atoms : list of int
-            Indices of atoms eligible for proposal
+        r0 : float
+            equilibrium bond length
+        k_eq : float
+            bond spring constant
         """
-        #get bond force
-        forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
-        bond_force = forces['HarmonicBondForce']
-        return [3,4,5]
-        #find
+        forces = {system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces())}
+        bonded_force = forces['HarmonicBondForce']
+        for bond_index in range(bonded_force.getNumBonds()):
+            parameters = bonded_force.getBondParameters(bond_index)
+            if (parameters[0] == atom1 and parameters[1] == atom2) or (parameters[1] == atom1 and parameters[0] == atom1):
+                return parameters[2], parameters[3]
 
+    def _get_angle_parameters(self, system, atom1, atom2, atom3):
+        """
+        Utility function to retrieve harmonic angle parameters for
+        a given set of atoms in a system
 
+        Arguments
+        ---------
+        system : simtk.openmm.System
+            the system with parameters
+        atom1 : int
+            the index of the first atom
+        atom2 : int
+            the index of the second atom
+        atom3 : int
+            the index of the third atom
+
+        Returns
+        -------
+        theta0 : float
+            equilibrium bond angle
+        k_eq : float
+            angle spring constant
+        """
 
     def _get_unique_atoms(self, new_to_old_map, new_atom_list, old_atom_list):
         """
