@@ -112,13 +112,32 @@ class FFGeometryEngine(GeometryEngine):
                     bonded_atom = torsion_parameters[3]
                     angle_atom = torsion_parameters[2]
                     torsion_atom = torsion_parameters[1]
+
                 #get bond parameters and draw bond length
                 r0, k_eq = self._get_bond_parameters(new_system, atom, bonded_atom)
                 r, logp_bond = self._propose_bond_length(r0, k_eq)
+
                 #get angle parameters and draw bond angle
+                theta0, k_eq = self._get_angle_parameters(new_system, atom, bonded_atom, angle_atom)
+                theta, logp_angle = self._propose_bond_angle(theta0, k_eq)
 
+                #propose torsion
+                phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
 
+                #convert spherical to cartesian coordinates
+                spherical_coordinates = np.array([r, theta, phi])
+                atomic_xyz, detJ = self._spherical_to_cartesian(spherical_coordinates)
 
+                #accumulate the forward logp with jacobian correction
+                logp_forward += (logp_selected_torsion + logp_angle + logp_bond + logp_torsion + np.log(detJ))
+
+                #add new position to atom relative to bonded atom
+                new_positions[atom] = atomic_xyz + new_positions[bonded_atom]
+
+                #remove atom from list of atoms needing positions
+                new_atoms.remove(atom)
+
+        return new_positions, logp_forward
 
 
     def _get_bond_parameters(self, system, atom1, atom2):
@@ -171,6 +190,17 @@ class FFGeometryEngine(GeometryEngine):
         k_eq : float
             angle spring constant
         """
+        list_of_angle_atoms = [atom1, atom2, atom3]
+        #compare sorted lists of atoms
+        list_of_angle_atoms.sort()
+        forces = {system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces())}
+        angle_force = forces['HarmonicAngleForce']
+        for angle_index in range(angle_force.getNumAngles()):
+            parameters = angle_force.getAngleParameters(angle_index)
+            #the first three "parameters" are atom indices
+            atoms = parameters[:3]
+            if atoms.sort() == list_of_angle_atoms:
+                return parameters[3], parameters[4]
 
     def _get_unique_atoms(self, new_to_old_map, new_atom_list, old_atom_list):
         """
