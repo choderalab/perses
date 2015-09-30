@@ -76,7 +76,8 @@ class FFGeometryEngine(GeometryEngine):
         atoms_with_positions = new_to_old_atom_map.keys()
         forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
         torsion_force = forces['PeriodicTorsionForce']
-        atom_torsion_proposals = {atom_index  : [] for atom_index in new_atoms}
+        bond_force = forces['HarmonicBondForce']
+        atom_torsion_proposals = {atom_index: [] for atom_index in new_atoms}
         while len(new_atoms) > 0:
             #find atoms to propose
             current_atom_proposals = []
@@ -87,6 +88,9 @@ class FFGeometryEngine(GeometryEngine):
                 atom4 = torsion_force.getTorsionParameters(torsion_index)[3]
                 #Only take torsions where the "new" statuses of atoms 1 and 4 are not equal
                 if (atom1 in atoms_with_positions) != (atom4 in atoms_with_positions):
+                    #make sure torsion is not improper:
+                    if not self._is_proper(torsion_force.getTorsionParameters(torsion_index), bond_force):
+                        continue
                     #only take torsions where 2 and 3 have known positions
                     if (atom2 in atoms_with_positions) and (atom3 in atoms_with_positions):
                         #finally, append the torsion index to the list of possible atom sets for proposal
@@ -133,11 +137,41 @@ class FFGeometryEngine(GeometryEngine):
 
                 #add new position to atom relative to bonded atom
                 new_positions[atom] = atomic_xyz + new_positions[bonded_atom]
+                atoms_with_positions.append(atom)
 
                 #remove atom from list of atoms needing positions
                 new_atoms.remove(atom)
 
         return new_positions, logp_forward
+
+
+    def _is_proper(self, torsion_parameters, bond_force):
+        """
+        Utility function to determine if torsion is proper
+        """
+        #get the atoms
+        torsion_atoms = torsion_parameters[:4]
+        is_proper = True
+        for i in range(3):
+            is_proper = is_proper and self._is_bond(torsion_atoms[i], torsion_atoms[i+1], bond_force)
+        return is_proper
+
+    def _is_bond(self, atom1, atom2, bond_force):
+        """
+        Utility function to determine if bond exists between two atoms
+        """
+        for bond_index in range(bond_force.getNumBonds()):
+            parameters = bond_force.getBondParameters(bond_index)
+            if (parameters[0] == atom1 and parameters[1] == atom2) or (parameters[1] == atom1 and parameters[0] == atom1):
+                return True
+        return False
+
+
+    def _reverse_proposal_logp(self, old_atoms, old_system, old_positions, new_to_old_atom_map):
+        """
+        Calculate the log-probability of the proposal of the unique old atoms (reverse proposal)
+        """
+        pass
 
 
     def _get_bond_parameters(self, system, atom1, atom2):
