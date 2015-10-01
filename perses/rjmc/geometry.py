@@ -23,14 +23,14 @@ class GeometryEngine(object):
     def __init__(self, metadata):
         pass
 
-    def propose(self, topology_proposal, new_system, old_system, old_positions):
+    def propose(self, new_to_old_atom_map, new_system, old_system, old_positions):
         """
         Make a geometry proposal for the appropriate atoms.
         
         Arguments
         ----------
-        topology_proposal : TopologyProposal namedtuple
-            The result of the topology proposal, containing the atom mapping and topologies.
+        new_to_old_atom_map : dict
+            mapping of the new to old atoms
         new_system : simtk.openmm.System
             The new system object
         old_system : simtk.openmm.System
@@ -53,14 +53,14 @@ class FFGeometryEngine(GeometryEngine):
     """
 
 
-    def propose(self, topology_proposal, new_system, old_system, old_positions):
+    def propose(self, new_to_old_atom_map, new_system, old_system, old_positions):
         """
         Propose a new geometry for the appropriate atoms using forcefield parameters
 
         Arguments
         ----------
-        topology_proposal : TopologyProposal namedtuple
-            The result of the topology proposal, containing the atom mapping and topologies.
+        new_to_old_atom_map : dict
+            mapping of the new to old atoms
         new_system : simtk.openmm.System
             The new system object
         old_system : simtk.openmm.System
@@ -76,15 +76,14 @@ class FFGeometryEngine(GeometryEngine):
         """
 
         #get the mapping between new and old atoms
-        new_to_old_atom_map = topology_proposal.new_to_old_atom_map
         n_atoms_new = new_system.getNumParticles()
         n_atoms_old = old_system.getNumParticles()
 
         #get a list of the new atoms
-        new_atoms = [atom for atom in range(n_atoms_new) not in new_to_old_atom_map.keys()]
+        new_atoms = [atom for atom in range(n_atoms_new) if atom not in new_to_old_atom_map.keys()]
 
         #get a list of the old atoms
-        old_atoms = [atom for atom in range(n_atoms_old) not in new_to_old_atom_map.values()]
+        old_atoms = [atom for atom in range(n_atoms_old) if atom not in new_to_old_atom_map.values()]
 
         #create a new array with the appropriate size
         new_positions = np.zeros([n_atoms_new, 3])
@@ -101,6 +100,8 @@ class FFGeometryEngine(GeometryEngine):
 
         #construct the return object
         geometry_proposal = GeometryProposal(final_new_positions, logp_reverse - logp_forward)
+
+        return geometry_proposal
 
     def _propose_new_positions(self, new_atoms, new_system, new_positions, new_to_old_atom_map):
         """
@@ -133,28 +134,9 @@ class FFGeometryEngine(GeometryEngine):
         while len(new_atoms) > 0:
             #find atoms to propose
             current_atom_proposals = []
-            for torsion_index in range(torsion_force.getNumTorsions()):
-                atom1 = torsion_force.getTorsionParameters(torsion_index)[0]
-                atom2 = torsion_force.getTorsionParameters(torsion_index)[1]
-                atom3 = torsion_force.getTorsionParameters(torsion_index)[2]
-                atom4 = torsion_force.getTorsionParameters(torsion_index)[3]
-                #Only take torsions where the "new" statuses of atoms 1 and 4 are not equal
-                if (atom1 in atoms_with_positions) != (atom4 in atoms_with_positions):
-                    #make sure torsion is not improper:
-                    if not self._is_proper(torsion_force.getTorsionParameters(torsion_index), bond_force):
-                        continue
-                    #only take torsions where 2 and 3 have known positions
-                    if (atom2 in atoms_with_positions) and (atom3 in atoms_with_positions):
-                        #finally, append the torsion index to the list of possible atom sets for proposal
-                        if atom1 in atoms_with_positions:
-                            atom_torsion_proposals[atom1].append(torsion_index)
-                            current_atom_proposals.append(atom1)
-                        else:
-                            atom_torsion_proposals[atom4].append(torsion_index)
-                            current_atom_proposals.append(atom4)
+            atom_torsion_proposals = self._atoms_eligible_for_proposal(torsion_force, bond_force, atoms_with_positions, new_atoms)
             #now loop through the list of atoms found to be eligible for positions this round
-            for atom in current_atom_proposals:
-                possible_torsions = atom_torsion_proposals[atom]
+            for atom, possible_torsions in atom_torsion_proposals.items():
                 #randomly select a torsion from the available list, and calculate its log-probability
                 selected_torsion = np.random.randint(0, len(possible_torsions))
                 logp_selected_torsion = - np.log(len(possible_torsions))
@@ -195,6 +177,48 @@ class FFGeometryEngine(GeometryEngine):
                 new_atoms.remove(atom)
 
         return new_positions, logp_forward
+
+    def _propose_atomic_position(self, system, atom, bonded_atom, angle_atom, torsion_parameters):
+        """
+        Method to propose the position of a single atom.
+
+        Arguments
+        ---------
+        system : simtk.openmm.System
+            the system containing the atom of interest
+        atom : int
+            the index of the atom whose position should be proposed
+        bonded_atom : int
+            the index of the atom bonded to the atom of interest
+        angle_atom : int
+            the 1, 3 position atom index
+        torsion_parameters : dict
+            The parameters of the torsion that is being used for this proposal
+
+        Returns
+        -------
+
+        """
+        #get bond parameters and draw bond length
+        r0, k_eq = self._get_bond_parameters(system, atom, bonded_atom)
+        r, logp_bond = self._propose_bond_length(r0, k_eq)
+
+        #get angle parameters and draw bond angle
+        theta0, k_eq = self._get_angle_parameters(system, atom, bonded_atom, angle_atom)
+        theta, logp_angle = self._propose_bond_angle(theta0, k_eq)
+
+        #propose torsion
+        phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
+
+        #convert spherical to cartesian coordinates
+        spherical_coordinates = np.array([r, theta, phi])
+        atomic_xyz, detJ = self._spherical_to_cartesian(spherical_coordinates)
+
+        #accumulate the forward logp with jacobian correction
+        logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
+
+        return atomic_xyz, logp_atomic_position
+
 
     def _reverse_proposal_logp(self, old_atoms, old_system, old_positions, new_to_old_atom_map):
         """
@@ -289,6 +313,52 @@ class FFGeometryEngine(GeometryEngine):
         return logp_reverse
 
 
+    def _atoms_eligible_for_proposal(self, torsion_force, bond_force, atoms_with_positions, new_atoms):
+        """
+        Determine which atoms are eligible for position proposal this round.
+        The criteria are that the atom must not yet have a position, and must
+        be 1 or 4 in at least one torsion where the other atoms have positoins.
+
+        Arguments
+        ---------
+        torsion_force : simtk.openmm.PeriodicTorsionForce
+            The torsion force from the system
+        bond_roce : simtk.openmm.HarmonicBondForce
+            The HarmonicBondForce from the system
+        atoms_with_positions : list of int
+            A list of the indices of atoms that have positions
+
+        Returns
+        -------
+        atom_torsion_proposals : dict
+            Dictionary containing {eligible_atom : [list_of_torsions]}
+
+        """
+        current_atom_proposals = []
+        atom_torsion_proposals = {atom_index: [] for atom_index in new_atoms}
+        for torsion_index in range(torsion_force.getNumTorsions()):
+            atom1 = torsion_force.getTorsionParameters(torsion_index)[0]
+            atom2 = torsion_force.getTorsionParameters(torsion_index)[1]
+            atom3 = torsion_force.getTorsionParameters(torsion_index)[2]
+            atom4 = torsion_force.getTorsionParameters(torsion_index)[3]
+            #Only take torsions where the "new" statuses of atoms 1 and 4 are not equal
+            if (atom1 in atoms_with_positions) != (atom4 in atoms_with_positions):
+                #make sure torsion is not improper:
+                if not self._is_proper(torsion_force.getTorsionParameters(torsion_index), bond_force):
+                    continue
+                #only take torsions where 2 and 3 have known positions
+                if (atom2 in atoms_with_positions) and (atom3 in atoms_with_positions):
+                    #finally, append the torsion index to the list of possible atom sets for proposal
+                    if atom1 in atoms_with_positions and (atom1 not in current_atom_proposals):
+                        atom_torsion_proposals[atom4].append(torsion_index)
+                        current_atom_proposals.append(atom4)
+                    elif atom4 in atoms_with_positions and (atom4 not in current_atom_proposals):
+                        atom_torsion_proposals[atom1].append(torsion_index)
+                        current_atom_proposals.append(atom1)
+                    else:
+                        continue
+        return {atom: torsionlist for atom, torsionlist in atom_torsion_proposals if len(torsionlist) > 0}
+
 
     def _is_proper(self, torsion_parameters, bond_force):
         """
@@ -307,7 +377,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         for bond_index in range(bond_force.getNumBonds()):
             parameters = bond_force.getBondParameters(bond_index)
-            if (parameters[0] == atom1 and parameters[1] == atom2) or (parameters[1] == atom1 and parameters[0] == atom1):
+            if (parameters[0] == atom1 and parameters[1] == atom2) or (parameters[1] == atom1 and parameters[0] == atom2):
                 return True
         return False
 
@@ -414,7 +484,7 @@ class FFGeometryEngine(GeometryEngine):
         logp : float
             the log-probability of the proposal
         """
-        sigma = 1.0/np.sqrt(2.0*k_eq)
+        sigma = 2.0/np.sqrt(2.0*k_eq/k_eq.unit)
         r = sigma*np.random.random() + r0
         logp = stats.distributions.norm.logpdf(r, r0, sigma)
         return (r, logp)
@@ -437,7 +507,7 @@ class FFGeometryEngine(GeometryEngine):
         logp : float
             the log-probability of the proposal
         """
-        sigma = 1.0/np.sqrt(2.0*k_eq)
+        sigma = 1.0/np.sqrt(2.0*k_eq/k_eq.unit)
         theta = sigma*np.random.random() + theta0
         logp = stats.distributions.norm.logpdf(theta, theta0, sigma)
         return (theta, logp)
