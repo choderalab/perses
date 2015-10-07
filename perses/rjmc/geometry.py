@@ -71,9 +71,10 @@ class FFGeometryEngine(GeometryEngine):
 
         Returns
         -------
-        proposal : GeometryProposal namedtuple
-             Contains the new positions as well as the logp ratio
-             of the proposal.
+        new_positions : [m, 3] np.array of floats
+            The positions of the m atoms in the new system (if not propose_positions, this is the old positions)
+        logp : float
+            The logp of the proposal, including the jacobian
         """
 
         #get the mapping between new and old atoms
@@ -232,7 +233,7 @@ class FFGeometryEngine(GeometryEngine):
         #get angle parameters and draw bond angle
         theta0, k_eq = self._get_angle_parameters(system, atom, bonded_atom, angle_atom)
         theta, logp_angle = self._propose_bond_angle(theta0, k_eq)
-
+        theta = theta+np.pi*units.radians
         #propose torsion
         phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
 
