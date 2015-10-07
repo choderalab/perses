@@ -517,6 +517,9 @@ class FFGeometryEngine(GeometryEngine):
         """
         Utility function for calculating the normalized probability of a torsion angle
         """
+        #must remove units
+        V = V/V.unit
+        gamma = gamma/gamma.unit
         return (1.0/Z)*np.exp(-(V/2.0)*(1+np.cos(n*phi-gamma)))
 
     def _torsion_normalizer(self, V, n, gamma):
@@ -527,6 +530,9 @@ class FFGeometryEngine(GeometryEngine):
         #generate a grid of 5000 points from 0 < phi < 2*pi
         phis = np.linspace(0, 2.0*np.pi, 5000)
         #evaluate the unnormalized probability at each of those points
+        #need to remove units--numexpr can't handle them otherwise
+        V = V/V.unit
+        gamma = gamma/gamma.unit
         phi_q = ne.evaluate("exp(-(V/2.0)*(1+cos(n*phis-gamma)))")
         #integrate the values
         Z = np.trapz(phi_q, phis)
