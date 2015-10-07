@@ -130,7 +130,7 @@ class FFGeometryEngine(GeometryEngine):
         forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
         torsion_force = forces['PeriodicTorsionForce']
         bond_force = forces['HarmonicBondForce']
-        atomic_proposal_order = self._generate_proposal_order(new_atoms, new_system, new_positions, new_to_old_atom_map)
+        atomic_proposal_order = self._generate_proposal_order(new_atoms, new_system, new_to_old_atom_map)
         for atomset in atomic_proposal_order:
             for atom, possible_torsions in atomset.items():
                 #randomly select a torsion from the available list, and calculate its log-probability
@@ -187,10 +187,11 @@ class FFGeometryEngine(GeometryEngine):
         while len(new_atoms) > 0:
             atom_torsion_proposals = self._atoms_eligible_for_proposal(torsion_force, bond_force, atoms_with_positions, new_atoms)
             #now loop through the list of atoms found to be eligible for positions this round
-            for atom, possible_torsions in atom_torsion_proposals.items():
-                atom_proposal_list.append(atom)
+            atom_proposal_list.append(atom_torsion_proposals)
+            for atom in atom_torsion_proposals.keys():
                 #remove atom from list of atoms needing positions
                 new_atoms.remove(atom)
+                atoms_with_positions.append(atom)
         return atom_proposal_list
 
 
@@ -367,7 +368,7 @@ class FFGeometryEngine(GeometryEngine):
         bonded_force = forces['HarmonicBondForce']
         for bond_index in range(bonded_force.getNumBonds()):
             parameters = bonded_force.getBondParameters(bond_index)
-            if (parameters[0] == atom1 and parameters[1] == atom2) or (parameters[1] == atom1 and parameters[0] == atom1):
+            if (parameters[0] == atom1 and parameters[1] == atom2) or (parameters[1] == atom1 and parameters[0] == atom2):
                 return parameters[2], parameters[3]
 
     def _get_angle_parameters(self, system, atom1, atom2, atom3):
@@ -395,14 +396,13 @@ class FFGeometryEngine(GeometryEngine):
         """
         list_of_angle_atoms = [atom1, atom2, atom3]
         #compare sorted lists of atoms
-        list_of_angle_atoms.sort()
         forces = {system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces())}
         angle_force = forces['HarmonicAngleForce']
         for angle_index in range(angle_force.getNumAngles()):
             parameters = angle_force.getAngleParameters(angle_index)
             #the first three "parameters" are atom indices
             atoms = parameters[:3]
-            if atoms.sort() == list_of_angle_atoms:
+            if np.all(np.equal(list_of_angle_atoms, atoms)) or np.all(np.equal(list_of_angle_atoms[::-1], atoms)):
                 return parameters[3], parameters[4]
 
     def _get_unique_atoms(self, new_to_old_map, new_atom_list, old_atom_list):
@@ -470,7 +470,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         sigma = 1.0/np.sqrt(2.0*k_eq/k_eq.unit)
         theta = sigma*np.random.random()*theta0.unit + theta0
-        logp = stats.distributions.norm.logpdf(theta, theta0, sigma)
+        logp = stats.distributions.norm.logpdf(theta / theta.unit, theta0/theta0.unit, sigma)
         return (theta, logp)
 
     def _propose_torsion_angle(self, V, n, gamma):
