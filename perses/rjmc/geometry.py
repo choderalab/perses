@@ -6,6 +6,7 @@ from collections import namedtuple
 import numpy as np
 import scipy.stats as stats
 import numexpr as ne
+import simtk.unit as units
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 
@@ -88,14 +89,17 @@ class FFGeometryEngine(GeometryEngine):
         #create a new array with the appropriate size
         new_positions = np.zeros([n_atoms_new, 3])
 
-        #transfer known positions
+        #transfer known positions--be careful about units!
         for atom in new_to_old_atom_map.keys():
-            new_positions[atom] = old_positions[new_to_old_atom_map[atom]]
+            new_positions[atom] = old_positions[new_to_old_atom_map[atom]].in_units_of(units.nanometers)
 
+        #restore units
+        new_positions = new_positions*units.nanometers
         #get a new set of positions and a logp of that proposal
         final_new_positions, logp_forward = self._propose_new_positions(new_atoms, new_system, new_positions, new_to_old_atom_map)
 
         #get the probability of a reverse proposal
+
         logp_reverse = self._reverse_proposal_logp(old_atoms, old_system, old_positions, new_to_old_atom_map)
 
         #construct the return object
@@ -232,7 +236,7 @@ class FFGeometryEngine(GeometryEngine):
         phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
 
         #convert spherical to cartesian coordinates
-        spherical_coordinates = np.array([r, theta, phi])
+        spherical_coordinates = np.asarray([r, theta, phi])
         atomic_xyz, detJ = self._spherical_to_cartesian(spherical_coordinates)
 
         #accumulate the forward logp with jacobian correction
@@ -511,7 +515,7 @@ class FFGeometryEngine(GeometryEngine):
                 accepted = True
             else:
                 continue
-        return (phi, logp)
+        return (phi*units.radians, logp)
 
     def _torsion_p(self, Z, V, n, gamma, phi):
         """
@@ -554,14 +558,15 @@ class FFGeometryEngine(GeometryEngine):
         [x,y,z] : np.array 1x3
             the transformed cartesian coordinates
         detJ : float
-            the determinant of the jacobian of the transformation
+            the absolute value of the determinant of the jacobian of the transformation
         """
         xyz = np.zeros(3)
+        spherical = [coord/coord.unit for coord in spherical]
         xyz[0] = spherical[0]*np.cos(spherical[1])
         xyz[1] = spherical[0]*np.sin(spherical[1])
         xyz[2] = spherical[0]*np.cos(spherical[2])
         detJ = spherical[0]**2*np.sin(spherical[2])
-        return xyz, detJ
+        return xyz*units.nanometers, np.abs(detJ)
 
     def _cartesian_to_spherical(self, xyz):
         """
@@ -577,11 +582,11 @@ class FFGeometryEngine(GeometryEngine):
         spherical : 1x3 np.array of floats
             the spherical coordinates
         detJ : float
-            The determinant of the jacobian of the transformation
+            The absolute value of the determinant of the jacobian of the transformation
         """
         spherical = np.zeros(3)
         spherical[0] = np.linalg.norm(xyz)
         spherical[1] = np.arccos(xyz[2]/spherical[0])
         spherical[2] = np.arctan(xyz[1]/xyz[0])
         detJ = spherical[0]**2*np.sin(spherical[2])
-        return spherical, detJ
+        return spherical, np.abs(detJ)
