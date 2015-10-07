@@ -103,10 +103,10 @@ class FFGeometryEngine(GeometryEngine):
 
         return geometry_proposal
 
-    def _propose_new_positions(self, new_atoms, new_system, new_positions, new_to_old_atom_map):
+    def _propose_new_positions(self, new_atoms, new_system, new_positions, new_to_old_atom_map, propose_positions=True):
         """
-        Propose new atomic positions
-
+        Propose new atomic positions, or get the probability of existing ones
+        (used to evaluate the reverse probability, where the old atoms become the new atoms, etc)
         Arguments
         ---------
         new_atoms : list of int
@@ -121,24 +121,21 @@ class FFGeometryEngine(GeometryEngine):
         Returns
         -------
         new_positions : [m, 3] np.array of floats
-            The positions of the m atoms in the new system
-        logp_forward : float
-            The logp of the forward proposal, including the jacobian
+            The positions of the m atoms in the new system (if not propose_positions, this is the old positions)
+        logp : float
+            The logp of the proposal, including the jacobian
         """
-        logp_forward = 0.0
+        logp = 0.0
         atoms_with_positions = new_to_old_atom_map.keys()
         forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
         torsion_force = forces['PeriodicTorsionForce']
         bond_force = forces['HarmonicBondForce']
-        atom_torsion_proposals = {atom_index: [] for atom_index in new_atoms}
-        while len(new_atoms) > 0:
-            #find atoms to propose
-            current_atom_proposals = []
-            atom_torsion_proposals = self._atoms_eligible_for_proposal(torsion_force, bond_force, atoms_with_positions, new_atoms)
-            #now loop through the list of atoms found to be eligible for positions this round
-            for atom, possible_torsions in atom_torsion_proposals.items():
+        atomic_proposal_order = self._generate_proposal_order(new_atoms, new_system, new_positions, new_to_old_atom_map)
+        for atomset in atomic_proposal_order:
+            for atom, possible_torsions in atomset.items():
                 #randomly select a torsion from the available list, and calculate its log-probability
-                selected_torsion = np.random.randint(0, len(possible_torsions))
+                selected_torsion_index = np.random.randint(0, len(possible_torsions))
+                selected_torsion = possible_torsions[selected_torsion_index]
                 logp_selected_torsion = - np.log(len(possible_torsions))
                 torsion_parameters = torsion_force.getTorsionParameters(selected_torsion)
                 #check to see whether the atom is the first or last in the torsion
@@ -151,32 +148,52 @@ class FFGeometryEngine(GeometryEngine):
                     angle_atom = torsion_parameters[1]
                     torsion_atom = torsion_parameters[0]
 
-                #get bond parameters and draw bond length
-                r0, k_eq = self._get_bond_parameters(new_system, atom, bonded_atom)
-                r, logp_bond = self._propose_bond_length(r0, k_eq)
+                #get a new position for the atom, if specified
+                if propose_positions:
+                    atomic_xyz, logp_atomic = self._propose_atomic_position(new_system, atom, bonded_atom, angle_atom, torsion_parameters)
+                    new_positions[atom] = atomic_xyz + new_positions[bonded_atom]
+                else:
+                    logp_atomic = self._calculate_logp_atomic_position(new_system, new_positions, atom, bonded_atom, angle_atom, torsion_parameters)
+                logp += logp_atomic + logp_selected_torsion
 
-                #get angle parameters and draw bond angle
-                theta0, k_eq = self._get_angle_parameters(new_system, atom, bonded_atom, angle_atom)
-                theta, logp_angle = self._propose_bond_angle(theta0, k_eq)
+        return new_positions, logp
 
-                #propose torsion
-                phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
+    def _generate_proposal_order(self, new_atoms, new_system, new_to_old_atom_map):
+        """
+        Generate the list of atoms (and corresponding torsions) to be proposed each round
 
-                #convert spherical to cartesian coordinates
-                spherical_coordinates = np.array([r, theta, phi])
-                atomic_xyz, detJ = self._spherical_to_cartesian(spherical_coordinates)
+        Arguments
+        ---------
+        new_atoms : list of int
+            Indices of atoms that need positions
+        topology_proposal : TopologyProposal namedtuple
+            The result of the topology proposal, containing the atom mapping and topologies
+        new_system : simtk.OpenMM.System object
+            The new system
+        new_positions : [m, 3] np.array of floats
+            The positions of the m atoms in the new system, with unpositioned atoms having [0,0,0]
 
-                #accumulate the forward logp with jacobian correction
-                logp_forward += (logp_selected_torsion + logp_angle + logp_bond + logp_torsion + np.log(detJ))
-
-                #add new position to atom relative to bonded atom
-                new_positions[atom] = atomic_xyz + new_positions[bonded_atom]
-                atoms_with_positions.append(atom)
-
+        Returns
+        -------
+        atom_proposal_list : list of dict
+            List of dict of form {atom_index : [torsion_list]}. each entry in the list is a
+            round of atoms eligible for proposal.
+        """
+        atoms_with_positions = new_to_old_atom_map.keys()
+        forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
+        torsion_force = forces['PeriodicTorsionForce']
+        bond_force = forces['HarmonicBondForce']
+        atom_proposal_list = []
+        while len(new_atoms) > 0:
+            atom_torsion_proposals = self._atoms_eligible_for_proposal(torsion_force, bond_force, atoms_with_positions, new_atoms)
+            #now loop through the list of atoms found to be eligible for positions this round
+            for atom, possible_torsions in atom_torsion_proposals.items():
+                atom_proposal_list.append(atom)
                 #remove atom from list of atoms needing positions
                 new_atoms.remove(atom)
+        return atom_proposal_list
 
-        return new_positions, logp_forward
+
 
     def _propose_atomic_position(self, system, atom, bonded_atom, angle_atom, torsion_parameters):
         """
@@ -197,7 +214,10 @@ class FFGeometryEngine(GeometryEngine):
 
         Returns
         -------
-
+        atomic_xyz : [1,3] np.array of floats
+            the cartesian coordinates of the atom
+        logp_atomic_position : float
+            the logp of this proposal, including jacobian correction
         """
         #get bond parameters and draw bond length
         r0, k_eq = self._get_bond_parameters(system, atom, bonded_atom)
@@ -220,98 +240,39 @@ class FFGeometryEngine(GeometryEngine):
         return atomic_xyz, logp_atomic_position
 
 
-    def _reverse_proposal_logp(self, old_atoms, old_system, old_positions, new_to_old_atom_map):
+    def _calculate_logp_atomic_position(self, system, positions, atom, bonded_atom, angle_atom, torsion_parameters):
         """
-        Calculate the log-probability of the proposal of the unique old atoms (reverse proposal).
+        Calculate the log-probability of a given atom's position
 
         Arguments
         ---------
-        old_atoms : list of int
-            List of indices of the old unique atoms
-        old_system : simtk.openmm.System
-            Old system object
-        old_positions : [m, 3] np.array of floats
-            Positions of the old system
 
         Returns
         -------
-        logp_reverse : float
-            Log-propbability of the reverse transformation
+        logp : float
+            logp of position, including det(J) correction
         """
-        logp_reverse = 0.0
-        atoms_with_positions = new_to_old_atom_map.values()
-        forces = {old_system.getForce(index).__class__.__name__ : old_system.getForce(index) for index in range(old_system.getNumForces())}
-        torsion_force = forces['PeriodicTorsionForce']
-        bond_force = forces['HarmonicBondForce']
-        atom_torsion_proposals = {atom_index: [] for atom_index in old_atoms}
-        while len(old_atoms) > 0:
-            #find atoms to propose
-            current_atom_proposals = []
-            for torsion_index in range(torsion_force.getNumTorsions()):
-                atom1 = torsion_force.getTorsionParameters(torsion_index)[0]
-                atom2 = torsion_force.getTorsionParameters(torsion_index)[1]
-                atom3 = torsion_force.getTorsionParameters(torsion_index)[2]
-                atom4 = torsion_force.getTorsionParameters(torsion_index)[3]
-                #Only take torsions where the "new" statuses of atoms 1 and 4 are not equal
-                if (atom1 in atoms_with_positions) != (atom4 in atoms_with_positions):
-                    #make sure torsion is not improper:
-                    if not self._is_proper(torsion_force.getTorsionParameters(torsion_index), bond_force):
-                        continue
-                    #only take torsions where 2 and 3 have known positions
-                    if (atom2 in atoms_with_positions) and (atom3 in atoms_with_positions):
-                        #finally, append the torsion index to the list of possible atom sets for proposal
-                        if atom1 in atoms_with_positions:
-                            atom_torsion_proposals[atom1].append(torsion_index)
-                            current_atom_proposals.append(atom1)
-                        else:
-                            atom_torsion_proposals[atom4].append(torsion_index)
-                            current_atom_proposals.append(atom4)
-            #now loop through the list of atoms found to be eligible for positions this round
-            for atom in current_atom_proposals:
-                possible_torsions = atom_torsion_proposals[atom]
-                #randomly select a torsion from the available list, and calculate its log-probability
-                selected_torsion = np.random.randint(0, len(possible_torsions))
-                logp_selected_torsion = - np.log(len(possible_torsions))
-                torsion_parameters = torsion_force.getTorsionParameters(selected_torsion)
-                #check to see whether the atom is the first or last in the torsion
-                if atom == torsion_parameters[0]:
-                    bonded_atom = torsion_parameters[1]
-                    angle_atom = torsion_parameters[2]
-                    torsion_atom = torsion_parameters[3]
-                else:
-                    bonded_atom = torsion_parameters[2]
-                    angle_atom = torsion_parameters[1]
-                    torsion_atom = torsion_parameters[0]
+        #convert cartesian coordinates to spherical
+        relative_xyz = positions[atom] - positions[bonded_atom]
+        spherical_coordinates, detJ = self._cartesian_to_spherical(relative_xyz)
 
-                #convert cartesian coordinates to spherical
-                relative_xyz = old_positions[atom] - old_positions[bonded_atom]
-                spherical_coordinates, detJ = self._cartesian_to_spherical(relative_xyz)
+        #get bond parameters and calculate the probability of choosing the current positions
+        r0, k_eq = self._get_bond_parameters(system, atom, bonded_atom)
+        sigma_bond = 1.0/np.sqrt(2.0*k_eq)
+        logp_bond = stats.distributions.norm.logpdf(spherical_coordinates[0], r0, sigma_bond)
 
-                #get bond parameters and calculate the probability of choosing the current positions
-                r0, k_eq = self._get_bond_parameters(old_system, atom, bonded_atom)
-                sigma_bond = 1.0/np.sqrt(2.0*k_eq)
-                logp_bond = stats.distributions.norm.logpdf(spherical_coordinates[0], r0, sigma_bond)
+        #calculate the probability of choosing this bond angle
+        theta0, k_eq = self._get_angle_parameters(system, atom, bonded_atom, angle_atom)
+        sigma_angle = 1.0/np.sqrt(2.0*k_eq)
+        logp_angle = stats.distributions.norm.logpdf(spherical_coordinates[1], theta0, sigma_angle)
 
-                #calculate the probability of choosing this bond angle
-                theta0, k_eq = self._get_angle_parameters(old_system, atom, bonded_atom, angle_atom)
-                sigma_angle = 1.0/np.sqrt(2.0*k_eq)
-                logp_angle = stats.distributions.norm.logpdf(spherical_coordinates[1], theta0, sigma_angle)
+        #calculate the probabilty of choosing this torsion angle
+        torsion_Z = self._torsion_normalizer(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
+        logp_torsion = self._torsion_p(torsion_Z,torsion_parameters[6], torsion_parameters[4], torsion_parameters[5], spherical_coordinates[2])
 
-                #calculate the probabilty of choosing this torsion angle
-                torsion_Z = self._torsion_normalizer(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
-                logp_torsion = self._torsion_p(torsion_Z,torsion_parameters[6], torsion_parameters[4], torsion_parameters[5], spherical_coordinates[2])
+        logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
 
-                #accumulate the reverse logp with jacobian correction
-                logp_reverse += (logp_selected_torsion + logp_angle + logp_bond + logp_torsion + np.log(detJ))
-
-                #add new position to atom relative to bonded atom
-
-                atoms_with_positions.append(atom)
-
-                #remove atom from list of atoms needing positions
-                old_atoms.remove(atom)
-        return logp_reverse
-
+        return logp_atomic_position
 
     def _atoms_eligible_for_proposal(self, torsion_force, bond_force, atoms_with_positions, new_atoms):
         """
@@ -357,7 +318,7 @@ class FFGeometryEngine(GeometryEngine):
                         current_atom_proposals.append(atom1)
                     else:
                         continue
-        return {atom: torsionlist for atom, torsionlist in atom_torsion_proposals if len(torsionlist) > 0}
+        return {atom: torsionlist for atom, torsionlist in atom_torsion_proposals.items() if len(torsionlist) > 0}
 
 
     def _is_proper(self, torsion_parameters, bond_force):
@@ -485,8 +446,8 @@ class FFGeometryEngine(GeometryEngine):
             the log-probability of the proposal
         """
         sigma = 2.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        r = sigma*np.random.random() + r0
-        logp = stats.distributions.norm.logpdf(r, r0, sigma)
+        r = sigma*np.random.random()*r0.unit + r0
+        logp = stats.distributions.norm.logpdf(r/r.unit, r0/r0.unit, sigma)
         return (r, logp)
 
     def _propose_bond_angle(self, theta0, k_eq):
@@ -508,7 +469,7 @@ class FFGeometryEngine(GeometryEngine):
             the log-probability of the proposal
         """
         sigma = 1.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        theta = sigma*np.random.random() + theta0
+        theta = sigma*np.random.random()*theta0.unit + theta0
         logp = stats.distributions.norm.logpdf(theta, theta0, sigma)
         return (theta, logp)
 
