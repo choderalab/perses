@@ -99,8 +99,9 @@ class FFGeometryEngine(GeometryEngine):
         final_new_positions, logp_forward = self._propose_new_positions(new_atoms, new_system, new_positions, new_to_old_atom_map)
 
         #get the probability of a reverse proposal
-
-        logp_reverse = self._reverse_proposal_logp(old_atoms, old_system, old_positions, new_to_old_atom_map)
+        #first get the atom map reversed
+        old_to_new_atom_map = {value: key for (key, value) in new_to_old_atom_map.items()}
+        _, logp_reverse = self._propose_new_positions(old_atoms, old_system, old_positions, old_to_new_atom_map, propose_positions=False)
 
         #construct the return object
         geometry_proposal = GeometryProposal(final_new_positions, logp_reverse - logp_forward)
@@ -263,17 +264,17 @@ class FFGeometryEngine(GeometryEngine):
 
         #get bond parameters and calculate the probability of choosing the current positions
         r0, k_eq = self._get_bond_parameters(system, atom, bonded_atom)
-        sigma_bond = 1.0/np.sqrt(2.0*k_eq)
-        logp_bond = stats.distributions.norm.logpdf(spherical_coordinates[0], r0, sigma_bond)
+        sigma_bond = 1.0/np.sqrt(2.0*k_eq/k_eq.unit)
+        logp_bond = stats.distributions.norm.logpdf(spherical_coordinates[0]/spherical_coordinates[0].unit, r0/r0.unit, sigma_bond)
 
         #calculate the probability of choosing this bond angle
         theta0, k_eq = self._get_angle_parameters(system, atom, bonded_atom, angle_atom)
-        sigma_angle = 1.0/np.sqrt(2.0*k_eq)
-        logp_angle = stats.distributions.norm.logpdf(spherical_coordinates[1], theta0, sigma_angle)
+        sigma_angle = 1.0/np.sqrt(2.0*k_eq/k_eq.unit)
+        logp_angle = stats.distributions.norm.logpdf(spherical_coordinates[1]/spherical_coordinates[1].unit, theta0/theta0.unit, sigma_angle)
 
         #calculate the probabilty of choosing this torsion angle
-        torsion_Z = self._torsion_normalizer(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
-        logp_torsion = self._torsion_p(torsion_Z,torsion_parameters[6], torsion_parameters[4], torsion_parameters[5], spherical_coordinates[2])
+        torsion_Z, _ = self._torsion_normalizer(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
+        logp_torsion = self._torsion_p(torsion_Z,torsion_parameters[6], torsion_parameters[4], torsion_parameters[5], spherical_coordinates[2]/spherical_coordinates[2].unit)
 
         logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
 
@@ -556,17 +557,18 @@ class FFGeometryEngine(GeometryEngine):
         Returns
         -------
         [x,y,z] : np.array 1x3
-            the transformed cartesian coordinates
+            the transformed cartesian coordinates in the original length unit
         detJ : float
             the absolute value of the determinant of the jacobian of the transformation
         """
         xyz = np.zeros(3)
+        length_unit = spherical[0].unit
         spherical = [coord/coord.unit for coord in spherical]
         xyz[0] = spherical[0]*np.cos(spherical[1])
         xyz[1] = spherical[0]*np.sin(spherical[1])
         xyz[2] = spherical[0]*np.cos(spherical[2])
         detJ = spherical[0]**2*np.sin(spherical[2])
-        return xyz*units.nanometers, np.abs(detJ)
+        return xyz*length_unit, np.abs(detJ)
 
     def _cartesian_to_spherical(self, xyz):
         """
@@ -579,14 +581,14 @@ class FFGeometryEngine(GeometryEngine):
 
         Returns
         -------
-        spherical : 1x3 np.array of floats
+        spherical : 1x3 list of floats
             the spherical coordinates
         detJ : float
             The absolute value of the determinant of the jacobian of the transformation
         """
-        spherical = np.zeros(3)
-        spherical[0] = np.linalg.norm(xyz)
-        spherical[1] = np.arccos(xyz[2]/spherical[0])
-        spherical[2] = np.arctan(xyz[1]/xyz[0])
-        detJ = spherical[0]**2*np.sin(spherical[2])
-        return spherical, np.abs(detJ)
+        r = (np.linalg.norm(xyz)*xyz.unit).in_units_of(units.nanometers)
+        theta = np.arccos(xyz[2]/r)*units.radians
+        phi = np.arctan(xyz[1]/xyz[0])*units.radians
+        detJ = r**2*np.sin(phi)
+        spherical = [r, theta, phi]
+        return spherical, np.abs(detJ)/detJ.unit
