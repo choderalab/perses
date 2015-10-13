@@ -156,8 +156,8 @@ class FFGeometryEngine(GeometryEngine):
 
                 #get a new position for the atom, if specified
                 if propose_positions:
-                    atomic_xyz, logp_atomic = self._propose_atomic_position(new_system, atom, bonded_atom, angle_atom, torsion_parameters)
-                    new_positions[atom] = atomic_xyz + new_positions[bonded_atom]
+                    atomic_xyz, logp_atomic = self._propose_atomic_position(new_system, atom, bonded_atom, angle_atom, torsion_atom, torsion_parameters, new_positions)
+                    new_positions[atom] = atomic_xyz
                 else:
                     logp_atomic = self._calculate_logp_atomic_position(new_system, new_positions, atom, bonded_atom, angle_atom, torsion_parameters)
                 logp += logp_atomic + logp_selected_torsion
@@ -202,7 +202,7 @@ class FFGeometryEngine(GeometryEngine):
 
 
 
-    def _propose_atomic_position(self, system, atom, bonded_atom, angle_atom, torsion_parameters):
+    def _propose_atomic_position(self, system, atom, bonded_atom, angle_atom, torsion_atom, torsion_parameters, positions):
         """
         Method to propose the position of a single atom.
 
@@ -239,8 +239,9 @@ class FFGeometryEngine(GeometryEngine):
 
         #convert spherical to cartesian coordinates
         spherical_coordinates = np.asarray([r, theta, phi])
-        atomic_xyz, detJ = self._spherical_to_cartesian(spherical_coordinates)
+        atomic_xyz= self._internal_to_cartesian(positions[bonded_atom], positions[angle_atom], positions[torsion_atom], r, theta, phi)
 
+        detJ = 1
         #accumulate the forward logp with jacobian correction
         logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
 
@@ -545,6 +546,18 @@ class FFGeometryEngine(GeometryEngine):
         max_p = np.max(phi_q/Z)
         return Z, max_p
 
+    def rotation_matrix(self, axis, angle):
+        """
+        Euler-Rodrigues formula for rotation matrix
+        """
+        # Normalize the axis
+        angle = angle/angle.unit
+        axis = axis/np.sqrt(np.dot(axis, axis))
+        a = np.cos(angle/2)
+        b, c, d = -axis*np.sin(angle/2)
+        return np.array([[a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
+                        [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
+                        [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
 
     def _spherical_to_cartesian(self, spherical):
         """
@@ -570,6 +583,32 @@ class FFGeometryEngine(GeometryEngine):
         xyz[2] = spherical[0]*np.cos(spherical[2])
         detJ = spherical[0]**2*np.sin(spherical[2])
         return xyz*length_unit, np.abs(detJ)
+
+    def _internal_to_cartesian(self, bond_atom, angle_atom, torsion_atom, r, theta, phi):
+        """
+        Convert internal coordinates to cartesian
+        """
+
+        #2-3 bond
+        a = angle_atom - bond_atom
+
+        #3-4 bond
+        b = angle_atom - torsion_atom
+
+
+        d = r*a/(np.sqrt(np.dot(a,a))*units.nanometers)
+
+        normal = np.cross(a, b)
+        a = a/a.unit #get rid of the units of a
+        #rotate the vector about the normal
+        d = np.dot(self.rotation_matrix(normal, theta), d)
+
+        #rotate the vector about the 2-3 bond)
+        d = np.dot(self.rotation_matrix(a, phi), d)
+
+        atomic_coordinates = bond_atom + d * units.nanometers
+
+        return atomic_coordinates
 
     def _cartesian_to_spherical(self, xyz):
         """
