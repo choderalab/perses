@@ -7,6 +7,8 @@ import numpy as np
 import scipy.stats as stats
 import numexpr as ne
 import simtk.unit as units
+import logging
+
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 
@@ -226,6 +228,7 @@ class FFGeometryEngine(GeometryEngine):
         logp_atomic_position : float
             the logp of this proposal, including jacobian correction
         """
+        logging.debug("Proposing position %d with bond atom %d, angle atom %d, torsion atom %d" % (atom, bonded_atom, angle_atom, torsion_atom))
         #get bond parameters and draw bond length
         r0, k_eq = self._get_bond_parameters(system, atom, bonded_atom)
         r, logp_bond = self._propose_bond_length(r0, k_eq)
@@ -233,10 +236,9 @@ class FFGeometryEngine(GeometryEngine):
         #get angle parameters and draw bond angle
         theta0, k_eq = self._get_angle_parameters(system, atom, bonded_atom, angle_atom)
         theta, logp_angle = self._propose_bond_angle(theta0, k_eq)
-        theta = theta+np.pi*units.radians
+
         #propose torsion
         phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
-
         #convert spherical to cartesian coordinates
         spherical_coordinates = np.asarray([r, theta, phi])
         atomic_xyz= self._internal_to_cartesian(positions[bonded_atom], positions[angle_atom], positions[torsion_atom], r, theta, phi)
@@ -244,7 +246,7 @@ class FFGeometryEngine(GeometryEngine):
         detJ = 1
         #accumulate the forward logp with jacobian correction
         logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
-
+        logging.debug("Proposed (r, theta, phi) of (%s, %s, %s)" % (str(r), str(theta), str(phi)))
         return atomic_xyz, logp_atomic_position
 
 
@@ -588,7 +590,6 @@ class FFGeometryEngine(GeometryEngine):
         """
         Convert internal coordinates to cartesian
         """
-
         #2-3 bond
         a = angle_atom - bond_atom
 
@@ -609,6 +610,40 @@ class FFGeometryEngine(GeometryEngine):
         atomic_coordinates = bond_atom + d * units.nanometers
 
         return atomic_coordinates
+
+    def _cartesian_to_internal(self, atom, bond_atom, angle_atom, torsion_atom, positions):
+        """
+        Convert the cartesian coordinates of an atom to internal
+        """
+        a = positions[bond_atom] - positions[atom]
+        b = positions[angle_atom] - positions[bond_atom]
+        c = positions[torsion_atom] - positions[angle_atom]
+        atom_position_u = positions[atom] / np.linalg.norm(positions[atom])
+
+        a_u = a / np.linalg.norm(a)
+        b_u = b / np.linalg.norm(b)
+        c_u = c / np.linalg.norm(c)
+
+        #bond length
+        r = np.linalg.norm(a)
+
+        #bond angle
+        theta = np.arccos(np.dot(-a_u, b_u))
+
+        #torsion angle
+        plane1 = np.cross(a, b)
+        plane2 = np.cross(b, c)
+
+        phi = np.arccos(np.dot(plane1, plane2)/(np.linalg.norm(plane1)*np.linalg.norm(plane2)))
+
+        if np.dot(np.cross(plane1, plane2), b_u) < 0:
+            phi = -phi
+
+        return np.array([r, theta, phi])
+
+
+
+
 
     def _cartesian_to_spherical(self, xyz):
         """
