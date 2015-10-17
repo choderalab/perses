@@ -46,7 +46,7 @@ class NCMCEngine(object):
           ```
 
         """
-        self.temperature = temperature # TODO: Need temperature
+        self.temperature = 300 * unit.kelvin # TODO: Need a way to specify temperature
         self.alchemical_system = alchemical_system
         self.initial_positions = initial_positions
         self._log_ncmc = None
@@ -104,7 +104,8 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.LennardJonesCluster()
     >>> from alchemy import AbsoluteAlchemicalFactory
-    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, alchemical_particles=[0])
+    >>> alchemical_atoms = [0]
+    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=alchemical_atoms)
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
     >>> functions = { 'alchemical_sterics' : 't' }
