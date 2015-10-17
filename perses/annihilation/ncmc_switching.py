@@ -3,7 +3,7 @@ import numpy as np
 class NCMCEngine(object):
     """
     This is the base class for NCMC switching between two different systems.
-    
+
     Arguments
     ---------
     alchemical_system : simtk.openmm.System object
@@ -12,7 +12,7 @@ class NCMCEngine(object):
         The protocol to use for alchemical introduction or elimination
     initial_positions : [n, 3] numpy.ndarray
         positions of the atoms in the old system
-    
+
     Properties
     ---------
     log_ncmc : float, read-only
@@ -30,7 +30,7 @@ class NCMCEngine(object):
          alchemical_protocol
          """
          pass
-    
+
     @property
     def log_ncmc(self):
         return 0
