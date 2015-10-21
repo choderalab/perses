@@ -241,9 +241,9 @@ class FFGeometryEngine(GeometryEngine):
         phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
         #convert spherical to cartesian coordinates
         spherical_coordinates = np.asarray([r, theta, phi])
-        atomic_xyz= self._internal_to_cartesian(positions[bonded_atom], positions[angle_atom], positions[torsion_atom], r, theta, phi)
-
-        detJ = 1
+        atomic_xyz = self._internal_to_cartesian(positions[bonded_atom], positions[angle_atom], positions[torsion_atom], r, theta, phi)
+        jacobian = grad.
+        detJ = jacobian(self._internal_to_cartesian)
         #accumulate the forward logp with jacobian correction
         logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
         logging.debug("Proposed (r, theta, phi) of (%s, %s, %s)" % (str(r), str(theta), str(phi)))
@@ -561,31 +561,6 @@ class FFGeometryEngine(GeometryEngine):
                         [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
                         [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
 
-    def _spherical_to_cartesian(self, spherical):
-        """
-        Convert spherical coordinates to cartesian coordinates, and get jacobian
-
-        Arguments
-        ---------
-        spherical : 1x3 np.array of floats
-            r, theta, phi
-
-        Returns
-        -------
-        [x,y,z] : np.array 1x3
-            the transformed cartesian coordinates in the original length unit
-        detJ : float
-            the absolute value of the determinant of the jacobian of the transformation
-        """
-        xyz = np.zeros(3)
-        length_unit = spherical[0].unit
-        spherical = [coord/coord.unit for coord in spherical]
-        xyz[0] = spherical[0]*np.cos(spherical[1])
-        xyz[1] = spherical[0]*np.sin(spherical[1])
-        xyz[2] = spherical[0]*np.cos(spherical[2])
-        detJ = spherical[0]**2*np.sin(spherical[2])
-        return xyz*length_unit, np.abs(detJ)
-
     def _internal_to_cartesian(self, bond_atom, angle_atom, torsion_atom, r, theta, phi):
         """
         Convert internal coordinates to cartesian
@@ -640,30 +615,3 @@ class FFGeometryEngine(GeometryEngine):
             phi = -phi
 
         return np.array([r, theta, phi])
-
-
-
-
-
-    def _cartesian_to_spherical(self, xyz):
-        """
-        Convert cartesian coordinates to spherical coordinates
-
-        Arguments
-        ---------
-        xyz : 1x3 np.array of floats
-            the cartesian coordinates to convert
-
-        Returns
-        -------
-        spherical : 1x3 list of floats
-            the spherical coordinates
-        detJ : float
-            The absolute value of the determinant of the jacobian of the transformation
-        """
-        r = (np.linalg.norm(xyz)*xyz.unit).in_units_of(units.nanometers)
-        theta = np.arccos(xyz[2]/r)*units.radians
-        phi = np.arctan(xyz[1]/xyz[0])*units.radians
-        detJ = r**2*np.sin(phi)
-        spherical = [r, theta, phi]
-        return spherical, np.abs(detJ)/detJ.unit
