@@ -102,14 +102,14 @@ class ProteinTransformation(Transformation):
         new_residue_map = self._generateResidueMap(modeller, index_to_new_residues)
         modeller = self._addNewAtoms(modeller, missingAtoms, residue_map, new_residue_map)
 
-        # save new topology
-        new_topology = modeller.topology
         # atoms with an old_index attribute should be mapped
-        for atom in modeller.topology.atoms():
+        for k, atom in enumerate(modeller.topology.atoms()):
             try:
+                atom.index=k
                 atom_map[atom.old_index] = atom.index
             except AttributeError:
                 pass
+        new_topology = modeller.topology
 
         return modeller, TopologyProposal(old_topology, new_topology, 0.0, atom_map, metadata)
 
@@ -174,14 +174,21 @@ class ProteinTransformation(Transformation):
                     missing.append(atom)
             if len(missing) > 0:
                 missingAtoms[residue] = missing
-        modeller.delete(deleteAtoms)
+        modeller = self._toDelete(modeller, deleteAtoms)
 
         return(modeller, missingAtoms)
+
+    def _toDelete(self, modeller, deleteAtoms):
+        for atom in deleteAtoms:
+            atom.residue._atoms.remove(atom)
+            for bond in modeller.topology._bonds:
+                if atom in bond:
+                    modeller.topology._bonds.remove(bond)
+        return modeller
 
     def _addNewAtoms(self, modeller, missingAtoms, old_residue_map, new_residue_map):
         # add new atoms to new residues
         newAtoms = list()
-        print(old_residue_map)
         for k, residue_ent in enumerate(old_residue_map):
             residue = residue_ent[0]
             replaceWith = residue_ent[1]
