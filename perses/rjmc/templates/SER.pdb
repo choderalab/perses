@@ -1,0 +1,14 @@
+REMARK   1 CREATED WITH OPENMM 6.3, 2015-10-22
+ATOM      1  N   SER A   1      -1.192  -0.063   1.270  1.00  0.00           N  
+ATOM      2  H   SER A   1      -1.903  -0.264   0.596  1.00  0.00           H  
+ATOM      3  CA  SER A   1      -0.052  -0.153   0.330  1.00  0.00           C  
+ATOM      4  HA  SER A   1       0.546  -0.910   0.619  1.00  0.00           H  
+ATOM      5  CB  SER A   1      -0.512  -0.243  -1.130  1.00  0.00           C  
+ATOM      6  HB2 SER A   1       0.259  -0.059  -1.747  1.00  0.00           H  
+ATOM      7  HB3 SER A   1      -0.894   0.574  -1.566  1.00  0.00           H  
+ATOM      8  OG  SER A   1      -1.332  -1.373  -1.370  1.00  0.00           O  
+ATOM      9  HG  SER A   1      -1.155  -2.051  -0.656  1.00  0.00           H  
+ATOM     10  C   SER A   1       0.938   1.017   0.460  1.00  0.00           C  
+ATOM     11  O   SER A   1       2.148   0.817   0.440  1.00  0.00           O  
+TER      12      SER A   1
+END
