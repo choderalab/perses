@@ -59,7 +59,7 @@ class NCMCEngine(object):
                     parameters.append(force.getGlobalParameterName(parameter_index))
         return parameters
 
-    def integrate(self, alchemical_system, initial_positions, direction='creation', platform=None):
+    def integrate(self, alchemical_system, initial_positions, direction='insert', platform=None):
         """
         Performs NCMC switching according to the provided
 
@@ -69,10 +69,10 @@ class NCMCEngine(object):
             alchemically-modified system with atoms to be eliminated
         initial_positions : [n, 3] numpy.ndarray
             positions of the atoms in the old system
-        direction : str, optional, default='creation'
+        direction : str, optional, default='insert'
             Direction of alchemical switching:
-                'creation' causes lambda to switch from 0 to 1 over nsteps steps of integration
-                'deletion' causes lambda to switch from 1 to 0 over nsteps steps of integration
+                'insert' causes lambda to switch from 0 to 1 over nsteps steps of integration
+                'delete' causes lambda to switch from 1 to 0 over nsteps steps of integration
         platform : simtk.openmm.Platform, optional, default=None
             If not None, this platform is used for integration.
 
@@ -136,7 +136,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
     >>> functions = { 'alchemical_sterics' : 't' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(alchemical_system, functions, mode='deletion')
+    >>> ncmc_integrator = NCMCAlchemicalIntegrator(alchemical_system, functions, mode='delete')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
     >>> context.setPositions(testsystem.positions)
@@ -157,7 +157,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> alchemical_system = factory.createPerturbedSystem(alchemical_state)
     >>> # Create an NCMC switching integrator.
     >>> functions = { 'lambda_sterics' : 't', 'lambda_electrostatics' : 't**0.5', 'lambda_torsions' : 't', 'lambda_angles' : 't**2' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(alchemical_system, functions, mode='insertion')
+    >>> ncmc_integrator = NCMCAlchemicalIntegrator(alchemical_system, functions, mode='insert')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
     >>> context.setPositions(testsystem.positions)
@@ -168,7 +168,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
 
 
     """
-    def __init__(self, temperature, system, functions, nsteps=10, timestep=1.0*unit.femtoseconds, mode='insertion'):
+    def __init__(self, temperature, system, functions, nsteps=10, timestep=1.0*unit.femtoseconds, mode='insert'):
         """
         Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
 
@@ -185,8 +185,10 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             The number of switching timesteps per call to integrator.step(1).
         timestep : simtk.unit.Quantity with units compatible with femtoseconds
             The timestep to use for each NCMC step.
-        mode : str, optional, default='insertion'
-            One of ['insertion', 'deletion'].  For insertion, the parameter 'lambda' is switched from 0 to 1.  For deletion, the parameter 'lambda' is switched from 1 to 0.
+        mode : str, optional, default='insert'
+            One of ['insert', 'delete'].
+            For `insert`, the parameter 'lambda' is switched from 0 to 1.
+            For `delete`, the parameter 'lambda' is switched from 1 to 0.
 
         Note that each call to integrator.step(1) executes the entire integration program; this should not be called with more than one step.
 
@@ -199,8 +201,8 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         if (nsteps < 1):
             raise Exception("'nsteps' must be >= 1")
 
-        if mode not in ['intertion', 'deletion']:
-            raise Exception("mode must be one of ['insertion', 'deletion']; was '%s' instead" % mode)
+        if mode not in ['intert', 'delete']:
+            raise Exception("mode must be one of ['insert', 'delete']; was '%s' instead" % mode)
 
         super(NCMCAlchemicalIntegrator, self).__init__((nsteps+1) * timestep)
 
@@ -208,9 +210,9 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addGlobalParameter('final_total_energy', 0.0) # final total energy (kinetic + potential)
         self.addGlobalParameter('log_ncmc_acceptance_probability', 0.0) # log of NCMC acceptance probability
 
-        if mode == 'insertion':
+        if mode == 'insert':
             self.addGlobalParameter('lambda', 0.0) # parameter switched from 0 to 1 during course of integrating internal 'nsteps' of dynamics
-        elif mode == 'deletion':
+        elif mode == 'delete':
             self.addGlobalParameter('lambda', 1.0) # parameter switched from 1 to 0 during course of integrating internal 'nsteps' of dynamics
 
         self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
@@ -250,9 +252,9 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             else:
                 delta_lambda = float(step)/float(nsteps-1)
 
-            if mode == 'insertion':
+            if mode == 'insert':
                 self.addComputeGlobal('lambda', 'lambda + %f' % delta_t)
-            elif mode == 'deletion':
+            elif mode == 'delete':
                 self.addComputeGlobal('lambda', 'lambda - %f' % delta_t)
 
             # Update Context parameters according to provided functions.
