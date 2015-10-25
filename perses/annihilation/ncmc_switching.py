@@ -1,99 +1,126 @@
 import numpy as np
+import copy
 from simtk import openmm, unit
 
+default_functions = {
+    'alchemical_sterics' : 'lambda',
+    'alchemical_electrostatocs' : 'lambda',
+    'alchemical_bonds' : 'lambda',
+    'alchemical_angles' : 'lambda',
+    'alchemical_torsions' : 'lambda'
+    }
+
 class NCMCEngine(object):
-    def __init__(self, alchemical_system, alchemical_protocol, initial_positions):
+    def __init__(self, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=1, timestep=1.0*unit.femtoseconds, constraint_tolerance=None):
         """
         This is the base class for NCMC switching between two different systems.
 
         Arguments
         ---------
-        alchemical_system : simtk.openmm.System object
-            alchemically-modified system with atoms to be eliminated
-        alchemical_protocol : dict?
-            The protocol to use for alchemical introduction or elimination
-        initial_positions : [n, 3] numpy.ndarray
-            positions of the atoms in the old system
-
-        Properties
-        ---------
-        log_ncmc : float, read-only
-            The contribution of the NCMC move to the acceptance probability
-        final_positions : [n,3] numpy.ndarray, read-only
-            positions of the system after NCMC switching
-
-        TODO:
-        * We also need the temperature to compute log acceptance probability contributions
-        * The 'alchemical_protocol' is really an NCMC switching protocol for the alchemical parameters.
-          Do we want it to contain the dict of alchemical switching functions, nsteps, and timestep?
-          Or should this be encoded by which subclass of NCMCEngine we want?
-        * Do we want to also handle creation of the alchemical system here, or keep that separate?
-        * Does it make sense to split this into object creation followed immediately by integration,
-          or does it make more sense to configure the NCMCEngine with the switching functions at the beginning
-          and then have 'integrate' start from the alchemical_system and initial_positions and return the final_positions and log_ncmc?
-          That would look more like
-          ```python
-          # Initialization of run
-          ncmc_deletion  = NCMCEngine(alchemical_deletion_protocol)
-          ncmc_insertion = NCMCEngine(alchemical_insertion_protocol)
-          ...
-          # Inside the main loop
-          ...
-          [final_deletion_positions, log_ncmc_deletion] = ncmc_deletion.integrate(alchemical_deletion_system, initial_deletion_positions)
-          # do trans-dimensional RJMC here
-          [final_insertion_positions, log_ncmc_insertion] = ncmc_insertion.integrate(alchemical_insertion_system, initial_insertion_positions)
-          ...
-          ```
+        temperature : simtk.unit.Quantity with units compatible with kelvin
+            The temperature at which switching is to be run
+        functions : dict of str:str, optional, default=default_functions
+            functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
+            controls how alchemical context parameter 'parameter' is switched
+        nsteps : int, optional, default=1
+            The number of steps to use for switching.
+        timestep : simtk.unit.Quantity with units compatible with femtoseconds, optional, default=1*femtosecond
+            The timestep to use for integration of switching velocity Verlet steps.
+        constraint_tolerance : float, optional, default=None
+            If not None, this relative constraint tolerance is used for position and velocity constraints.
 
         """
-        self.temperature = 300 * unit.kelvin # TODO: Need a way to specify temperature
-        self.alchemical_system = alchemical_system
-        self.initial_positions = initial_positions
-        self._log_ncmc = None
-        self._final_psoitions = None
+        self.temperature = temperature
+        self.functions = copy.deepcopy(functions)
+        self.nsteps = nsteps
+        self.timestep = timestep
+        self.constraint_tolerance = constraint_tolerance
 
-    def functions(self):
+    def _getAvailableParameters(self, system):
         """
-        Define the dictionary of functions controlling how alchemical switching proceeds.
+        Return a list of available context parameters defined in the system
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system for which available context parameters are to be determined
+
+        Returns
+        -------
+        parameters : list of str
+            The list of available context parameters in the system
 
         """
-        raise NotImplementedException()
+        parameters = list()
+        for force_index in range(system.getNumForces()):
+            force = system.getForce(force_index)
+            if hasattr(force, 'getNumGlobalParameters'):
+                for parameter_index in range(force.getNumGlobalParameters()):
+                    parameters.append(force.getGlobalParameterName(parameter_index))
+        return parameters
 
-    def integrate(self, nsteps=10, timestep=1.0*unit.femtoseconds):
+    def integrate(self, alchemical_system, initial_positions, direction='creation', platform=None):
         """
         Performs NCMC switching according to the provided
-        alchemical_protocol
+
+        Parameters
+        ----------
+        alchemical_system : simtk.openmm.System object
+            alchemically-modified system with atoms to be eliminated
+        initial_positions : [n, 3] numpy.ndarray
+            positions of the atoms in the old system
+        direction : str, optional, default='creation'
+            Direction of alchemical switching:
+                'creation' causes lambda to switch from 0 to 1 over nsteps steps of integration
+                'deletion' causes lambda to switch from 1 to 0 over nsteps steps of integration
+        platform : simtk.openmm.Platform, optional, default=None
+            If not None, this platform is used for integration.
+
+        Returns
+        -------
+        final_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
+            The final positions after `nsteps` steps of alchemical switching
+        logP : float
+            The log acceptance probability of the switch
+
         """
-        # Perform the NCMC switching step.
-        integrator = NCMCAlchemicalIntegrator(self.temperature, self.alchemical_system, self.functions(), nsteps=10, timestep=1.0*unit.femtoseconds)
-        context = openmm.Context(self.alchemical_system, integrator)
+        # Make a list of available context parameters.
+
+        # Select subset of switching functions based on which alchemical parameters are present in the system.
+        available_parameters = self._getAvailableParameters(alchemical_system)
+        functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
+
+        # Create an NCMC velocity Verlet integrator.
+        integrator = NCMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep)
+        # Set the constraint tolerance if specified.
+        if self.constraint_tolerance is not None:
+            integrator.setConstraintTolerance(self.constraint_tolerance)
+        # Create a context on the specified platform.
+        if platform is not None:
+            context = openmm.Context(self.alchemical_system, integrator, platform)
+        else:
+            context = openmm.Context(self.alchemical_system, integrator)
         context.setPositions(self.initial_positions)
+        # Set velocities to temperature and apply velocity constraints.
+        context.setVelocitiesToTemperature(self.temperature)
+        context.applyVelocityConstraints(integrator.getConstraintTolerance())
+        # Only take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
         integrator.step(1)
         # Store final positions and log acceptance probability.
-        self._log_ncmc = integrator.getLogAcceptanceProbability()
-        self._final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+        final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+        logP = integrator.getLogAcceptanceProbability()
         # Clean up.
         del context, integrator
-
-    @property
-    def log_ncmc(self):
-        return self._log_ncmc
-
-    @property
-    def final_positions(self):
-        return self._final_positions
-
-class LinearNCMCEngine(NCMCEngine):
-    """
-    NCMC engine utilizing linear switching.
-
-    """
-    def functions(self):
-        return { 'lambda_sterics' : 't', 'lambda_electrostatics' : 't', 'lambda_torsions' : 't', 'lambda_angles' : 't**2' }
+        # Return
+        return [final_positions, logP]
 
 class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     """
     Use NCMC switching to annihilate or introduce particles alchemically.
+
+    TODO:
+    ----
+    * We may need to avoid unrolling integration steps.
 
     Examples
     --------
