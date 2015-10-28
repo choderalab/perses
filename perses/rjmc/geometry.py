@@ -8,6 +8,8 @@ import scipy.stats as stats
 import numexpr as ne
 import simtk.unit as units
 import logging
+import sympy
+from sympy.physics import vector
 
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
@@ -241,9 +243,7 @@ class FFGeometryEngine(GeometryEngine):
         phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
         #convert spherical to cartesian coordinates
         spherical_coordinates = np.asarray([r, theta, phi])
-        atomic_xyz = self._internal_to_cartesian(positions[bonded_atom], positions[angle_atom], positions[torsion_atom], r, theta, phi)
-        jacobian = grad.
-        detJ = jacobian(self._internal_to_cartesian)
+        atomic_xyz, detJ = self._internal_to_cartesian(bonded_atom, angle_atom, torsion_atom, r, theta, phi, positions)
         #accumulate the forward logp with jacobian correction
         logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
         logging.debug("Proposed (r, theta, phi) of (%s, %s, %s)" % (str(r), str(theta), str(phi)))
@@ -548,70 +548,118 @@ class FFGeometryEngine(GeometryEngine):
         max_p = np.max(phi_q/Z)
         return Z, max_p
 
-    def rotation_matrix(self, axis, angle):
+    def _internal_to_cartesian(self, bond_atom, angle_atom, torsion_atom, r, theta, phi, positions):
         """
-        Euler-Rodrigues formula for rotation matrix
+        Convert the internal coordinates to cartesian via sympy, also produce detJ
         """
-        # Normalize the axis
-        angle = angle/angle.unit
-        axis = axis/np.sqrt(np.dot(axis, axis))
-        a = np.cos(angle/2)
-        b, c, d = -axis*np.sin(angle/2)
-        return np.array([[a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
-                        [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
-                        [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
+        N = vector.ReferenceFrame('N')
+        bond_position = positions[bond_atom]
+        angle_position = positions[angle_atom]
+        torsion_position = positions[torsion_atom]
+        r_sym, theta_sym, phi_sym = sympy.symbols('r_sym, theta_sym, phi_sym')
 
-    def _internal_to_cartesian(self, bond_atom, angle_atom, torsion_atom, r, theta, phi):
-        """
-        Convert internal coordinates to cartesian
-        """
+        bond_vec = N.x*bond_position[0] + N.y*bond_position[1] + N.z*bond_position[2]
+        angle_vec = N.x*angle_position[0] + N.y*angle_position[1] + N.z*angle_position[2]
+        torsion_vec = N.x*torsion_position[0] + N.y*torsion_position[1] + N.z*torsion_position[2]
+
         #2-3 bond
-        a = angle_atom - bond_atom
+        a = angle_vec - bond_vec
+        a_u = a.normalize()
 
         #3-4 bond
-        b = angle_atom - torsion_atom
+        b = angle_vec - torsion_vec
+        b_u = b.normalize()
+
+        d = r_sym*a_u
+
+        normal = vector.cross(a, b)
+
+        #rotate the vector about the normal (bond angle)
+        angle_rotation = N.orientnew('angle_rotation', 'Axis',[theta_sym, normal])
+        angle_dcm = N.dcm(angle_rotation)
+        d_theta = vector.dot(angle_dcm, d)
+
+        #rotate the vector about the 2-3 bond (torsion)
+        torsion_rotation = N.orientnew('torsion_rotation', 'Axis', [phi_sym, a])
+        torsion_dcm = N.dcm(torsion_rotation)
+        d_phi = vector.dot(torsion_dcm, d_theta)
+
+        #lambdify the expression and calculate the new coordinates
+        cartesian_atomic_position = sympy.lambdify("r_sym, theta_sym, phi_sym", d_phi, "numpy")(r, theta, phi)
+
+        #now get a jacobian matrix, take the determinant and absolute value, and we're done
+        d_phi_matrix = d_phi.to_matrix(N)
+        d_x = d_phi_matrix[0]
+        d_y = d_phi_matrix[1]
+        d_z = d_phi_matrix[2]
+
+        jacobian_r = [sympy.diff(d_x, 'r_sym'), sympy.diff(d_y, 'r_sym'), sympy.diff(d_z, 'r_sym')]
+        jacobian_theta = [sympy.diff(d_x, 'theta_sym'), sympy.diff(d_y, 'theta_sym'), sympy.diff(d_z, 'theta_sym')]
+        jacobian_phi = [sympy.diff(d_x, 'phi_sym'), sympy.diff(d_y, 'phi_sym'), sympy.diff(d_z, 'phi_sym')]
+        jacobian = sympy.Matrix([jacobian_r, jacobian_theta, jacobian_phi])
+        jacobian_determinant = jacobian.det(method='berkowitz')
+
+        detJ = sympy.lambdify('r_sym, theta_sym, phi_sym', jacobian_determinant)(r, theta, phi)
+
+        return np.array(cartesian_atomic_position), np.abs(detJ)
 
 
-        d = r*a/(np.sqrt(np.dot(a,a))*units.nanometers)
-
-        normal = np.cross(a, b)
-        a = a/a.unit #get rid of the units of a
-        #rotate the vector about the normal
-        d = np.dot(self.rotation_matrix(normal, theta), d)
-
-        #rotate the vector about the 2-3 bond)
-        d = np.dot(self.rotation_matrix(a, phi), d)
-
-        atomic_coordinates = bond_atom + d * units.nanometers
-
-        return atomic_coordinates
 
     def _cartesian_to_internal(self, atom, bond_atom, angle_atom, torsion_atom, positions):
         """
-        Convert the cartesian coordinates of an atom to internal
+        Use sympy to derive the r, theta, phi for
         """
-        a = positions[bond_atom] - positions[atom]
-        b = positions[angle_atom] - positions[bond_atom]
-        c = positions[torsion_atom] - positions[angle_atom]
-        atom_position_u = positions[atom] / np.linalg.norm(positions[atom])
+        N = vector.ReferenceFrame('N')
+        Xa, Ya, Za = sympy.symbols("Xa Ya Za")
 
-        a_u = a / np.linalg.norm(a)
-        b_u = b / np.linalg.norm(b)
-        c_u = c / np.linalg.norm(c)
+        atomic_position = positions[atom]
+        bond_position = positions[bond_atom]
+        angle_position = positions[angle_atom]
+        torsion_position = positions[torsion_atom]
+        atom_vec = N.x*Xa+N.y*Ya+N.z*Za
+        bond_vec = N.x*bond_position[0] + N.y*bond_position[1] + N.z*bond_position[2]
+        angle_vec = N.x*angle_position[0] + N.y*angle_position[1] + N.z*angle_position[2]
+        torsion_vec = N.x*torsion_position[0] + N.y*torsion_position[1] + N.z*torsion_position[2]
+
+        a = bond_vec - atom_vec
+        b = angle_vec - bond_vec
+        c = torsion_vec - angle_vec
+
+        atom_pos_u = atom_vec.normalize()
+        a_u = a.normalize()
+        b_u = b.normalize()
+        c_u = c.normalize()
 
         #bond length
-        r = np.linalg.norm(a)
+        r_exp = a.magnitude()
 
         #bond angle
-        theta = np.arccos(np.dot(-a_u, b_u))
+        theta_exp = sympy.acos(vector.dot(-a_u, b_u))
 
-        #torsion angle
-        plane1 = np.cross(a, b)
-        plane2 = np.cross(b, c)
+        #torsion
+        plane1 = vector.cross(a, b)
+        plane2 = vector.cross(b, c)
 
-        phi = np.arccos(np.dot(plane1, plane2)/(np.linalg.norm(plane1)*np.linalg.norm(plane2)))
+        plane1_norm = plane1.magnitude()
+        plane2_norm = plane2.magnitude()
 
-        if np.dot(np.cross(plane1, plane2), b_u) < 0:
-            phi = -phi
+        plane_dot_u = vector.dot(plane1, plane2) / (plane1_norm * plane2_norm)
 
-        return np.array([r, theta, phi])
+        phi_exp = sympy.acos(plane_dot_u)
+
+        r = sympy.lambdify("Xa, Ya, Za", r_exp, "numpy")(*atomic_position)
+        theta = sympy.lambdify("Xa, Ya, Za", theta_exp, "numpy")(*atomic_position)
+        phi = sympy.lambdify("Xa, Ya, Za", phi_exp, "numpy")(*atomic_position)
+
+        #calculate the jacobian and its determinant
+        j_rows = []
+        for sym in [r_exp, theta_exp, phi_exp]:
+            j_rows.append([sym.diff(Xa), sym.diff(Ya), sym.diff(Za)])
+        jacobian = sympy.Matrix(j_rows)
+        jacobian_determinant = jacobian.det(method='berkowitz')
+
+        detJ = sympy.lambdify("Xa, Ya, Za",jacobian_determinant, "numpy")(*atomic_position)
+
+
+        return np.array([r, theta, phi]), np.abs(detJ)
+
