@@ -609,7 +609,7 @@ class FFGeometryEngine(GeometryEngine):
         jacobian_det = np.linalg.det(j(atom_position))
         return internal_coords, atom_position
 
-    def _autograd_itoc(atom, bond, angle, torsion, r, theta, phi, positions):
+    def _autograd_itoc(self, bond, angle, torsion, r, theta, phi, positions):
         """
         Autograd based coordinate conversion internal -> cartesian
 
@@ -686,5 +686,6 @@ class FFGeometryEngine(GeometryEngine):
         j = autograd.jacobian(_internal_to_cartesian)
         atom_xyz = _internal_to_cartesian(rtp)
         jacobian_det = np.linalg.det(j(rtp))
+        logging.debug("detJ is %f" %(jacobian_det))
         return units.Quantity(atom_xyz, unit=units.nanometers), np.abs(jacobian_det)
 
