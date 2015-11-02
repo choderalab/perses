@@ -51,7 +51,7 @@ class Transformation(object):
 class SmallSetMoleculeTransformation(Transformation):
     """
     This class implements a proposal based on a finite set of small molecules.
-    The proposal probability is based on the tanimoto distance between the molecules.
+    The proposal probability is based on the tanimoto similarity between the molecules.
 
     Arguments
     ---------
@@ -63,7 +63,7 @@ class SmallSetMoleculeTransformation(Transformation):
         self._smiles_list = proposal_metadata['molecule_list']
         self._n_molecules = len(self._smiles_list)
         self._mol_array, self._smiles_dict = self._smiles_to_oemol()
-        self._tanimotos = self._compute_tanimoto_distances()
+        self._tanimotos = self._compute_tanimoto_similarities()
         self._normalize_row_probability()
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
@@ -176,9 +176,9 @@ class SmallSetMoleculeTransformation(Transformation):
             oemol_smile_dict[smile] = i
         return oemols, oemol_smile_dict
 
-    def _compute_tanimoto_distances(self):
+    def _compute_tanimoto_similarities(self):
         """
-        Compute the nxn matrix of tanimoto distance between each molecule
+        Compute the nxn matrix of tanimoto similarity between each molecule
         """
         tanimotos = np.ones([self._n_molecules, self._n_molecules], dtype=np.float64)
         for i in range(self._mol_array):
@@ -187,9 +187,9 @@ class SmallSetMoleculeTransformation(Transformation):
                 fingerprint_j = oegraphsim.OEFingerPrint()
                 oegraphsim.OEMakeFP(fingerprint_i, self._mol_array[i], oegraphsim.OEFPType_MACCS166)
                 oegraphsim.OEMakeFP(fingerprint_j, self._mol_array[j], oegraphsim.OEFPType_MACCS166)
-                tanimoto_distance = oegraphsim.OETanimoto(fingerprint_i, fingerprint_j)
-                tanimotos[i, j] = tanimoto_distance
-                tanimotos[j, i] = tanimoto_distance
+                tanimoto_similarities = oegraphsim.OETanimoto(fingerprint_i, fingerprint_j)
+                tanimotos[i, j] = tanimoto_similarities
+                tanimotos[j, i] = tanimoto_similarities
         return tanimotos
 
     def _normalize_row_probability(self):
