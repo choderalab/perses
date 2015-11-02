@@ -7,10 +7,8 @@ from collections import namedtuple
 import openeye.oechem as oechem
 import numpy as np
 import openeye.oegraphsim as oegraphsim
-import scipy.stats as stats
 import openmoltools
-import openeye.oeiupac as oeiupac
-import openeye.oeomega as oeomega
+
 TopologyProposal = namedtuple('TopologyProposal',
                               ['old_topology', 'new_topology', 'logp', 'new_to_old_atom_map', 'metadata'])
 SamplerState = namedtuple('SamplerState', ['topology', 'system', 'positions', 'metadata'])
