@@ -24,6 +24,8 @@ install:
 script:
   - conda config --add channels https://conda.binstar.org/${ORGNAME}
   - conda build devtools/conda-recipe
+  - conda install --yes --quiet pip
+  - pip install $OPENEYE_CHANNEL openeye-toolkits
   # Install and test (in separate directory)
   - conda install --yes --quiet --use-local ${PACKAGENAME}-dev
   # Run tests
@@ -31,7 +33,7 @@ script:
   - mkdir test && cd test && nosetests perses --nocapture --verbosity=2 --with-doctest
 env:
   matrix:
-    - python=2.7  CONDA_PY=27
+    - python=2.7  CONDA_PY=27 OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
     #- python=3.3  CONDA_PY=33
     #- python=3.4  CONDA_PY=34
 
