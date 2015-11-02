@@ -8,8 +8,6 @@ import scipy.stats as stats
 import numexpr as ne
 import simtk.unit as units
 import logging
-import sympy
-from sympy.physics import vector
 
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
@@ -687,5 +685,7 @@ class FFGeometryEngine(GeometryEngine):
         atom_xyz = _internal_to_cartesian(rtp)
         jacobian_det = np.linalg.det(j(rtp))
         logging.debug("detJ is %f" %(jacobian_det))
+        detj_spherical = r**2*np.sin(theta)
+        logging.debug("The spherical detJ is %f" % detj_spherical)
         return units.Quantity(atom_xyz, unit=units.nanometers), np.abs(jacobian_det)
 
