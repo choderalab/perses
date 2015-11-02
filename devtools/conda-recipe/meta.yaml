@@ -25,7 +25,6 @@ requirements:
     - numpy
     - scipy
     - numexpr
-    - openeye
     #- openmoltools
     #- alchemy
 
