@@ -24,7 +24,8 @@ requirements:
     - openmm >=6.3
     - numpy
     - scipy
-    #- openmoltools
+    - numexpr
+    - openmoltools
     #- alchemy
 
 test:
