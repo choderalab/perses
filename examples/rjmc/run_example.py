@@ -9,8 +9,8 @@ This could represent sampling of small molecules, protein mutants, or both.
 
 
 import numpy as np
-import simtk.openmm as openmm
-import simtk.openmm.app as app
+from simtk import unit, openmm
+from simtk.openmm import app
 from perses.rjmc.topology_proposal import Transformation, SamplerState
 from perses.bias.bias_engine import BiasEngine
 from perses.annihilation.alchemical_engine import AlchemicalEliminationEngine
@@ -22,6 +22,11 @@ def run():
     # Create initial model system, topology, and positions.
     # QUESTION: Do we want to maintain 'metadata' as well?
     # QUESTION: What if we incorporate the tuple (system, topology, metadata, positions) into a SamplerState object, or a named tuple?
+
+    # Run parameters
+    temperature = 300.0 * unit.kelvin # temperature
+    pressure = 1.0 * unit.atmospheres # pressure
+    collision_rate = 5.0 / unit.picoseconds # collision rate for Langevin dynamics
 
     # Specify alchemical elimination and introduction protocols.
     alchemical_elimination_protocol = dict()
@@ -46,10 +51,22 @@ def run():
     alchemical_metadata = {'data':0}
     alchemical_engine = AlchemicalEliminationEngine(alchemical_metadata)
 
+    #Initialize NCMC engines.
+    switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
+    switching_nsteps = 10 # number of steps to use in NCMC integration
+    switching_functions = { # functional schedules to use in terms of `lambda`, which is switched from 0->1 for creation and 1->0 for deletion
+        'alchemical_sterics' : 'lambda',
+        'alchemical_electrostatics' : 'lambda',
+        'alchemical_bonds' : 'lambda',
+        'alchemical_angles' : 'lambda',
+        'alchemical_torsionss' : 'lambda'
+        }
+    ncmc_engine = NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
+
     #initialize GeometryEngine
     geometry_metadata = {'data': 0}
     geometry_engine = GeometryEngine(geometry_metadata)
-    
+
     #initialize
     (system, topology, positions, state_metadata) = (openmm.System(), app.Topology(), np.array([0.0,0.0,0.0]), {'mol': 'CC'})
     # Run a anumber of iterations.
@@ -77,7 +94,7 @@ def run():
         # new_system = system_generator.createSystem(new_topology)
         new_system = system_generator.new_system(top_proposal)
         print(top_proposal)
-        
+
         # Perform alchemical transformation.
 
         # Alchemically eliminate atoms being removed.
@@ -85,13 +102,10 @@ def run():
         # What if we had a method that took the old/new (topology, system, metadata) and generated some information about the transformation?
         # At minimum, we need to know what atoms are being eliminated/introduced.  We might also need to identify some System for the "intermediate" with scaffold atoms that are shared,
         # since charges and types may need to be modified?
-        old_alchemical_system = alchemical_engine.make_alchemical_system(system, top_proposal)
+        old_alchemical_system = alchemical_engine.make_alchemical_system(system, top_proposal, direction='delete')
         print(old_alchemical_system)
-        ncmc_elimination = NCMCEngine(old_alchemical_system, alchemical_elimination_protocol, positions)
-        ncmc_elimination.integrate()
-        ncmc_old_positions = ncmc_elimination.final_positions
+        [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(old_alchemical_system, positions, direction='delete')
         print(ncmc_old_positions)
-        ncmc_elimination_logp = ncmc_elimination.log_ncmc
         print(ncmc_elimination_logp)
 
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
@@ -100,11 +114,8 @@ def run():
 
         # Alchemically introduce new atoms.
         # QUESTION: Similarly, this needs to introduce new atoms.  We need to know both intermediate toplogy/system and new topology/system, right?
-        new_alchemical_system = alchemical_engine.make_alchemical_system(new_system, top_proposal)
-        ncmc_introduction = NCMCEngine(new_alchemical_system, alchemical_introduction_protocol, geometry_proposal.new_positions)
-        ncmc_introduction.integrate()
-        ncmc_introduction_logp = ncmc_introduction.log_ncmc
-        ncmc_new_positions = ncmc_introduction.final_positions
+        new_alchemical_system = alchemical_engine.make_alchemical_system(new_system, top_proposal, direction='create')
+        [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(new_alchemical_system, geometry_proposal.new_positions, direction='insert')
         print(ncmc_new_positions)
         print(ncmc_introduction_logp)
 
