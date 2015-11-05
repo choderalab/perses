@@ -26,6 +26,7 @@ requirements:
     - scipy
     - openmoltools-dev
     - alchemy-dev
+    - numexpr
 
 test:
   requires:
