@@ -51,7 +51,7 @@ class Transformation(object):
 class SmallSetMoleculeTransformation(Transformation):
     """
     This class implements a proposal based on a finite set of small molecules.
-    The proposal probability is based on the tanimoto similarity between the molecules.
+    The proposal probability is based on the tanimoto similarity of the MACCS166fp between the molecules.
 
     Arguments
     ---------
@@ -102,7 +102,7 @@ class SmallSetMoleculeTransformation(Transformation):
         #now make a topology out of these things:
         new_topology, positions = self._oemol_to_openmm_system(self._mol_array[proposed_idx], "MOL")
 
-        return TopologyProposal(current_topology, new_topology, logp, new_to_old_atom_map, {'molecule_idx' : proposed_idx})
+        return TopologyProposal(current_topology, new_topology, logp, new_to_old_atom_map, {'molecule_idx' : proposed_idx, 'oemol' : self._mol_array[proposed_idx]})
 
 
 
