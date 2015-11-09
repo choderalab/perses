@@ -187,3 +187,4 @@ class ComplexSystemGenerator(SystemGenerator):
         """
 
         tleap_input = tleapstr.format(ligand_frcmod=ligand_frcmod, ligand_gaff_mol2=ligand_gaff_mol2, receptor_filename=self._receptor_filename, complex_name=complex_name)
+        return tleap_input
