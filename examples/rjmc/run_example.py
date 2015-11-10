@@ -14,12 +14,13 @@ from simtk.openmm import app
 import openeye.oechem as oechem
 import openeye.oeomega as oeomega
 import openmoltools
+import logging
 from perses.rjmc.topology_proposal import SingleSmallMolecule
 from perses.bias.bias_engine import BiasEngine
 from perses.annihilation.alchemical_engine import AlchemicalEliminationEngine
 from perses.rjmc.geometry import GeometryEngine
 from perses.annihilation.ncmc_switching import NCMCEngine
-from perses.rjmc.system_engine import SystemGenerator
+
 
 def generate_initial_molecule(mol_smiles):
     """
@@ -97,6 +98,7 @@ def run():
     system = initial_sys
     topology = initial_top
     positions = initial_pos
+    current_log_weight = bias_calculator.g_k('CC')
     for i in range(niterations):
         # Store old (system, topology, positions).
 
@@ -106,7 +108,7 @@ def run():
 
         # QUESTION: What about instead initializing StateWeight once, and then using
         # log_state_weight = state_weight.computeLogStateWeight(new_topology, new_system, new_metadata)?
-        log_weight = bias_calculator.generate_bias(top_proposal)
+        log_weight = bias_calculator.g_k(top_proposal.metadata['molecule_smiles'])
 
         # Perform alchemical transformation.
 
@@ -129,16 +131,16 @@ def run():
         print(ncmc_introduction_logp)
 
         # Compute total log acceptance probability, including all components.
-        logp_accept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - bias_calculator.g_k(top_proposal)
+        logp_accept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
         print(logp_accept)
 
         # Accept or reject.
         if (logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)):
             # Accept.
-            (system, topology, positions, current_log_weight) = (new_system, top_proposal.new_topology, ncmc_new_positions, log_weight)
+            (system, topology, positions, current_log_weight) = (top_proposal.new_system, top_proposal.new_topology, ncmc_new_positions, log_weight)
         else:
             # Reject.
-            pass
+            logging.debug("reject")
 
 #
 # MAIN
