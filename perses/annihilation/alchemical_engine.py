@@ -56,21 +56,18 @@ class  AlchemicalEliminationEngine(object):
             The system with appropriate atoms alchemically modified
 
         """
-        # Create a list of alchemical atoms.
-        alchemical_atoms = list()
-        old_atoms = range(sum(1 for a in topology_proposal.old_topology.atoms()))
-        logging.debug(old_atoms)
-        old_atoms_preserved = topology_proposal.new_to_old_atom_map.keys()
-        new_atoms = range(sum(1 for a in topology_proposal.new_topology.atoms()))
-        logging.debug(new_atoms)
-        new_atoms_preserved = topology_proposal.new_to_old_atom_map.values()
+        atom_map = topology_proposal.new_to_old_atom_map
+        n_atoms = unmodified_system.getNumParticles()
+
+        #take the unique atoms as those not in the {new_atom : old_atom} atom map
         if direction == 'delete':
-            alchemical_atoms = set(old_atoms) - set(old_atoms_preserved)
+            alchemical_atoms = [atom for atom in range(n_atoms) not in atom_map.values()]
         elif direction == 'create':
-            alchemical_atoms = set(new_atoms) - set(new_atoms_preserved)
+            alchemical_atoms = [atom for atom in range(n_atoms) not in atom_map.keys()]
         else:
             raise Exception("direction must be one of ['delete', 'create']; found '%s' instead" % direction)
 
+        logging.debug(alchemical_atoms)
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
         alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms)
