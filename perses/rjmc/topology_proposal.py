@@ -11,7 +11,7 @@ import openeye.oeomega as oeomega
 import tempfile
 import openeye.oegraphsim as oegraphsim
 import openmoltools
-TopologyProposal = namedtuple('TopologyProposal',['new_system', 'new_topology','logp', 'new_to_old_atom_map', 'metadata'])
+TopologyProposal = namedtuple('TopologyProposal',['new_system', 'new_topology','logp_proposal', 'new_to_old_atom_map', 'metadata'])
 SamplerState = namedtuple('SamplerState',['topology','system','positions', 'metadata'])
 
 class Transformation(object):
@@ -245,6 +245,8 @@ class SmallMoleculeTransformation(Transformation):
         self._smiles_list = proposal_metadata['smiles_list']
         self._n_molecules = len(proposal_metadata['smiles_list'])
         self._oemol_list, self._oemol_smile_dict = self._smiles_to_oemol()
+        self._generated_systems = dict()
+        self._generated_topologies = dict()
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
         """
@@ -270,7 +272,8 @@ class SmallMoleculeTransformation(Transformation):
         current_mol = self._oemol_smile_dict[current_mol_smiles]
 
         #choose the next molecule to simulate:
-        proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_positions, current_mol_smiles)
+        proposed_idx, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_positions, current_mol_smiles)
+        proposed_mol_smiles = self._smiles_list[proposed_idx]
 
         #map the atoms between the new and old molecule only:
         mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol)
@@ -278,8 +281,11 @@ class SmallMoleculeTransformation(Transformation):
         #build the topology and system containing the new molecule:
         new_system, new_topology, new_to_old_atom_map = self._build_system(proposed_mol, mol_atom_map)
 
+        #Create the TopologyProposal and return it
+        proposal = TopologyProposal(new_system, new_topology, logp_proposal, new_to_old_atom_map, {'molecule_smiles' : proposed_mol_smiles})
+        return proposal
 
-    def _build_system(self, proposed_molecule, mol_atom_map):
+    def _build_system(self, proposed_molecule, molecule_smiles, mol_atom_map):
         """
         This is a stub for methods that will build a system for a new proposed molecule.
 
@@ -287,6 +293,8 @@ class SmallMoleculeTransformation(Transformation):
         ---------
         proposed_molecule : oemol
              The next proposed molecule
+        molecule_smiles : string
+             The smiles string representing the molecule
         mol_atom_map : dict
              The map of old ligand atoms to new ligand atoms
         Returns
@@ -372,10 +380,63 @@ class SmallMoleculeTransformation(Transformation):
 
         Returns
         -------
+        proposed_idx : int
+             The index of the proposed oemol
         mol : oechem.OEMol
             The next molecule to simulate
         logp : float
             The log probability of the choice
         """
         proposed_idx = np.choose(range(self._n_molecules))
-        return self._oemol_list[proposed_idx], 0.0
+        return proposed_idx, self._oemol_list[proposed_idx], 0.0
+
+
+class SingleSmallMolecule(SmallMoleculeTransformation):
+    """
+    This class is an implementation of a proposal to transform a single small molecule
+    in implicit solvent
+    """
+
+
+    def _build_system(self, proposed_molecule, molecule_smiles, mol_atom_map):
+        """
+        This will build a new system for the proposed molecule in implicit solvent
+
+        Arguments
+        ---------
+        proposed_molecule : oemol
+             The next proposed molecule
+        molecule_smiles : string
+             The smiles string representing the molecule
+        mol_atom_map : dict
+             The map of old ligand atoms to new ligand atoms
+        Returns
+        -------
+        new_system : simtk.openmm.System
+             A new system object for the molecule-X pair
+        new_topology : simtk.openmm.Topology
+             A new topology object for the molecule-X pair
+        new_to_old_atom_map : dict
+             The new to old atom map (same as input here)
+        """
+
+        #if we've already made the system, return that and get out
+        if molecule_smiles in self._generated_systems.keys():
+            return self._generated_systems['mol_smiles'], self._generated_topologies['mol_smiles'], mol_atom_map
+
+        #run antechamber to parameterize, and tleap to create the prmtop
+        molecule_name = 'ligand'
+        _ , tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(proposed_molecule, tripos_mol2_filename=molecule_name + '.tripos.mol2', conformer=0, residue_name=molecule_name)
+        gaff_mol2, frcmod = openmoltools.openeye.run_antechamber(molecule_name, tripos_mol2_filename)
+        prmtop_file, inpcrd_file = openmoltools.utils.run_tleap(molecule_name, gaff_mol2, frcmod)
+
+        #read in the prmtop
+        prmtop = app.AmberPrmtopFile(prmtop_file)
+
+        #add the topology to the generated tops, create the system and do the same for it
+        self._generated_topologies['mol_smiles'] = prmtop.topology
+        system = prmtop.createSystem(implicitSolvent=app.OBC2)
+        self._generated_systems['mol_smiles'] = system
+
+        #return the system and topology, along with the atom map
+        return system, prmtop.topology, mol_atom_map
