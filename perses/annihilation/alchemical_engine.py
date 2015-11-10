@@ -5,7 +5,7 @@ for NCMC switching between compounds or residues.
 from simtk import openmm, unit
 import alchemy
 import logging
-class  AlchemicalEliminationEngine(object):
+class AlchemicalEliminationEngine(object):
     """
     This class is the template for generating systems with the appropriate atoms alchemically modified
 
