@@ -6,7 +6,8 @@ Example illustrating use of expanded ensembles framework to perform a generic ex
 This could represent sampling of small molecules, protein mutants, or both.
 
 """
-
+import sys
+sys.path.append("/Users/grinawap/PycharmProjects/perses")
 
 import numpy as np
 from simtk import unit, openmm
@@ -15,11 +16,11 @@ import openeye.oechem as oechem
 import openeye.oeomega as oeomega
 import openmoltools
 import logging
-from perses.rjmc.topology_proposal import SingleSmallMolecule
-from perses.bias.bias_engine import BiasEngine
-from perses.annihilation.alchemical_engine import AlchemicalEliminationEngine
-from perses.rjmc.geometry import GeometryEngine
-from perses.annihilation.ncmc_switching import NCMCEngine
+import perses.rjmc.topology_proposal as topology_proposal
+import perses.bias.bias_engine as bias_engine
+import perses.annihilation.alchemical_engine as alchemical_engine_library
+import perses.rjmc.geometry as geometry
+import perses.annihilation.ncmc_switching as ncmc_switching
 
 
 def generate_initial_molecule(mol_smiles):
@@ -63,19 +64,20 @@ def run():
     # Run parameters
     temperature = 300.0 * unit.kelvin # temperature
     pressure = 1.0 * unit.atmospheres # pressure
-    collision_rate = 5.0 / unit.picoseconds # collision rate for Langevin dynamics
+    collision_rate = 5.0 / unit.picoseconds #collision rate for Langevin dynamics
 
 
     #Create proposal metadata, such as the list of molecules to sample (SMILES here)
     proposal_metadata = {'smiles_list': smiles_list}
-    transformation = SingleSmallMolecule(proposal_metadata)
+
+    transformation = topology_proposal.SingleSmallMolecule(proposal_metadata)
 
     #initialize weight calculation engine, along with its metadata
-    bias_calculator = BiasEngine(smiles_list)
+    bias_calculator = bias_engine.MinimizedPotentialBias(smiles_list)
 
     #Initialize AlchemicalEliminationEngine
     alchemical_metadata = {'data':0} #ignored
-    alchemical_engine = AlchemicalEliminationEngine(alchemical_metadata)
+    alchemical_engine = alchemical_engine_library.AlchemicalEliminationEngine(alchemical_metadata)
 
     #Initialize NCMC engines.
     switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
@@ -87,11 +89,11 @@ def run():
         'alchemical_angles' : 'lambda',
         'alchemical_torsionss' : 'lambda'
         }
-    ncmc_engine = NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
+    ncmc_engine = ncmc_switching.NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
 
     #initialize GeometryEngine
     geometry_metadata = {'data': 0} #currently ignored
-    geometry_engine = GeometryEngine(geometry_metadata)
+    geometry_engine = geometry.FFGeometryEngine(geometry_metadata)
 
     # Run a anumber of iterations.
     niterations = 10
@@ -147,4 +149,5 @@ def run():
 #
 
 if __name__=="__main__":
+
     run()

@@ -61,9 +61,9 @@ class AlchemicalEliminationEngine(object):
 
         #take the unique atoms as those not in the {new_atom : old_atom} atom map
         if direction == 'delete':
-            alchemical_atoms = [atom for atom in range(n_atoms) not in atom_map.values()]
+            alchemical_atoms = [atom for atom in range(n_atoms) if atom not in atom_map.values()]
         elif direction == 'create':
-            alchemical_atoms = [atom for atom in range(n_atoms) not in atom_map.keys()]
+            alchemical_atoms = [atom for atom in range(n_atoms) if atom not in atom_map.keys()]
         else:
             raise Exception("direction must be one of ['delete', 'create']; found '%s' instead" % direction)
 
