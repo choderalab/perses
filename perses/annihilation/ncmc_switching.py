@@ -2,6 +2,7 @@ import numpy as np
 import copy
 from simtk import openmm, unit
 
+
 default_functions = {
     'alchemical_sterics' : 'lambda',
     'alchemical_electrostatocs' : 'lambda',
