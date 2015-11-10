@@ -11,44 +11,69 @@ This could represent sampling of small molecules, protein mutants, or both.
 import numpy as np
 from simtk import unit, openmm
 from simtk.openmm import app
-from perses.rjmc.topology_proposal import Transformation, SamplerState
+import openeye.oechem as oechem
+import openeye.oeomega as oeomega
+import openmoltools
+from perses.rjmc.topology_proposal import SingleSmallMolecule
 from perses.bias.bias_engine import BiasEngine
 from perses.annihilation.alchemical_engine import AlchemicalEliminationEngine
 from perses.rjmc.geometry import GeometryEngine
 from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.rjmc.system_engine import SystemGenerator
 
+def generate_initial_molecule(mol_smiles):
+    """
+    Generate an oemol with a geometry
+    """
+    mol = oechem.OEMol()
+    oechem.OESmilesToMol(mol, mol_smiles)
+    oechem.OEAddExplicitHydrogens(mol)
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega(mol)
+    return mol
+
+def oemol_to_openmm_system(oemol, molecule_name):
+    """
+    Create an openmm system out of an oemol
+
+    Returns
+    -------
+    system : openmm.System object
+        the system from the molecule
+    positions : [n,3] np.array of floats
+    """
+    _ , tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(oemol, tripos_mol2_filename=molecule_name + '.tripos.mol2', conformer=0, residue_name='MOL')
+    gaff_mol2, frcmod = openmoltools.openeye.run_antechamber(molecule_name, tripos_mol2_filename)
+    prmtop_file, inpcrd_file = openmoltools.utils.run_tleap(molecule_name, gaff_mol2, frcmod)
+    prmtop = app.AmberPrmtopFile(prmtop_file)
+    system = prmtop.createSystem(implicitSolvent=app.OBC1)
+    crd = app.AmberInpcrdFile(inpcrd_file)
+    return system, crd.getPositions(asNumpy=True), prmtop.topology
+
+
 def run():
     # Create initial model system, topology, and positions.
-    # QUESTION: Do we want to maintain 'metadata' as well?
-    # QUESTION: What if we incorporate the tuple (system, topology, metadata, positions) into a SamplerState object, or a named tuple?
+    smiles_list = ["CC", "CCC", "CCCC"]
+    initial_molecule = generate_initial_molecule("CC")
+    initial_sys, initial_pos, initial_top = oemol_to_openmm_system(initial_molecule, "ligand_old")
+    smiles = 'CC'
 
     # Run parameters
     temperature = 300.0 * unit.kelvin # temperature
     pressure = 1.0 * unit.atmospheres # pressure
     collision_rate = 5.0 / unit.picoseconds # collision rate for Langevin dynamics
 
-    # Specify alchemical elimination and introduction protocols.
-    alchemical_elimination_protocol = dict()
-    alchemical_introduction_protocol = dict()
 
     #Create proposal metadata, such as the list of molecules to sample (SMILES here)
-    proposal_metadata = {'molecule_list': ['CC','C=C']}
-    transformation = Transformation(proposal_metadata)
+    proposal_metadata = {'smiles_list': smiles_list}
+    transformation = SingleSmallMolecule(proposal_metadata)
 
     #initialize weight calculation engine, along with its metadata
-    bias_metadata = {'type':'solvation free energy'}
-    bias_calculator = BiasEngine(bias_metadata)
-
-    #initialize with a log_weight
-    current_log_weight = 0.0
-
-    #initialize system generator, along with its metadata
-    system_generator_metadata = {'protein_ff':'amber99sbildn.xml'}
-    system_generator = SystemGenerator(system_generator_metadata)
+    bias_calculator = BiasEngine(smiles_list)
 
     #Initialize AlchemicalEliminationEngine
-    alchemical_metadata = {'data':0}
+    alchemical_metadata = {'data':0} #ignored
     alchemical_engine = AlchemicalEliminationEngine(alchemical_metadata)
 
     #Initialize NCMC engines.
@@ -64,11 +89,9 @@ def run():
     ncmc_engine = NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
 
     #initialize GeometryEngine
-    geometry_metadata = {'data': 0}
+    geometry_metadata = {'data': 0} #currently ignored
     geometry_engine = GeometryEngine(geometry_metadata)
 
-    #initialize
-    (system, topology, positions, state_metadata) = (openmm.System(), app.Topology(), np.array([0.0,0.0,0.0]), {'mol': 'CC'})
     # Run a anumber of iterations.
     niterations = 10
     for i in range(niterations):
