@@ -27,7 +27,7 @@ class AlchemicalEliminationEngine(object):
 
     Create some alchemical systems
 
-    >>> alchemical_system_insert = make_alchemical_system(testsystem.system, topology_proposal, direction='insert')
+    >>> alchemical_system_insert = make_alchemical_system(testsystem.system, topology_proposal, direction='create')
     >>> alchemical_system_delete = make_alchemical_system(testsystem.system, topology_proposal, direction='delete')
 
     """
@@ -36,7 +36,7 @@ class AlchemicalEliminationEngine(object):
         pass
 
 
-    def make_alchemical_system(self, unmodified_system, topology_proposal, direction='insert'):
+    def make_alchemical_system(self, unmodified_system, topology_proposal, direction='create'):
         """
         Generate an alchemically-modified system at the correct atoms
         based on the topology proposal

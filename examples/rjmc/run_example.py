@@ -6,8 +6,7 @@ Example illustrating use of expanded ensembles framework to perform a generic ex
 This could represent sampling of small molecules, protein mutants, or both.
 
 """
-import sys
-sys.path.append("/Users/grinawap/PycharmProjects/perses")
+
 
 import numpy as np
 from simtk import unit, openmm
@@ -81,11 +80,11 @@ def run():
 
     #Initialize NCMC engines.
     switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
-    switching_nsteps = 10 # number of steps to use in NCMC integration
+    switching_nsteps = 2 # number of steps to use in NCMC integration
     switching_functions = { # functional schedules to use in terms of `lambda`, which is switched from 0->1 for creation and 1->0 for deletion
         'alchemical_sterics' : 'lambda',
         'alchemical_electrostatics' : 'lambda',
-        'alchemical_bonds' : 'lambda',
+        'alchemical_bonds' : '1',
         'alchemical_angles' : 'lambda',
         'alchemical_torsionss' : 'lambda'
         }
@@ -96,11 +95,12 @@ def run():
     geometry_engine = geometry.FFGeometryEngine(geometry_metadata)
 
     # Run a anumber of iterations.
-    niterations = 10
+    niterations = 5
     system = initial_sys
     topology = initial_top
     positions = initial_pos
     current_log_weight = bias_calculator.g_k('CC')
+    n_accepted = 0
     for i in range(niterations):
         # Store old (system, topology, positions).
 
@@ -128,21 +128,23 @@ def run():
 
         # Alchemically introduce new atoms.
         new_alchemical_system = alchemical_engine.make_alchemical_system(top_proposal.new_system, top_proposal, direction='create')
-        [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(new_alchemical_system, geometry_proposal.new_positions, direction='insert')
+        [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(new_alchemical_system, geometry_proposal.new_positions, direction='create')
         print(ncmc_new_positions)
         print(ncmc_introduction_logp)
 
         # Compute total log acceptance probability, including all components.
-        logp_accept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
+        logp_accept = top_proposal.logp_proposal + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight/log_weight.unit - current_log_weight/current_log_weight.unit
         print(logp_accept)
 
         # Accept or reject.
         if (logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)):
             # Accept.
             (system, topology, positions, current_log_weight) = (top_proposal.new_system, top_proposal.new_topology, ncmc_new_positions, log_weight)
+            n_accepted+=1
         else:
             # Reject.
             logging.debug("reject")
+    print("The total number accepted was %d out of %d iterations" % (n_accepted, niterations))
 
 #
 # MAIN
