@@ -95,7 +95,8 @@ class SmallMoleculeTransformation(Transformation):
             Contains new system, new topology, new to old atom map, and logp, as well as metadata
         """
         current_mol_smiles = current_metadata['molecule_smiles']
-        current_mol = self._oemol_smile_dict[current_mol_smiles]
+        current_mol_idx = self._oemol_smile_dict[current_mol_smiles]
+        current_mol = self._oemol_list[current_mol_idx]
 
         #choose the next molecule to simulate:
         proposed_idx, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
@@ -106,7 +107,7 @@ class SmallMoleculeTransformation(Transformation):
         mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol)
 
         #build the topology and system containing the new molecule:
-        new_system, new_topology, new_to_old_atom_map = self._build_system(proposed_mol, mol_atom_map)
+        new_system, new_topology, new_to_old_atom_map = self._build_system(proposed_mol, proposed_mol_smiles, mol_atom_map)
 
         #Create the TopologyProposal and return it
         proposal = TopologyProposal(new_system, new_topology, logp_proposal, new_to_old_atom_map,
@@ -153,6 +154,9 @@ class SmallMoleculeTransformation(Transformation):
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smile)
             oechem.OEAddExplicitHydrogens(mol)
+            omega = oeomega.OEOmega()
+            omega.SetMaxConfs(1)
+            omega(mol)
             oemols[i] = mol
             oemol_smile_dict[smile] = i
         return oemols, oemol_smile_dict
@@ -181,8 +185,7 @@ class SmallMoleculeTransformation(Transformation):
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
-        matches = [match for match in mcs.Match(oegraphmol_proposed, unique)]
-        match = matches[0]
+        match = [m for m in mcs.Match(oegraphmol_proposed, unique)][0]
         new_to_old_atom_map = {}
         for matchpair in match.GetAtoms():
             old_index = matchpair.pattern.GetIdx()
@@ -215,7 +218,7 @@ class SmallMoleculeTransformation(Transformation):
         logp : float
             The log probability of the choice
         """
-        proposed_idx = np.choose(range(self._n_molecules))
+        proposed_idx = np.random.choice(range(self._n_molecules))
         return proposed_idx, self._oemol_list[proposed_idx], 0.0
 
 
