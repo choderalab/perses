@@ -94,37 +94,24 @@ def run():
 
     # Run a anumber of iterations.
     niterations = 10
+    system = initial_sys
+    topology = initial_top
+    positions = initial_pos
     for i in range(niterations):
         # Store old (system, topology, positions).
 
         # Propose a transformation from one chemical species to another.
-        # QUESTION: This could depend on the geometry; could it not?
-                               # The metadata might contain information about the topology, such as the SMILES string or amino acid sequence.
-        # QUESTION: Could we instead initialize a transformation object once as
-        # transformation = topology_proposal.Transformation(metametadata)
-        # and then do
-        # [new_topology, new_system, new_metadata] = transformation.propose(old_topology, old_system, old_metadata)?
-        top_proposal = transformation.propose(system, topology, positions, state_metadata) # QUESTION: Is this a Topology object or some other container?
+        state_metadata = {'molecule_smiles' : smiles}
+        top_proposal = transformation.propose(system, topology, positions, state_metadata) #get a new molecule
 
         # QUESTION: What about instead initializing StateWeight once, and then using
         # log_state_weight = state_weight.computeLogStateWeight(new_topology, new_system, new_metadata)?
         log_weight = bias_calculator.generate_bias(top_proposal)
 
-        # Create a new System object from the proposed topology.
-        # QUESTION: Do we want to isolate the system creation from the Transformation proposal? This does seem like something that *could* be pretty well isolated.
-        # QUESTION: Should we at least create only one SystemGenerator, like
-        # system_generator = SystemGenerator(forcefield, etc)
-        # new_system = system_generator.createSystem(new_topology)
-        new_system = system_generator.new_system(top_proposal)
-        print(top_proposal)
-
         # Perform alchemical transformation.
 
         # Alchemically eliminate atoms being removed.
-        # QUESTION: We need the alchemical transformation to eliminate the atoms being removed, right? So we need old topology/system and intermediate topology/system.
-        # What if we had a method that took the old/new (topology, system, metadata) and generated some information about the transformation?
-        # At minimum, we need to know what atoms are being eliminated/introduced.  We might also need to identify some System for the "intermediate" with scaffold atoms that are shared,
-        # since charges and types may need to be modified?
+
         old_alchemical_system = alchemical_engine.make_alchemical_system(system, top_proposal, direction='delete')
         print(old_alchemical_system)
         [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(old_alchemical_system, positions, direction='delete')
@@ -133,17 +120,16 @@ def run():
 
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
         # QUESTION: Again, maybe we want to have the geometry engine initialized once only?
-        geometry_proposal = geometry_engine.propose(top_proposal, new_system, ncmc_old_positions)
+        geometry_proposal = geometry_engine.propose(top_proposal.new_to_old_atom_map, top_proposal.new_system, system, ncmc_old_positions)
 
         # Alchemically introduce new atoms.
-        # QUESTION: Similarly, this needs to introduce new atoms.  We need to know both intermediate toplogy/system and new topology/system, right?
-        new_alchemical_system = alchemical_engine.make_alchemical_system(new_system, top_proposal, direction='create')
+        new_alchemical_system = alchemical_engine.make_alchemical_system(top_proposal.new_system, top_proposal, direction='create')
         [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(new_alchemical_system, geometry_proposal.new_positions, direction='insert')
         print(ncmc_new_positions)
         print(ncmc_introduction_logp)
 
         # Compute total log acceptance probability, including all components.
-        logp_accept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
+        logp_accept = top_proposal.logp + geometry_proposal.logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - bias_calculator.g_k(top_proposal)
         print(logp_accept)
 
         # Accept or reject.

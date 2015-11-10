@@ -23,14 +23,14 @@ class BiasEngine(object):
     def __init__(self, metadata):
         pass
 
-    def g_k(self, topology_proposal):
+    def g_k(self, molecule_smiles):
         """
         Generate a biasing weight g_k for the state indicated.
         
         Arguments
         --------
-        topology_proposal : namedtuple of type TopologyProposal
-            Contains information about the state for which g_k should be generated
+        molecule_smiles : string
+            SMILES string of molecule to calculate bias
 
         Returns
         -------
