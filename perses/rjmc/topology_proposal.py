@@ -218,7 +218,10 @@ class SmallMoleculeTransformation(Transformation):
         logp : float
             The log probability of the choice
         """
-        proposed_idx = np.random.choice(range(self._n_molecules))
+        current_idx = self._smiles_list.index(molecule_smiles)
+        prob = np.array([1.0/(self._n_molecules-1) for i in range(self._n_molecules)])
+        prob[current_idx] = 0.0
+        proposed_idx = np.random.choice(range(self._n_molecules), p=prob)
         return proposed_idx, self._oemol_list[proposed_idx], 0.0
 
 

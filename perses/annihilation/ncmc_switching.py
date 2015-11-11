@@ -5,7 +5,7 @@ from simtk import openmm, unit
 
 default_functions = {
     'alchemical_sterics' : 'lambda',
-    'alchemical_electrostatocs' : 'lambda',
+    'alchemical_electrostatics' : 'lambda',
     'alchemical_bonds' : 'lambda',
     'alchemical_angles' : 'lambda',
     'alchemical_torsions' : 'lambda'
@@ -206,7 +206,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         if mode not in ['insert', 'delete']:
             raise Exception("mode must be one of ['insert', 'delete']; was '%s' instead" % mode)
 
-        super(NCMCAlchemicalIntegrator, self).__init__((nsteps+1) * timestep)
+        super(NCMCAlchemicalIntegrator, self).__init__(timestep)
 
         self.addGlobalVariable('initial_total_energy', 0.0) # initial total energy (kinetic + potential)
         self.addGlobalVariable('final_total_energy', 0.0) # final total energy (kinetic + potential)
