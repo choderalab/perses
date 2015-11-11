@@ -276,7 +276,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             self.addConstrainVelocities()
 
         # Store final total energy.
-        self.addComputeGlobal('initial_total_energy', 'ke + potential')
+        self.addComputeGlobal('final_total_energy', 'ke + potential')
 
         # Compute log acceptance probability.
         self.addComputeGlobal('log_ncmc_acceptance_probability', '(final_total_energy - initial_total_energy) / %f' % kT)

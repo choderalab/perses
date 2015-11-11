@@ -210,6 +210,7 @@ def run():
             integrator = openmm.LangevinIntegrator(temperature, collision_rate, switching_timestep)
             context = openmm.Context(p_system, integrator)
             context.setPositions(positions)
+            print(context.getState(getEnergy=True).getPotentialEnergy())
             integrator.step(1000)
             state = context.getState(getPositions=True)
             positions = state.getPositions(asNumpy=True)
