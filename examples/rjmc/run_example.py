@@ -139,13 +139,13 @@ def run():
 
     #Initialize NCMC engines.
     switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
-    switching_nsteps = 100 # number of steps to use in NCMC integration
+    switching_nsteps = 10 # number of steps to use in NCMC integration
     switching_functions = { # functional schedules to use in terms of `lambda`, which is switched from 0->1 for creation and 1->0 for deletion
-        'alchemical_sterics' : 'lambda**(1/6)',
-        'alchemical_electrostatics' : 'lambda**(1/6)',
-        'alchemical_bonds' : 'lambda**(1/6)',
-        'alchemical_angles' : 'lambda**(1/6)',
-        'alchemical_torsions' : 'lambda**(1/6)'
+        'lambda_sterics' : 'lambda',
+        'lambda_electrostatics' : 'lambda',
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'sqrt(lambda)',
+        'lambda_torsions' : 'lambda'
         }
     ncmc_engine = ncmc_switching.NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
 
