@@ -4,8 +4,8 @@ for NCMC switching between compounds or residues.
 """
 from simtk import openmm, unit
 import alchemy
-
-class  AlchemicalEliminationEngine(object):
+import logging
+class AlchemicalEliminationEngine(object):
     """
     This class is the template for generating systems with the appropriate atoms alchemically modified
 
@@ -21,13 +21,13 @@ class  AlchemicalEliminationEngine(object):
 
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
-    >>> from perses import TopologyProposal
+    >>> from perses.rjmc import topology_proposal
     >>> new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
-    >>> topology_proposal = TopologyProposal(old_topology=testsystem.topology, new_topology=testsystem.topology, logp=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
+    >>> topology_proposal = topology_proposal.TopologyProposal(old_topology=testsystem.topology, new_topology=testsystem.topology, logp=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
 
     Create some alchemical systems
 
-    >>> alchemical_system_insert = make_alchemical_system(testsystem.system, topology_proposal, direction='insert')
+    >>> alchemical_system_insert = make_alchemical_system(testsystem.system, topology_proposal, direction='create')
     >>> alchemical_system_delete = make_alchemical_system(testsystem.system, topology_proposal, direction='delete')
 
     """
@@ -36,7 +36,7 @@ class  AlchemicalEliminationEngine(object):
         pass
 
 
-    def make_alchemical_system(self, unmodified_system, topology_proposal, direction='insert'):
+    def make_alchemical_system(self, unmodified_system, topology_proposal, direction='create'):
         """
         Generate an alchemically-modified system at the correct atoms
         based on the topology proposal
@@ -56,21 +56,18 @@ class  AlchemicalEliminationEngine(object):
             The system with appropriate atoms alchemically modified
 
         """
-        # Create a list of alchemical atoms.
-        alchemical_atoms = list()
-        old_atoms = range(sum(1 for a in topology_proposal.old_topology.atoms()))
-        print old_atoms
-        old_atoms_preserved = topology_proposal.new_to_old_atom_map.keys()
-        new_atoms = range(sum(1 for a in topology_proposal.new_topology.atoms()))
-        print new_atoms
-        new_atoms_preserved = topology_proposal.new_to_old_atom_map.values()
+        atom_map = topology_proposal.new_to_old_atom_map
+        n_atoms = unmodified_system.getNumParticles()
+
+        #take the unique atoms as those not in the {new_atom : old_atom} atom map
         if direction == 'delete':
-            alchemical_atoms = set(old_atoms) - set(old_atoms_preserved)
+            alchemical_atoms = [atom for atom in range(n_atoms) if atom not in atom_map.values()]
         elif direction == 'create':
-            alchemical_atoms = set(new_atoms) - set(new_atoms_preserved)
+            alchemical_atoms = [atom for atom in range(n_atoms) if atom not in atom_map.keys()]
         else:
             raise Exception("direction must be one of ['delete', 'create']; found '%s' instead" % direction)
 
+        logging.debug(alchemical_atoms)
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
         alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms)

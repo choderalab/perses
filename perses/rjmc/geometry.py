@@ -276,7 +276,6 @@ class FFGeometryEngine(GeometryEngine):
             logp of position, including det(J) correction
         """
         #convert cartesian coordinates to spherical
-        self._autograd_ctoi(atom, bonded_atom, angle_atom, torsion_atom, positions)
         relative_xyz = positions[atom] - positions[bonded_atom]
         internal_coordinates, detJ = self._autograd_ctoi(atom, bonded_atom, angle_atom, torsion_atom, positions)
 
@@ -605,7 +604,7 @@ class FFGeometryEngine(GeometryEngine):
         j = autograd.jacobian(_cartesian_to_internal)
         internal_coords = _cartesian_to_internal(atom_position)
         jacobian_det = np.linalg.det(j(atom_position))
-        return internal_coords, atom_position
+        return internal_coords, np.abs(jacobian_det)
 
     def _autograd_itoc(self, bond, angle, torsion, r, theta, phi, positions):
         """
