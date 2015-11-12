@@ -16,7 +16,7 @@ def generate_initial_molecule(iupac_name):
     Generate an oemol with a geometry
     """
     mol = oechem.OEMol()
-    oeiupac.OEParseIUPACName(mol, "n-pentane")
+    oeiupac.OEParseIUPACName(mol, iupac_name)
     oechem.OEAddExplicitHydrogens(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
@@ -33,14 +33,33 @@ def oemol_to_openmm_system(oemol, molecule_name):
         the system from the molecule
     positions : [n,3] np.array of floats
     """
-    openmoltools.openeye.enter_temp_directory()
+
     _ , tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(oemol, tripos_mol2_filename=molecule_name + '.tripos.mol2', conformer=0, residue_name='MOL')
     gaff_mol2, frcmod = openmoltools.openeye.run_antechamber(molecule_name, tripos_mol2_filename)
     prmtop_file, inpcrd_file = openmoltools.utils.run_tleap(molecule_name, gaff_mol2, frcmod)
     prmtop = app.AmberPrmtopFile(prmtop_file)
     system = prmtop.createSystem(implicitSolvent=app.OBC1)
     crd = app.AmberInpcrdFile(inpcrd_file)
-    return system, crd.positions
+    return system, crd.getPositions(asNumpy=True), prmtop.topology
+
+def align_molecules(mol1, mol2):
+    """
+    MCSS two OEmols. Return the mapping of new : old atoms
+    """
+    mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
+    atomexpr = oechem.OEExprOpts_AtomicNumber
+    bondexpr = 0
+    mcs.Init(mol1, atomexpr, bondexpr)
+    mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
+    unique = True
+    match = [m for m in mcs.Match(mol2, unique)][0]
+    new_to_old_atom_mapping = {}
+    for matchpair in match.GetAtoms():
+        old_index = matchpair.pattern.GetIdx()
+        new_index = matchpair.target.GetIdx()
+        new_to_old_atom_mapping[new_index] = old_index
+    return new_to_old_atom_mapping
+
 
 def align_molecules(mol1, mol2):
     """
@@ -73,8 +92,8 @@ def test_run_geometry_engine():
     molecule2 = generate_initial_molecule(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1 = oemol_to_openmm_system(molecule1, molecule_name_1)
-    sys2, pos2 = oemol_to_openmm_system(molecule2, molecule_name_2)
+    sys1, pos1, _ = oemol_to_openmm_system(molecule1, molecule_name_1)
+    sys2, pos2, _ = oemol_to_openmm_system(molecule2, molecule_name_2)
 
     #copy the positions to openmm manually (not sure what happens to units otherwise)
     for atom in molecule1.GetAtoms():
@@ -92,7 +111,7 @@ def test_run_geometry_engine():
         pos2[index, 2] = z * units.angstrom
 
     #propose(self, new_to_old_atom_map, new_system, old_system, old_positions)
-    from . import geometry
+    import perses.rjmc.geometry as geometry
 
     geometry_engine = geometry.FFGeometryEngine({'test': 'true'})
 
