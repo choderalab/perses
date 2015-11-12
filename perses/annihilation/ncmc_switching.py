@@ -136,7 +136,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=alchemical_atoms)
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
-    >>> functions = { 'alchemical_sterics' : 't' }
+    >>> functions = { 'alchemical_sterics' : 'lambda' }
     >>> ncmc_integrator = NCMCAlchemicalIntegrator(alchemical_system, functions, mode='delete')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
@@ -157,7 +157,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> alchemical_state = AlchemicalState(lambda_sterics=0, lambda_torsions=0, lambda_angles=0)
     >>> alchemical_system = factory.createPerturbedSystem(alchemical_state)
     >>> # Create an NCMC switching integrator.
-    >>> functions = { 'lambda_sterics' : 't', 'lambda_electrostatics' : 't**0.5', 'lambda_torsions' : 't', 'lambda_angles' : 't**2' }
+    >>> functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda**0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda**2' }
     >>> ncmc_integrator = NCMCAlchemicalIntegrator(alchemical_system, functions, mode='insert')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
