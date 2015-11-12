@@ -136,8 +136,9 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=alchemical_atoms)
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
+    >>> temperature = 300.0 * unit.kelvin
     >>> functions = { 'alchemical_sterics' : 'lambda' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(alchemical_system, functions, mode='delete')
+    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, mode='delete')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
     >>> context.setPositions(testsystem.positions)
@@ -154,11 +155,11 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> from alchemy import AbsoluteAlchemicalFactory
     >>> alchemical_atoms = [0,1,2,3] # terminal methyl group
     >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=alchemical_atoms, alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
-    >>> alchemical_state = AlchemicalState(lambda_sterics=0, lambda_torsions=0, lambda_angles=0)
-    >>> alchemical_system = factory.createPerturbedSystem(alchemical_state)
+    >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
+    >>> temperature = 300.0 * unit.kelvin
     >>> functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda**0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda**2' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(alchemical_system, functions, mode='insert')
+    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, mode='insert')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
     >>> context.setPositions(testsystem.positions)
