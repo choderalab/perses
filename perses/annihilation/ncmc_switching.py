@@ -4,11 +4,11 @@ from simtk import openmm, unit
 
 
 default_functions = {
-    'alchemical_sterics' : 'lambda',
-    'alchemical_electrostatics' : 'lambda',
-    'alchemical_bonds' : 'lambda',
-    'alchemical_angles' : 'lambda',
-    'alchemical_torsions' : 'lambda'
+    'lambda_sterics' : 'lambda',
+    'lambda_electrostatics' : 'lambda',
+    'lambda_bonds' : 'lambda',
+    'lambda_angles' : 'lambda',
+    'lambda_torsions' : 'lambda'
     }
 
 class NCMCEngine(object):
