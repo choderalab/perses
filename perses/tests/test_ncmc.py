@@ -70,6 +70,6 @@ def test_ncmc_harmonic_oscillator():
     # Run the integrator
     ncmc_integrator.step(1)
     # Retrieve the log acceptance probability
-    log_ncmc = ncmc_integrator.log_ncmc
+    log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
     print(log_ncmc)
 

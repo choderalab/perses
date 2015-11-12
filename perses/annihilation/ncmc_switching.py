@@ -145,7 +145,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> # Run the integrator
     >>> ncmc_integrator.step(1)
     >>> # Retrieve the log acceptance probability
-    >>> log_ncmc = ncmc_integrator.log_ncmc
+    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
 
     Turn on an atom and its associated angles and torsions in alanine dipeptide
 
@@ -166,7 +166,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> # Run the integrator
     >>> ncmc_integrator.step(1)
     >>> # Retrieve the log acceptance probability
-    >>> log_ncmc = ncmc_integrator.log_ncmc
+    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
 
 
     """
@@ -208,6 +208,14 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             raise Exception("mode must be one of ['insert', 'delete']; was '%s' instead" % mode)
 
         super(NCMCAlchemicalIntegrator, self).__init__(timestep)
+
+        # Make a list of parameters in the system
+        system_parameters = list()
+        for force_index in range(system.getNumForces()):
+            force = system.getForce(force_index)
+            if hasattr(force, 'getNumGlobalParameters'):
+                for parameter_index in range(force.getNumGlobalParameters()):
+                    system_parameters.append(force.getGlobalParameterName(parameter_index))
 
         self.addGlobalVariable('kinetic', 0.0) # kinetic energy
         self.addGlobalVariable('initial_total_energy', 0.0) # initial total energy (kinetic + potential)
@@ -264,7 +272,8 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
 
             # Update Context parameters according to provided functions.
             for context_parameter in functions:
-                self.addComputeGlobal(context_parameter, functions[context_parameter])
+                if context_parameter in system_parameters:
+                    self.addComputeGlobal(context_parameter, functions[context_parameter])
 
             #
             # Velocity Verlet propagation step
