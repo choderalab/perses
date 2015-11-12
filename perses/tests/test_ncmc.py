@@ -12,7 +12,6 @@ __author__ = 'John D. Chodera'
 from simtk import openmm, unit
 import math
 import numpy as np
-from perses import annihilation 
 
 ################################################################################
 # CONSTANTS
@@ -62,12 +61,12 @@ def test_ncmc_harmonic_oscillator():
 
     # Create an NCMC switching integrator.
     functions = { 'x0' : 'lambda' } # drag spring center x0
-    from annihilation import NCMCAlchemicalIntegrator
-    ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, mode='insert', nsteps=nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
+    from perses.annihilation import NCMCAlchemicalIntegrator
+    ncmc_integrator = NCMCAlchemicalIntegrator(temperature, system, functions, mode='insert', nsteps=nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
     # Create a Context
     platform = openmm.Platform.getPlatformByName(platform_name)
-    context = openmm.Context(alchemical_system, ncmc_integrator, platform)
-    context.setPositions(testsystem.positions)
+    context = openmm.Context(system, ncmc_integrator, platform)
+    context.setPositions(positions)
     # Run the integrator
     ncmc_integrator.step(1)
     # Retrieve the log acceptance probability

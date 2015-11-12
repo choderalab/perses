@@ -209,6 +209,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
 
         super(NCMCAlchemicalIntegrator, self).__init__(timestep)
 
+        self.addGlobalVariable('kinetic', 0.0) # kinetic energy
         self.addGlobalVariable('initial_total_energy', 0.0) # initial total energy (kinetic + potential)
         self.addGlobalVariable('final_total_energy', 0.0) # final total energy (kinetic + potential)
         self.addGlobalVariable('log_ncmc_acceptance_probability', 0.0) # log of NCMC acceptance probability
@@ -230,7 +231,8 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addConstrainVelocities()
 
         # Store initial total energy.
-        self.addComputeGlobal('initial_total_energy', 'kinetic + potential; kinetic = 0.5 * m * v^2')
+        self.addComputeSum("kinetic", "0.5*m*v*v")
+        self.addComputeGlobal('initial_total_energy', 'kinetic + energy')
 
         #
         # Initial Velocity Verlet propagation step
@@ -277,7 +279,8 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             self.addConstrainVelocities()
 
         # Store final total energy.
-        self.addComputeGlobal('final_total_energy', 'kinetic + potential; kinetic = 0.5 * m * v^2')
+        self.addComputeSum("kinetic", "0.5*m*v*v")
+        self.addComputeGlobal('final_total_energy', 'kinetic + energy')
 
         # Compute log acceptance probability.
         self.addComputeGlobal('log_ncmc_acceptance_probability', '(final_total_energy - initial_total_energy) / %f' % kT)
