@@ -61,7 +61,6 @@ def align_molecules(mol1, mol2):
     return new_to_old_atom_mapping
 
 
-
 def test_run_geometry_engine():
     """
     Run the geometry engine a few times to make sure that it actually runs

@@ -17,20 +17,18 @@ install:
   - export PYTHONUNBUFFERED=true
   - export CC=gcc
   - export CXX=g++
+  - export REPO_SLUG="choderalab/perses"
   # Unpack encrypted OpenEye license file
-  - if [ ! $TRAVIS_PULL_REQUEST ]; then openssl aes-256-cbc -K $encrypted_514505261e50_key -iv $encrypted_514505261e50_iv -in oe_license.txt.enc -out oe_license.txt -d; fi
-  - if [ $TRAVIS_PULL_REQUEST ]; then echo "OpenEye license will not be installed in pull request."; fi
+  - if [ "$TRAVIS_REPO_SLUG" == "$REPO_SLUG" ]; then openssl aes-256-cbc -K $encrypted_514505261e50_key -iv $encrypted_514505261e50_iv -in oe_license.txt.enc -out $HOME/oe_license.txt -d; fi
+  - if [ "$TRAVIS_REPO_SLUG" != "$REPO_SLUG" ]; then echo "OpenEye license will not be installed in forks."; fi
 
 script:
-  - conda config --add channels https://conda.binstar.org/${ORGNAME}
+  - conda config --add channels ${ORGNAME}
   - conda build devtools/conda-recipe
-  - conda install --yes --quiet pip
+  - source activate _test
+  - conda install --yes --quiet pip nose nose-timer
   - pip install $OPENEYE_CHANNEL openeye-toolkits
-  # Install and test (in separate directory)
-  - conda install --yes --quiet --use-local ${PACKAGENAME}-dev
-  # Run tests
-  - conda install --yes --quiet nose nose-timer openmmtools
-  - mkdir test && cd test && nosetests perses --nocapture --verbosity=2 --with-doctest
+  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-doctest --with-timer && cd ..
 env:
   matrix:
     - python=2.7  CONDA_PY=27 OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
