@@ -220,8 +220,7 @@ class Transformation(object):
             probabilities, as well as old and new topologies and atom
             mapping
         """
-        return TopologyProposal(app.Topology(), app.Topology(), 0.0, {0: 0}, {'molecule_smiles': 'CC'})
-
+        pass
 
 
 class SmallMoleculeTransformation(Transformation):
@@ -273,8 +272,10 @@ class SmallMoleculeTransformation(Transformation):
         new_system, new_topology, new_to_old_atom_map = self._build_system(proposed_mol, proposed_mol_smiles, mol_atom_map)
 
         #Create the TopologyProposal and return it
-        proposal = TopologyProposal(new_system, new_topology, logp_proposal, new_to_old_atom_map,
-                                    {'molecule_smiles': proposed_mol_smiles})
+        proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
+                                                 old_positions=current_positions, logp_proposal=logp_proposal,
+                                                 new_to_old_atom_map=new_to_old_atom_map, molecule_smiles=proposed_mol_smiles)
+
         return proposal
 
     def _build_system(self, proposed_molecule, molecule_smiles, mol_atom_map):
