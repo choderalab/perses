@@ -13,19 +13,20 @@ requirements:
   build:
     - python
     - setuptools
-    - openmm >=6.3
+    - openmm >=7.0
     - numpy
     - scipy
     - openmoltools-dev
-    - alchemy
+    - alchemy >=1.1.3
+    - numexpr
 
   run:
     - python
-    - openmm >=6.3
+    - openmm >=7.0
     - numpy
     - scipy
     - openmoltools-dev
-    - alchemy
+    - alchemy >=1.1.3
     - numexpr
 
 test:
