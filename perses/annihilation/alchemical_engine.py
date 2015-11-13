@@ -21,9 +21,9 @@ class AlchemicalEliminationEngine(object):
 
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
-    >>> from perses.rjmc import topology_proposal
+    >>> from perses.rjmc.topology_proposal import TopologyProposal
     >>> new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
-    >>> topology_proposal = topology_proposal.TopologyProposal(old_topology=testsystem.topology, new_topology=testsystem.topology, logp=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
+    >>> topology_proposal = TopologyProposal(new_system=testsystem.system, new_topology=testsystem.topology, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
 
     Create some alchemical systems
 

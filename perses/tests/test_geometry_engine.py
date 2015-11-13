@@ -71,7 +71,7 @@ def align_molecules(mol1, mol2):
     mcs.Init(mol1, atomexpr, bondexpr)
     mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
     unique = True
-    matches = mcs.Match(mol2, unique)
+    matches = [match for match in mcs.Match(mol2, unique) ]
     match = matches[0]
     new_to_old_atom_mapping = {}
     for matchpair in match.GetAtoms():
