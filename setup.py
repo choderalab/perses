@@ -79,9 +79,9 @@ setup(name='perses',
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        'openmm >=6.3',
+        'openmm >=7.0',
         'numpy',
         'scipy',
-        'alchemy >=1.1.0',
+        'alchemy >=1.1.2',
         ],
       )

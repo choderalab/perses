@@ -23,6 +23,52 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 # TESTS
 ################################################################################
 
+def collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ghmc_nsteps=200, ncmc_nsteps=50, niterations=20, mode='insert'):
+    """
+    Collect switching data.
+
+    """
+
+    work_n = np.zeros([niterations], np.float64) # work[iteration] is work (log probability) in kT from iteration `iteration`
+
+    # Create integrators.
+    integrator = openmm.CompoundIntegrator()
+    # Create GHMC integrator.
+    from openmmtools.integrators import GHMCIntegrator
+    ghmc_integrator = GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
+    integrator.addIntegrator(ghmc_integrator)
+    # Create an NCMC switching integrator.
+    from perses.annihilation import NCMCAlchemicalIntegrator
+    ncmc_integrator = NCMCAlchemicalIntegrator(temperature, system, functions, mode=mode, nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
+    integrator.addIntegrator(ncmc_integrator)
+
+    # Create Context
+    context = openmm.Context(system, integrator, platform)
+    context.setPositions(positions)
+    context.setVelocitiesToTemperature(temperature)
+
+    for iteration in range(niterations):
+        # Equilibrate
+        integrator.setCurrentIntegrator(0)
+        if mode == 'insert':
+            context.setParameter('x0', 0)
+        elif mode == 'delete':
+            context.setParameter('x0', 1)
+        else:
+            raise Exception("mode '%s' unknown; must be 'insert' or 'delete'." % mode)
+        integrator.step(ghmc_nsteps)
+
+        # Switch
+        integrator.setCurrentIntegrator(1)
+        integrator.step(1)
+        work_n[iteration] = ncmc_integrator.getLogAcceptanceProbability()
+
+    # Clean up
+    del context, integrator
+
+    return work_n
+
+
 def test_ncmc_harmonic_oscillator():
     """
     Test NCMC switching of a 3D harmonic oscillator.
@@ -33,9 +79,10 @@ def test_ncmc_harmonic_oscillator():
     # Parameters for 3D harmonic oscillator
     mass = 39.948 * unit.amu # mass of particle (argon)
     sigma = 5.0 * unit.angstrom # standard deviation of harmonic oscillator
+    collision_rate = 5.0/unit.picosecond # collision rate
     temperature = 300.0 * unit.kelvin # temperature
-    nsteps = 500 # number of switching steps
     platform_name = 'Reference' # platform anme
+    NSIGMA_MAX = 6.0 # number of standard errors away from analytical solution tolerated before Exception is thrown
 
     # Compute derived quantities.
     kT = kB * temperature # thermal energy
@@ -43,6 +90,7 @@ def test_ncmc_harmonic_oscillator():
     K = kT / sigma**2 # spring constant
     tau = 2 * math.pi * unit.sqrt(mass/K) # time constant
     timestep = tau / 20.0
+    platform = openmm.Platform.getPlatformByName(platform_name)
 
     # Create a 3D harmonic oscillator with context parameter.
     system = openmm.System()
@@ -58,18 +106,20 @@ def test_ncmc_harmonic_oscillator():
     positions = unit.Quantity(np.zeros([1, 3], np.float32), unit.angstroms)
 
     # Run NCMC switching trials where the spring center is switched with lambda: 0 -> 1.
-
-    # Create an NCMC switching integrator.
     functions = { 'x0' : 'lambda' } # drag spring center x0
-    from perses.annihilation import NCMCAlchemicalIntegrator
-    ncmc_integrator = NCMCAlchemicalIntegrator(temperature, system, functions, mode='insert', nsteps=nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
-    # Create a Context
-    platform = openmm.Platform.getPlatformByName(platform_name)
-    context = openmm.Context(system, ncmc_integrator, platform)
-    context.setPositions(positions)
-    # Run the integrator
-    ncmc_integrator.step(1)
-    # Retrieve the log acceptance probability
-    log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
-    print(log_ncmc)
 
+    w_f = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, mode='insert')
+    w_r = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, mode='delete')
+
+    print w_f
+    print w_r
+
+    from pymbar import BAR
+    [df, ddf] = BAR(w_f, w_r, method='self-consistent-iteration')
+    print 'Delta F = %f +- %f kT' % (df, ddf)
+    if (abs(df) > NSIGMA_MAX * ddf):
+        raise Exception('Delta F = %f +- %f kT; should be within %f sigma of 0' % (df, ddf, NSIGMA_MAX))
+
+
+if __name__ == '__main__':
+    test_ncmc_harmonic_oscillator()
