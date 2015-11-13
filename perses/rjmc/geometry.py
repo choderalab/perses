@@ -3,6 +3,7 @@ This contains the base class for the geometry engine, which proposes new positio
 for each additional atom that must be added.
 """
 from collections import namedtuple
+import perses.rjmc.topology_proposal as topology_proposal
 import numpy as np
 import scipy.stats as stats
 import numexpr as ne
@@ -56,7 +57,7 @@ class FFGeometryEngine(GeometryEngine):
     """
 
 
-    def propose(self, topology_proposal):
+    def propose(self, top_proposal):
         """
         Propose a new geometry for the appropriate atoms using forcefield parameters
 
@@ -74,31 +75,33 @@ class FFGeometryEngine(GeometryEngine):
         """
 
         #get the mapping between new and old atoms
-        n_atoms_new = new_system.getNumParticles()
-        n_atoms_old = old_system.getNumParticles()
+        n_atoms_new = top_proposal.n_atoms_new
+        n_atoms_old = top_proposal.n_atoms_old
 
         #get a list of the new atoms
-        new_atoms = [atom for atom in range(n_atoms_new) if atom not in new_to_old_atom_map.keys()]
+        new_atoms = top_proposal.unique_new_atoms
 
         #get a list of the old atoms
-        old_atoms = [atom for atom in range(n_atoms_old) if atom not in new_to_old_atom_map.values()]
+        old_atoms = top_proposal.unique_old_atoms
 
         #create a new array with the appropriate size
         new_positions = np.zeros([n_atoms_new, 3])
 
+        new_to_old_atom_map = top_proposal.new_to_old_atom_map
+
         #transfer known positions--be careful about units!
         for atom in new_to_old_atom_map.keys():
-            new_positions[atom] = old_positions[new_to_old_atom_map[atom]].in_units_of(units.nanometers)
+            new_positions[atom] = top_proposal.old_positions[new_to_old_atom_map[atom]].in_units_of(units.nanometers)
 
         #restore units
         new_positions = new_positions*units.nanometers
         #get a new set of positions and a logp of that proposal
-        final_new_positions, logp_forward = self._propose_new_positions(new_atoms, new_system, new_positions, new_to_old_atom_map)
+        final_new_positions, logp_forward = self._propose_new_positions(new_atoms, top_proposal.new_system, new_positions, new_to_old_atom_map)
 
         #get the probability of a reverse proposal
         #first get the atom map reversed
-        old_to_new_atom_map = {value: key for (key, value) in new_to_old_atom_map.items()}
-        _, logp_reverse = self._propose_new_positions(old_atoms, old_system, old_positions, old_to_new_atom_map, propose_positions=False)
+        old_to_new_atom_map = top_proposal.old_to_new_atom_map
+        _, logp_reverse = self._propose_new_positions(old_atoms, top_proposal.old_system, top_proposal.old_positions, old_to_new_atom_map, propose_positions=False)
 
         #construct the return object
         geometry_proposal = GeometryProposal(final_new_positions, logp_reverse - logp_forward)
