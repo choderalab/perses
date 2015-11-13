@@ -56,20 +56,14 @@ class FFGeometryEngine(GeometryEngine):
     """
 
 
-    def propose(self, new_to_old_atom_map, new_system, old_system, old_positions):
+    def propose(self, topology_proposal):
         """
         Propose a new geometry for the appropriate atoms using forcefield parameters
 
         Arguments
         ----------
-        new_to_old_atom_map : dict
-            mapping of the new to old atoms
-        new_system : simtk.openmm.System
-            The new system object
-        old_system : simtk.openmm.System
-            The old system object
-        old_positions : [m, 3] np.array of floats
-            The positions of the old m atoms
+        topology_proposal : TopologyProposal object
+            Object containing the relevant results of a topology proposal
 
         Returns
         -------

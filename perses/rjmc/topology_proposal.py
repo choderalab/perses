@@ -67,6 +67,10 @@ class TopologyProposal(object):
         List of indices of the unique new atoms
     unique_old_atoms : list of int
         List of indices of the unique old atoms
+    natoms_new : int
+        Number of atoms in the new system
+    natoms_old : int
+        Number of atoms in the old system
     metadata : dict
         additional information of interest about the state
     """
@@ -116,6 +120,12 @@ class TopologyProposal(object):
     @property
     def unique_old_atoms(self):
         return self._unique_old_atoms
+    @property
+    def n_atoms_new(self):
+        return self._new_system.getNumParticles()
+    @property
+    def n_atoms_old(self):
+        return self._old_system.getNumParticles()
     @property
     def metadata(self):
         return self.metadata
@@ -167,6 +177,10 @@ class SmallMoleculeTopologyProposal(TopologyProposal):
         List of indices of the unique new atoms
     unique_old_atoms : list of int
         List of indices of the unique old atoms
+    natoms_new : int
+        Number of atoms in the new system
+    natoms_old : int
+        Number of atoms in the old system
     molecule_smiles : string
         SMILES string of the current molecule
     metadata : dict
