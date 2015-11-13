@@ -17,10 +17,108 @@ try:
 except ImportError:
     from commands import getoutput  # If python 2
 
-TopologyProposal = namedtuple('TopologyProposal',
-                              ['new_system', 'new_topology', 'logp_proposal', 'new_to_old_atom_map', 'metadata'])
+
 SamplerState = namedtuple('SamplerState', ['topology', 'system', 'positions', 'metadata'])
 
+
+class TopologyProposal(object):
+    """
+    This is a container class with convenience methods to access various objects needed
+    for a topology proposal
+
+    Arguments
+    ---------
+    new_topology : simtk.openmm.Topology object
+        openmm Topology representing the proposed new system
+    new_system : simtk.openmm.System object
+        openmm System of the newly proposed state
+    old_topology : simtk.openmm.Topology object
+        openmm Topology of the current system
+    old_system : simtk.openmm.System object
+        openm System of the current state
+    old_positions : [n, 3] np.array, Quantity
+        positions of the old system
+    logp_proposal : float
+        log probability of the proposal
+    new_to_old_atom_map : dict
+        {new_atom_idx : old_atom_idx} map for the two systems
+    metadata : dict
+        additional information of interest about the state
+
+    Properties
+    ----------
+    new_topology : simtk.openmm.Topology object
+        openmm Topology representing the proposed new system
+    new_system : simtk.openmm.System object
+        openmm System of the newly proposed state
+    old_topology : simtk.openmm.Topology object
+        openmm Topology of the current system
+    old_system : simtk.openmm.System object
+        openm System of the current state
+    old_positions : [n, 3] np.array, Quantity
+        positions of the old system
+    logp_proposal : float
+        log probability of the proposal
+    new_to_old_atom_map : dict
+        {new_atom_idx : old_atom_idx} map for the two systems
+    old_to_new_atom_map : dict
+        {old_atom_idx : new_atom_idx} map for the two systems
+    unique_new_atoms : list of int
+        List of indices of the unique new atoms
+    unique_old_atoms : list of int
+        List of indices of the unique old atoms
+    metadata : dict
+        additional information of interest about the state
+    """
+
+    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
+                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
+
+        self._new_topology = new_topology
+        self._new_system = new_system
+        self._old_topology = old_topology
+        self._old_system = old_system
+        self._old_positions = old_positions
+        self._logp_proposal = logp_proposal
+        self._new_to_old_atom_map = new_to_old_atom_map
+        self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
+        self._unique_new_atoms = [atom for atom in range(self._new_system.getNumParticles()) if atom not in self._new_to_old_atom_map.keys()]
+        self._unique_old_atoms = [atom for atom in range(self._old_system.getNumParticles()) if atom not in self._new_to_old_atom_map.values()]
+        self._metadata = metadata
+
+    @property
+    def new_topology(self):
+        return self._new_topology
+    @property
+    def new_system(self):
+        return self._new_system
+    @property
+    def old_topology(self):
+        return self._old_topology
+    @property
+    def old_system(self):
+        return self._old_system
+    @property
+    def old_positions(self):
+        return self._old_positions
+    @property
+    def logp_proposal(self):
+        return self._logp_proposal
+    @property
+    def new_to_old_atom_map(self):
+        return self._new_to_old_atom_map
+    @property
+    def old_to_new_atom_map(self):
+        return self._old_to_new_atom_map
+    @property
+    def unique_new_atoms(self):
+        return self._unique_new_atoms
+    @property
+    def unique_old_atoms(self):
+        return self._unique_old_atoms
+    @property
+    def metadata(self):
+        return self.metadata
 
 class Transformation(object):
     """
