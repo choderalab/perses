@@ -61,25 +61,6 @@ def align_molecules(mol1, mol2):
     return new_to_old_atom_mapping
 
 
-def align_molecules(mol1, mol2):
-    """
-    MCSS two OEmols. Return the mapping of new : old atoms
-    """
-    mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-    atomexpr = oechem.OEExprOpts_AtomicNumber
-    bondexpr = 0
-    mcs.Init(mol1, atomexpr, bondexpr)
-    mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
-    unique = True
-    matches = [match for match in mcs.Match(mol2, unique) ]
-    match = matches[0]
-    new_to_old_atom_mapping = {}
-    for matchpair in match.GetAtoms():
-        old_index = matchpair.pattern.GetIdx()
-        new_index = matchpair.target.GetIdx()
-        new_to_old_atom_mapping[new_index] = old_index
-    return new_to_old_atom_mapping
-
 def test_run_geometry_engine():
     """
     Run the geometry engine a few times to make sure that it actually runs
@@ -92,8 +73,8 @@ def test_run_geometry_engine():
     molecule2 = generate_initial_molecule(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1, _ = oemol_to_openmm_system(molecule1, molecule_name_1)
-    sys2, pos2, _ = oemol_to_openmm_system(molecule2, molecule_name_2)
+    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
+    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
 
     #copy the positions to openmm manually (not sure what happens to units otherwise)
     for atom in molecule1.GetAtoms():
@@ -112,8 +93,12 @@ def test_run_geometry_engine():
 
     #propose(self, new_to_old_atom_map, new_system, old_system, old_positions)
     import perses.rjmc.geometry as geometry
+    import perses.rjmc.topology_proposal as topology_proposal
+
+    sm_top_proposal = topology_proposal.SmallMoleculeTopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
+                                                                      old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
 
     geometry_engine = geometry.FFGeometryEngine({'test': 'true'})
 
     for i in range(10):
-        geometry_engine.propose(new_to_old_atom_mapping, sys2, sys1, pos1)
+        geometry_engine.propose(sm_top_proposal)
