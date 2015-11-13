@@ -27,12 +27,13 @@ class AlchemicalEliminationEngine(object):
 
     Create some alchemical systems
 
-    >>> alchemical_system_insert = make_alchemical_system(testsystem.system, topology_proposal, direction='create')
-    >>> alchemical_system_delete = make_alchemical_system(testsystem.system, topology_proposal, direction='delete')
+    >>> engine = AlchemicalEliminationEngine()
+    >>> alchemical_system_insert = engine.make_alchemical_system(testsystem.system, topology_proposal, direction='create')
+    >>> alchemical_system_delete = engine.make_alchemical_system(testsystem.system, topology_proposal, direction='delete')
 
     """
 
-    def __init__(self, metadata):
+    def __init__(self, metadata=None):
         pass
 
 

@@ -158,16 +158,17 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
     >>> temperature = 300.0 * unit.kelvin
-    >>> functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda**0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda**2' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, mode='insert')
+    >>> functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
+    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, mode='delete')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
     >>> context.setPositions(testsystem.positions)
+    >>> # Minimize
+    >>> openmm.LocalEnergyMinimizer.minimize(context)
     >>> # Run the integrator
     >>> ncmc_integrator.step(1)
     >>> # Retrieve the log acceptance probability
     >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
-
 
     """
 
@@ -207,7 +208,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         if mode not in ['insert', 'delete']:
             raise Exception("mode must be one of ['insert', 'delete']; was '%s' instead" % mode)
 
-        super(NCMCAlchemicalIntegrator, self).__init__(timestep)
+        super(NCMCAlchemicalIntegrator, self).__init__(timestep * (nsteps+1))
 
         # Make a list of parameters in the system
         system_parameters = list()
@@ -221,6 +222,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addGlobalVariable('initial_total_energy', 0.0) # initial total energy (kinetic + potential)
         self.addGlobalVariable('final_total_energy', 0.0) # final total energy (kinetic + potential)
         self.addGlobalVariable('log_ncmc_acceptance_probability', 0.0) # log of NCMC acceptance probability
+        self.addGlobalVariable('dti', timestep.in_unit_system(unit.md_unit_system))
 
         if mode == 'insert':
             self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 to 1 during course of integrating internal 'nsteps' of dynamics
@@ -237,22 +239,41 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         # Constrain initial positions and velocities.
         self.addConstrainPositions()
         self.addConstrainVelocities()
+        self.addUpdateContextState()
 
         # Store initial total energy.
         self.addComputeSum("kinetic", "0.5*m*v*v")
         self.addComputeGlobal('initial_total_energy', 'kinetic + energy')
+        self.addComputeGlobal('dti', 'dt/%f' % nsteps)
+
+        # Set initial parameters.
+        if mode == 'insert':
+            self.addComputeGlobal('lambda', '0.0')
+        elif mode == 'delete':
+            self.addComputeGlobal('lambda', '1.0')
+
+        # Update Context parameters according to provided functions.
+        for context_parameter in functions:
+            if context_parameter in system_parameters:
+                self.addComputeGlobal(context_parameter, functions[context_parameter])
 
         #
         # Initial Velocity Verlet propagation step
         #
 
-        self.addUpdateContextState()
-        self.addComputePerDof("v", "v+0.5*dt*f/m")
-        self.addComputePerDof("x", "x+dt*v")
-        self.addComputePerDof("x1", "x")
-        self.addConstrainPositions()
-        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
-        self.addConstrainVelocities()
+        if (nsteps > 0):
+            self.addComputePerDof("v", "v+0.5*dti*f/m")
+            self.addComputePerDof("x", "x+dti*v")
+            self.addComputePerDof("x1", "x")
+            self.addConstrainPositions()
+            self.addComputePerDof("v", "v+0.5*dti*f/m+(x-x1)/dti")
+            self.addConstrainVelocities()
+
+
+        if (nsteps == 0):
+            delta_lambda = 1.0
+        else:
+            delta_lambda = 1.0/nsteps
 
         # Unroll loop over NCMC steps.
         for step in range(nsteps):
@@ -260,15 +281,10 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             # Alchemical perturbation step
             #
 
-            if nsteps==1:
-                delta_lambda = 1.0
-            else:
-                delta_lambda = float(step)/float(nsteps-1)
-
             if mode == 'insert':
-                self.addComputeGlobal('lambda', 'lambda + %f' % delta_lambda)
+                self.addComputeGlobal('lambda', '%f' % (delta_lambda * (step+1)))
             elif mode == 'delete':
-                self.addComputeGlobal('lambda', 'lambda - %f' % delta_lambda)
+                self.addComputeGlobal('lambda', '%f' % (delta_lambda * (nsteps - step - 1)))
 
             # Update Context parameters according to provided functions.
             for context_parameter in functions:
@@ -279,12 +295,11 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             # Velocity Verlet propagation step
             #
 
-            self.addUpdateContextState()
-            self.addComputePerDof("v", "v+0.5*dt*f/m")
-            self.addComputePerDof("x", "x+dt*v")
+            self.addComputePerDof("v", "v+0.5*dti*f/m")
+            self.addComputePerDof("x", "x+dti*v")
             self.addComputePerDof("x1", "x")
             self.addConstrainPositions()
-            self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
+            self.addComputePerDof("v", "v+0.5*dti*f/m+(x-x1)/dti")
             self.addConstrainVelocities()
 
         # Store final total energy.
