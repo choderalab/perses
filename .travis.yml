@@ -23,6 +23,8 @@ install:
   - echo $TRAVIS_REPO_SLUG
   - if [ "$TRAVIS_REPO_SLUG" -eq "$REPO_SLUG" ]; then openssl aes-256-cbc -K $encrypted_514505261e50_key -iv $encrypted_514505261e50_iv -in oe_license.txt.enc -out $HOME/oe_license.txt -d; fi
   - if [ "$TRAVIS_REPO_SLUG" -ne "$REPO_SLUG" ]; then echo "OpenEye license will not be installed in forks."; fi
+  - ls -ltr $HOME/oe_license.txt
+  - md5 $HOME/oe_license.txt
 
 script:
   - conda config --add channels ${ORGNAME}
