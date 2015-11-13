@@ -13,7 +13,7 @@ requirements:
   build:
     - python
     - setuptools
-    - openmm >=7.0
+    - openmm-dev
     - numpy
     - scipy
     - openmoltools-dev
@@ -22,7 +22,7 @@ requirements:
 
   run:
     - python
-    - openmm >=7.0
+    - openmm-dev
     - numpy
     - scipy
     - openmoltools-dev
