@@ -19,6 +19,8 @@ requirements:
     - openmoltools-dev
     - alchemy >=1.1.3
     - numexpr
+    - openmmtools
+    - pymbar
 
   run:
     - python
@@ -28,11 +30,14 @@ requirements:
     - openmoltools-dev
     - alchemy >=1.1.3
     - numexpr
+    - openmmtools
+    - pymbar
 
 test:
   requires:
     - nose
     - openmmtools
+    - pymbar
   imports:
     - perses
 
