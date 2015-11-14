@@ -441,8 +441,8 @@ class SingleSmallMolecule(SmallMoleculeTransformation):
         _, tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(proposed_molecule,
                                                                         tripos_mol2_filename=molecule_name + '.tripos.mol2',
                                                                         conformer=0, residue_name=molecule_name)
-        gaff_mol2, frcmod = openmoltools.openeye.run_antechamber(molecule_name, tripos_mol2_filename)
-        prmtop_file, inpcrd_file = openmoltools.utils.run_tleap(molecule_name, gaff_mol2, frcmod)
+        gaff_mol2, frcmod = openmoltools.amber.run_antechamber(molecule_name, tripos_mol2_filename)
+        prmtop_file, inpcrd_file = openmoltools.amber.run_tleap(molecule_name, gaff_mol2, frcmod)
 
         #read in the prmtop
         prmtop = app.AmberPrmtopFile(prmtop_file)
@@ -535,7 +535,7 @@ class SmallMoleculeProteinComplex(SmallMoleculeTransformation):
         #run antechamber to get parameters for molecule
         ligand_name = 'ligand'
         _ , tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(proposed_molecule, tripos_mol2_filename=ligand_name + '.tripos.mol2', conformer=0, residue_name=ligand_name)
-        gaff_mol2, frcmod = openmoltools.openeye.run_antechamber(ligand_name, tripos_mol2_filename)
+        gaff_mol2, frcmod = openmoltools.amber.run_antechamber(ligand_name, tripos_mol2_filename)
 
         #now get ready to run tleap to generate prmtop
         tleap_input = self._gen_tleap_input(gaff_mol2, frcmod, "complex")
