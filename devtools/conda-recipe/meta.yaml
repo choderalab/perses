@@ -21,6 +21,7 @@ requirements:
     - numexpr
     - openmmtools
     - pymbar
+    - autograd
 
   run:
     - python
@@ -32,6 +33,7 @@ requirements:
     - numexpr
     - openmmtools
     - pymbar
+    - autograd
 
 test:
   requires:

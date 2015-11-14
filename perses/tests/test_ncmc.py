@@ -111,12 +111,8 @@ def test_ncmc_harmonic_oscillator():
     w_f = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, mode='insert')
     w_r = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, mode='delete')
 
-    print w_f
-    print w_r
-
     from pymbar import BAR
     [df, ddf] = BAR(w_f, w_r, method='self-consistent-iteration')
-    print 'Delta F = %f +- %f kT' % (df, ddf)
     if (abs(df) > NSIGMA_MAX * ddf):
         raise Exception('Delta F = %f +- %f kT; should be within %f sigma of 0' % (df, ddf, NSIGMA_MAX))
 
