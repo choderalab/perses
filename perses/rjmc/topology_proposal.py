@@ -128,7 +128,7 @@ class TopologyProposal(object):
         return self._old_system.getNumParticles()
     @property
     def metadata(self):
-        return self.metadata
+        return self._metadata
 
 class SmallMoleculeTopologyProposal(TopologyProposal):
     """
