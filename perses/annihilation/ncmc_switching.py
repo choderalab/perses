@@ -202,9 +202,6 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         * Add a global variable that causes termination of future calls to step(1) after the first
 
         """
-        if (nsteps < 1):
-            raise Exception("'nsteps' must be >= 1")
-
         if mode not in ['insert', 'delete']:
             raise Exception("mode must be one of ['insert', 'delete']; was '%s' instead" % mode)
 

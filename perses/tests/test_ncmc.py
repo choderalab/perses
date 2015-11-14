@@ -12,6 +12,7 @@ __author__ = 'John D. Chodera'
 from simtk import openmm, unit
 import math
 import numpy as np
+from functools import partial
 
 ################################################################################
 # CONSTANTS
@@ -68,13 +69,10 @@ def collect_switching_data(system, positions, functions, temperature, collision_
 
     return work_n
 
-
-def test_ncmc_harmonic_oscillator():
+def check_harmonic_oscillator_ncmc(ncmc_nsteps=50):
     """
     Test NCMC switching of a 3D harmonic oscillator.
-    In this test, the oscillator center is dragged in space, and we check the computed free energy difference with BAR,
-    which should be 0.
-
+    In this test, the oscillator center is dragged in space, and we check the computed free energy difference with BAR, which should be 0.
     """
     # Parameters for 3D harmonic oscillator
     mass = 39.948 * unit.amu # mass of particle (argon)
@@ -105,17 +103,26 @@ def test_ncmc_harmonic_oscillator():
     # Set the positions at the origin.
     positions = unit.Quantity(np.zeros([1, 3], np.float32), unit.angstroms)
 
-    # Run NCMC switching trials where the spring center is switched with lambda: 0 -> 1.
+    # Run NCMC switching trials where the spring center is switched with lambda: 0 -> 1 over a finite number of steps.
     functions = { 'x0' : 'lambda' } # drag spring center x0
 
-    w_f = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, mode='insert')
-    w_r = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, mode='delete')
+    w_f = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ncmc_nsteps=ncmc_nsteps, mode='insert')
+    w_r = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ncmc_nsteps=ncmc_nsteps, mode='delete')
 
     from pymbar import BAR
     [df, ddf] = BAR(w_f, w_r, method='self-consistent-iteration')
     if (abs(df) > NSIGMA_MAX * ddf):
-        raise Exception('Delta F = %f +- %f kT; should be within %f sigma of 0' % (df, ddf, NSIGMA_MAX))
+        raise Exception('Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0' % (ncmc_nsteps, df, ddf, NSIGMA_MAX))
 
+def test_ncmc_harmonic_oscillator():
+    """
+    Check NCMC switching works for 0, 1, and 50 switching steps.
+
+    """
+    for ncmc_nsteps in [0, 1, 50]:
+        f = partial(check_harmonic_oscillator_ncmc, ncmc_nsteps)
+        f.description = "Testing NCMC switching using harmonic oscillator and nsteps=%d" % ncmc_nsteps
+        yield f
 
 if __name__ == '__main__':
     test_ncmc_harmonic_oscillator()
