@@ -1,5 +1,5 @@
 """
-Unit tests for NCMC switching engine.
+Unit tests for NCMC integrator.
 
 """
 
@@ -90,7 +90,7 @@ def check_harmonic_oscillator_ncmc(ncmc_nsteps=50):
     timestep = tau / 20.0
     platform = openmm.Platform.getPlatformByName(platform_name)
 
-    # Create a 3D harmonic oscillator with context parameter.
+    # Create a 3D harmonic oscillator with context parameter controlling center of oscillator.
     system = openmm.System()
     system.addParticle(mass)
     energy_expression = '(K/2.0) * ((x-x0)^2 + y^2 + z^2);'
@@ -114,9 +114,9 @@ def check_harmonic_oscillator_ncmc(ncmc_nsteps=50):
     if (abs(df) > NSIGMA_MAX * ddf):
         raise Exception('Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0' % (ncmc_nsteps, df, ddf, NSIGMA_MAX))
 
-def test_ncmc_harmonic_oscillator():
+def test_ncmc_integrator_harmonic_oscillator():
     """
-    Check NCMC switching works for 0, 1, and 50 switching steps.
+    Check NCMC integrator switching works for 0, 1, and 50 switching steps with a harmonic oscillator.
 
     """
     for ncmc_nsteps in [0, 1, 50]:
