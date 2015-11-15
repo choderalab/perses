@@ -18,7 +18,6 @@ import logging
 import copy
 import perses.rjmc.topology_proposal as topology_proposal
 import perses.bias.bias_engine as bias_engine
-import perses.annihilation.alchemical_engine as alchemical_engine_library
 import perses.rjmc.geometry as geometry
 import perses.annihilation.ncmc_switching as ncmc_switching
 
@@ -143,7 +142,6 @@ def run():
         'lambda_angles' : 'sqrt(lambda)',
         'lambda_torsions' : 'lambda'
         }
-    ncmc_engine = ncmc_switching.NCMCEngine(topology_proposal, temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
 
     #initialize GeometryEngine
     geometry_metadata = {'data': 0} #currently ignored
@@ -171,6 +169,7 @@ def run():
         # Perform alchemical transformation.
 
         # Alchemically eliminate atoms being removed.
+        ncmc_engine = ncmc_switching.NCMCEngine(top_proposal, temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
 
         #print(old_alchemical_system)
         [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(positions, direction='delete')
