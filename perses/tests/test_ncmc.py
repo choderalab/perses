@@ -24,7 +24,7 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 # TESTS
 ################################################################################
 
-def collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ghmc_nsteps=200, ncmc_nsteps=50, niterations=20, mode='insert'):
+def collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ghmc_nsteps=200, ncmc_nsteps=50, niterations=20, direction='insert'):
     """
     Collect switching data.
 
@@ -40,7 +40,7 @@ def collect_switching_data(system, positions, functions, temperature, collision_
     integrator.addIntegrator(ghmc_integrator)
     # Create an NCMC switching integrator.
     from perses.annihilation import NCMCAlchemicalIntegrator
-    ncmc_integrator = NCMCAlchemicalIntegrator(temperature, system, functions, mode=mode, nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
+    ncmc_integrator = NCMCAlchemicalIntegrator(temperature, system, functions, direction=direction, nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
     integrator.addIntegrator(ncmc_integrator)
 
     # Create Context
@@ -51,12 +51,12 @@ def collect_switching_data(system, positions, functions, temperature, collision_
     for iteration in range(niterations):
         # Equilibrate
         integrator.setCurrentIntegrator(0)
-        if mode == 'insert':
+        if direction == 'insert':
             context.setParameter('x0', 0)
-        elif mode == 'delete':
+        elif direction == 'delete':
             context.setParameter('x0', 1)
         else:
-            raise Exception("mode '%s' unknown; must be 'insert' or 'delete'." % mode)
+            raise Exception("direction '%s' unknown; must be 'insert' or 'delete'." % direction)
         integrator.step(ghmc_nsteps)
 
         # Switch
@@ -106,8 +106,8 @@ def check_harmonic_oscillator_ncmc(ncmc_nsteps=50):
     # Run NCMC switching trials where the spring center is switched with lambda: 0 -> 1 over a finite number of steps.
     functions = { 'x0' : 'lambda' } # drag spring center x0
 
-    w_f = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ncmc_nsteps=ncmc_nsteps, mode='insert')
-    w_r = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ncmc_nsteps=ncmc_nsteps, mode='delete')
+    w_f = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ncmc_nsteps=ncmc_nsteps, direction='insert')
+    w_r = collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ncmc_nsteps=ncmc_nsteps, direction='delete')
 
     from pymbar import BAR
     [df, ddf] = BAR(w_f, w_r, method='self-consistent-iteration')
@@ -121,7 +121,7 @@ def test_ncmc_harmonic_oscillator():
     """
     for ncmc_nsteps in [0, 1, 50]:
         f = partial(check_harmonic_oscillator_ncmc, ncmc_nsteps)
-        f.description = "Testing NCMC switching using harmonic oscillator and nsteps=%d" % ncmc_nsteps
+        f.description = "Testing NCMC switching using harmonic oscillator with %d NCMC steps" % ncmc_nsteps
         yield f
 
 if __name__ == '__main__':
