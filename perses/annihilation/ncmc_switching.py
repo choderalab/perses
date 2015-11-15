@@ -25,20 +25,21 @@ class NCMCEngine(object):
     >>> from perses.rjmc.topology_proposal import TopologyProposal
     >>> new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
     >>> topology_proposal = TopologyProposal(old_system=testsystem.system, old_topology=testsystem.topology, old_positions=testsystem.positions, new_system=testsystem.system, new_topology=testsystem.topology, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
-    >>> from perses.annihilation.alchemical_engine import AlchemicalEliminationEngine
-    >>> alchemical_engine = AlchemicalEliminationEngine()
-    >>> alchemical_system = alchemical_engine.make_alchemical_system(testsystem.system, topology_proposal, direction='delete')
-    >>> ncmc_engine = NCMCEngine(temperature=300.0*unit.kelvin, functions=default_functions, nsteps=50, timestep=1.0*unit.femtoseconds)
-    >>> [final_positions, logP] = ncmc_engine.integrate(alchemical_system, testsystem.positions, direction='delete')
+    >>> ncmc_engine = NCMCEngine(topology_proposal, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=50, timestep=1.0*unit.femtoseconds)
+    >>> positions = testsystem.positions
+    >>> [positions, logP_delete] = ncmc_engine.integrate(positions, direction='delete')
+    >>> [positions, logP_insert] = ncmc_engine.integrate(positions, direction='insert')
 
     """
 
-    def __init__(self, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=1, timestep=1.0*unit.femtoseconds, constraint_tolerance=None):
+    def __init__(self, topology_proposal, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=1, timestep=1.0*unit.femtoseconds, constraint_tolerance=None):
         """
         This is the base class for NCMC switching between two different systems.
 
         Arguments
         ---------
+        topology_proposal : TopologyProposal
+            Contains old topology, proposed new topology, and atom mapping
         temperature : simtk.unit.Quantity with units compatible with kelvin
             The temperature at which switching is to be run
         functions : dict of str:str, optional, default=default_functions
@@ -52,11 +53,17 @@ class NCMCEngine(object):
             If not None, this relative constraint tolerance is used for position and velocity constraints.
 
         """
+        self.topology_proposal = topology_proposal
         self.temperature = temperature
         self.functions = copy.deepcopy(functions)
         self.nsteps = nsteps
         self.timestep = timestep
         self.constraint_tolerance = constraint_tolerance
+
+        # TODO: Create alchemical systems.
+        self._alchemical_systems = dict()
+        for direction in ['delete', 'insert']:
+            self._alchemical_systems[direction] = self.make_alchemical_system(topology_proposal, direction=direction)
 
     def _getAvailableParameters(self, system):
         """
@@ -81,14 +88,52 @@ class NCMCEngine(object):
                     parameters.append(force.getGlobalParameterName(parameter_index))
         return parameters
 
-    def integrate(self, alchemical_system, initial_positions, direction='insert', platform=None):
+    def make_alchemical_system(self, topology_proposal, direction='insert'):
+        """
+        Generate an alchemically-modified system at the correct atoms
+        based on the topology proposal
+
+        Arguments
+        ---------
+        topology_proposal : TopologyProposal namedtuple
+            Contains old topology, proposed new topology, and atom mapping
+        direction : str, optional, default='insert'
+            Direction of topology proposal to use for identifying alchemical atoms.
+
+        Returns
+        -------
+        alchemical_system : openmm.System object
+            The system with appropriate atoms alchemically modified
+
+        """
+        atom_map = topology_proposal.new_to_old_atom_map
+
+        #take the unique atoms as those not in the {new_atom : old_atom} atom map
+        if direction == 'delete':
+            unmodified_system = topology_proposal.old_system
+            alchemical_atoms = [atom for atom in range(unmodified_system.getNumParticles()) if atom not in atom_map.values()]
+        elif direction == 'insert':
+            unmodified_system = topology_proposal.new_system
+            alchemical_atoms = [atom for atom in range(unmodified_system.getNumParticles()) if atom not in atom_map.keys()]
+        else:
+            raise Exception("direction must be one of ['delete', 'insert']; found '%s' instead" % direction)
+
+        logging.debug(alchemical_atoms)
+
+        # Create an alchemical factory.
+        from alchemy import AbsoluteAlchemicalFactory
+        alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
+
+        # Return the alchemically-modified system.
+        alchemical_system = alchemical_factory.createPerturbedSystem()
+        return alchemical_system
+
+    def integrate(self, initial_positions, direction='insert', platform=None):
         """
         Performs NCMC switching according to the provided
 
         Parameters
         ----------
-        alchemical_system : simtk.openmm.System object
-            alchemically-modified system with atoms to be eliminated
         initial_positions : [n, 3] numpy.ndarray
             positions of the atoms in the old system
         direction : str, optional, default='insert'
@@ -109,7 +154,8 @@ class NCMCEngine(object):
         if direction not in ['insert', 'delete']:
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
-        # Make a list of available context parameters.
+        # Select alchemical system to use.
+        alchemical_system = self._alchemical_systems[direction]
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
