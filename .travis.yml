@@ -11,7 +11,10 @@ addons:
       - csh
       - g++-multilib
       - gcc-multilib
-
+branches:
+  only:
+    - master
+    
 install:
   - source devtools/travis-ci/install.sh
   - export PYTHONUNBUFFERED=true
