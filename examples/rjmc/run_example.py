@@ -18,7 +18,6 @@ import logging
 import copy
 import perses.rjmc.topology_proposal as topology_proposal
 import perses.bias.bias_engine as bias_engine
-import perses.annihilation.alchemical_engine as alchemical_engine_library
 import perses.rjmc.geometry as geometry
 import perses.annihilation.ncmc_switching as ncmc_switching
 
@@ -133,10 +132,6 @@ def run():
     #initialize weight calculation engine, along with its metadata
     bias_calculator = bias_engine.MinimizedPotentialBias(smiles_list)
 
-    #Initialize AlchemicalEliminationEngine
-    alchemical_metadata = {'data':0} #ignored
-    alchemical_engine = alchemical_engine_library.AlchemicalEliminationEngine(alchemical_metadata)
-
     #Initialize NCMC engines.
     switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
     switching_nsteps = 10 # number of steps to use in NCMC integration
@@ -176,9 +171,8 @@ def run():
 
         # Alchemically eliminate atoms being removed.
 
-        old_alchemical_system = alchemical_engine.make_alchemical_system(system, top_proposal, direction='delete')
         #print(old_alchemical_system)
-        [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(old_alchemical_system, positions, direction='delete')
+        [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(top_proposal, positions, direction='delete')
         #print(ncmc_old_positions)
         #print(ncmc_elimination_logp)
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
@@ -186,8 +180,7 @@ def run():
         geometry_proposal = geometry_engine.propose(top_proposal.new_to_old_atom_map, top_proposal.new_system, system, ncmc_old_positions)
 
         # Alchemically introduce new atoms.
-        new_alchemical_system = alchemical_engine.make_alchemical_system(top_proposal.new_system, top_proposal, direction='insert')
-        [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(new_alchemical_system, geometry_proposal.new_positions, direction='insert')
+        [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(top_proposal, geometry_proposal.new_positions, direction='insert')
         #print(ncmc_new_positions)
         #print(ncmc_introduction_logp)
 

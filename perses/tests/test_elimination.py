@@ -49,9 +49,7 @@ def check_alchemical_elimination(ncmc_nsteps=50):
     topology_proposal = TopologyProposal(old_system=testsystem.system, old_topology=testsystem.topology, old_positions=testsystem.positions, new_system=testsystem.system, new_topology=testsystem.topology, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
 
     # Initialize engine
-    from perses.annihilation.alchemical_engine import AlchemicalEliminationEngine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    engine = AlchemicalEliminationEngine()
     ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps)
 
     niterations = 20 # number of round-trip switching trials
@@ -63,12 +61,10 @@ def check_alchemical_elimination(ncmc_nsteps=50):
         positions = simulate(testsystem.system, positions)
 
         # Delete atoms
-        alchemical_system_delete = engine.make_alchemical_system(testsystem.system, topology_proposal, direction='delete')
-        [positions, logP_delete] = ncmc_engine.integrate(alchemical_system_delete, positions, direction='delete')
+        [positions, logP_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
 
         # Insert atoms
-        alchemical_system_insert = engine.make_alchemical_system(testsystem.system, topology_proposal, direction='insert')
-        [positions, logP_insert] = ncmc_engine.integrate(alchemical_system_insert, positions, direction='insert')
+        [positions, logP_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
 
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
@@ -98,4 +94,3 @@ def test_alchemical_elimination():
         f = partial(check_alchemical_elimination, ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
-

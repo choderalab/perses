@@ -1,2 +1,1 @@
-from alchemical_engine import AlchemicalEliminationEngine
 from ncmc_switching import NCMCEngine, NCMCAlchemicalIntegrator
