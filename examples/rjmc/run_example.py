@@ -142,6 +142,7 @@ def run():
         'lambda_angles' : 'sqrt(lambda)',
         'lambda_torsions' : 'lambda'
         }
+    ncmc_engine = ncmc_switching.NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
 
     #initialize GeometryEngine
     geometry_metadata = {'data': 0} #currently ignored
@@ -169,10 +170,9 @@ def run():
         # Perform alchemical transformation.
 
         # Alchemically eliminate atoms being removed.
-        ncmc_engine = ncmc_switching.NCMCEngine(top_proposal, temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
 
         #print(old_alchemical_system)
-        [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(positions, direction='delete')
+        [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(top_proposal, positions, direction='delete')
         #print(ncmc_old_positions)
         #print(ncmc_elimination_logp)
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
@@ -180,7 +180,7 @@ def run():
         geometry_proposal = geometry_engine.propose(top_proposal.new_to_old_atom_map, top_proposal.new_system, system, ncmc_old_positions)
 
         # Alchemically introduce new atoms.
-        [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(geometry_proposal.new_positions, direction='insert')
+        [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(top_proposal, geometry_proposal.new_positions, direction='insert')
         #print(ncmc_new_positions)
         #print(ncmc_introduction_logp)
 

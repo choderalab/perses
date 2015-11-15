@@ -25,21 +25,19 @@ class NCMCEngine(object):
     >>> from perses.rjmc.topology_proposal import TopologyProposal
     >>> new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
     >>> topology_proposal = TopologyProposal(old_system=testsystem.system, old_topology=testsystem.topology, old_positions=testsystem.positions, new_system=testsystem.system, new_topology=testsystem.topology, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
-    >>> ncmc_engine = NCMCEngine(topology_proposal, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=50, timestep=1.0*unit.femtoseconds)
+    >>> ncmc_engine = NCMCEngine(temperature=300.0*unit.kelvin, functions=default_functions, nsteps=50, timestep=1.0*unit.femtoseconds)
     >>> positions = testsystem.positions
-    >>> [positions, logP_delete] = ncmc_engine.integrate(positions, direction='delete')
-    >>> [positions, logP_insert] = ncmc_engine.integrate(positions, direction='insert')
+    >>> [positions, logP_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
+    >>> [positions, logP_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
 
     """
 
-    def __init__(self, topology_proposal, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=1, timestep=1.0*unit.femtoseconds, constraint_tolerance=None):
+    def __init__(self, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=1, timestep=1.0*unit.femtoseconds, constraint_tolerance=None):
         """
         This is the base class for NCMC switching between two different systems.
 
         Arguments
         ---------
-        topology_proposal : TopologyProposal
-            Contains old topology, proposed new topology, and atom mapping
         temperature : simtk.unit.Quantity with units compatible with kelvin
             The temperature at which switching is to be run
         functions : dict of str:str, optional, default=default_functions
@@ -53,17 +51,11 @@ class NCMCEngine(object):
             If not None, this relative constraint tolerance is used for position and velocity constraints.
 
         """
-        self.topology_proposal = topology_proposal
         self.temperature = temperature
         self.functions = copy.deepcopy(functions)
         self.nsteps = nsteps
         self.timestep = timestep
         self.constraint_tolerance = constraint_tolerance
-
-        # TODO: Create alchemical systems.
-        self._alchemical_systems = dict()
-        for direction in ['delete', 'insert']:
-            self._alchemical_systems[direction] = self.make_alchemical_system(topology_proposal, direction=direction)
 
     def _getAvailableParameters(self, system):
         """
@@ -126,12 +118,14 @@ class NCMCEngine(object):
         alchemical_system = alchemical_factory.createPerturbedSystem()
         return alchemical_system
 
-    def integrate(self, initial_positions, direction='insert', platform=None):
+    def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None):
         """
         Performs NCMC switching according to the provided
 
         Parameters
         ----------
+        topology_proposal : TopologyProposal
+            Contains old topology, proposed new topology, and atom mapping
         initial_positions : [n, 3] numpy.ndarray
             positions of the atoms in the old system
         direction : str, optional, default='insert'
@@ -152,8 +146,8 @@ class NCMCEngine(object):
         if direction not in ['insert', 'delete']:
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
-        # Select alchemical system to use.
-        alchemical_system = self._alchemical_systems[direction]
+        # Create alchemical system.
+        alchemical_system = self.make_alchemical_system(topology_proposal, direction=direction)
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
@@ -179,7 +173,8 @@ class NCMCEngine(object):
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         logP = integrator.getLogAcceptanceProbability()
         # Clean up.
-        del context, integrator
+        del context, integrator, alchemical_system
+
         # Return
         return [final_positions, logP]
 

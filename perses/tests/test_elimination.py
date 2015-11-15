@@ -50,7 +50,7 @@ def check_alchemical_elimination(ncmc_nsteps=50):
 
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    ncmc_engine = NCMCEngine(topology_proposal, nsteps=ncmc_nsteps)
+    ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps)
 
     niterations = 20 # number of round-trip switching trials
     positions = testsystem.positions
@@ -61,10 +61,10 @@ def check_alchemical_elimination(ncmc_nsteps=50):
         positions = simulate(testsystem.system, positions)
 
         # Delete atoms
-        [positions, logP_delete] = ncmc_engine.integrate(positions, direction='delete')
+        [positions, logP_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
 
         # Insert atoms
-        [positions, logP_insert] = ncmc_engine.integrate(positions, direction='insert')
+        [positions, logP_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
 
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
