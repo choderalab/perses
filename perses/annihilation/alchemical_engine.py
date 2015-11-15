@@ -28,7 +28,7 @@ class AlchemicalEliminationEngine(object):
     Create some alchemical systems
 
     >>> engine = AlchemicalEliminationEngine()
-    >>> alchemical_system_insert = engine.make_alchemical_system(testsystem.system, topology_proposal, direction='create')
+    >>> alchemical_system_create = engine.make_alchemical_system(testsystem.system, topology_proposal, direction='insert')
     >>> alchemical_system_delete = engine.make_alchemical_system(testsystem.system, topology_proposal, direction='delete')
 
     """
@@ -37,7 +37,7 @@ class AlchemicalEliminationEngine(object):
         pass
 
 
-    def make_alchemical_system(self, unmodified_system, topology_proposal, direction='create'):
+    def make_alchemical_system(self, unmodified_system, topology_proposal, direction='insert'):
         """
         Generate an alchemically-modified system at the correct atoms
         based on the topology proposal
@@ -63,15 +63,15 @@ class AlchemicalEliminationEngine(object):
         #take the unique atoms as those not in the {new_atom : old_atom} atom map
         if direction == 'delete':
             alchemical_atoms = [atom for atom in range(n_atoms) if atom not in atom_map.values()]
-        elif direction == 'create':
+        elif direction == 'insert':
             alchemical_atoms = [atom for atom in range(n_atoms) if atom not in atom_map.keys()]
         else:
-            raise Exception("direction must be one of ['delete', 'create']; found '%s' instead" % direction)
+            raise Exception("direction must be one of ['delete', 'insert']; found '%s' instead" % direction)
 
         logging.debug(alchemical_atoms)
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
-        alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms)
+        alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
 
         # Return the alchemically-modified system.
         alchemical_system = alchemical_factory.createPerturbedSystem()
