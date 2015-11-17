@@ -173,6 +173,7 @@ class FFGeometryEngine(GeometryEngine):
         eligible_angles = []
         angles = new_atom.angles
         for angle in angles:
+            #check to make sure both other two atoms in angle also have positions
             if angle.atom1 == new_atom:
                 if atoms_with_positions.issuperset(set([angle.atom2, angle.atom3])):
                     eligible_angles.append(angle)
@@ -183,6 +184,169 @@ class FFGeometryEngine(GeometryEngine):
                 if atoms_with_positions.issuperset(set([angle.atom1, angle.atom2])):
                     eligible_angles.append(angle)
         return eligible_angles
+
+    def _autograd_ctoi(self, atom, bond, angle, torsion, positions):
+        import autograd
+        import autograd.numpy as np
+
+        positions = positions/positions.unit
+        atom_position = positions[atom]
+
+
+        def _cartesian_to_internal(xyz):
+            """
+            Autograd-based jacobian of transformation from cartesian to internal.
+            Returns without units!
+            """
+            a = positions[bond] - xyz
+            b = positions[angle] - positions[bond]
+            #3-4 bond
+            c = positions[angle] - positions[torsion]
+            a_u = a / np.linalg.norm(a)
+            b_u = b / np.linalg.norm(b)
+            c_u = c / np.linalg.norm(c)
+
+            #bond length
+            r = np.linalg.norm(a)
+
+            #bond angle
+            theta = np.arccos(np.dot(-a_u, b_u))
+
+            #torsion angle
+            plane1 = np.cross(a, b)
+            plane2 = np.cross(b, c)
+
+            phi = np.arccos(np.dot(plane1, plane2)/(np.linalg.norm(plane1)*np.linalg.norm(plane2)))
+
+            if np.dot(np.cross(plane1, plane2), b_u) < 0:
+                phi = -phi
+
+            return np.array([r, theta, phi])
+
+        j = autograd.jacobian(_cartesian_to_internal)
+        internal_coords = _cartesian_to_internal(atom_position)
+        jacobian_det = np.linalg.det(j(atom_position))
+        return internal_coords, np.abs(jacobian_det)
+
+    def _autograd_itoc(self, bond, angle, torsion, r, theta, phi, positions):
+        """
+        Autograd based coordinate conversion internal -> cartesian
+
+        Arguments
+        ---------
+        bond : int
+            index of the bonded atom
+        angle : int
+            index of the angle atom
+        torsion : int
+            index of the torsion atom
+        r : float, Quantity nm
+            bond length
+        theta : float, Quantity rad
+            bond angle
+        phi : float, Quantity rad
+            torsion angle
+        positions : [n, 3] np.array Quantity nm
+            positions of the atoms in the molecule
+
+        Returns
+        -------
+        atom_xyz : [1, 3] np.array Quantity nm
+            The atomic positions in cartesian space
+        detJ : float
+            The absolute value of the determinant of the jacobian
+        """
+        import autograd
+        import autograd.numpy as np
+        positions = positions/positions.unit
+        r = r/r.unit
+        theta = theta/theta.unit
+        phi = phi/phi.unit
+        rtp = np.array([r, theta, phi])
+
+        def _internal_to_cartesian(rthetaphi):
+
+            a = positions[angle] - positions[bond]
+            b = positions[angle] - positions[torsion]
+
+            a_u = a / np.linalg.norm(a)
+            b_u = b / np.linalg.norm(b)
+
+
+            d_r = rthetaphi[0]*a_u
+
+            normal = np.cross(a, b)
+
+            #construct the angle rotation matrix
+            axis_angle = normal / np.linalg.norm(normal)
+            a = np.cos(rthetaphi[1]/2)
+            b, c, d = -axis_angle*np.sin(rthetaphi[1]/2)
+            angle_rotation_matrix =  np.array([[a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
+                            [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
+                            [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
+            #apply it
+            d_ang = np.dot(angle_rotation_matrix, d_r)
+
+            #construct the torsion rotation matrix and apply it
+            axis = a_u
+            a = np.cos(rthetaphi[2]/2)
+            b, c, d = -axis*np.sin(rthetaphi[2]/2)
+            torsion_rotation_matrix = np.array([[a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
+                            [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
+                            [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
+            #apply it
+            d_torsion = np.dot(torsion_rotation_matrix, d_ang)
+
+            #add the positions of the bond atom
+            xyz = positions[bond] + d_torsion
+
+            return xyz
+
+        j = autograd.jacobian(_internal_to_cartesian)
+        atom_xyz = _internal_to_cartesian(rtp)
+        jacobian_det = np.linalg.det(j(rtp))
+        logging.debug("detJ is %f" %(jacobian_det))
+        detj_spherical = r**2*np.sin(theta)
+        logging.debug("The spherical detJ is %f" % detj_spherical)
+        return units.Quantity(atom_xyz, unit=units.nanometers), np.abs(jacobian_det)
+
+    def _bond_logp(self,r, r0, k_eq, beta):
+        """
+        Calculate the log-probability of a given bond at a given inverse temperature
+
+        Arguments
+        ---------
+        r : float
+            bond length, in nanometers
+        r0 : float
+            equilibrium bond length, in nanometers
+        k_eq : float
+            Spring constant of bond
+        beta : float
+            1/kT or inverse temperature
+        """
+        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
+        logp = stats.distributions.norm.logpdf(r/r.unit, r0/r0.unit, sigma)
+        return logp
+
+    def _angle_logp(self, theta, theta0, k_eq, beta):
+        """
+        Calculate the log-probability of a given bond at a given inverse temperature
+
+        Arguments
+        ---------
+        theta : float
+            bond angle, in randians
+        theta0 : float
+            equilibrium bond angle, in radians
+        k_eq : float
+            Spring constant of angle
+        beta : float
+            1/kT or inverse temperature
+        """
+        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
+        logp = stats.distributions.norm.logpdf(theta/theta.unit, theta0/theta0.unit, sigma)
+        return logp
 
 
 
