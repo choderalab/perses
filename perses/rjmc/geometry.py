@@ -112,7 +112,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         return 0.0
 
-    def _get_torsions(self, topology, system, new_to_old_atom_map, atom_index):
+    def _get_torsions(self, topology, system, atoms_with_positions, atom_index):
         """
         Get the torsions that the new atom_index participates in, where all other
         atoms in the torsion have positions.
@@ -123,20 +123,29 @@ class FFGeometryEngine(GeometryEngine):
             Topology of the system
         system : simtk.openmm.System
             openmmm System
-        new_to_old_atom_map : dict
-            Mapping of the new atoms to the old
+        atoms_with_positions : list
+            list of atoms with valid positions
         atom_index : int
             Index of the new atom of interest
 
         Returns
         ------
-        torsions : list of int
+        torsions : list of parmed.Dihedral objects
             list of the torsions meeting the criteria
         """
         structure = parmed.openmm.load_topology(topology, system)
         new_atom = structure.atoms[atom_index]
-        torsion_partners = a.dihedral_partners
-
+        torsions = new_atom.torsions
+        eligible_torsions = []
+        for torsion in torsions:
+            if torsion.improper:
+                continue
+            if not torsion.atom1 == new_atom:
+                continue
+            torsion_partners = [torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
+            if set(atoms_with_positions).issuperset(set(torsion_partners)):
+                eligible_torsions.append(torsion)
+        return torsions
 
 
 class FFGeometryEngineOld(GeometryEngine):
