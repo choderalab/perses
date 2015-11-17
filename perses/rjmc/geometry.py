@@ -169,8 +169,21 @@ class FFGeometryEngine(GeometryEngine):
         """
         structure = parmed.openmm.load_topology(app.Topology(), openmm.System())
         new_atom = structure.atoms[atom_index]
+        atoms_with_positions = set(atoms_with_positions)
+        eligible_angles = []
         angles = new_atom.angles
-        for
+        for angle in angles:
+            if angle.atom1 == new_atom:
+                if atoms_with_positions.issuperset(set([angle.atom2, angle.atom3])):
+                    eligible_angles.append(angle)
+            elif angle.atom2 == new_atom:
+                if atoms_with_positions.issuperset(set([angle.atom1, angle.atom3])):
+                    eligible_angles.append(angle)
+            else:
+                if atoms_with_positions.issuperset(set([angle.atom1, angle.atom2])):
+                    eligible_angles.append(angle)
+        return eligible_angles
+
 
 
 class FFGeometryEngineOld(GeometryEngine):
