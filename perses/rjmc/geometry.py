@@ -145,7 +145,6 @@ class FFGeometryEngine(GeometryEngine):
                 torsion_partners = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx]
             else:
                 continue
-            torsion_partners = [torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
             if set(atoms_with_positions).issuperset(set(torsion_partners)):
                 eligible_torsions.append(torsion)
         return torsions
