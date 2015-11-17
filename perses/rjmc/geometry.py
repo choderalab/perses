@@ -7,6 +7,7 @@ import perses.rjmc.topology_proposal as topology_proposal
 import numpy as np
 import scipy.stats as stats
 import numexpr as ne
+import parmed
 import simtk.unit as units
 import logging
 
@@ -27,31 +28,118 @@ class GeometryEngine(object):
     def __init__(self, metadata):
         pass
 
-    def propose(self, new_to_old_atom_map, new_system, old_system, old_positions):
+    def propose(self, top_proposal):
         """
         Make a geometry proposal for the appropriate atoms.
         
         Arguments
         ----------
-        new_to_old_atom_map : dict
-            mapping of the new to old atoms
-        new_system : simtk.openmm.System
-            The new system object
-        old_system : simtk.openmm.System
-            The old system object
-        old_positions : [m, 3] np.array of floats
-            The positions of the old m atoms
+        top_proposal : TopologyProposal object
+            Object containing the relevant results of a topology proposal
 
         Returns
         -------
-        proposal : GeometryProposal namedtuple
-             Contains the new positions as well as the logp ratio
-             of the proposal.
+        new_positions : [n, 3] ndarray
+            The new positions of the system
         """
-        return GeometryProposal(np.array([0.0,0.0,0.0]), 0)
+        return np.array([0.0,0.0,0.0])
 
+    def logp(self, top_proposal, new_coordinates, old_coordinates, direction='forward'):
+        """
+        Calculate the logp for the given geometry proposal
+
+        Arguments
+        ----------
+        top_proposal : TopologyProposal object
+            Object containing the relevant results of a topology proposal
+        new_coordinates : [n, 3] np.ndarray
+            The coordinates of the system after the proposal
+        old_coordiantes : [n, 3] np.ndarray
+            The coordinates of the system before the proposal
+        direction : str, either 'forward' or 'reverse'
+            whether the transformation is for the forward NCMC move or the reverse
+
+        Returns
+        -------
+        logp : float
+            The log probability of the proposal for the given transformation
+        """
+        return 0.0
 
 class FFGeometryEngine(GeometryEngine):
+    """
+    This class is a base class for GeometryEngines which rely on forcefield information for
+    making matching proposals
+    """
+    def __init__(self, metadata):
+        self._metadata = metadata
+
+    def propose(self, top_proposal):
+        """
+        Make a geometry proposal for the appropriate atoms.
+
+        Arguments
+        ----------
+        top_proposal : TopologyProposal object
+            Object containing the relevant results of a topology proposal
+
+        Returns
+        -------
+        new_positions : [n, 3] ndarray
+            The new positions of the system
+        """
+        return np.array([0.0,0.0,0.0])
+
+    def logp(self, top_proposal, new_coordinates, old_coordinates, direction='forward'):
+        """
+        Calculate the logp for the given geometry proposal
+
+        Arguments
+        ----------
+        top_proposal : TopologyProposal object
+            Object containing the relevant results of a topology proposal
+        new_coordinates : [n, 3] np.ndarray
+            The coordinates of the system after the proposal
+        old_coordiantes : [n, 3] np.ndarray
+            The coordinates of the system before the proposal
+        direction : str, either 'forward' or 'reverse'
+            whether the transformation is for the forward NCMC move or the reverse
+
+        Returns
+        -------
+        logp : float
+            The log probability of the proposal for the given transformation
+        """
+        return 0.0
+
+    def _get_torsions(self, topology, system, new_to_old_atom_map, atom_index):
+        """
+        Get the torsions that the new atom_index participates in, where all other
+        atoms in the torsion have positions.
+
+        Arguments
+        ---------
+        topology : simtk.openmm.Topology
+            Topology of the system
+        system : simtk.openmm.System
+            openmmm System
+        new_to_old_atom_map : dict
+            Mapping of the new atoms to the old
+        atom_index : int
+            Index of the new atom of interest
+
+        Returns
+        ------
+        torsions : list of int
+            list of the torsions meeting the criteria
+        """
+        structure = parmed.openmm.load_topology(topology, system)
+        new_atom = structure.atoms[atom_index]
+        torsion_partners = a.dihedral_partners
+
+
+
+class FFGeometryEngineOld(GeometryEngine):
     """
     This is an implementation of the GeometryEngine class which proposes new dimensions based on the forcefield parameters
     """
