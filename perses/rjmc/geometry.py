@@ -10,6 +10,8 @@ import numexpr as ne
 import parmed
 import simtk.unit as units
 import logging
+import simtk.openmm.app as app
+import simtk.openmm as openmm
 
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
@@ -112,17 +114,15 @@ class FFGeometryEngine(GeometryEngine):
         """
         return 0.0
 
-    def _get_torsions(self, topology, system, atoms_with_positions, atom_index):
+    def _get_torsions(self, structure, atoms_with_positions, atom_index):
         """
         Get the torsions that the new atom_index participates in, where all other
         atoms in the torsion have positions.
 
         Arguments
         ---------
-        topology : simtk.openmm.Topology
-            Topology of the system
-        system : simtk.openmm.System
-            openmmm System
+        structure : parmed.Structure
+            Structure object containing topology and parameters for the system
         atoms_with_positions : list
             list of atoms with valid positions
         atom_index : int
@@ -133,19 +133,45 @@ class FFGeometryEngine(GeometryEngine):
         torsions : list of parmed.Dihedral objects
             list of the torsions meeting the criteria
         """
-        structure = parmed.openmm.load_topology(topology, system)
         new_atom = structure.atoms[atom_index]
         torsions = new_atom.torsions
         eligible_torsions = []
         for torsion in torsions:
             if torsion.improper:
                 continue
-            if not torsion.atom1 == new_atom:
+            if torsion.atom1 == new_atom:
+                torsion_partners = [torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
+            elif torsion.atom4 == new_atom:
+                torsion_partners = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx]
+            else:
                 continue
             torsion_partners = [torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
             if set(atoms_with_positions).issuperset(set(torsion_partners)):
                 eligible_torsions.append(torsion)
         return torsions
+
+    def _get_valid_angles(self, structure, atoms_with_positions, atom_index):
+        """
+        Get the angles that involve other atoms with valid positions
+
+        Arguments
+        ---------
+        structure : parmed.Structure
+            Structure object containing topology and parameters for the system
+        atoms_with_positions : list
+            list of atoms with valid positions
+        atom_index : int
+            Index of the new atom of interest
+
+        Returns
+        -------
+        angles : list of parmed.Angle objects
+            list of the angles meeting the criteria
+        """
+        structure = parmed.openmm.load_topology(app.Topology(), openmm.System())
+        new_atom = structure.atoms[atom_index]
+        angles = new_atom.angles
+        for
 
 
 class FFGeometryEngineOld(GeometryEngine):
