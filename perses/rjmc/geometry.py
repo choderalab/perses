@@ -348,6 +348,46 @@ class FFGeometryEngine(GeometryEngine):
         logp = stats.distributions.norm.logpdf(theta/theta.unit, theta0/theta0.unit, sigma)
         return logp
 
+    def _torsion_p(self, Z, V, n, gamma, phi, beta):
+        """
+        Utility function for calculating the normalized probability of a torsion angle
+        """
+        #must remove units
+        V = V/V.unit
+        gamma = gamma/gamma.unit
+        return (1.0/Z)*np.exp(-beta*(V/2.0)*(1+np.cos(n*phi-gamma)))
+
+    def _torsion_normalizer(self, V, n, gamma, beta):
+        """
+        Utility function to numerically normalize torsion angles.
+        Also return max_p to facilitate rejection sampling
+        """
+        #generate a grid of 5000 points from 0 < phi < 2*pi
+        phis = np.linspace(0, 2.0*np.pi, 5000)
+        #evaluate the unnormalized probability at each of those points
+        #need to remove units--numexpr can't handle them otherwise
+        V = V/V.unit
+        gamma = gamma/gamma.unit
+        beta = beta/beta.unit
+        phi_q = ne.evaluate("exp(-beta*(V/2.0)*(1+cos(n*phis-gamma)))")
+        #integrate the values
+        Z = np.trapz(phi_q, phis)
+        max_p = np.max(phi_q/Z)
+        return Z, max_p
+
+    def _atoms_eligible_for_proposal(self, structure, atoms_with_positions):
+        """
+        Get the set of atoms eligible for proposal
+        """
+        eligible_atoms = []
+        for atom in structure.atoms:
+            #get array of booleans to see if a bond partner has a position
+            has_bonded_position = [a.idx in atoms_with_positions for a in atom.bond_partners]
+            #if at least one does, then the atom is ready to be proposed.
+            if np.sum(has_bonded_position) > 0:
+                eligible_atoms.append(atom)
+        return eligible_atoms
+
 
 
 class FFGeometryEngineOld(GeometryEngine):
