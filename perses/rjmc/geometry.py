@@ -92,8 +92,32 @@ class FFGeometryEngine(GeometryEngine):
         """
         top_proposal = topology_proposal.SmallMoleculeTopologyProposal()
         new_atoms = top_proposal.unique_new_atoms
+        structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
+        atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
         #maintain a running list of the atoms still needing positions
         while(len(new_atoms)>0):
+            atoms_for_proposal = self._atoms_eligible_for_proposal(structure, atoms_with_positions)
+            for atom in atoms_for_proposal:
+                torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
+                if torsion.atom1 == atom:
+                    bond_atom = torsion.atom2
+                    angle_atom = torsion.atom3
+                    torsion_atom = torsion.atom4
+                else:
+                    bond_atom = torsion.atom3
+                    angle_atom = torsion.atom2
+                    torsion_atom = torsion.atom1
+                #propose a bond and calculate its probability
+                bond = self._get_relevant_bond(atom, bond_atom)
+                r_proposed = self._propose_bond(bond.type.req*units.nanometers, bond.type.k*units.kilojoule_per_mole/units.nanometers**2, top_proposal.beta)
+                logp_r = self._bond_logp(r_proposed, bond.type.req*units.nanometers, bond.type.k*units.kilojoule_per_mole/units.nanometers**2, top_proposal.beta)
+
+                #propose an angle and calculate its probability
+                angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
+                theta_proposed = self._propose_angle(angle.type.theteq*units.radians, angle.type.keq*units.kilojoule_per_mole/units.radians**2, top_proposal.beta)
+                logp_theta = self._angle_logp(theta_proposed, angle.type.keq*units.kilojoule_per_mole/units.radians**2, top_proposal.beta)
+
+                #propose a torsion angle and calcualate its probability
 
         return np.array([0.0,0.0,0.0])
 
@@ -119,6 +143,37 @@ class FFGeometryEngine(GeometryEngine):
         """
         return 0.0
 
+    def _get_relevant_bond(self, atom1, atom2):
+        """
+        utility function to get the bond connecting atoms 1 and 2
+
+        Arguments
+        ---------
+        atom1 : parmed atom object
+             One of the atoms in the bond
+        atom2 : parmed.atom object
+             The other atom in the bond
+
+        Returns
+        -------
+        bond : bond object
+            Bond connecting the two atoms
+        """
+        bonds_1 = set(atom1.bonds)
+        bonds_2 = set(atom2.bonds)
+        relevant_bond = bonds_1.intersection(bonds_2)
+        return relevant_bond
+
+    def _get_relevant_angle(self, atom1, atom2, atom3):
+        """
+        Get the angle containing the 3 given atoms
+        """
+        atom1_angles = set(atom1.angles)
+        atom2_angles = set(atom2.angles)
+        atom3_angles = set(atom3.angles)
+        relevant_angle = atom1_angles.intersection(atom2_angles, atom3_angles)
+        return relevant_angle
+
     def _get_torsions(self, atoms_with_positions, new_atom):
         """
         Get the torsions that the new atom_index participates in, where all other
@@ -128,8 +183,8 @@ class FFGeometryEngine(GeometryEngine):
         ---------
         atoms_with_positions : list
             list of atoms with valid positions
-        atom_index : int
-            Index of the new atom of interest
+        atom_index : parmed atom object
+           parmed atom object
 
         Returns
         ------
@@ -411,7 +466,7 @@ class FFGeometryEngine(GeometryEngine):
         theta = sigma*np.random.random()*theta0.unit + theta0
         return theta
 
-    def _propose_torsion(self,V, n, gamma):
+    def _propose_torsion(self, structure, V, n, gamma):
         pass
 
 class FFGeometryEngineOld(GeometryEngine):

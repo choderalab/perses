@@ -76,7 +76,7 @@ class TopologyProposal(object):
     """
 
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
+                 logp_proposal=None, new_to_old_atom_map=None, metadata=None, beta=None):
 
         self._new_topology = new_topology
         self._new_system = new_system
@@ -89,6 +89,7 @@ class TopologyProposal(object):
         self._unique_new_atoms = [atom for atom in range(self._new_system.getNumParticles()) if atom not in self._new_to_old_atom_map.keys()]
         self._unique_old_atoms = [atom for atom in range(self._old_system.getNumParticles()) if atom not in self._new_to_old_atom_map.values()]
         self._metadata = metadata
+        self._beta = beta
 
     @property
     def new_topology(self):
@@ -105,6 +106,9 @@ class TopologyProposal(object):
     @property
     def old_positions(self):
         return self._old_positions
+    @property
+    def beta(self):
+        return self._beta
     @property
     def logp_proposal(self):
         return self._logp_proposal
