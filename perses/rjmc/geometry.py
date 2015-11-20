@@ -90,6 +90,11 @@ class FFGeometryEngine(GeometryEngine):
         new_positions : [n, 3] ndarray
             The new positions of the system
         """
+        top_proposal = topology_proposal.SmallMoleculeTopologyProposal()
+        new_atoms = top_proposal.unique_new_atoms
+        #maintain a running list of the atoms still needing positions
+        while(len(new_atoms)>0):
+
         return np.array([0.0,0.0,0.0])
 
     def logp(self, top_proposal, new_coordinates, old_coordinates, direction='forward'):
@@ -114,15 +119,13 @@ class FFGeometryEngine(GeometryEngine):
         """
         return 0.0
 
-    def _get_torsions(self, structure, atoms_with_positions, atom_index):
+    def _get_torsions(self, atoms_with_positions, new_atom):
         """
         Get the torsions that the new atom_index participates in, where all other
         atoms in the torsion have positions.
 
         Arguments
         ---------
-        structure : parmed.Structure
-            Structure object containing topology and parameters for the system
         atoms_with_positions : list
             list of atoms with valid positions
         atom_index : int
@@ -133,7 +136,6 @@ class FFGeometryEngine(GeometryEngine):
         torsions : list of parmed.Dihedral objects
             list of the torsions meeting the criteria
         """
-        new_atom = structure.atoms[atom_index]
         torsions = new_atom.torsions
         eligible_torsions = []
         for torsion in torsions:
@@ -167,7 +169,6 @@ class FFGeometryEngine(GeometryEngine):
         angles : list of parmed.Angle objects
             list of the angles meeting the criteria
         """
-        structure = parmed.openmm.load_topology(app.Topology(), openmm.System())
         new_atom = structure.atoms[atom_index]
         atoms_with_positions = set(atoms_with_positions)
         eligible_angles = []
@@ -375,6 +376,15 @@ class FFGeometryEngine(GeometryEngine):
         max_p = np.max(phi_q/Z)
         return Z, max_p
 
+    def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
+        """
+        Pick an eligible torsion uniformly
+        """
+        eligible_torsions = self._get_torsions(atoms_with_positions, atom_for_proposal.idx)
+        torsion_idx = np.random.randint(0, len(eligible_torsions))
+        torsion_selected = eligible_torsions[torsion_idx]
+        return torsion_selected, np.log(1/len(eligible_torsions))
+
     def _atoms_eligible_for_proposal(self, structure, atoms_with_positions):
         """
         Get the set of atoms eligible for proposal
@@ -388,7 +398,21 @@ class FFGeometryEngine(GeometryEngine):
                 eligible_atoms.append(atom)
         return eligible_atoms
 
+    def _propose_bond(self, r0, k_eq, beta):
+        """
+        Bond length proposal
+        """
+        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
+        r = sigma*np.random.random()*r0.unit + r0
+        return r
 
+    def _propose_angle(self, theta0, k_eq, beta):
+        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
+        theta = sigma*np.random.random()*theta0.unit + theta0
+        return theta
+
+    def _propose_torsion(self,V, n, gamma):
+        pass
 
 class FFGeometryEngineOld(GeometryEngine):
     """
