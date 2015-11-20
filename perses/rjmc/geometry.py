@@ -46,7 +46,7 @@ class GeometryEngine(object):
         """
         return np.array([0.0,0.0,0.0])
 
-    def logp(self, top_proposal, new_coordinates, old_coordinates, direction='forward'):
+    def logp(self, top_proposal, new_coordinates, old_coordinates):
         """
         Calculate the logp for the given geometry proposal
 
@@ -121,7 +121,7 @@ class FFGeometryEngine(GeometryEngine):
 
         return np.array([0.0,0.0,0.0])
 
-    def logp(self, top_proposal, new_coordinates, old_coordinates, direction='forward'):
+    def logp(self, top_proposal, new_coordinates, old_coordinates):
         """
         Calculate the logp for the given geometry proposal
 
@@ -133,8 +133,6 @@ class FFGeometryEngine(GeometryEngine):
             The coordinates of the system after the proposal
         old_coordiantes : [n, 3] np.ndarray
             The coordinates of the system before the proposal
-        direction : str, either 'forward' or 'reverse'
-            whether the transformation is for the forward NCMC move or the reverse
 
         Returns
         -------
