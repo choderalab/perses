@@ -138,9 +138,9 @@ class FFGeometryEngine(GeometryEngine):
                 #add new position to array of new positions
                 new_positions[atom.idx] = xyz
                 #accumulate logp
-                logp = logp + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
+                logp_proposal = logp_proposal + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
 
-        return new_positions, logp
+        return new_positions, logp_proposal
 
     def logp(self, top_proposal, new_coordinates, old_coordinates, direction='reverse'):
         """
