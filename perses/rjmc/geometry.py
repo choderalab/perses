@@ -129,8 +129,8 @@ class FFGeometryEngine(GeometryEngine):
                 logp_theta = self._angle_logp(theta_proposed, angle, top_proposal.beta)
 
                 #propose a torsion angle and calcualate its probability
-                phi_proposed = self._propose_torsion(structure, torsion)
-                logp_phi = self._torsion_logp(structure, torsion, phi_proposed)
+                phi_proposed = self._propose_torsion(atom, structure, torsion)
+                logp_phi = self._torsion_logp(atom, structure, torsion, phi_proposed)
 
                 #convert to cartesian
                 xyz, detJ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r_proposed, theta_proposed, phi_proposed, new_positions)
@@ -140,6 +140,8 @@ class FFGeometryEngine(GeometryEngine):
                 #accumulate logp
                 logp_proposal = logp_proposal + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
 
+                atoms_with_positions.append(atom)
+                new_atoms.remove(atom.idx)
         return new_positions, logp_proposal
 
     def logp(self, top_proposal, new_coordinates, old_coordinates, direction='reverse'):
@@ -197,9 +199,11 @@ class FFGeometryEngine(GeometryEngine):
                 logp_theta = self._angle_logp(internal_coordinates[1], angle, top_proposal.beta)
 
                 #propose a torsion angle and calcualate its probability
-                logp_phi = self._torsion_logp(structure, torsion, internal_coordinates[2])
+                logp_phi = self._torsion_logp(atom, structure, torsion, internal_coordinates[2])
                 logp = logp + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
 
+                atoms_with_positions.append(atom)
+                new_atoms.remove(atom.idx)
         return logp
 
     def _get_relevant_bond(self, atom1, atom2):
@@ -465,7 +469,7 @@ class FFGeometryEngine(GeometryEngine):
         logp = stats.distributions.norm.logpdf(theta/theta.unit, theta0/theta0.unit, sigma)
         return logp
 
-    def _torsion_logp(self, structure, torsion, phi):
+    def _torsion_logp(self, atom, structure, torsion, phi):
         """
         Utility function for calculating the normalized probability of a torsion angle
         """
@@ -533,8 +537,37 @@ class FFGeometryEngine(GeometryEngine):
         theta = sigma*np.random.random()*theta0.unit + theta0
         return theta
 
-    def _propose_torsion(self, structure, torsion):
+    def _propose_torsion(self, atom, structure, torsion):
         pass
+
+class FFAllAngleGeometryEngine(FFGeometryEngine):
+    """
+    This is a forcefield-based geometry engine that takes all relevant angles
+    and torsions into account when proposing a given torsion. it overrides the torsion_proposal
+    and torsion_p methods of the base.
+    """
+
+    def _propose_torsion(self, atom, structure, torsion, atoms_with_positions):
+        """
+        Propose a new torsion angle, including the contributions of other
+        harmonic angles and torsions.
+
+        Arguments
+        ---------
+        atom : parmed atom object
+            Atom whose position is being proposed
+        structure : parmed structure
+            structure of the molecule undergoing a geometry proposal
+        torsion : parmed dihedral
+            Parmed object containing the dihedral in question
+        atoms_with_positions : list
+            List of atoms with positions
+        Returns
+        -------
+        phi_proposed : float, radians
+            proposed torsion angle
+        """
+
 
 class FFGeometryEngineOld(GeometryEngine):
     """
