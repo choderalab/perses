@@ -583,20 +583,13 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         log_ub_angles = np.zeros(n_divisions)
         for i, xyz in enumerate(xyzs):
             for angle in involved_angles:
-                if angle.atom1 == atom:
-                    atom_position = xyz
-                    bond_atom_position = positions[angle.atom2.idx]
-                    angle_atom_position = positions[angle.atom3.idx]
-                elif angle.atom2 == atom:
-                    atom_position = positions[angle.atom1.idx]
-                    bond_atom_position = xyz
-                    angle_atom_position = positions[angle.atom3.idx]
-                else:
-                    atom_position = positions[angle.atom1.idx]
-                    bond_atom_position = positions[angle.atom2.idx]
-                    angle_atom_position = xyz
+                atom_position = xyz if angle.atom1 == atom else positions[angle.atom1.idx]
+                bond_atom_position = xyz if angle.atom2 == atom else positions[angle.atom2.idx]
+                angle_atom_position = xyz if angle.atom2 == atom else positions[angle.atom3.idx]
                 theta = self._calculate_angle(atom_position, bond_atom_position, angle_atom_position)
                 log_ub_angles[i] += self._angle_logp(theta*units.radians, angle, beta)
+
+        #now the torsions
 
         return
 
