@@ -144,7 +144,7 @@ class FFGeometryEngine(GeometryEngine):
                 new_atoms.remove(atom.idx)
         return new_positions, logp_proposal
 
-    def logp(self, top_proposal, new_coordinates, old_coordinates, direction='reverse'):
+    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates):
         """
         Calculate the logp for the given geometry proposal
 
@@ -164,15 +164,10 @@ class FFGeometryEngine(GeometryEngine):
         """
         logp = 0.0
         top_proposal = topology_proposal.SmallMoleculeTopologyProposal()
-        new_atoms = top_proposal.unique_new_atoms
-        if direction == 'reverse':
-            structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_old) if atom_idx not in top_proposal.unique_old_atoms]
-        elif direction == 'forward':
-            structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
-        else:
-            raise Exception("Argument direction must be either forward or reverse")
+
+        structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
+        atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_old) if atom_idx not in top_proposal.unique_old_atoms]
+        new_atoms = top_proposal.unique_old_atoms
         #maintain a running list of the atoms still needing logp
         while(len(new_atoms)>0):
             atoms_for_proposal = self._atoms_eligible_for_proposal(structure, atoms_with_positions)
