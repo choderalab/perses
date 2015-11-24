@@ -269,7 +269,7 @@ class FFGeometryEngine(GeometryEngine):
                 eligible_torsions.append(torsion)
         return torsions
 
-    def _get_valid_angles(self, structure, atoms_with_positions, new_atom):
+    def _get_valid_angles(self, atoms_with_positions, new_atom):
         """
         Get the angles that involve other atoms with valid positions
 
@@ -546,7 +546,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
     and torsion_p methods of the base.
     """
 
-    def _propose_torsion(self, atom, structure, bond, angle, torsion, atoms_with_positions, positions):
+    def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
         """
         Propose a new torsion angle, including the contributions of other
         harmonic angles and torsions.
@@ -566,8 +566,38 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         phi_proposed : float, radians
             proposed torsion angle
         """
-        #first, get the list of angles involved in this torsion, and
-        involved_angles = self._get_valid_angles(structure, atoms_with_positions, atom)
+        n_divisions = 5000
+        #first, get the list of angles and torsions involved:
+        involved_angles = self._get_valid_angles(atoms_with_positions, atom)
+        involved_torsions = self._get_torsions(atoms_with_positions, atom)
+
+        #get an array of [0,2pi)
+        phis = np.linspace(0, 2.0*np.pi, n_divisions)
+        xyzs = np.zeros([n_divisions, 3])
+
+        #rotate atom about torsion angle, calculating an xyz for each
+        for i, phi in enumerate(phis):
+            xyzs[i], _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi, positions)
+
+        #set up arrays for energies from angles and torsions
+        log_ub_angles = np.zeros(n_divisions)
+        for i, xyz in enumerate(xyzs):
+            for angle in involved_angles:
+                if angle.atom1 == atom:
+                    atom_position = xyz
+                    bond_atom_position = positions[angle.atom2.idx]
+                    angle_atom_position = positions[angle.atom3.idx]
+                elif angle.atom2 == atom:
+                    atom_position = positions[angle.atom1.idx]
+                    bond_atom_position = xyz
+                    angle_atom_position = positions[angle.atom3.idx]
+                else:
+                    atom_position = positions[angle.atom1.idx]
+                    bond_atom_position = positions[angle.atom2.idx]
+                    angle_atom_position = xyz
+                theta = self._calculate_angle(atom_position, bond_atom_position, angle_atom_position)
+                log_ub_angles[i] += self._angle_logp(theta*units.radians, angle, beta)
+
         return
 
     def _calculate_angle(self, atom_position, bond_atom_position, angle_atom_position):
