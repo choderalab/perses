@@ -303,12 +303,14 @@ class FFGeometryEngine(GeometryEngine):
                     eligible_angles.append(angle)
         return eligible_angles
 
-    def _autograd_ctoi(self, atom, bond, angle, torsion, positions):
+    def _autograd_ctoi(self, atom_position, bond_position, angle_position, torsion_position):
         import autograd
         import autograd.numpy as np
 
-        positions = positions/positions.unit
-        atom_position = positions[atom]
+        atom_position = atom_position/atom_position.unit
+        bond_position = bond_position/bond_position.unit
+        angle_position = angle_position/angle_position.unit
+        torsion_position = torsion_position/torsion_position.unit
 
 
         def _cartesian_to_internal(xyz):
@@ -316,10 +318,10 @@ class FFGeometryEngine(GeometryEngine):
             Autograd-based jacobian of transformation from cartesian to internal.
             Returns without units!
             """
-            a = positions[bond] - xyz
-            b = positions[angle] - positions[bond]
+            a = bond_position - xyz
+            b = angle_position - bond_position
             #3-4 bond
-            c = positions[angle] - positions[torsion]
+            c = angle_position - torsion_position
             a_u = a / np.linalg.norm(a)
             b_u = b / np.linalg.norm(b)
             c_u = c / np.linalg.norm(c)
@@ -468,31 +470,16 @@ class FFGeometryEngine(GeometryEngine):
         logp = stats.distributions.norm.logpdf(theta/theta.unit, theta0/theta0.unit, sigma)
         return logp
 
-    def _torsion_logp(self, atom, structure, torsion, phi):
+    def _torsion_logp(self, phi, torsion, beta):
         """
-        Utility function for calculating the normalized probability of a torsion angle
+        Utility function for calculating the unnormalized probability of a torsion angle
         """
-        raise NotImplementedError
-
-    def _torsion_normalizer(self, torsion, V, n, gamma, beta):
-        """
-        Utility function to numerically normalize torsion angles.
-        Also return max_p to facilitate rejection sampling
-        """
+        beta = beta/beta.unit
         gamma = torsion.type.phase
         V = torsion.type.phi_k
         n = torsion.type.per
-
-        #generate a grid of 5000 points from 0 < phi < 2*pi
-        phis = np.linspace(0, 2.0*np.pi, 5000)
-        #evaluate the unnormalized probability at each of those points
-        #need to remove units--numexpr can't handle them otherwise
-        beta = beta/beta.unit
-        phi_q = ne.evaluate("exp(-beta*(V/2.0)*(1+cos(n*phis-gamma)))")
-        #integrate the values
-        Z = np.trapz(phi_q, phis)
-        max_p = np.max(phi_q/Z)
-        return Z, max_p
+        q = np.exp(-beta*(V/2.0)*(1+np.cos(n*phi-gamma)))
+        return q
 
     def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
         """
@@ -546,10 +533,9 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
     and torsion_p methods of the base.
     """
 
-    def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
+    def _calc_torsion_proposal(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000):
         """
-        Propose a new torsion angle, including the contributions of other
-        harmonic angles and torsions.
+        Calculates the array of normalized proposal probabilities for this torsion
 
         Arguments
         ---------
@@ -580,18 +566,40 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             xyzs[i], _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi, positions)
 
         #set up arrays for energies from angles and torsions
-        log_ub_angles = np.zeros(n_divisions)
+        ub_angles = np.zeros(n_divisions)
         for i, xyz in enumerate(xyzs):
             for angle in involved_angles:
                 atom_position = xyz if angle.atom1 == atom else positions[angle.atom1.idx]
                 bond_atom_position = xyz if angle.atom2 == atom else positions[angle.atom2.idx]
-                angle_atom_position = xyz if angle.atom2 == atom else positions[angle.atom3.idx]
+                angle_atom_position = xyz if angle.atom3 == atom else positions[angle.atom3.idx]
                 theta = self._calculate_angle(atom_position, bond_atom_position, angle_atom_position)
-                log_ub_angles[i] += self._angle_logp(theta*units.radians, angle, beta)
+                ub_angles[i] += self._angle_logp(theta*units.radians, angle, beta)
 
         #now the torsions
+        ub_torsions = np.zeros(n_divisions)
+        for i, xyz in enumerate(xyzs):
+            for torsion in involved_torsions:
+                atom_position = xyz if torsion.atom1 == atom else positions[torsion.atom1.idx]
+                bond_atom_position = xyz if torsion.atom2 == atom else positions[torsion.atom2.idx]
+                angle_atom_position = xyz if torsion.atom3 == atom else positions[torsion.atom3.idx]
+                torsion_atom_position = xyz if torsion.atom4 == atom else positions[torsion.atom4.idx]
+                internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position, positions)
+                phi = internal_coordinates[2]
+                ub_torsions[i] += self._torsion_logp(phi, torsion, beta)
 
-        return
+        #add the energetic contributions
+        ub_total = ub_angles + ub_torsions
+
+        #exponentiate to get the unnormalized probability
+        q = np.exp(ub_total)
+
+        #estimate the normalizing constant
+        Z = 1.0 / np.trapz(q, phis)
+
+        #get the normalized probabilities for torsions
+        p = q / Z
+
+        return p
 
     def _calculate_angle(self, atom_position, bond_atom_position, angle_atom_position):
         """
@@ -603,6 +611,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         b_u = b / np.linalg.norm(b)
         theta = np.arccos(np.dot(a_u, b_u))
         return theta
+
 
 class FFGeometryEngineOld(GeometryEngine):
     """
