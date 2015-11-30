@@ -1,8 +1,6 @@
 __author__ = 'Patrick B. Grinaway'
 
-#for now, just make the geometry engine run
 
-import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openmoltools
 import openeye.oeiupac as oeiupac
@@ -10,7 +8,8 @@ import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import simtk.unit as units
 
-
+kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
+beta = 1.0/ (300.0*units.kelvin*kB)
 def generate_initial_molecule(iupac_name):
     """
     Generate an oemol with a geometry
@@ -97,8 +96,11 @@ def test_run_geometry_engine():
 
     sm_top_proposal = topology_proposal.SmallMoleculeTopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
                                                                       old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+    sm_top_proposal._beta = beta
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
 
-    geometry_engine = geometry.FFGeometryEngine({'test': 'true'})
 
-    for i in range(10):
-        geometry_engine.propose(sm_top_proposal)
+    geometry_engine.propose(sm_top_proposal)
+
+if __name__=="__main__":
+    test_run_geometry_engine()
