@@ -446,7 +446,7 @@ class FFGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        k_eq = bond.type.k*units.kilojoule_per_mole/(units.nanometers**2)
+        k_eq = bond.type.k*units.kilocalories_per_mole_per_mole/(units.angstrom**2)
         r0 = bond.type.req*units.nanometers
         sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
         logp = stats.distributions.norm.logpdf(r/r.unit, r0/r0.unit, sigma)
