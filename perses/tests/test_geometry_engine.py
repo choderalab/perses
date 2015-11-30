@@ -1,7 +1,5 @@
 __author__ = 'Patrick B. Grinaway'
 
-#for now, just make the geometry engine run
-
 import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openmoltools
@@ -10,7 +8,8 @@ import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import simtk.unit as units
 
-
+kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
+beta = 1.0/ (300.0*units.kelvin*kB)
 def generate_initial_molecule(iupac_name):
     """
     Generate an oemol with a geometry
@@ -76,29 +75,26 @@ def test_run_geometry_engine():
     sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
     sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
 
-    #copy the positions to openmm manually (not sure what happens to units otherwise)
-    for atom in molecule1.GetAtoms():
-        (x, y, z) = molecule1.GetCoords(atom)
-        index = atom.GetIdx()
-        pos1[index, 0] = x * units.angstrom
-        pos1[index, 1] = y * units.angstrom
-        pos1[index, 2] = z * units.angstrom
-
-    for atom in molecule2.GetAtoms():
-        (x, y, z) = molecule1.GetCoords(atom)
-        index = atom.GetIdx()
-        pos2[index, 0] = x * units.angstrom
-        pos2[index, 1] = y * units.angstrom
-        pos2[index, 2] = z * units.angstrom
-
-    #propose(self, new_to_old_atom_map, new_system, old_system, old_positions)
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
 
     sm_top_proposal = topology_proposal.SmallMoleculeTopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
                                                                       old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+    sm_top_proposal._beta = beta
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
 
-    geometry_engine = geometry.FFGeometryEngine({'test': 'true'})
+    integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    context = openmm.Context(sys2, integrator)
+    context.setPositions(pos2)
+    state = context.getState(getEnergy=True)
+    print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
-    for i in range(10):
-        geometry_engine.propose(sm_top_proposal)
+    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal)
+    context.setPositions(new_positions)
+    state2 = context.getState(getEnergy=True)
+    print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
+
+
+
+if __name__=="__main__":
+    test_run_geometry_engine()
