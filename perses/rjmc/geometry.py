@@ -534,6 +534,19 @@ class FFGeometryEngine(GeometryEngine):
         theta = sigma/sigma.unit*np.random.random()*theta0.unit + theta0
         return theta
 
+    def _torsion_potential(self, torsion, phi, beta):
+        """
+        Calculate the log-unnormalized probability
+        of the torsion
+        """
+        phi = phi/phi.unit
+        beta = beta/beta.unit
+        gamma = torsion.type.phase
+        V = torsion.type.phi_k
+        n = torsion.type.per
+        q = -beta*(V/2.0)*(1+np.cos(n*phi-gamma))
+        return q
+
     def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
         pass
 
@@ -551,6 +564,8 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         """
         ub_angles = 0.0
         ub_torsions = 0.0
+        if type(xyz) != units.Quantity:
+            xyz = units.Quantity(xyz, units.nanometers)
         for angle in involved_angles:
             atom_position = xyz if angle.atom1 == atom else positions[angle.atom1.idx]
             bond_atom_position = xyz if angle.atom2 == atom else positions[angle.atom2.idx]
@@ -563,8 +578,8 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             angle_atom_position = xyz if torsion.atom3 == atom else positions[torsion.atom3.idx]
             torsion_atom_position = xyz if torsion.atom4 == atom else positions[torsion.atom4.idx]
             internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position)
-            phi = internal_coordinates[2]
-            ub_torsions += self._torsion_logp(phi, torsion, beta)
+            phi = internal_coordinates[2]*units.radians
+            ub_torsions += self._torsion_potential(torsion, phi, beta)
         return ub_angles+ub_torsions
 
 
@@ -621,7 +636,6 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         """
         Calculate the angle theta between 3 atoms 1-2-3
         """
-        atom_position = units.Quantity(atom_position, units.nanometers)
         a = bond_atom_position - atom_position
         b = angle_atom_position - bond_atom_position
         a_u = a / np.linalg.norm(a)
@@ -661,8 +675,9 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         max_p = max(p)
         logp = 0.0
         phi = 0
+        accepted = False
         while not accepted:
-            phi_samp = np.random.uniform(0.0, 2*np.pi)
+            phi_samp = np.random.uniform(0.0, 2*np.pi)*units.radians
             xyz, _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi_samp, positions)
             runif = np.random.uniform(0.0, max_p+1.0)
             p_phi_samp = self._torsion_logp(atom, xyz, torsion, atoms_with_positions, positions, beta, Z)
