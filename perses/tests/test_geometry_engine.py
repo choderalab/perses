@@ -1,6 +1,6 @@
 __author__ = 'Patrick B. Grinaway'
 
-
+import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openmoltools
 import openeye.oeiupac as oeiupac
@@ -90,7 +90,6 @@ def test_run_geometry_engine():
         pos2[index, 1] = y * units.angstrom
         pos2[index, 2] = z * units.angstrom
 
-    #propose(self, new_to_old_atom_map, new_system, old_system, old_positions)
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
 
@@ -99,8 +98,18 @@ def test_run_geometry_engine():
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
 
+    integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    context = openmm.Context(sys2, integrator)
+    context.setPositions(pos2)
+    state = context.getState(getEnergy=True)
+    print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
-    geometry_engine.propose(sm_top_proposal)
+    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal)
+    context.setPositions(new_positions)
+    state2 = context.getState(getEnergy=True)
+    print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
+
+
 
 if __name__=="__main__":
     test_run_geometry_engine()
