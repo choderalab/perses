@@ -129,9 +129,7 @@ class FFGeometryEngine(GeometryEngine):
                 logp_theta = self._angle_logp(theta_proposed, angle, top_proposal.beta)
 
                 #propose a torsion angle and calcualate its probability
-                phi_proposed = self._propose_torsion(atom, structure, torsion)
-                logp_phi = self._torsion_logp(atom, structure, torsion, phi_proposed)
-
+                phi_proposed, logp_phi = self._propose_torsion(atom, structure, torsion)
                 #convert to cartesian
                 xyz, detJ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r_proposed, theta_proposed, phi_proposed, new_positions)
 
@@ -539,7 +537,7 @@ class FFGeometryEngine(GeometryEngine):
         theta = sigma*np.random.random()*theta0.unit + theta0
         return theta
 
-    def _propose_torsion(self, atom, structure, bond, angle, torsion, atoms_with_position, positionss):
+    def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
         pass
 
 class FFAllAngleGeometryEngine(FFGeometryEngine):
@@ -633,7 +631,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         theta = np.arccos(np.dot(a_u, b_u))
         return theta
 
-    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
+    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta, Z=None):
         """
         Calculate the log-probability of a given torsion. This is calculated via a distribution
         that includes angle and other torsion potentials.
@@ -649,10 +647,34 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         involved_angles = self._get_valid_angles(atoms_with_positions, atom)
         involved_torsions = self._get_torsions(atoms_with_positions, atom)
         internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        p, Z = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta)
+        if not Z:
+            p, Z = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta)
         ub_torsion = self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
         p_torsion = np.exp(ub_torsion) / Z
         return p_torsion
+
+    def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
+        """
+        Propose a torsion angle, including energetic contributions from other torsions and angles
+        """
+        #first, let's get the normalizing constant of this distribution
+        p, Z = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta)
+        #now, use rejection sampling on the normalized distribution to randomly draw a phi
+        max_p = max(p)
+        logp = 0.0
+        phi = 0
+        while not accepted:
+            phi_samp = np.random.uniform(0.0, 2*np.pi)
+            xyz, _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi_samp, positions)
+            runif = np.random.uniform(0.0, max_p+1.0)
+            p_phi_samp = self._torsion_logp(atom, xyz, torsion, atoms_with_positions, positions, beta, Z)
+            if p_phi_samp > runif:
+                phi = phi_samp
+                logp = p_phi_samp
+                accepted = True
+            else:
+                continue
+        return phi, logp
 
 class FFGeometryEngineOld(GeometryEngine):
     """
