@@ -75,21 +75,6 @@ def test_run_geometry_engine():
     sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
     sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
 
-    #copy the positions to openmm manually (not sure what happens to units otherwise)
-    for atom in molecule1.GetAtoms():
-        (x, y, z) = molecule1.GetCoords(atom)
-        index = atom.GetIdx()
-        pos1[index, 0] = x * units.angstrom
-        pos1[index, 1] = y * units.angstrom
-        pos1[index, 2] = z * units.angstrom
-
-    for atom in molecule2.GetAtoms():
-        (x, y, z) = molecule1.GetCoords(atom)
-        index = atom.GetIdx()
-        pos2[index, 0] = x * units.angstrom
-        pos2[index, 1] = y * units.angstrom
-        pos2[index, 2] = z * units.angstrom
-
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
 

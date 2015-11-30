@@ -304,7 +304,7 @@ class FFGeometryEngine(GeometryEngine):
                     eligible_angles.append(angle)
         return eligible_angles
 
-    def _autograd_ctoi(self, atom_position, bond_position, angle_position, torsion_position):
+    def _autograd_ctoi(self, atom_position, bond_position, angle_position, torsion_position, calculate_jacobian=True):
         import autograd
         import autograd.numpy as np
 
@@ -343,13 +343,15 @@ class FFGeometryEngine(GeometryEngine):
                 phi = -phi
 
             return np.array([r, theta, phi])
-
-        j = autograd.jacobian(_cartesian_to_internal)
         internal_coords = _cartesian_to_internal(atom_position)
-        jacobian_det = np.linalg.det(j(atom_position))
+        if calculate_jacobian:
+            j = autograd.jacobian(_cartesian_to_internal)
+            jacobian_det = np.linalg.det(j(atom_position))
+        else:
+            jacobian_det = 0.0
         return internal_coords, np.abs(jacobian_det)
 
-    def _autograd_itoc(self, bond, angle, torsion, r, theta, phi, positions):
+    def _autograd_itoc(self, bond, angle, torsion, r, theta, phi, positions, calculate_jacobian=True):
         """
         Autograd based coordinate conversion internal -> cartesian
 
@@ -369,6 +371,8 @@ class FFGeometryEngine(GeometryEngine):
             torsion angle
         positions : [n, 3] np.array Quantity nm
             positions of the atoms in the molecule
+        calculate_jacobian : boolean
+            Whether to calculate a jacobian--default True
 
         Returns
         -------
@@ -423,12 +427,15 @@ class FFGeometryEngine(GeometryEngine):
 
             return xyz
 
-        j = autograd.jacobian(_internal_to_cartesian)
         atom_xyz = _internal_to_cartesian(rtp)
-        jacobian_det = np.linalg.det(j(rtp))
-        logging.debug("detJ is %f" %(jacobian_det))
-        detj_spherical = r**2*np.sin(theta)
-        logging.debug("The spherical detJ is %f" % detj_spherical)
+        if calculate_jacobian:
+            j = autograd.jacobian(_internal_to_cartesian)
+            jacobian_det = np.linalg.det(j(rtp))
+            logging.debug("detJ is %f" %(jacobian_det))
+        else:
+            jacobian_det = 0.0
+        #detj_spherical = r**2*np.sin(theta)
+        #logging.debug("The spherical detJ is %f" % detj_spherical)
         return units.Quantity(atom_xyz, unit=units.nanometers), np.abs(jacobian_det)
 
     def _bond_logp(self, r, bond, beta):
@@ -577,7 +584,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom_position = xyz if torsion.atom2 == atom else positions[torsion.atom2.idx]
             angle_atom_position = xyz if torsion.atom3 == atom else positions[torsion.atom3.idx]
             torsion_atom_position = xyz if torsion.atom4 == atom else positions[torsion.atom4.idx]
-            internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position)
+            internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position, calculate_jacobian=False)
             phi = internal_coordinates[2]*units.radians
             ub_torsions += self._torsion_potential(torsion, phi, beta)
         return ub_angles+ub_torsions
@@ -614,12 +621,15 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
 
         #rotate atom about torsion angle, calculating an xyz for each
         for i, phi in enumerate(phis):
-            xyzs[i], _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi, positions)
+            xyzs[i], _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi, positions, calculate_jacobian=False)
 
         #set up arrays for energies from angles and torsions
         ub= np.zeros(n_divisions)
         for i, xyz in enumerate(xyzs):
-            ub[i] += self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
+            ub_i = self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
+            if np.isnan(ub_i):
+                ub_i = np.inf
+            ub[i]+=ub_i
 
         #exponentiate to get the unnormalized probability
         q = np.exp(-ub)
@@ -660,7 +670,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         involved_torsions = self._get_torsions(atoms_with_positions, atom)
         internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
         if not Z:
-            p, Z = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=60)
+            p, Z = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         ub_torsion = self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
         p_torsion = np.exp(-ub_torsion) / Z
         return p_torsion
@@ -670,7 +680,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         Propose a torsion angle, including energetic contributions from other torsions and angles
         """
         #first, let's get the normalizing constant of this distribution
-        p, Z = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=60)
+        p, Z = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         #now, use rejection sampling on the normalized distribution to randomly draw a phi
         max_p = max(p)
         logp = 0.0
