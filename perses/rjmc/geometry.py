@@ -10,6 +10,7 @@ import numexpr as ne
 import parmed
 import simtk.unit as units
 import logging
+from numba import jit
 
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
@@ -584,7 +585,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom_position = xyz if torsion.atom2 == atom else positions[torsion.atom2.idx]
             angle_atom_position = xyz if torsion.atom3 == atom else positions[torsion.atom3.idx]
             torsion_atom_position = xyz if torsion.atom4 == atom else positions[torsion.atom4.idx]
-            internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position, calculate_jacobian=False)
+            internal_coordinates, _ = _ctoi_prim_numba(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position)
             phi = internal_coordinates[2]*units.radians
             ub_torsions += self._torsion_potential(torsion, phi, beta)
         return ub_angles+ub_torsions
@@ -640,7 +641,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         #get the normalized probabilities for torsions
         p = q / Z
 
-        return p, Z
+        return p, Z, q, phis
 
     def _calculate_angle(self, atom_position, bond_atom_position, angle_atom_position):
         """
@@ -680,24 +681,13 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         Propose a torsion angle, including energetic contributions from other torsions and angles
         """
         #first, let's get the normalizing constant of this distribution
-        p, Z = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
-        #now, use rejection sampling on the normalized distribution to randomly draw a phi
-        max_p = max(p)
-        logp = 0.0
-        phi = 0
-        accepted = False
-        while not accepted:
-            phi_samp = np.random.uniform(0.0, 2*np.pi)*units.radians
-            xyz, _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi_samp, positions)
-            runif = np.random.uniform(0.0, max_p+1.0)
-            p_phi_samp = self._torsion_logp(atom, xyz, torsion, atoms_with_positions, positions, beta, Z)
-            if p_phi_samp > runif:
-                phi = phi_samp
-                logp = p_phi_samp
-                accepted = True
-            else:
-                continue
+        p, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        #choose from the set of possible torsion angles
+        phi_idx = np.random.choice(range(len(phis)), p=p)
+        logp = np.log(p[phi_idx])
+        phi = phis[phi_idx]
         return phi, logp
+
 
 class FFGeometryEngineOld(GeometryEngine):
     """

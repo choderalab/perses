@@ -89,12 +89,14 @@ def test_run_geometry_engine():
     state = context.getState(getEnergy=True)
     print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
-    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal)
-    context.setPositions(new_positions)
-    state2 = context.getState(getEnergy=True)
-    print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
+    for i in range(10):
+        new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal)
+        context.setPositions(new_positions)
+        state2 = context.getState(getEnergy=True)
+        print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
 
 
 
 if __name__=="__main__":
-    test_run_geometry_engine()
+    for i in range(10):
+        test_run_geometry_engine()
