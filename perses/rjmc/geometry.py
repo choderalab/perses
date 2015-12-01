@@ -193,14 +193,15 @@ class FFGeometryEngine(GeometryEngine):
 
                 #propose a bond and calculate its probability
                 bond = self._get_relevant_bond(atom, bond_atom)
-                logp_r = self._bond_logp(internal_coordinates[0], bond, top_proposal.beta)
+                bond_logz = np.sqrt(2.0*np.pi)*
+                logp_r = self._bond_logq(internal_coordinates[0], bond, top_proposal.beta)
 
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-                logp_theta = self._angle_logp(internal_coordinates[1], angle, top_proposal.beta)
+                logp_theta = self._angle_logq(internal_coordinates[1], angle, top_proposal.beta)
 
                 #calculate torsion probability
-                logp_phi = self._torsion_logp(atom, atom_coords, torsion, atoms_with_positions, reverse_proposal_coordinates, beta)
+                logp_phi = self._torsion_logq(atom, atom_coords, torsion, atoms_with_positions, reverse_proposal_coordinates, beta)
                 logp = logp + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
 
                 atoms_with_positions.append(atom)
@@ -455,7 +456,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         k_eq = bond.type.k*units.kilocalories_per_mole/(units.angstrom**2)
         r0 = bond.type.req*units.nanometers
-        logq = -beta*k_eq*(r-r0)**2
+        logq = -beta*0.5*k_eq*(r-r0)**2
         return logq
 
     def _angle_logq(self, theta, angle, beta):
@@ -473,7 +474,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         k_eq = angle.type.k*units.kilocalories_per_mole/(units.radians**2)
         theta0 = angle.type.theteq*units.radians
-        logq = -beta*k_eq*(theta-theta0)**2
+        logq = -beta*k_eq*0.5*(theta-theta0)**2
         return logq
 
     def _torsion_logq(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
@@ -576,7 +577,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom_position = xyz if angle.atom2 == atom else positions[angle.atom2.idx]
             angle_atom_position = xyz if angle.atom3 == atom else positions[angle.atom3.idx]
             theta = self._calculate_angle(atom_position, bond_atom_position, angle_atom_position)
-            ub_angles += self._angle_logp(theta*units.radians, angle, beta)
+            ub_angles += self._angle_logq(theta*units.radians, angle, beta)
         for torsion in involved_torsions:
             atom_position = xyz if torsion.atom1 == atom else positions[torsion.atom1.idx]
             bond_atom_position = xyz if torsion.atom2 == atom else positions[torsion.atom2.idx]
@@ -630,7 +631,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             ub[i]+=ub_i
 
         #exponentiate to get the unnormalized probability
-        q = np.exp(-ub)
+        q = np.exp(ub)
 
         #estimate the normalizing constant
         Z = np.trapz(q, phis)
@@ -684,4 +685,3 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         logp = np.log(p[phi_idx])
         phi = phis[phi_idx]
         return phi, logp
-
