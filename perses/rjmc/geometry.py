@@ -193,12 +193,15 @@ class FFGeometryEngine(GeometryEngine):
 
                 #propose a bond and calculate its probability
                 bond = self._get_relevant_bond(atom, bond_atom)
-                bond_logz = np.sqrt(2.0*np.pi)*
-                logp_r = self._bond_logq(internal_coordinates[0], bond, top_proposal.beta)
+                sigma_r = np.sqrt(1.0/(beta/beta.unit*bond.type.k))
+                logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r))
+                logp_r = self._bond_logq(internal_coordinates[0], bond, top_proposal.beta) - logZ_r
 
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-                logp_theta = self._angle_logq(internal_coordinates[1], angle, top_proposal.beta)
+                sigma_theta = np.sqrt(1.0/(beta/beta.unit*angle.type.k))
+                logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta))
+                logp_theta = self._angle_logq(internal_coordinates[1], angle, top_proposal.beta) - logZ_theta
 
                 #calculate torsion probability
                 logp_phi = self._torsion_logq(atom, atom_coords, torsion, atoms_with_positions, reverse_proposal_coordinates, beta)
