@@ -5,11 +5,10 @@ for each additional atom that must be added.
 from collections import namedtuple
 import perses.rjmc.topology_proposal as topology_proposal
 import numpy as np
-import numexpr as ne
 import parmed
 import simtk.unit as units
 import logging
-from numba import jit
+
 
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
