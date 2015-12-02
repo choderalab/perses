@@ -90,6 +90,7 @@ class FFGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
+        beta = top_proposa.beta
         logp_proposal = 0.0
         structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_new_atoms]
@@ -117,16 +118,18 @@ class FFGeometryEngine(GeometryEngine):
 
                 #propose a bond and calculate its probability
                 bond = self._get_relevant_bond(atom, bond_atom)
-                r_proposed = self._propose_bond(bond, top_proposal.beta)
-                logp_r = self._bond_logp(r_proposed, bond, top_proposal.beta)
+                r_proposed = self._propose_bond(bond, beta)
+                sigma_r = np.sqrt(1.0/(beta/beta.unit*bond.type.k))
+                logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r))
+                logp_r = self._bond_logq(r_proposed, bond, beta)
 
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-                theta_proposed = self._propose_angle(angle, top_proposal.beta)
-                logp_theta = self._angle_logp(theta_proposed, angle, top_proposal.beta)
+                theta_proposed = self._propose_angle(angle, beta)
+                logp_theta = self._angle_logp(theta_proposed, angle, beta)
 
                 #propose a torsion angle and calcualate its probability
-                phi_proposed, logp_phi = self._propose_torsion(atom, r_proposed, theta_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, top_proposal.beta)
+                phi_proposed, logp_phi = self._propose_torsion(atom, r_proposed, theta_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
                 #convert to cartesian
                 xyz, detJ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r_proposed, theta_proposed, phi_proposed, new_positions)
 
@@ -204,7 +207,7 @@ class FFGeometryEngine(GeometryEngine):
                 logp_theta = self._angle_logq(internal_coordinates[1], angle, top_proposal.beta) - logZ_theta
 
                 #calculate torsion probability
-                logp_phi = self._torsion_logq(atom, atom_coords, torsion, atoms_with_positions, reverse_proposal_coordinates, beta)
+                logp_phi = self._torsion_logp(atom, atom_coords, torsion, atoms_with_positions, reverse_proposal_coordinates, beta)
                 logp = logp + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
 
                 atoms_with_positions.append(atom)
@@ -527,10 +530,9 @@ class FFGeometryEngine(GeometryEngine):
         """
         Bond length proposal
         """
-        k_eq = bond.type.k*units.kilocalories_per_mole/(units.angstrom**2)
         r0 = bond.type.req*units.angstrom
-        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        r = sigma/sigma.unit*np.random.random()*r0.unit + r0
+        sigma_r = np.sqrt(1.0/(beta/beta.unit*bond.type.k))
+        r = sigma_r/sigma_r.unit*np.random.random()*r0.unit + r0
         return r
 
     def _propose_angle(self, angle, beta):
@@ -538,9 +540,8 @@ class FFGeometryEngine(GeometryEngine):
         Bond angle proposal
         """
         theta0 = angle.type.theteq*units.radians
-        k_eq = angle.type.k*units.kilocalories_per_mole/(units.radians**2)
-        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        theta = sigma/sigma.unit*np.random.random()*theta0.unit + theta0
+        sigma_theta = np.sqrt(1.0/(beta/beta.unit*angle.type.k))
+        theta = sigma_theta/sigma_theta.unit*np.random.random()*theta0.unit + theta0
         return theta
 
     def _torsion_potential(self, torsion, phi, beta):
@@ -555,6 +556,9 @@ class FFGeometryEngine(GeometryEngine):
         n = torsion.type.per
         q = -beta*(V/2.0)*(1+np.cos(n*phi-gamma))
         return q
+
+    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta, Z=None):
+        pass
 
     def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
         pass
