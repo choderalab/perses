@@ -200,14 +200,14 @@ class FFGeometryEngine(GeometryEngine):
                 #propose a bond and calculate its probability
                 bond = self._get_relevant_bond(atom, bond_atom)
                 bond_k = bond.type.k*units.kilocalorie_per_mole/units.angstrom**2
-                sigma_r = units.sqrt(1/beta*bond_k)
+                sigma_r = units.sqrt(1/(beta*bond_k))
                 logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit)) #need to eliminate unit to allow numpy log
                 logp_r = self._bond_logq(internal_coordinates[0], bond, beta) - logZ_r
 
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-                angle_k = angle.type.k*units.kilocalorie_per_mole/(units.radians**2)
-                sigma_theta = units.sqrt(1/beta*angle_k)
+                angle_k = angle.type.k*units.kilocalorie_per_mole/(units.degrees**2)
+                sigma_theta = units.sqrt(1/(beta*angle_k))
                 logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit)) #need to eliminate unit to allow numpy log
                 logp_theta = self._angle_logq(internal_coordinates[1], angle, beta) - logZ_theta
 
@@ -483,8 +483,8 @@ class FFGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        k_eq = angle.type.k*units.kilocalories_per_mole/(units.radians**2)
-        theta0 = angle.type.theteq*units.radians
+        k_eq = angle.type.k*units.kilocalories_per_mole/(units.degrees**2)
+        theta0 = angle.type.theteq*units.degrees
         logq = -beta*k_eq*0.5*(theta-theta0)**2
         return logq
 
@@ -524,7 +524,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         Bond angle proposal
         """
-        theta0 = angle.type.theteq*units.radians
+        theta0 = angle.type.theteq*units.degrees
         k = angle.type.k*units.kilocalorie_per_mole/units.radian**2
         sigma_theta = units.sqrt(1.0/(beta*k))
         theta = sigma_theta*np.random.random() + theta0
@@ -616,15 +616,15 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             xyzs[i], _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi, positions, calculate_jacobian=False)
 
         #set up arrays for energies from angles and torsions
-        ub= np.zeros(n_divisions)
+        loq= np.zeros(n_divisions)
         for i, xyz in enumerate(xyzs):
             ub_i = self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
             if np.isnan(ub_i):
                 ub_i = np.inf
-            ub[i]+=ub_i
+            loq[i]+=ub_i
 
         #exponentiate to get the unnormalized probability
-        q = np.exp(ub)
+        q = np.exp(loq)
 
         #estimate the normalizing constant
         Z = np.trapz(q, phis)
