@@ -495,7 +495,7 @@ class FFGeometryEngine(GeometryEngine):
         eligible_torsions = self._get_torsions(atoms_with_positions, atom_for_proposal)
         torsion_idx = np.random.randint(0, len(eligible_torsions))
         torsion_selected = eligible_torsions[torsion_idx]
-        return torsion_selected, np.log(1/len(eligible_torsions))
+        return torsion_selected, np.log(1.0/len(eligible_torsions))
 
     def _atoms_eligible_for_proposal(self, new_atoms, structure, atoms_with_positions):
         """
