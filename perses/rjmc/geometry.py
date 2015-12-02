@@ -658,10 +658,8 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom = torsion.atom3
             angle_atom = torsion.atom2
             torsion_atom = torsion.atom1
-        involved_angles = self._get_valid_angles(atoms_with_positions, atom)
-        involved_torsions = self._get_torsions(atoms_with_positions, atom)
         internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        p, Z, q, phis = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        p, Z, q, phis, logq = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         #find the phi that's closest to the internal_coordinate phi:
         phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-internal_coordinates[2]))
         p_phi = p[phi_idx]
@@ -672,7 +670,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         Propose a torsion angle, including energetic contributions from other torsions and angles
         """
         #first, let's get the normalizing constant of this distribution
-        p, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        p, Z, q, phis, logq = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         #choose from the set of possible torsion angles
         phi_idx = np.random.choice(range(len(phis)), p=p)
         logp = np.log(p[phi_idx])
