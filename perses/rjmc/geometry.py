@@ -530,7 +530,7 @@ class FFGeometryEngine(GeometryEngine):
         theta = sigma_theta*np.random.random() + theta0
         return theta
 
-    def _torsion_potential(self, torsion, phi, beta):
+    def _torsion_logq(self, torsion, phi, beta):
         """
         Calculate the log-unnormalized probability
         of the torsion
@@ -540,8 +540,8 @@ class FFGeometryEngine(GeometryEngine):
         gamma = torsion.type.phase
         V = torsion.type.phi_k
         n = torsion.type.per
-        q = -beta*(V/2.0)*(1+np.cos(n*phi-gamma))
-        return q
+        logq = -beta*(V/2.0)*(1+np.cos(n*phi-gamma))
+        return logq
 
     def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
         pass
@@ -556,13 +556,13 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
     and torsion_p methods of the base.
     """
 
-    def _torsion_and_angle_potential(self, xyz, atom, positions, involved_angles, involved_torsions, beta):
+    def _torsion_and_angle_logq(self, xyz, atom, positions, involved_angles, involved_torsions, beta):
         """
         Calculate the potential resulting from torsions and angles
         at a given cartesian coordinate
         """
-        ub_angles = 0.0
-        ub_torsions = 0.0
+        logq_angles = 0.0
+        logq_torsions= 0.0
         if type(xyz) != units.Quantity:
             xyz = units.Quantity(xyz, units.nanometers)
         for angle in involved_angles:
@@ -570,7 +570,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom_position = xyz if angle.atom2 == atom else positions[angle.atom2.idx]
             angle_atom_position = xyz if angle.atom3 == atom else positions[angle.atom3.idx]
             theta = self._calculate_angle(atom_position, bond_atom_position, angle_atom_position)
-            ub_angles += self._angle_logq(theta*units.radians, angle, beta)
+            logq_angles += self._angle_logq(theta*units.radians, angle, beta)
         for torsion in involved_torsions:
             atom_position = xyz if torsion.atom1 == atom else positions[torsion.atom1.idx]
             bond_atom_position = xyz if torsion.atom2 == atom else positions[torsion.atom2.idx]
@@ -578,8 +578,8 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             torsion_atom_position = xyz if torsion.atom4 == atom else positions[torsion.atom4.idx]
             internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position, calculate_jacobian=False)
             phi = internal_coordinates[2]*units.radians
-            ub_torsions += self._torsion_potential(torsion, phi, beta)
-        return ub_angles+ub_torsions
+            logq_torsions += self._torsion_logq(torsion, phi, beta)
+        return logq_angles+logq_torsions
 
 
     def _normalize_torsion_proposal(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000):
@@ -616,15 +616,15 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             xyzs[i], _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi, positions, calculate_jacobian=False)
 
         #set up arrays for energies from angles and torsions
-        loq= np.zeros(n_divisions)
+        logq = np.zeros(n_divisions)
         for i, xyz in enumerate(xyzs):
-            ub_i = self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
-            if np.isnan(ub_i):
-                ub_i = np.inf
-            loq[i]+=ub_i
+            logq_i = self._torsion_and_angle_logq(xyz, atom, positions, involved_angles, involved_torsions, beta)
+            if np.isnan(logq_i):
+                logq_i = np.inf
+            logq[i]+=logq_i
 
         #exponentiate to get the unnormalized probability
-        q = np.exp(loq)
+        q = np.exp(logq)
 
         #estimate the normalizing constant
         Z = np.trapz(q, phis)
@@ -632,7 +632,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         #get the normalized probabilities for torsions
         p = q / Z
 
-        return p, Z, q, phis
+        return p, Z, q, phis, logq
 
     def _calculate_angle(self, atom_position, bond_atom_position, angle_atom_position):
         """
