@@ -90,7 +90,7 @@ class FFGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
-        beta = top_proposa.beta
+        beta = top_proposal.beta.in_units_of(units.kilocalorie_per_mole**-1)
         logp_proposal = 0.0
         structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_new_atoms]
@@ -160,6 +160,7 @@ class FFGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal for the given transformation
         """
+        beta = top_proposal.beta.in_units_of(units.kilocalorie_per_mole**-1)
         logp = 0.0
         top_proposal = topology_proposal.SmallMoleculeTopologyProposal()
         structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
@@ -167,7 +168,6 @@ class FFGeometryEngine(GeometryEngine):
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_old_atoms]
         #we'll need to copy the current positions of the core to the old system
         #In the case of C-A --> C/-A -> C/-B ---> C-B these are the same
-        beta = top_proposal.beta
         reverse_proposal_coordinates = units.Quantity(np.zeros([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
         for atom in atoms_with_positions:
             new_index = top_proposal.old_to_new_atom_map[atom.idx]
@@ -198,13 +198,13 @@ class FFGeometryEngine(GeometryEngine):
                 bond = self._get_relevant_bond(atom, bond_atom)
                 sigma_r = np.sqrt(1.0/(beta/beta.unit*bond.type.k))
                 logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r))
-                logp_r = self._bond_logq(internal_coordinates[0], bond, top_proposal.beta) - logZ_r
+                logp_r = self._bond_logq(internal_coordinates[0], bond, beta) - logZ_r
 
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
                 sigma_theta = np.sqrt(1.0/(beta/beta.unit*angle.type.k))
                 logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta))
-                logp_theta = self._angle_logq(internal_coordinates[1], angle, top_proposal.beta) - logZ_theta
+                logp_theta = self._angle_logq(internal_coordinates[1], angle, beta) - logZ_theta
 
                 #calculate torsion probability
                 logp_phi = self._torsion_logp(atom, atom_coords, torsion, atoms_with_positions, reverse_proposal_coordinates, beta)
