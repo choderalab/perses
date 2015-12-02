@@ -622,6 +622,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             if np.isnan(logq_i):
                 logq_i = np.inf
             logq[i]+=logq_i
+        logq - max(logq)
 
         #exponentiate to get the unnormalized probability
         q = np.exp(logq)
