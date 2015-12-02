@@ -517,7 +517,7 @@ class FFGeometryEngine(GeometryEngine):
         r0 = bond.type.req*units.angstrom
         k = bond.type.k*units.kilocalorie_per_mole/units.angstrom**2
         sigma_r = units.sqrt(1.0/(beta*k))
-        r = sigma_r*np.random.random() + r0
+        r = sigma_r/sigma_r.unit*np.random.random()*units.angstrom + r0
         return r
 
     def _propose_angle(self, angle, beta):
@@ -527,7 +527,7 @@ class FFGeometryEngine(GeometryEngine):
         theta0 = angle.type.theteq*units.degrees
         k = angle.type.k*units.kilocalorie_per_mole/units.radian**2
         sigma_theta = units.sqrt(1.0/(beta*k))
-        theta = sigma_theta*np.random.random() + theta0
+        theta = sigma_theta/sigma_theta.unit*np.random.random()*units.radian + theta0
         return theta
 
     def _torsion_logq(self, torsion, phi, beta):
