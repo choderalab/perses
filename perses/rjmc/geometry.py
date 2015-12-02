@@ -489,27 +489,6 @@ class FFGeometryEngine(GeometryEngine):
         logq = -beta*k_eq*0.5*(theta-theta0)**2
         return logq
 
-    def _torsion_logq(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
-        """
-        Utility function for calculating the unnormalized probability of a torsion angle
-        """
-        if torsion.atom1 == atom:
-            bond_atom = torsion.atom2
-            angle_atom = torsion.atom3
-            torsion_atom = torsion.atom4
-        else:
-            bond_atom = torsion.atom3
-            angle_atom = torsion.atom2
-            torsion_atom = torsion.atom1
-
-        internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        beta = beta/beta.unit
-        gamma = torsion.type.phase
-        V = torsion.type.phi_k
-        n = torsion.type.per
-        logq = -beta*(V/2.0)*(1+np.cos(n*internal_coordinates[2]-gamma))
-        return logq
-
     def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
         """
         Pick an eligible torsion uniformly
@@ -563,7 +542,7 @@ class FFGeometryEngine(GeometryEngine):
         q = -beta*(V/2.0)*(1+np.cos(n*phi-gamma))
         return q
 
-    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta, Z=None):
+    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
         pass
 
     def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
@@ -665,7 +644,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         theta = np.arccos(np.dot(a_u, b_u))
         return theta
 
-    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta, Z=None):
+    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
         """
         Calculate the log-probability of a given torsion. This is calculated via a distribution
         that includes angle and other torsion potentials.
@@ -681,8 +660,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         involved_angles = self._get_valid_angles(atoms_with_positions, atom)
         involved_torsions = self._get_torsions(atoms_with_positions, atom)
         internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        if not Z:
-            p, Z, _, _ = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        p, Z, q, phis = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         ub_torsion = self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
         p_torsion = np.exp(-ub_torsion) / Z
         return p_torsion
