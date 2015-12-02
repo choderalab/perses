@@ -576,7 +576,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom_position = xyz if torsion.atom2 == atom else positions[torsion.atom2.idx]
             angle_atom_position = xyz if torsion.atom3 == atom else positions[torsion.atom3.idx]
             torsion_atom_position = xyz if torsion.atom4 == atom else positions[torsion.atom4.idx]
-            internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position)
+            internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position, calculate_jacobian=False)
             phi = internal_coordinates[2]*units.radians
             ub_torsions += self._torsion_potential(torsion, phi, beta)
         return ub_angles+ub_torsions
