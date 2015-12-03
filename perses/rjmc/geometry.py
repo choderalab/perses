@@ -668,7 +668,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         q = np.exp(logq)
 
         #estimate the normalizing constant
-        Z = np.trapz(q, phis)
+        Z = np.sum(q)
 
         #get the normalized probabilities for torsions
         p = q / Z
