@@ -522,8 +522,8 @@ class FFGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        k_eq = angle.type.k*units.kilocalories_per_mole/(units.degrees**2)
-        theta0 = angle.type.theteq*units.degrees
+        k_eq = angle.type.k
+        theta0 = angle.type.theteq
         logq = -beta*k_eq*0.5*(theta-theta0)**2
         return logq
 
