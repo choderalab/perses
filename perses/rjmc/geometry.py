@@ -735,7 +735,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         #first, let's get the normalizing constant of this distribution
         logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         #choose from the set of possible torsion angles
-        phi_idx = np.random.choice(range(len(phis)), p=np.exp(p))
+        phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp))
         logp = logp[phi_idx]
         phi = phis[phi_idx]
         return phi, logp
