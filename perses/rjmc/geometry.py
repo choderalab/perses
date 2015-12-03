@@ -251,7 +251,8 @@ class FFGeometryEngine(GeometryEngine):
         atom3_angles = set(atom3.angles)
         relevant_angle_set = atom1_angles.intersection(atom2_angles, atom3_angles)
         relevant_angle = relevant_angle_set.pop()
-        relevant_angle_with_units = self._add_angle_units(relevant_angle)
+        if type(relevant_angle.type.k) != units.Quantity:
+            relevant_angle_with_units = self._add_angle_units(relevant_angle)
         return relevant_angle_with_units
 
     def _add_bond_units(self, bond):
