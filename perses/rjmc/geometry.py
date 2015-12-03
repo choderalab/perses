@@ -274,7 +274,7 @@ class FFGeometryEngine(GeometryEngine):
 
         """
         bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
-        bond.type.k = units.Quantity(bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
         return bond
 
     def _add_angle_units(self, angle):
@@ -292,7 +292,7 @@ class FFGeometryEngine(GeometryEngine):
             The angle, but with units on its parameters
         """
         angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
-        angle.type.k = units.Quantity(angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
         return angle
 
     def _get_torsions(self, atoms_with_positions, new_atom):
