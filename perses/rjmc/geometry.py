@@ -118,7 +118,7 @@ class FFGeometryEngine(GeometryEngine):
                 #propose a bond and calculate its probability
                 bond = self._get_relevant_bond(atom, bond_atom)
                 r_proposed = self._propose_bond(bond, beta)
-                bond_k = bond.type.k*units.kilocalorie_per_mole/units.angstrom**2
+                bond_k = bond.type.k
                 sigma_r = units.sqrt(1/(beta*bond_k))
                 logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit))
                 logp_r = self._bond_logq(r_proposed, bond, beta) - logZ_r
@@ -126,7 +126,7 @@ class FFGeometryEngine(GeometryEngine):
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
                 theta_proposed = self._propose_angle(angle, beta)
-                angle_k = angle.type.k*units.kilocalorie_per_mole/units.degree**2
+                angle_k = angle.type.k
                 sigma_theta = units.sqrt(1/(beta*angle_k))
                 logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit))
                 logp_theta = self._angle_logq(theta_proposed, angle, beta) - logZ_theta
@@ -553,8 +553,8 @@ class FFGeometryEngine(GeometryEngine):
         """
         Bond length proposal
         """
-        r0 = bond.type.req*units.angstrom
-        k = bond.type.k*units.kilocalorie_per_mole/units.angstrom**2
+        r0 = bond.type.req
+        k = bond.type.k
         sigma_r = units.sqrt(1.0/(beta*k))
         r = sigma_r/sigma_r.unit*np.random.random()*units.angstrom + r0
         return r
@@ -563,8 +563,8 @@ class FFGeometryEngine(GeometryEngine):
         """
         Bond angle proposal
         """
-        theta0 = angle.type.theteq*units.degrees
-        k = angle.type.k*units.kilocalorie_per_mole/units.degree**2
+        theta0 = angle.type.theteq
+        k = angle.type.k
         sigma_theta = units.sqrt(1.0/(beta*k))
         theta = sigma_theta/sigma_theta.unit*np.random.random()*units.radian + theta0
         return theta
