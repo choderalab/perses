@@ -295,6 +295,24 @@ class FFGeometryEngine(GeometryEngine):
         angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
         return angle
 
+    def _add_torsion_units(self, torsion):
+        """
+        Add the correct units to a torsion
+
+        Arguments
+        ---------
+        torsion : parmed.dihedral object
+            The torsion needing units
+
+        Returns
+        -------
+        torsion : parmed.dihedral object
+            Torsion but with units added
+        """
+        torsion.type.phi_k = units.Quantity(torsion.type.phi_k, unit=units.kilocalorie_per_mole)
+        torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
+        return torsion
+
     def _get_torsions(self, atoms_with_positions, new_atom):
         """
         Get the torsions that the new atom_index participates in, where all other
@@ -325,7 +343,8 @@ class FFGeometryEngine(GeometryEngine):
                 continue
             if set(atoms_with_positions).issuperset(set(torsion_partners)):
                 eligible_torsions.append(torsion)
-        return torsions
+        eligible_torsions_with_units = [self._add_torsion_units(torsion) if type(torsion.type.phi_k)!=units.Quantity else torsion for torsion in eligible_torsions]
+        return eligible_torsions_with_units
 
     def _get_valid_angles(self, atoms_with_positions, new_atom):
         """
@@ -581,10 +600,8 @@ class FFGeometryEngine(GeometryEngine):
         Calculate the log-unnormalized probability
         of the torsion
         """
-        phi = phi
-        beta = beta
-        gamma = torsion.type.phase*units.degree
-        V = torsion.type.phi_k*units.kilocalorie_per_mole
+        gamma = torsion.type.phase
+        V = torsion.type.phi_k
         n = torsion.type.per
         logq = -beta*(V/2.0)*(1+units.cos(n*phi-gamma))
         return logq
