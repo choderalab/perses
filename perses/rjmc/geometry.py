@@ -353,7 +353,8 @@ class FFGeometryEngine(GeometryEngine):
             else:
                 if atoms_with_positions.issuperset(set([angle.atom1, angle.atom2])):
                     eligible_angles.append(angle)
-        return eligible_angles
+        eligible_angles_with_units = [self._add_angle_units(angle) if type(angle.type.theteq) != units.Quantity else angle for angle in eligible_angles]
+        return eligible_angles_with_units
 
     def _autograd_ctoi(self, atom_position, bond_position, angle_position, torsion_position, calculate_jacobian=True):
         import autograd
