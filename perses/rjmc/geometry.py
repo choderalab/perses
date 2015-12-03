@@ -581,10 +581,10 @@ class FFGeometryEngine(GeometryEngine):
         Calculate the log-unnormalized probability
         of the torsion
         """
-        phi = phi/phi.unit
-        beta = beta/beta.unit
-        gamma = torsion.type.phase
-        V = torsion.type.phi_k
+        phi = phi
+        beta = beta
+        gamma = torsion.type.phase*units.degree
+        V = torsion.type.phi_k*units.kilocalorie_per_mole
         n = torsion.type.per
         logq = -beta*(V/2.0)*(1+units.cos(n*phi-gamma))
         return logq
