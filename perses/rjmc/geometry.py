@@ -504,8 +504,8 @@ class FFGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        k_eq = bond.type.k*units.kilocalories_per_mole/(units.angstrom**2)
-        r0 = bond.type.req*units.nanometers
+        k_eq = bond.type.k
+        r0 = bond.type.req
         logq = -beta*0.5*k_eq*(r-r0)**2
         return logq
 
