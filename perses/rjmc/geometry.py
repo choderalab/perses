@@ -237,8 +237,10 @@ class FFGeometryEngine(GeometryEngine):
         """
         bonds_1 = set(atom1.bonds)
         bonds_2 = set(atom2.bonds)
-        relevant_bond = bonds_1.intersection(bonds_2)
-        return relevant_bond.pop()
+        relevant_bond_set = bonds_1.intersection(bonds_2)
+        relevant_bond = relevant_bond_set.pop()
+        relevant_bond_with_units = self._add_bond_units(relevant_bond)
+        return relevant_bond_with_units
 
     def _get_relevant_angle(self, atom1, atom2, atom3):
         """
@@ -247,8 +249,45 @@ class FFGeometryEngine(GeometryEngine):
         atom1_angles = set(atom1.angles)
         atom2_angles = set(atom2.angles)
         atom3_angles = set(atom3.angles)
-        relevant_angle = atom1_angles.intersection(atom2_angles, atom3_angles)
-        return relevant_angle.pop()
+        relevant_angle_set = atom1_angles.intersection(atom2_angles, atom3_angles)
+        relevant_angle = relevant_angle_set.pop()
+        relevant_angle_with_units = self._add_angle_units(relevant_angle)
+        return relevant_angle_with_units
+
+    def _add_bond_units(self, bond):
+        """
+        Add the correct units to a harmonic bond
+
+        Arguments
+        ---------
+        bond : parmed bond object
+            The bond to get units
+
+        Returns
+        -------
+
+        """
+        bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
+        bond.type.k = units.Quantity(bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        return bond
+
+    def _add_angle_units(self, angle):
+        """
+        Add the correct units to a harmonic angle
+
+        Arguments
+        ----------
+        angle : parmed angle object
+             the angle to get unit-ed
+
+        Returns
+        -------
+        angle_with_units : parmed angle
+            The angle, but with units on its parameters
+        """
+        angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
+        angle.type.k = units.Quantity(angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        return angle
 
     def _get_torsions(self, atoms_with_positions, new_atom):
         """
