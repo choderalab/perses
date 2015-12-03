@@ -563,7 +563,7 @@ class FFGeometryEngine(GeometryEngine):
         r0 = bond.type.req
         k = bond.type.k
         sigma_r = units.sqrt(1.0/(beta*k))
-        r = sigma_r/sigma_r.unit*np.random.random()*units.angstrom + r0
+        r = sigma_r*np.random.random() + r0
         return r
 
     def _propose_angle(self, angle, beta):
@@ -573,7 +573,7 @@ class FFGeometryEngine(GeometryEngine):
         theta0 = angle.type.theteq
         k = angle.type.k
         sigma_theta = units.sqrt(1.0/(beta*k))
-        theta = sigma_theta/sigma_theta.unit*np.random.random()*units.radian + theta0
+        theta = sigma_theta*np.random.random() + theta0
         return theta
 
     def _torsion_logq(self, torsion, phi, beta):
@@ -668,7 +668,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             if np.isnan(logq_i):
                 logq_i = - np.inf
             logq[i]+=logq_i
-        logq - max(logq)
+        logq -= max(logq)
 
         #exponentiate to get the unnormalized probability
         q = np.exp(logq)
