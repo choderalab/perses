@@ -660,7 +660,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         for i, xyz in enumerate(xyzs):
             logq_i = self._torsion_and_angle_logq(xyz, atom, positions, involved_angles, involved_torsions, beta)
             if np.isnan(logq_i):
-                logq_i = np.inf
+                logq_i = - np.inf
             logq[i]+=logq_i
         logq - max(logq)
 
