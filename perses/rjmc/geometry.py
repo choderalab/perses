@@ -89,7 +89,7 @@ class FFGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
-        beta = top_proposal.beta.in_units_of(units.kilocalorie_per_mole**-1)
+        beta = top_proposal.beta
         logp_proposal = 0.0
         structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_new_atoms]
@@ -163,7 +163,7 @@ class FFGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal for the given transformation
         """
-        beta = top_proposal.beta.in_units_of(units.kilocalorie_per_mole**-1)
+        beta = top_proposal.beta
         logp = 0.0
         top_proposal = topology_proposal.SmallMoleculeTopologyProposal()
         structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
