@@ -239,10 +239,7 @@ class FFGeometryEngine(GeometryEngine):
         bonds_2 = set(atom2.bonds)
         relevant_bond_set = bonds_1.intersection(bonds_2)
         relevant_bond = relevant_bond_set.pop()
-        if type(relevant_bond.type.k) != units.Quantity:
-            relevant_bond_with_units = self._add_bond_units(relevant_bond)
-        else:
-            relevant_bond_with_units = relevant_bond
+        relevant_bond_with_units = self._add_bond_units(relevant_bond)
         return relevant_bond_with_units
 
     def _get_relevant_angle(self, atom1, atom2, atom3):
@@ -273,6 +270,8 @@ class FFGeometryEngine(GeometryEngine):
         -------
 
         """
+        if type(bond.type.k)==units.Quantity:
+            return bond
         bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
         bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
         return bond
@@ -291,6 +290,8 @@ class FFGeometryEngine(GeometryEngine):
         angle_with_units : parmed angle
             The angle, but with units on its parameters
         """
+        if type(angle.type.k)==units.Quantity:
+            return angle
         angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
         angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
         return angle
@@ -309,6 +310,8 @@ class FFGeometryEngine(GeometryEngine):
         torsion : parmed.dihedral object
             Torsion but with units added
         """
+        if type(torsion.type.phi_k)==units.Quantity:
+            return torsion
         torsion.type.phi_k = units.Quantity(torsion.type.phi_k, unit=units.kilocalorie_per_mole)
         torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
         return torsion
@@ -343,7 +346,7 @@ class FFGeometryEngine(GeometryEngine):
                 continue
             if set(atoms_with_positions).issuperset(set(torsion_partners)):
                 eligible_torsions.append(torsion)
-        eligible_torsions_with_units = [self._add_torsion_units(torsion) if type(torsion.type.phi_k)!=units.Quantity else torsion for torsion in eligible_torsions]
+        eligible_torsions_with_units = [self._add_torsion_units(torsion) for torsion in eligible_torsions]
         return eligible_torsions_with_units
 
     def _get_valid_angles(self, atoms_with_positions, new_atom):
@@ -378,7 +381,7 @@ class FFGeometryEngine(GeometryEngine):
             else:
                 if atoms_with_positions.issuperset(set([angle.atom1, angle.atom2])):
                     eligible_angles.append(angle)
-        eligible_angles_with_units = [self._add_angle_units(angle) if type(angle.type.theteq) != units.Quantity else angle for angle in eligible_angles]
+        eligible_angles_with_units = [self._add_angle_units(angle) for angle in eligible_angles]
         return eligible_angles_with_units
 
     def _autograd_ctoi(self, atom_position, bond_position, angle_position, torsion_position, calculate_jacobian=True):
