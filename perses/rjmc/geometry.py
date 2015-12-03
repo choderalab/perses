@@ -253,6 +253,8 @@ class FFGeometryEngine(GeometryEngine):
         relevant_angle = relevant_angle_set.pop()
         if type(relevant_angle.type.k) != units.Quantity:
             relevant_angle_with_units = self._add_angle_units(relevant_angle)
+        else:
+            relevant_angle_with_units = relevant_angle
         return relevant_angle_with_units
 
     def _add_bond_units(self, bond):
