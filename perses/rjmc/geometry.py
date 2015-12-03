@@ -336,9 +336,9 @@ class FFGeometryEngine(GeometryEngine):
             if torsion.improper:
                 continue
             if torsion.atom1 == new_atom:
-                torsion_partners = [torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
+                torsion_partners = [torsion.atom2, torsion.atom3, torsion.atom4]
             elif torsion.atom4 == new_atom:
-                torsion_partners = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx]
+                torsion_partners = [torsion.atom1, torsion.atom2, torsion.atom3]
             else:
                 continue
             if set(atoms_with_positions).issuperset(set(torsion_partners)):
