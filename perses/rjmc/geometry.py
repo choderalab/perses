@@ -239,7 +239,10 @@ class FFGeometryEngine(GeometryEngine):
         bonds_2 = set(atom2.bonds)
         relevant_bond_set = bonds_1.intersection(bonds_2)
         relevant_bond = relevant_bond_set.pop()
-        relevant_bond_with_units = self._add_bond_units(relevant_bond)
+        if type(relevant_bond.type.k) != units.Quantity:
+            relevant_bond_with_units = self._add_bond_units(relevant_bond)
+        else:
+            relevant_bond_with_units = relevant_bond
         return relevant_bond_with_units
 
     def _get_relevant_angle(self, atom1, atom2, atom3):
