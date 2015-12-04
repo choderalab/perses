@@ -674,7 +674,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         involved_torsions = self._get_torsions(atoms_with_positions, atom)
 
         #get an array of [0,2pi)
-        phis = units.Quantity(np.linspace(0, 2.0*np.pi, n_divisions), unit=units.radians)
+        phis = units.Quantity(np.arange(0, 2.0*np.pi, n_divisions), unit=units.radians)
         xyzs = np.zeros([n_divisions, 3])
 
         #rotate atom about torsion angle, calculating an xyz for each
