@@ -417,10 +417,18 @@ class FFGeometryEngine(GeometryEngine):
             plane1 = np.cross(a, b)
             plane2 = np.cross(b, c)
 
-            phi = np.arccos(np.dot(plane1, plane2)/(np.linalg.norm(plane1)*np.linalg.norm(plane2)))
+            plane1_u = plane1/np.linalg.norm(plane1)
+            plane2_u = plane2/np.linalg.norm(plane2)
 
-            if np.dot(np.cross(plane1, plane2), b_u) < 0:
-                phi = -phi
+            m = np.cross(plane1_u, b_u)
+
+            x = np.dot(plane1_u, plane2_u)
+            y = np.dot(m, plane2_u)
+
+            phi = np.arctan2(y, x)
+
+            if np.isnan(phi):
+                raise Exception("phi is nan")
 
             return np.array([r, theta, phi])
         internal_coords = _cartesian_to_internal(atom_position)
@@ -726,7 +734,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             angle_atom = torsion.atom2
             torsion_atom = torsion.atom1
         internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        logp, Z, q, phis = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=500)
+        logp, Z, q, phis = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         #find the phi that's closest to the internal_coordinate phi:
         phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-internal_coordinates[2]))
         return logp[phi_idx]
