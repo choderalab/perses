@@ -674,8 +674,8 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         involved_torsions = self._get_torsions(atoms_with_positions, atom)
 
         #get an array of [0,2pi)
-        phis = units.Quantity(np.arange(0, 2.0*np.pi, n_divisions), unit=units.radians)
-        xyzs = np.zeros([n_divisions, 3])
+        phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
+        xyzs = np.zeros([len(phis), 3])
 
         #rotate atom about torsion angle, calculating an xyz for each
         for i, phi in enumerate(phis):
@@ -726,7 +726,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             angle_atom = torsion.atom2
             torsion_atom = torsion.atom1
         internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        logp, Z, q, phis = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        logp, Z, q, phis = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=500)
         #find the phi that's closest to the internal_coordinate phi:
         phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-internal_coordinates[2]))
         return logp[phi_idx]
