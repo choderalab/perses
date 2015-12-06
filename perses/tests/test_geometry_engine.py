@@ -7,6 +7,7 @@ import openeye.oeiupac as oeiupac
 import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import simtk.unit as units
+import numpy as np
 
 kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 beta = 1.0/ (300.0*units.kelvin*kB)
@@ -36,7 +37,8 @@ def oemol_to_openmm_system(oemol, molecule_name):
     _ , tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(oemol, tripos_mol2_filename=molecule_name + '.tripos.mol2', conformer=0, residue_name='MOL')
     gaff_mol2, frcmod = openmoltools.amber.run_antechamber(molecule_name, tripos_mol2_filename)
     prmtop_file, inpcrd_file = openmoltools.amber.run_tleap(molecule_name, gaff_mol2, frcmod)
-    prmtop = app.AmberPrmtopFile(prmtop_file)
+    from parmed.amber import AmberParm
+    prmtop = AmberParm(prmtop_file)
     system = prmtop.createSystem(implicitSolvent=app.OBC1)
     crd = app.AmberInpcrdFile(inpcrd_file)
     return system, crd.getPositions(asNumpy=True), prmtop.topology
@@ -82,6 +84,8 @@ def test_run_geometry_engine():
                                                                       old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    test_pdb_file = open("npentanehexane.pdb", 'w')
+
 
     integrator = openmm.VerletIntegrator(1*units.femtoseconds)
     context = openmm.Context(sys2, integrator)
@@ -90,11 +94,33 @@ def test_run_geometry_engine():
     print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal)
+    app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
+    test_pdb_file.close()
     context.setPositions(new_positions)
     state2 = context.getState(getEnergy=True)
     print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
 
+def test_coordinate_conversion():
+
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    example_coordinates = units.Quantity(np.random.normal(size=[100,3]), unit=units.nanometers)
+    #try to transform random coordinates to and from
+    for i in range(20):
+        indices = np.random.randint(100, size=4)
+        atom_position = example_coordinates[indices[0]]
+        bond_position = example_coordinates[indices[1]]
+        angle_position = example_coordinates[indices[2]]
+        torsion_position = example_coordinates[indices[3]]
+        rtp, detJ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
+        r = rtp[0]*units.nanometers
+        theta = rtp[1]*units.radians
+        phi = rtp[2]*units.radians
+        xyz, _ = geometry_engine._internal_to_cartesian(indices[1], indices[2], indices[3], r, theta, phi, example_coordinates)
+
+
 
 
 if __name__=="__main__":
+    test_coordinate_conversion()
     test_run_geometry_engine()
