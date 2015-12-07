@@ -8,6 +8,7 @@ import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import simtk.unit as units
 import numpy as np
+import parmed
 
 kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 beta = 1.0/ (300.0*units.kelvin*kB)
@@ -67,8 +68,8 @@ def test_run_geometry_engine():
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
     """
-    molecule_name_1 = 'n-pentane'
-    molecule_name_2 = '2-methylpentane'
+    molecule_name_1 = 'propane'
+    molecule_name_2 = 'butane'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -84,7 +85,7 @@ def test_run_geometry_engine():
                                                                       old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    test_pdb_file = open("npentanehexane.pdb", 'w')
+    test_pdb_file = open("pbutane_4.pdb", 'w')
 
 
     integrator = openmm.VerletIntegrator(1*units.femtoseconds)
@@ -100,27 +101,202 @@ def test_run_geometry_engine():
     state2 = context.getState(getEnergy=True)
     print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
 
-def test_coordinate_conversion():
+def test_existing_coordinates():
+    """
+    predUS
+    for each torsion, calculate position of atom1
+    """
+    molecule_name_2 = 'butane'
+    molecule2 = generate_initial_molecule(molecule_name_2)
+    sys, pos, top = oemol_to_openmm_system(molecule2, molecule_name_2)
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    structure = parmed.openmm.load_topology(top, sys)
+    torsions = [torsion for torsion in structure.dihedrals if not torsion.improper]
+    for torsion in torsions:
+        atom1_position = pos[torsion.atom1.idx]
+        atom2_position = pos[torsion.atom2.idx]
+        atom3_position = pos[torsion.atom3.idx]
+        atom4_position = pos[torsion.atom4.idx]
+        _internal_coordinates, _ = geometry_engine._cartesian_to_internal(atom1_position, atom2_position, atom3_position, atom4_position)
+        internal_coordinates = internal_in_units(_internal_coordinates)
+        recalculated_atom1_position, _ = geometry_engine._internal_to_cartesian(atom2_position, atom3_position, atom4_position, internal_coordinates[0], internal_coordinates[1], internal_coordinates[2])
+        n = np.linalg.norm(atom1_position-recalculated_atom1_position)
+        print(n)
 
+def internal_in_units(internal_coords):
+    r = internal_coords[0]*units.nanometers if type(internal_coords[0]) != units.Quantity else internal_coords[0]
+    theta = internal_coords[1]*units.radians if type(internal_coords[1]) != units.Quantity else internal_coords[1]
+    phi = internal_coords[2]*units.radians if type(internal_coords[2]) != units.Quantity else internal_coords[2]
+    return [r, theta, phi]
+
+def test_coordinate_conversion():
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     example_coordinates = units.Quantity(np.random.normal(size=[100,3]), unit=units.nanometers)
     #try to transform random coordinates to and from
-    for i in range(20):
+    for i in range(200):
         indices = np.random.randint(100, size=4)
-        atom_position = example_coordinates[indices[0]]
-        bond_position = example_coordinates[indices[1]]
-        angle_position = example_coordinates[indices[2]]
-        torsion_position = example_coordinates[indices[3]]
+        atom_position = units.Quantity(np.array([ 0.80557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
+        bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
+        angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
+        torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
         rtp, detJ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
-        r = rtp[0]*units.nanometers
-        theta = rtp[1]*units.radians
-        phi = rtp[2]*units.radians
-        xyz, _ = geometry_engine._internal_to_cartesian(indices[1], indices[2], indices[3], r, theta, phi, example_coordinates)
+        r = rtp[0]
+        theta = rtp[1]
+        phi = rtp[2]
+        xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
+        assert np.linalg.norm(xyz-atom_position) < 1.0e-12
+
+def test_dihedral_potential():
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    molecule_name = 'ethane'
+    molecule2 = generate_initial_molecule(molecule_name)
+    sys, pos, top = oemol_to_openmm_system(molecule2, molecule_name)
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    structure = parmed.openmm.load_topology(top, sys)
+
+def test_openmm_dihedral():
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    import simtk.openmm as openmm
+    integrator = openmm.VerletIntegrator(1.0*units.femtoseconds)
+    sys = openmm.System()
+    force = openmm.CustomTorsionForce("theta")
+    for i in range(4):
+        sys.addParticle(1.0*units.amu)
+    force.addTorsion(0,1,2,3)
+    sys.addForce(force)
+    atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
+    bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
+    angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
+    torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
+    rtp, detJ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    context = openmm.Context(sys, integrator, platform)
+    positions = [atom_position, bond_position, angle_position, torsion_position]
+    context.setPositions(positions)
+    state = context.getState(getEnergy=True)
+    potential = state.getPotentialEnergy()
+
+    #rotate about the torsion:
+    n_divisions = 100
+    phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
+    omm_phis = np.zeros(n_divisions)
+    for i, phi in enumerate(phis):
+        xyz_atom1, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, rtp[0]*units.nanometers, rtp[1]*units.radians, phi)
+        context.setPositions([xyz_atom1, bond_position, angle_position, torsion_position])
+        state = context.getState(getEnergy=True)
+        omm_phis[i] = state.getPotentialEnergy()/units.kilojoule_per_mole
+
+    return 0
+
+def _try_random_itoc():
+
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    import simtk.openmm as openmm
+    integrator = openmm.VerletIntegrator(1.0*units.femtoseconds)
+    sys = openmm.System()
+    force = openmm.CustomTorsionForce("theta")
+    for i in range(4):
+        sys.addParticle(1.0*units.amu)
+    force.addTorsion(0,1,2,3)
+    sys.addForce(force)
+    atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
+    bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
+    angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
+    torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
+    for i in range(10):
+        atom_position += units.Quantity(np.random.normal(size=3), unit=units.nanometers)
+        r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
+        r = (r/r.unit)*units.nanometers
+        theta = (theta/theta.unit)*units.radians
+        phi = (phi/phi.unit)*units.radians
+        recomputed_xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
+        new_r, new_theta, new_phi = _get_internal_from_omm(recomputed_xyz,bond_position, angle_position, torsion_position)
+        crtp = geometry_engine._cartesian_to_internal(recomputed_xyz,bond_position, angle_position, torsion_position)
+        print(atom_position-recomputed_xyz)
 
 
+def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
+    import copy
+    #master system, will be used for all three
+    sys = openmm.System()
+    platform = openmm.Platform.getPlatformByName("Reference")
+    for i in range(4):
+        sys.addParticle(1.0*units.amu)
+
+    #first, the bond length:
+    bond_sys = openmm.System()
+    bond_sys.addParticle(1.0*units.amu)
+    bond_sys.addParticle(1.0*units.amu)
+    bond_force = openmm.CustomBondForce("r")
+    bond_force.addBond(0, 1)
+    bond_sys.addForce(bond_force)
+    bond_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    bond_context = openmm.Context(bond_sys, bond_integrator, platform)
+    bond_context.setPositions([atom_coords, bond_coords])
+    bond_state = bond_context.getState(getEnergy=True)
+    r = bond_state.getPotentialEnergy()
+    del bond_sys, bond_context, bond_integrator
+
+    #now, the angle:
+    angle_sys = copy.deepcopy(sys)
+    angle_force = openmm.CustomAngleForce("theta")
+    angle_force.addAngle(0,1,2)
+    angle_sys.addForce(angle_force)
+    angle_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    angle_context = openmm.Context(angle_sys, angle_integrator, platform)
+    angle_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
+    angle_state = angle_context.getState(getEnergy=True)
+    theta = angle_state.getPotentialEnergy()
+    del angle_sys, angle_context, angle_integrator
+
+    #finally, the torsion:
+    torsion_sys = copy.deepcopy(sys)
+    torsion_force = openmm.CustomTorsionForce("theta")
+    torsion_force.addTorsion(0,1,2,3)
+    torsion_sys.addForce(torsion_force)
+    torsion_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    torsion_context = openmm.Context(torsion_sys, torsion_integrator, platform)
+    torsion_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
+    torsion_state = torsion_context.getState(getEnergy=True)
+    phi = torsion_state.getPotentialEnergy()
+    del torsion_sys, torsion_context, torsion_integrator
+
+    return r, theta, phi
+
+
+def test_rotation_matrix():
+    """
+    Test the rotation matrix code to ensure that it does what we expect
+    """
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    #get 3 points:
+    points = units.Quantity(np.random.normal(size=[3,3]), unit=units.nanometers)
+
+    #calculate the angle between them:
+    a = points[1] - points[0]
+    b = points[2] - points[1]
+    a_u = a / units.norm(a)
+    b_u = b / units.norm(b)
+    theta_initial = units.acos(units.dot(a_u, b_u))
+
+    #now, rotate point 0 about an axis:
+    theta_rotate = np.pi/2.0*units.radians
+    normal = np.cross(a, b)
+    angle_axis = normal / units.norm(normal)
+    angle_rotation_matrix = geometry_engine._rotation_matrix(angle_axis, theta_rotate)
+    d_ang = units.dot(angle_rotation_matrix, a)
 
 
 if __name__=="__main__":
-    test_coordinate_conversion()
+    #test_coordinate_conversion()
     test_run_geometry_engine()
+    #test_existing_coordinates()
+    #test_openmm_dihedral()
+    #_try_random_itoc()
