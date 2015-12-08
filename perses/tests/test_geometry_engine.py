@@ -206,7 +206,7 @@ def test_openmm_dihedral():
 
     return 0
 
-def _try_random_itoc():
+def test_try_random_itoc():
 
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
@@ -294,34 +294,11 @@ def test_angle():
     assert abs(theta / theta.unit - theta_g) < 1.0e-12
 
 
-def test_rotation_matrix():
-    """
-    Test the rotation matrix code to ensure that it does what we expect
-    """
-    import perses.rjmc.geometry as geometry
-    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    #get 3 points:
-    points = units.Quantity(np.random.normal(size=[4,3]), unit=units.nanometers)
-
-    #have openmm calculate the angle between them:
-
-    theta_initial = units.acos(units.dot(a_u, b_u))
-
-    #now, rotate point 0 about an axis:
-    theta_rotate = np.pi/2.0*units.radians
-    normal = np.cross(a, b)
-    angle_axis = normal / units.norm(normal)
-    angle_rotation_matrix = geometry_engine._rotation_matrix(angle_axis, theta_rotate)
-    d_ang = units.dot(angle_rotation_matrix, a)
-
-
-
 
 if __name__=="__main__":
     test_coordinate_conversion()
-    #test_run_geometry_engine()
-    #test_existing_coordinates()
-    #test_openmm_dihedral()
-    #_try_random_itoc()
-    #test_angle()
-    #test_rotation_matrix()
+    test_run_geometry_engine()
+    test_existing_coordinates()
+    test_openmm_dihedral()
+    test_try_random_itoc()
+    test_angle()
