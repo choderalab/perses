@@ -155,9 +155,9 @@ def test_coordinate_conversion():
         angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
         torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
         rtp, detJ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
-        r = rtp[0]
-        theta = rtp[1]
-        phi = rtp[2]
+        r = rtp[0]*units.nanometers
+        theta = rtp[1]*units.radians
+        phi = rtp[2]*units.radians
         xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         assert np.linalg.norm(xyz-atom_position) < 1.0e-12
 
@@ -301,13 +301,10 @@ def test_rotation_matrix():
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     #get 3 points:
-    points = units.Quantity(np.random.normal(size=[3,3]), unit=units.nanometers)
+    points = units.Quantity(np.random.normal(size=[4,3]), unit=units.nanometers)
 
-    #calculate the angle between them:
-    a = points[1] - points[0]
-    b = points[2] - points[1]
-    a_u = a / units.norm(a)
-    b_u = b / units.norm(b)
+    #have openmm calculate the angle between them:
+
     theta_initial = units.acos(units.dot(a_u, b_u))
 
     #now, rotate point 0 about an axis:
@@ -318,10 +315,13 @@ def test_rotation_matrix():
     d_ang = units.dot(angle_rotation_matrix, a)
 
 
+
+
 if __name__=="__main__":
-    #test_coordinate_conversion()
+    test_coordinate_conversion()
     #test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #_try_random_itoc()
-    test_angle()
+    #test_angle()
+    #test_rotation_matrix()
