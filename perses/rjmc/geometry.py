@@ -441,7 +441,7 @@ class FFGeometryEngine(GeometryEngine):
         torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
         xyz = coordinate_tools._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         xyz = units.Quantity(xyz, unit=units.nanometers)
-        return xyz, (r/r.unit)**2*np.sin(theta/theta.unit)
+        return xyz, r**2*np.sin(theta)
 
 
     def _bond_logq(self, r, bond, beta):
