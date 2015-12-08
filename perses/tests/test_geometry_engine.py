@@ -12,6 +12,19 @@ import parmed
 
 kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 beta = 1.0/ (300.0*units.kelvin*kB)
+
+def generate_molecule_from_smiles(smiles):
+    """
+    Generate oemol with geometry from smiles
+    """
+    mol = oechem.OEMol()
+    oechem.OESmilesToMol(mol, smiles)
+    oechem.OEAddExplicitHydrogens(mol)
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega(mol)
+    return mol
+
 def generate_initial_molecule(iupac_name):
     """
     Generate an oemol with a geometry
@@ -52,7 +65,7 @@ def align_molecules(mol1, mol2):
     atomexpr = oechem.OEExprOpts_AtomicNumber
     bondexpr = 0
     mcs.Init(mol1, atomexpr, bondexpr)
-    mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
+    mcs.SetMCSFunc(oechem.OEMCSMaxAtomsCompleteCycles())
     unique = True
     match = [m for m in mcs.Match(mol2, unique)][0]
     new_to_old_atom_mapping = {}
@@ -68,8 +81,8 @@ def test_run_geometry_engine():
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
     """
-    molecule_name_1 = 'propane'
-    molecule_name_2 = 'butane'
+    molecule_name_1 = 'pentane'
+    molecule_name_2 = '2-methylpentane'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -85,7 +98,7 @@ def test_run_geometry_engine():
                                                                       old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    test_pdb_file = open("pbutane_4.pdb", 'w')
+    test_pdb_file = open("ethene12diol_3.pdb", 'w')
 
 
     integrator = openmm.VerletIntegrator(1*units.femtoseconds)

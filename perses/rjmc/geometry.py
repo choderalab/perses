@@ -646,7 +646,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         b = angle_atom_position - bond_atom_position
         a_u = a / np.linalg.norm(a)
         b_u = b / np.linalg.norm(b)
-        cos_theta = np.dot(a_u, b_u)
+        cos_theta = np.dot(-a_u, b_u)
         if cos_theta > 1.0:
             cos_theta = 1.0
         elif cos_theta < -1.0:
