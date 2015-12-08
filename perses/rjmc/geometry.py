@@ -4,13 +4,11 @@ for each additional atom that must be added.
 """
 from collections import namedtuple
 import perses.rjmc.topology_proposal as topology_proposal
-import numpy as np
-import scipy.stats as stats
-import numexpr as ne
 import parmed
 import simtk.unit as units
 import logging
-
+import numpy as np
+import coordinate_tools
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 
@@ -90,6 +88,7 @@ class FFGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
+        beta = top_proposal.beta
         logp_proposal = 0.0
         structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_new_atoms]
@@ -117,27 +116,40 @@ class FFGeometryEngine(GeometryEngine):
 
                 #propose a bond and calculate its probability
                 bond = self._get_relevant_bond(atom, bond_atom)
-                r_proposed = self._propose_bond(bond, top_proposal.beta)
-                logp_r = self._bond_logp(r_proposed, bond, top_proposal.beta)
+                r_proposed = self._propose_bond(bond, beta)
+                bond_k = bond.type.k
+                sigma_r = units.sqrt(1/(beta*bond_k))
+                logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit))
+                logp_r = self._bond_logq(r_proposed, bond, beta) - logZ_r
 
                 #propose an angle and calculate its probability
-                angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-                theta_proposed = self._propose_angle(angle, top_proposal.beta)
-                logp_theta = self._angle_logp(theta_proposed, angle, top_proposal.beta)
+                propose_angle_separately = True
+                if propose_angle_separately:
+                    angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
+                    theta_proposed = self._propose_angle(angle, beta)
+                    angle_k = angle.type.k
+                    sigma_theta = units.sqrt(1/(beta*angle_k))
+                    logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit))
+                    logp_theta = self._angle_logq(theta_proposed, angle, beta) - logZ_theta
 
-                #propose a torsion angle and calcualate its probability
-                phi_proposed, logp_phi = self._propose_torsion(atom, r_proposed, theta_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, top_proposal.beta)
+                    #propose a torsion angle and calcualate its probability
+                    phi_proposed, logp_phi = self._propose_torsion(atom, r_proposed, theta_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
+                else:
+                    theta_proposed, phi_proposed, logp_theta_phi, xyz = self._joint_torsion_angle_proposal(atom, r_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
                 #convert to cartesian
-                xyz, detJ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r_proposed, theta_proposed, phi_proposed, new_positions)
+                xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r_proposed, theta_proposed, phi_proposed)
+                detJ=0.0
+                rtp_test = self._cartesian_to_internal(xyz, new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx])
 
                 #add new position to array of new positions
                 new_positions[atom.idx] = xyz
                 #accumulate logp
-                logp_proposal = logp_proposal + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
+                logp_proposal = logp_proposal + logp_choice + logp_r + logp_theta +logp_phi + np.log(detJ+1)
 
                 atoms_with_positions.append(atom)
                 new_atoms.remove(atom)
         return new_positions, logp_proposal
+
 
     def logp_reverse(self, top_proposal, new_coordinates, old_coordinates):
         """
@@ -157,6 +169,7 @@ class FFGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal for the given transformation
         """
+        beta = top_proposal.beta
         logp = 0.0
         top_proposal = topology_proposal.SmallMoleculeTopologyProposal()
         structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
@@ -164,7 +177,6 @@ class FFGeometryEngine(GeometryEngine):
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_old_atoms]
         #we'll need to copy the current positions of the core to the old system
         #In the case of C-A --> C/-A -> C/-B ---> C-B these are the same
-        beta = top_proposal.beta
         reverse_proposal_coordinates = units.Quantity(np.zeros([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
         for atom in atoms_with_positions:
             new_index = top_proposal.old_to_new_atom_map[atom.idx]
@@ -189,15 +201,21 @@ class FFGeometryEngine(GeometryEngine):
                 bond_coords = reverse_proposal_coordinates[bond_atom.idx]
                 angle_coords = reverse_proposal_coordinates[angle_atom.idx]
                 torsion_coords = reverse_proposal_coordinates[torsion_atom.idx]
-                internal_coordinates, detJ = self._autograd_ctoi(atom_coords, bond_coords, angle_coords, torsion_coords)
+                internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
 
                 #propose a bond and calculate its probability
                 bond = self._get_relevant_bond(atom, bond_atom)
-                logp_r = self._bond_logp(internal_coordinates[0], bond, top_proposal.beta)
+                bond_k = bond.type.k
+                sigma_r = units.sqrt(1/(beta*bond_k))
+                logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit)) #need to eliminate unit to allow numpy log
+                logp_r = self._bond_logq(internal_coordinates[0], bond, beta) - logZ_r
 
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-                logp_theta = self._angle_logp(internal_coordinates[1], angle, top_proposal.beta)
+                angle_k = angle.type.k
+                sigma_theta = units.sqrt(1/(beta*angle_k))
+                logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit)) #need to eliminate unit to allow numpy log
+                logp_theta = self._angle_logq(internal_coordinates[1], angle, beta) - logZ_theta
 
                 #calculate torsion probability
                 logp_phi = self._torsion_logp(atom, atom_coords, torsion, atoms_with_positions, reverse_proposal_coordinates, beta)
@@ -225,8 +243,10 @@ class FFGeometryEngine(GeometryEngine):
         """
         bonds_1 = set(atom1.bonds)
         bonds_2 = set(atom2.bonds)
-        relevant_bond = bonds_1.intersection(bonds_2)
-        return relevant_bond.pop()
+        relevant_bond_set = bonds_1.intersection(bonds_2)
+        relevant_bond = relevant_bond_set.pop()
+        relevant_bond_with_units = self._add_bond_units(relevant_bond)
+        return relevant_bond_with_units
 
     def _get_relevant_angle(self, atom1, atom2, atom3):
         """
@@ -235,8 +255,72 @@ class FFGeometryEngine(GeometryEngine):
         atom1_angles = set(atom1.angles)
         atom2_angles = set(atom2.angles)
         atom3_angles = set(atom3.angles)
-        relevant_angle = atom1_angles.intersection(atom2_angles, atom3_angles)
-        return relevant_angle.pop()
+        relevant_angle_set = atom1_angles.intersection(atom2_angles, atom3_angles)
+        relevant_angle = relevant_angle_set.pop()
+        if type(relevant_angle.type.k) != units.Quantity:
+            relevant_angle_with_units = self._add_angle_units(relevant_angle)
+        else:
+            relevant_angle_with_units = relevant_angle
+        return relevant_angle_with_units
+
+    def _add_bond_units(self, bond):
+        """
+        Add the correct units to a harmonic bond
+
+        Arguments
+        ---------
+        bond : parmed bond object
+            The bond to get units
+
+        Returns
+        -------
+
+        """
+        if type(bond.type.k)==units.Quantity:
+            return bond
+        bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
+        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        return bond
+
+    def _add_angle_units(self, angle):
+        """
+        Add the correct units to a harmonic angle
+
+        Arguments
+        ----------
+        angle : parmed angle object
+             the angle to get unit-ed
+
+        Returns
+        -------
+        angle_with_units : parmed angle
+            The angle, but with units on its parameters
+        """
+        if type(angle.type.k)==units.Quantity:
+            return angle
+        angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
+        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        return angle
+
+    def _add_torsion_units(self, torsion):
+        """
+        Add the correct units to a torsion
+
+        Arguments
+        ---------
+        torsion : parmed.dihedral object
+            The torsion needing units
+
+        Returns
+        -------
+        torsion : parmed.dihedral object
+            Torsion but with units added
+        """
+        if type(torsion.type.phi_k)==units.Quantity:
+            return torsion
+        torsion.type.phi_k = units.Quantity(torsion.type.phi_k, unit=units.kilocalorie_per_mole)
+        torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
+        return torsion
 
     def _get_torsions(self, atoms_with_positions, new_atom):
         """
@@ -261,14 +345,15 @@ class FFGeometryEngine(GeometryEngine):
             if torsion.improper:
                 continue
             if torsion.atom1 == new_atom:
-                torsion_partners = [torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
+                torsion_partners = [torsion.atom2, torsion.atom3, torsion.atom4]
             elif torsion.atom4 == new_atom:
-                torsion_partners = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx]
+                torsion_partners = [torsion.atom1, torsion.atom2, torsion.atom3]
             else:
                 continue
             if set(atoms_with_positions).issuperset(set(torsion_partners)):
                 eligible_torsions.append(torsion)
-        return torsions
+        eligible_torsions_with_units = [self._add_torsion_units(torsion) for torsion in eligible_torsions]
+        return eligible_torsions_with_units
 
     def _get_valid_angles(self, atoms_with_positions, new_atom):
         """
@@ -302,143 +387,64 @@ class FFGeometryEngine(GeometryEngine):
             else:
                 if atoms_with_positions.issuperset(set([angle.atom1, angle.atom2])):
                     eligible_angles.append(angle)
-        return eligible_angles
+        eligible_angles_with_units = [self._add_angle_units(angle) for angle in eligible_angles]
+        return eligible_angles_with_units
 
-    def _autograd_ctoi(self, atom_position, bond_position, angle_position, torsion_position, calculate_jacobian=True):
-        import autograd
-        import autograd.numpy as np
-
-        atom_position = atom_position/atom_position.unit
-        bond_position = bond_position/bond_position.unit
-        angle_position = angle_position/angle_position.unit
-        torsion_position = torsion_position/torsion_position.unit
-
-
-        def _cartesian_to_internal(xyz):
-            """
-            Autograd-based jacobian of transformation from cartesian to internal.
-            Returns without units!
-            """
-            a = bond_position - xyz
-            b = angle_position - bond_position
-            #3-4 bond
-            c = angle_position - torsion_position
-            a_u = a / np.linalg.norm(a)
-            b_u = b / np.linalg.norm(b)
-            c_u = c / np.linalg.norm(c)
-
-            #bond length
-            r = np.linalg.norm(a)
-
-            #bond angle
-            theta = np.arccos(np.dot(-a_u, b_u))
-
-            #torsion angle
-            plane1 = np.cross(a, b)
-            plane2 = np.cross(b, c)
-
-            phi = np.arccos(np.dot(plane1, plane2)/(np.linalg.norm(plane1)*np.linalg.norm(plane2)))
-
-            if np.dot(np.cross(plane1, plane2), b_u) < 0:
-                phi = -phi
-
-            return np.array([r, theta, phi])
-        internal_coords = _cartesian_to_internal(atom_position)
-        if calculate_jacobian:
-            j = autograd.jacobian(_cartesian_to_internal)
-            jacobian_det = np.linalg.det(j(atom_position))
-        else:
-            jacobian_det = 0.0
-        return internal_coords, np.abs(jacobian_det)
-
-    def _autograd_itoc(self, bond, angle, torsion, r, theta, phi, positions, calculate_jacobian=True):
+    def _rotation_matrix(self, axis, angle):
         """
-        Autograd based coordinate conversion internal -> cartesian
-
-        Arguments
-        ---------
-        bond : int
-            index of the bonded atom
-        angle : int
-            index of the angle atom
-        torsion : int
-            index of the torsion atom
-        r : float, Quantity nm
-            bond length
-        theta : float, Quantity rad
-            bond angle
-        phi : float, Quantity rad
-            torsion angle
-        positions : [n, 3] np.array Quantity nm
-            positions of the atoms in the molecule
-        calculate_jacobian : boolean
-            Whether to calculate a jacobian--default True
-
-        Returns
-        -------
-        atom_xyz : [1, 3] np.array Quantity nm
-            The atomic positions in cartesian space
-        detJ : float
-            The absolute value of the determinant of the jacobian
+        This method produces a rotation matrix given an axis and an angle.
         """
-        import autograd
-        import autograd.numpy as np
-        positions = positions/positions.unit
-        r = r/r.unit
-        theta = theta/theta.unit
-        phi = phi/phi.unit
-        rtp = np.array([r, theta, phi])
+        axis = axis/np.linalg.norm(axis)
+        axis_squared = np.square(axis)
+        cos_angle = np.cos(angle)
+        sin_angle = np.sin(angle)
+        rot_matrix_row_one = np.array([cos_angle+axis_squared[0]*(1-cos_angle),
+                                       axis[0]*axis[1]*(1-cos_angle) - axis[2]*sin_angle,
+                                       axis[0]*axis[2]*(1-cos_angle)+axis[1]*sin_angle])
 
-        def _internal_to_cartesian(rthetaphi):
+        rot_matrix_row_two = np.array([axis[1]*axis[0]*(1-cos_angle)+axis[2]*sin_angle,
+                                      cos_angle+axis_squared[1]*(1-cos_angle),
+                                      axis[1]*axis[2]*(1-cos_angle) - axis[0]*sin_angle])
 
-            a = positions[angle] - positions[bond]
-            b = positions[angle] - positions[torsion]
+        rot_matrix_row_three = np.array([axis[2]*axis[0]*(1-cos_angle)-axis[1]*sin_angle,
+                                        axis[2]*axis[1]*(1-cos_angle)+axis[0]*sin_angle,
+                                        cos_angle+axis_squared[2]*(1-cos_angle)])
 
-            a_u = a / np.linalg.norm(a)
-            b_u = b / np.linalg.norm(b)
+        rotation_matrix = np.array([rot_matrix_row_one, rot_matrix_row_two, rot_matrix_row_three])
+        return rotation_matrix
+
+    def _cartesian_to_internal(self, atom_position, bond_position, angle_position, torsion_position):
+        """
+        Cartesian to internal function
+        """
+        #ensure we have the correct units, then remove them
+        atom_position = atom_position.in_units_of(units.nanometers)/units.nanometers
+        bond_position = bond_position.in_units_of(units.nanometers)/units.nanometers
+        angle_position = angle_position.in_units_of(units.nanometers)/units.nanometers
+        torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
+
+        internal_coords = coordinate_tools._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
 
 
-            d_r = rthetaphi[0]*a_u
+        return internal_coords, internal_coords[0]**2*np.sin(internal_coords)
 
-            normal = np.cross(a, b)
 
-            #construct the angle rotation matrix
-            axis_angle = normal / np.linalg.norm(normal)
-            a = np.cos(rthetaphi[1]/2)
-            b, c, d = -axis_angle*np.sin(rthetaphi[1]/2)
-            angle_rotation_matrix =  np.array([[a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
-                            [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
-                            [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
-            #apply it
-            d_ang = np.dot(angle_rotation_matrix, d_r)
+    def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
+        """
+        Calculate the cartesian coordinates given the internal, as well as abs(detJ)
+        """
+        r = r.in_units_of(units.nanometers)/units.nanometers
+        theta = theta.in_units_of(units.radians)/units.radians
+        phi = phi.in_units_of(units.radians)/units.radians
+        bond_position = bond_position.in_units_of(units.nanometers)/units.nanometers
+        angle_position = angle_position.in_units_of(units.nanometers)/units.nanometers
+        torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
+        xyz = coordinate_tools._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
+        xyz = units.Quantity(xyz, unit=units.nanometers)
+        return xyz, r**2*np.sin(theta)
 
-            #construct the torsion rotation matrix and apply it
-            axis = a_u
-            a = np.cos(rthetaphi[2]/2)
-            b, c, d = -axis*np.sin(rthetaphi[2]/2)
-            torsion_rotation_matrix = np.array([[a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
-                            [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
-                            [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
-            #apply it
-            d_torsion = np.dot(torsion_rotation_matrix, d_ang)
 
-            #add the positions of the bond atom
-            xyz = positions[bond] + d_torsion
-
-            return xyz
-
-        atom_xyz = _internal_to_cartesian(rtp)
-        if calculate_jacobian:
-            j = autograd.jacobian(_internal_to_cartesian)
-            jacobian_det = np.linalg.det(j(rtp))
-            logging.debug("detJ is %f" %(jacobian_det))
-        else:
-            jacobian_det = 0.0
-        #detj_spherical = r**2*np.sin(theta)
-        #logging.debug("The spherical detJ is %f" % detj_spherical)
-        return units.Quantity(atom_xyz, unit=units.nanometers), np.abs(jacobian_det)
-
-    def _bond_logp(self, r, bond, beta):
+    def _bond_logq(self, r, bond, beta):
         """
         Calculate the log-probability of a given bond at a given inverse temperature
 
@@ -453,13 +459,12 @@ class FFGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        k_eq = bond.type.k*units.kilocalories_per_mole/(units.angstrom**2)
-        r0 = bond.type.req*units.nanometers
-        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        logp = stats.distributions.norm.logpdf(r/r.unit, r0/r0.unit, sigma)
-        return logp
+        k_eq = bond.type.k
+        r0 = bond.type.req
+        logq = -beta*0.5*k_eq*(r-r0)**2
+        return logq
 
-    def _angle_logp(self, theta, angle, beta):
+    def _angle_logq(self, theta, angle, beta):
         """
         Calculate the log-probability of a given bond at a given inverse temperature
 
@@ -472,32 +477,10 @@ class FFGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        k_eq = angle.type.k*units.kilocalories_per_mole/(units.radians**2)
-        theta0 = angle.type.theteq*units.radians
-        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        logp = stats.distributions.norm.logpdf(theta/theta.unit, theta0/theta0.unit, sigma)
-        return logp
-
-    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
-        """
-        Utility function for calculating the unnormalized probability of a torsion angle
-        """
-        if torsion.atom1 == atom:
-            bond_atom = torsion.atom2
-            angle_atom = torsion.atom3
-            torsion_atom = torsion.atom4
-        else:
-            bond_atom = torsion.atom3
-            angle_atom = torsion.atom2
-            torsion_atom = torsion.atom1
-
-        internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        beta = beta/beta.unit
-        gamma = torsion.type.phase
-        V = torsion.type.phi_k
-        n = torsion.type.per
-        q = np.exp(-beta*(V/2.0)*(1+np.cos(n*internal_coordinates[2]-gamma)))
-        return q
+        k_eq = angle.type.k
+        theta0 = angle.type.theteq
+        logq = -beta*k_eq*0.5*(theta-theta0)**2
+        return logq
 
     def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
         """
@@ -506,7 +489,7 @@ class FFGeometryEngine(GeometryEngine):
         eligible_torsions = self._get_torsions(atoms_with_positions, atom_for_proposal)
         torsion_idx = np.random.randint(0, len(eligible_torsions))
         torsion_selected = eligible_torsions[torsion_idx]
-        return torsion_selected, np.log(1/len(eligible_torsions))
+        return torsion_selected, np.log(1.0/len(eligible_torsions))
 
     def _atoms_eligible_for_proposal(self, new_atoms, structure, atoms_with_positions):
         """
@@ -525,37 +508,41 @@ class FFGeometryEngine(GeometryEngine):
         """
         Bond length proposal
         """
-        k_eq = bond.type.k*units.kilocalories_per_mole/(units.angstrom**2)
-        r0 = bond.type.req*units.angstrom
-        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        r = sigma/sigma.unit*np.random.random()*r0.unit + r0
+        r0 = bond.type.req
+        k = bond.type.k
+        sigma_r = units.sqrt(1.0/(beta*k))
+        r = sigma_r*np.random.random() + r0
         return r
 
     def _propose_angle(self, angle, beta):
         """
         Bond angle proposal
         """
-        theta0 = angle.type.theteq*units.radians
-        k_eq = angle.type.k*units.kilocalories_per_mole/(units.radians**2)
-        sigma = beta*2.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        theta = sigma/sigma.unit*np.random.random()*theta0.unit + theta0
+        theta0 = angle.type.theteq
+        k = angle.type.k
+        sigma_theta = units.sqrt(1.0/(beta*k))
+        theta = sigma_theta*np.random.random() + theta0
         return theta
 
-    def _torsion_potential(self, torsion, phi, beta):
+    def _torsion_logq(self, torsion, phi, beta):
         """
         Calculate the log-unnormalized probability
         of the torsion
         """
-        phi = phi/phi.unit
-        beta = beta/beta.unit
         gamma = torsion.type.phase
         V = torsion.type.phi_k
         n = torsion.type.per
-        q = -beta*(V/2.0)*(1+np.cos(n*phi-gamma))
-        return q
+        logq = -beta*(V/2.0)*(1+units.cos(n*phi-gamma))
+        return logq
+
+    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
+        pass
 
     def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
         pass
+
+    def _joint_torsion_angle_proposal(self, atom, r, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta):
+        return 0, 0, 0
 
 class FFAllAngleGeometryEngine(FFGeometryEngine):
     """
@@ -564,13 +551,13 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
     and torsion_p methods of the base.
     """
 
-    def _torsion_and_angle_potential(self, xyz, atom, positions, involved_angles, involved_torsions, beta):
+    def _torsion_and_angle_logq(self, xyz, atom, positions, involved_angles, involved_torsions, beta):
         """
         Calculate the potential resulting from torsions and angles
         at a given cartesian coordinate
         """
-        ub_angles = 0.0
-        ub_torsions = 0.0
+        logq_angles = 0.0
+        logq_torsions= 0.0
         if type(xyz) != units.Quantity:
             xyz = units.Quantity(xyz, units.nanometers)
         for angle in involved_angles:
@@ -578,16 +565,23 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom_position = xyz if angle.atom2 == atom else positions[angle.atom2.idx]
             angle_atom_position = xyz if angle.atom3 == atom else positions[angle.atom3.idx]
             theta = self._calculate_angle(atom_position, bond_atom_position, angle_atom_position)
-            ub_angles += self._angle_logp(theta*units.radians, angle, beta)
+            logq_i = self._angle_logq(theta*units.radians, angle, beta)
+            if np.isnan(logq_i):
+                raise Exception("Angle logq is nan")
+            logq_angles+=logq_i
         for torsion in involved_torsions:
             atom_position = xyz if torsion.atom1 == atom else positions[torsion.atom1.idx]
             bond_atom_position = xyz if torsion.atom2 == atom else positions[torsion.atom2.idx]
             angle_atom_position = xyz if torsion.atom3 == atom else positions[torsion.atom3.idx]
             torsion_atom_position = xyz if torsion.atom4 == atom else positions[torsion.atom4.idx]
-            internal_coordinates, _ = self._autograd_ctoi(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position, calculate_jacobian=False)
+            internal_coordinates, _ = self._cartesian_to_internal(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position)
             phi = internal_coordinates[2]*units.radians
-            ub_torsions += self._torsion_potential(torsion, phi, beta)
-        return ub_angles+ub_torsions
+            logq_i = self._torsion_logq(torsion, phi, beta)
+            if np.isnan(logq_i):
+                raise Exception("Torsion logq is nan")
+            logq_torsions+=logq_i
+
+        return logq_angles+logq_torsions
 
 
     def _normalize_torsion_proposal(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000):
@@ -616,31 +610,32 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         involved_torsions = self._get_torsions(atoms_with_positions, atom)
 
         #get an array of [0,2pi)
-        phis = units.Quantity(np.linspace(0, 2.0*np.pi, n_divisions), unit=units.radians)
-        xyzs = np.zeros([n_divisions, 3])
+        phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
+        xyzs = np.zeros([len(phis), 3])
 
         #rotate atom about torsion angle, calculating an xyz for each
         for i, phi in enumerate(phis):
-            xyzs[i], _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi, positions, calculate_jacobian=False)
+            xyzs[i], _ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, theta, phi)
 
         #set up arrays for energies from angles and torsions
-        ub= np.zeros(n_divisions)
+        logq = np.zeros(n_divisions)
         for i, xyz in enumerate(xyzs):
-            ub_i = self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
-            if np.isnan(ub_i):
-                ub_i = np.inf
-            ub[i]+=ub_i
+            logq_i = self._torsion_and_angle_logq(xyz, atom, positions, involved_angles, involved_torsions, beta)
+            if np.isnan(logq_i):
+                raise Exception("logq_i was NaN")
+            logq[i]+=logq_i
+        logq -= max(logq)
 
         #exponentiate to get the unnormalized probability
-        q = np.exp(-ub)
+        q = np.exp(logq)
 
         #estimate the normalizing constant
-        Z = np.trapz(q, phis)
+        Z = np.sum(q)
 
         #get the normalized probabilities for torsions
-        p = q / Z
+        logp = logq - np.log(Z)
 
-        return p, Z
+        return logp, Z, q, phis
 
     def _calculate_angle(self, atom_position, bond_atom_position, angle_atom_position):
         """
@@ -650,10 +645,15 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         b = angle_atom_position - bond_atom_position
         a_u = a / np.linalg.norm(a)
         b_u = b / np.linalg.norm(b)
-        theta = np.arccos(np.dot(a_u, b_u))
+        cos_theta = np.dot(-a_u, b_u)
+        if cos_theta > 1.0:
+            cos_theta = 1.0
+        elif cos_theta < -1.0:
+            cos_theta = -1.0
+        theta = np.arccos(cos_theta)
         return theta
 
-    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta, Z=None):
+    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
         """
         Calculate the log-probability of a given torsion. This is calculated via a distribution
         that includes angle and other torsion potentials.
@@ -666,670 +666,60 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom = torsion.atom3
             angle_atom = torsion.atom2
             torsion_atom = torsion.atom1
-        involved_angles = self._get_valid_angles(atoms_with_positions, atom)
-        involved_torsions = self._get_torsions(atoms_with_positions, atom)
-        internal_coordinates = self._autograd_ctoi(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        if not Z:
-            p, Z = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
-        ub_torsion = self._torsion_and_angle_potential(xyz, atom, positions, involved_angles, involved_torsions, beta)
-        p_torsion = np.exp(-ub_torsion) / Z
-        return p_torsion
+        internal_coordinates = self._cartesian_to_internal(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
+        logp, Z, q, phis = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        #find the phi that's closest to the internal_coordinate phi:
+        phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-internal_coordinates[2]))
+        return logp[phi_idx]
 
     def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
         """
         Propose a torsion angle, including energetic contributions from other torsions and angles
         """
         #first, let's get the normalizing constant of this distribution
-        p, Z = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
-        #now, use rejection sampling on the normalized distribution to randomly draw a phi
-        max_p = max(p)
-        logp = 0.0
-        phi = 0
-        accepted = False
-        while not accepted:
-            phi_samp = np.random.uniform(0.0, 2*np.pi)*units.radians
-            xyz, _ = self._autograd_itoc(bond_atom.idx, angle_atom.idx, torsion_atom.idx, r, theta, phi_samp, positions)
-            runif = np.random.uniform(0.0, max_p+1.0)
-            p_phi_samp = self._torsion_logp(atom, xyz, torsion, atoms_with_positions, positions, beta, Z)
-            if p_phi_samp > runif:
-                phi = phi_samp
-                logp = p_phi_samp
-                accepted = True
-            else:
-                continue
+        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=100)
+        #choose from the set of possible torsion angles
+        phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp))
+        logp = logp[phi_idx]
+        phi = phis[phi_idx]
         return phi, logp
 
-class FFGeometryEngineOld(GeometryEngine):
-    """
-    This is an implementation of the GeometryEngine class which proposes new dimensions based on the forcefield parameters
-    """
-
-
-    def propose(self, top_proposal):
+    def _normalize_torsion_and_angle(self, atom, r, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000):
         """
-        Propose a new geometry for the appropriate atoms using forcefield parameters
-
-        Arguments
-        ----------
-        topology_proposal : TopologyProposal object
-            Object containing the relevant results of a topology proposal
-
-        Returns
-        -------
-        new_positions : [m, 3] np.array of floats
-            The positions of the m atoms in the new system (if not propose_positions, this is the old positions)
-        logp : float
-            The logp of the proposal, including the jacobian
+        Construct a grid of points on the surface of a sphere bounded by the bond length
         """
-
-        #get the mapping between new and old atoms
-        n_atoms_new = top_proposal.n_atoms_new
-        n_atoms_old = top_proposal.n_atoms_old
-
-        #get a list of the new atoms
-        new_atoms = top_proposal.unique_new_atoms
-
-        #get a list of the old atoms
-        old_atoms = top_proposal.unique_old_atoms
-
-        #create a new array with the appropriate size
-        new_positions = np.zeros([n_atoms_new, 3])
-
-        new_to_old_atom_map = top_proposal.new_to_old_atom_map
-
-        #transfer known positions--be careful about units!
-        for atom in new_to_old_atom_map.keys():
-            new_positions[atom] = top_proposal.old_positions[new_to_old_atom_map[atom]].in_units_of(units.nanometers)
-
-        #restore units
-        new_positions = new_positions*units.nanometers
-        #get a new set of positions and a logp of that proposal
-        final_new_positions, logp_forward = self._propose_new_positions(new_atoms, top_proposal.new_system, new_positions, new_to_old_atom_map)
-
-        #get the probability of a reverse proposal
-        #first get the atom map reversed
-        old_to_new_atom_map = top_proposal.old_to_new_atom_map
-        _, logp_reverse = self._propose_new_positions(old_atoms, top_proposal.old_system, top_proposal.old_positions, old_to_new_atom_map, propose_positions=False)
-
-        #construct the return object
-        geometry_proposal = GeometryProposal(final_new_positions, logp_reverse - logp_forward)
-
-        return geometry_proposal
-
-    def _propose_new_positions(self, new_atoms, new_system, new_positions, new_to_old_atom_map, propose_positions=True):
-        """
-        Propose new atomic positions, or get the probability of existing ones
-        (used to evaluate the reverse probability, where the old atoms become the new atoms, etc)
-        Arguments
-        ---------
-        new_atoms : list of int
-            Indices of atoms that need positions
-        topology_proposal : TopologyProposal namedtuple
-            The result of the topology proposal, containing the atom mapping and topologies
-        new_system : simtk.OpenMM.System object
-            The new system
-        new_positions : [m, 3] np.array of floats
-            The positions of the m atoms in the new system, with unpositioned atoms having [0,0,0]
-
-        Returns
-        -------
-        new_positions : [m, 3] np.array of floats
-            The positions of the m atoms in the new system (if not propose_positions, this is the old positions)
-        logp : float
-            The logp of the proposal, including the jacobian
-        """
-        logp = 0.0
-        atoms_with_positions = new_to_old_atom_map.keys()
-        forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
-        torsion_force = forces['PeriodicTorsionForce']
-        bond_force = forces['HarmonicBondForce']
-        atomic_proposal_order = self._generate_proposal_order(new_atoms, new_system, new_to_old_atom_map)
-        for atomset in atomic_proposal_order:
-            for atom, possible_torsions in atomset.items():
-                #randomly select a torsion from the available list, and calculate its log-probability
-                selected_torsion_index = np.random.randint(0, len(possible_torsions))
-                selected_torsion = possible_torsions[selected_torsion_index]
-                logp_selected_torsion = - np.log(len(possible_torsions))
-                torsion_parameters = torsion_force.getTorsionParameters(selected_torsion)
-                #check to see whether the atom is the first or last in the torsion
-                if atom == torsion_parameters[0]:
-                    bonded_atom = torsion_parameters[1]
-                    angle_atom = torsion_parameters[2]
-                    torsion_atom = torsion_parameters[3]
-                else:
-                    bonded_atom = torsion_parameters[2]
-                    angle_atom = torsion_parameters[1]
-                    torsion_atom = torsion_parameters[0]
-
-                #get a new position for the atom, if specified
-                if propose_positions:
-                    atomic_xyz, logp_atomic = self._propose_atomic_position(new_system, atom, bonded_atom, angle_atom, torsion_atom, torsion_parameters, new_positions)
-                    new_positions[atom] = atomic_xyz
-                else:
-                    logp_atomic = 0.0
-                    logp_atomic = self._calculate_logp_atomic_position(new_system, new_positions, atom, bonded_atom, angle_atom, torsion_atom, torsion_parameters)
-                logp += logp_atomic + logp_selected_torsion
-
-        return new_positions, logp
-
-    def _generate_proposal_order(self, new_atoms, new_system, new_to_old_atom_map):
-        """
-        Generate the list of atoms (and corresponding torsions) to be proposed each round
-
-        Arguments
-        ---------
-        new_atoms : list of int
-            Indices of atoms that need positions
-        topology_proposal : TopologyProposal namedtuple
-            The result of the topology proposal, containing the atom mapping and topologies
-        new_system : simtk.OpenMM.System object
-            The new system
-        new_positions : [m, 3] np.array of floats
-            The positions of the m atoms in the new system, with unpositioned atoms having [0,0,0]
-
-        Returns
-        -------
-        atom_proposal_list : list of dict
-            List of dict of form {atom_index : [torsion_list]}. each entry in the list is a
-            round of atoms eligible for proposal.
-        """
-        atoms_with_positions = new_to_old_atom_map.keys()
-        forces = {new_system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
-        torsion_force = forces['PeriodicTorsionForce']
-        bond_force = forces['HarmonicBondForce']
-        atom_proposal_list = []
-        while len(new_atoms) > 0:
-            atom_torsion_proposals = self._atoms_eligible_for_proposal(torsion_force, bond_force, atoms_with_positions, new_atoms)
-            #now loop through the list of atoms found to be eligible for positions this round
-            atom_proposal_list.append(atom_torsion_proposals)
-            for atom in atom_torsion_proposals.keys():
-                #remove atom from list of atoms needing positions
-                new_atoms.remove(atom)
-                atoms_with_positions.append(atom)
-        return atom_proposal_list
-
-
-
-    def _propose_atomic_position(self, system, atom, bonded_atom, angle_atom, torsion_atom, torsion_parameters, positions):
-        """
-        Method to propose the position of a single atom.
-
-        Arguments
-        ---------
-        system : simtk.openmm.System
-            the system containing the atom of interest
-        atom : int
-            the index of the atom whose position should be proposed
-        bonded_atom : int
-            the index of the atom bonded to the atom of interest
-        angle_atom : int
-            the 1, 3 position atom index
-        torsion_parameters : dict
-            The parameters of the torsion that is being used for this proposal
-
-        Returns
-        -------
-        atomic_xyz : [1,3] np.array of floats
-            the cartesian coordinates of the atom
-        logp_atomic_position : float
-            the logp of this proposal, including jacobian correction
-        """
-        logging.debug("Proposing position %d with bond atom %d, angle atom %d, torsion atom %d" % (atom, bonded_atom, angle_atom, torsion_atom))
-        #get bond parameters and draw bond length
-        r0, k_eq = self._get_bond_parameters(system, atom, bonded_atom)
-        r, logp_bond = self._propose_bond_length(r0, k_eq)
-
-        #get angle parameters and draw bond angle
-        theta0, k_eq = self._get_angle_parameters(system, atom, bonded_atom, angle_atom)
-        theta, logp_angle = self._propose_bond_angle(theta0, k_eq)
-
-        #propose torsion
-        phi, logp_torsion = self._propose_torsion_angle(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
-        #convert spherical to cartesian coordinates
-        spherical_coordinates = np.asarray([r, theta, phi])
-        atomic_xyz, detJ = self._autograd_itoc(bonded_atom, angle_atom, torsion_atom, r, theta, phi, positions)
-        #accumulate the forward logp with jacobian correction
-        logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
-        logging.debug("Proposed (r, theta, phi) of (%s, %s, %s)" % (str(r), str(theta), str(phi)))
-        return atomic_xyz, logp_atomic_position
-
-
-    def _calculate_logp_atomic_position(self, system, positions, atom, bonded_atom, angle_atom, torsion_atom, torsion_parameters):
-        """
-        Calculate the log-probability of a given atom's position
-
-        Arguments
-        ---------
-        system : simtk.openmm.System object
-            The system whose atomic position needs a logp
-        positions : [n, 3] np.ndarray of floats, Quantity nm
-            The positions of the particles in the system
-        atom : int
-            The index of the atom of interest
-        bonded_atom : int
-            The index of the bonded atom
-        angle_atom : int
-            The index of the angle atom
-        torsion_atom : int
-            The index of the torsion atom
-        torsion_parameters : array
-            The parameters of the torsion
-
-        Returns
-        -------
-        logp : float
-            logp of position, including det(J) correction
-        """
-        #convert cartesian coordinates to spherical
-        relative_xyz = positions[atom] - positions[bonded_atom]
-        internal_coordinates, detJ = self._autograd_ctoi(atom, bonded_atom, angle_atom, torsion_atom, positions)
-
-        #get bond parameters and calculate the probability of choosing the current positions
-        r0, k_eq = self._get_bond_parameters(system, atom, bonded_atom)
-        sigma_bond = 1.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        logp_bond = stats.distributions.norm.logpdf(internal_coordinates[0], r0/r0.unit, sigma_bond)
-
-        #calculate the probability of choosing this bond angle
-        theta0, k_eq = self._get_angle_parameters(system, atom, bonded_atom, angle_atom)
-        sigma_angle = 1.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        logp_angle = stats.distributions.norm.logpdf(internal_coordinates[1], theta0/theta0.unit, sigma_angle)
-
-        #calculate the probabilty of choosing this torsion angle
-        torsion_Z, _ = self._torsion_normalizer(torsion_parameters[6], torsion_parameters[4], torsion_parameters[5])
-        logp_torsion = self._torsion_p(torsion_Z,torsion_parameters[6], torsion_parameters[4], torsion_parameters[5], internal_coordinates[2])
-
-        logp_atomic_position = (logp_angle + logp_bond + logp_torsion + np.log(detJ))
-
-        return logp_atomic_position
-
-    def _atoms_eligible_for_proposal(self, torsion_force, bond_force, atoms_with_positions, new_atoms):
-        """
-        Determine which atoms are eligible for position proposal this round.
-        The criteria are that the atom must not yet have a position, and must
-        be 1 or 4 in at least one torsion where the other atoms have positoins.
-
-        Arguments
-        ---------
-        torsion_force : simtk.openmm.PeriodicTorsionForce
-            The torsion force from the system
-        bond_roce : simtk.openmm.HarmonicBondForce
-            The HarmonicBondForce from the system
-        atoms_with_positions : list of int
-            A list of the indices of atoms that have positions
-
-        Returns
-        -------
-        atom_torsion_proposals : dict
-            Dictionary containing {eligible_atom : [list_of_torsions]}
-
-        """
-        current_atom_proposals = []
-        atom_torsion_proposals = {atom_index: [] for atom_index in new_atoms}
-        for torsion_index in range(torsion_force.getNumTorsions()):
-            atom1 = torsion_force.getTorsionParameters(torsion_index)[0]
-            atom2 = torsion_force.getTorsionParameters(torsion_index)[1]
-            atom3 = torsion_force.getTorsionParameters(torsion_index)[2]
-            atom4 = torsion_force.getTorsionParameters(torsion_index)[3]
-            #Only take torsions where the "new" statuses of atoms 1 and 4 are not equal
-            if (atom1 in atoms_with_positions) != (atom4 in atoms_with_positions):
-                #make sure torsion is not improper:
-                if not self._is_proper(torsion_force.getTorsionParameters(torsion_index), bond_force):
-                    continue
-                #only take torsions where 2 and 3 have known positions
-                if (atom2 in atoms_with_positions) and (atom3 in atoms_with_positions):
-                    #finally, append the torsion index to the list of possible atom sets for proposal
-                    if atom1 in atoms_with_positions and (atom1 not in current_atom_proposals):
-                        atom_torsion_proposals[atom4].append(torsion_index)
-                        current_atom_proposals.append(atom4)
-                    elif atom4 in atoms_with_positions and (atom4 not in current_atom_proposals):
-                        atom_torsion_proposals[atom1].append(torsion_index)
-                        current_atom_proposals.append(atom1)
-                    else:
-                        continue
-        return {atom: torsionlist for atom, torsionlist in atom_torsion_proposals.items() if len(torsionlist) > 0}
-
-
-    def _is_proper(self, torsion_parameters, bond_force):
-        """
-        Utility function to determine if torsion is proper
-        """
-        #get the atoms
-        torsion_atoms = torsion_parameters[:4]
-        is_proper = True
-        for i in range(3):
-            is_proper = is_proper and self._is_bond(torsion_atoms[i], torsion_atoms[i+1], bond_force)
-        return is_proper
-
-    def _is_bond(self, atom1, atom2, bond_force):
-        """
-        Utility function to determine if bond exists between two atoms
-        """
-        for bond_index in range(bond_force.getNumBonds()):
-            parameters = bond_force.getBondParameters(bond_index)
-            if (parameters[0] == atom1 and parameters[1] == atom2) or (parameters[1] == atom1 and parameters[0] == atom2):
-                return True
-        return False
-
-
-    def _get_bond_parameters(self, system, atom1, atom2):
-        """
-        Utility function to get the bonded parameters for a pair of atoms
-
-        Arguments
-        ---------
-        system : simtk.openmm.System
-            the system containing the parameters of interest
-        atom1 : int
-            the index of the first atom in the bond
-        atom2 : int
-            the index of the second atom in the bond
-
-        Returns
-        -------
-        r0 : float
-            equilibrium bond length
-        k_eq : float
-            bond spring constant
-        """
-        forces = {system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces())}
-        bonded_force = forces['HarmonicBondForce']
-        for bond_index in range(bonded_force.getNumBonds()):
-            parameters = bonded_force.getBondParameters(bond_index)
-            if (parameters[0] == atom1 and parameters[1] == atom2) or (parameters[1] == atom1 and parameters[0] == atom2):
-                return parameters[2], parameters[3]
-
-    def _get_angle_parameters(self, system, atom1, atom2, atom3):
-        """
-        Utility function to retrieve harmonic angle parameters for
-        a given set of atoms in a system
-
-        Arguments
-        ---------
-        system : simtk.openmm.System
-            the system with parameters
-        atom1 : int
-            the index of the first atom
-        atom2 : int
-            the index of the second atom
-        atom3 : int
-            the index of the third atom
-
-        Returns
-        -------
-        theta0 : float
-            equilibrium bond angle
-        k_eq : float
-            angle spring constant
-        """
-        list_of_angle_atoms = [atom1, atom2, atom3]
-        #compare sorted lists of atoms
-        forces = {system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces())}
-        angle_force = forces['HarmonicAngleForce']
-        for angle_index in range(angle_force.getNumAngles()):
-            parameters = angle_force.getAngleParameters(angle_index)
-            #the first three "parameters" are atom indices
-            atoms = parameters[:3]
-            if np.all(np.equal(list_of_angle_atoms, atoms)) or np.all(np.equal(list_of_angle_atoms[::-1], atoms)):
-                return parameters[3], parameters[4]
-
-    def _get_unique_atoms(self, new_to_old_map, new_atom_list, old_atom_list):
-        """
-        Get the set of atoms unique to both the new and old system.
-
-        Arguments
-        ---------
-        new_to_old_map : dict
-            Dictionary of the form {new_atom : old_atom}
-
-        Returns
-        -------
-        unique_old_atoms : list of int
-            A list of the indices of atoms unique to the old system
-        unique_new_atoms : list of int
-            A list of the indices of atoms unique to the new system
-        """
-        mapped_new_atoms = new_to_old_map.keys()
-        unique_new_atoms = [atom for atom in new_atom_list not in mapped_new_atoms]
-        mapped_old_atoms = new_to_old_map.values()
-        unique_old_atoms = [atom for atom in old_atom_list not in mapped_old_atoms]
-        return unique_old_atoms, unique_new_atoms
-
-    def _propose_bond_length(self, r0, k_eq):
-        """
-        Draw a bond length from the equilibrium bond length distribution
-
-        Arguments
-        ---------
-        r0 : float
-            The equilibrium bond length
-        k_eq : float
-            The bond spring constant
-
-        Returns
-        --------
-        r : float
-            the proposed bond length
-        logp : float
-            the log-probability of the proposal
-        """
-        sigma = 2.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        r = sigma*np.random.random()*r0.unit + r0
-        logp = stats.distributions.norm.logpdf(r/r.unit, r0/r0.unit, sigma)
-        return (r, logp)
-
-    def _propose_bond_angle(self, theta0, k_eq):
-        """
-        Draw a bond length from the equilibrium bond length distribution
-
-        Arguments
-        ---------
-        theta0 : float
-            The equilibrium bond angle
-        k_eq : float
-            The angle spring constant
-
-        Returns
-        --------
-        r : float
-            the proposed bond angle
-        logp : float
-            the log-probability of the proposal
-        """
-        sigma = 1.0/np.sqrt(2.0*k_eq/k_eq.unit)
-        theta = sigma*np.random.random()*theta0.unit + theta0
-        logp = stats.distributions.norm.logpdf(theta / theta.unit, theta0/theta0.unit, sigma)
-        return (theta, logp)
-
-    def _propose_torsion_angle(self, V, n, gamma):
-        """
-        Draws a torsion angle from the distribution of one torsion.
-        Uses the functional form U(phi) = V/2[1+cos(n*phi-gamma)],
-        as described by Amber.
-
-        Arguments
-        ---------
-        V : float
-            force constant
-        n : int
-            multiplicity of the torsion
-        gamma : float
-            phase angle
-
-        Returns
-        -------
-        phi : float
-            The proposed torsion angle
-        logp : float
-            The proposed log probability of the torsion angle
-        """
-        (Z, max_p) = self._torsion_normalizer(V, n, gamma)
-        phi = 0.0
-        logp = 0.0
-        #sample from the distribution
-        accepted = False
-        #use rejection sampling
-        while not accepted:
-            phi_samp = np.random.uniform(0.0, 2*np.pi)
-            runif = np.random.uniform(0.0, max_p+1.0)
-            p_phi_samp = self._torsion_p(Z, V, n, gamma, phi_samp)
-            if p_phi_samp > runif:
-                phi = phi_samp
-                logp = np.log(p_phi_samp)
-                accepted = True
-            else:
-                continue
-        return (phi*units.radians, logp)
-
-    def _torsion_p(self, Z, V, n, gamma, phi):
-        """
-        Utility function for calculating the normalized probability of a torsion angle
-        """
-        #must remove units
-        V = V/V.unit
-        gamma = gamma/gamma.unit
-        return (1.0/Z)*np.exp(-(V/2.0)*(1+np.cos(n*phi-gamma)))
-
-    def _torsion_normalizer(self, V, n, gamma):
-        """
-        Utility function to numerically normalize torsion angles.
-        Also return max_p to facilitate rejection sampling
-        """
-        #generate a grid of 5000 points from 0 < phi < 2*pi
-        phis = np.linspace(0, 2.0*np.pi, 5000)
-        #evaluate the unnormalized probability at each of those points
-        #need to remove units--numexpr can't handle them otherwise
-        V = V/V.unit
-        gamma = gamma/gamma.unit
-        phi_q = ne.evaluate("exp(-(V/2.0)*(1+cos(n*phis-gamma)))")
-        #integrate the values
-        Z = np.trapz(phi_q, phis)
-        max_p = np.max(phi_q/Z)
-        return Z, max_p
-
-
-
-    def _autograd_ctoi(self, atom, bond, angle, torsion, positions):
-        import autograd
-        import autograd.numpy as np
-
-        positions = positions/positions.unit
-        atom_position = positions[atom]
-
-
-        def _cartesian_to_internal(xyz):
-            """
-            Autograd-based jacobian of transformation from cartesian to internal.
-            Returns without units!
-            """
-            a = positions[bond] - xyz
-            b = positions[angle] - positions[bond]
-            #3-4 bond
-            c = positions[angle] - positions[torsion]
-            a_u = a / np.linalg.norm(a)
-            b_u = b / np.linalg.norm(b)
-            c_u = c / np.linalg.norm(c)
-
-            #bond length
-            r = np.linalg.norm(a)
-
-            #bond angle
-            theta = np.arccos(np.dot(-a_u, b_u))
-
-            #torsion angle
-            plane1 = np.cross(a, b)
-            plane2 = np.cross(b, c)
-
-            phi = np.arccos(np.dot(plane1, plane2)/(np.linalg.norm(plane1)*np.linalg.norm(plane2)))
-
-            if np.dot(np.cross(plane1, plane2), b_u) < 0:
-                phi = -phi
-
-            return np.array([r, theta, phi])
-
-        j = autograd.jacobian(_cartesian_to_internal)
-        internal_coords = _cartesian_to_internal(atom_position)
-        jacobian_det = np.linalg.det(j(atom_position))
-        return internal_coords, np.abs(jacobian_det)
-
-    def _autograd_itoc(self, bond, angle, torsion, r, theta, phi, positions):
-        """
-        Autograd based coordinate conversion internal -> cartesian
-
-        Arguments
-        ---------
-        bond : int
-            index of the bonded atom
-        angle : int
-            index of the angle atom
-        torsion : int
-            index of the torsion atom
-        r : float, Quantity nm
-            bond length
-        theta : float, Quantity rad
-            bond angle
-        phi : float, Quantity rad
-            torsion angle
-        positions : [n, 3] np.array Quantity nm
-            positions of the atoms in the molecule
-
-        Returns
-        -------
-        atom_xyz : [1, 3] np.array Quantity nm
-            The atomic positions in cartesian space
-        detJ : float
-            The absolute value of the determinant of the jacobian
-        """
-        import autograd
-        import autograd.numpy as np
-        positions = positions/positions.unit
-        r = r/r.unit
-        theta = theta/theta.unit
-        phi = phi/phi.unit
-        rtp = np.array([r, theta, phi])
-
-        def _internal_to_cartesian(rthetaphi):
-
-            a = positions[angle] - positions[bond]
-            b = positions[angle] - positions[torsion]
-
-            a_u = a / np.linalg.norm(a)
-            b_u = b / np.linalg.norm(b)
-
-
-            d_r = rthetaphi[0]*a_u
-
-            normal = np.cross(a, b)
-
-            #construct the angle rotation matrix
-            axis_angle = normal / np.linalg.norm(normal)
-            a = np.cos(rthetaphi[1]/2)
-            b, c, d = -axis_angle*np.sin(rthetaphi[1]/2)
-            angle_rotation_matrix =  np.array([[a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
-                            [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
-                            [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
-            #apply it
-            d_ang = np.dot(angle_rotation_matrix, d_r)
-
-            #construct the torsion rotation matrix and apply it
-            axis = a_u
-            a = np.cos(rthetaphi[2]/2)
-            b, c, d = -axis*np.sin(rthetaphi[2]/2)
-            torsion_rotation_matrix = np.array([[a*a+b*b-c*c-d*d, 2*(b*c-a*d), 2*(b*d+a*c)],
-                            [2*(b*c+a*d), a*a+c*c-b*b-d*d, 2*(c*d-a*b)],
-                            [2*(b*d-a*c), 2*(c*d+a*b), a*a+d*d-b*b-c*c]])
-            #apply it
-            d_torsion = np.dot(torsion_rotation_matrix, d_ang)
-
-            #add the positions of the bond atom
-            xyz = positions[bond] + d_torsion
-
-            return xyz
-
-        j = autograd.jacobian(_internal_to_cartesian)
-        atom_xyz = _internal_to_cartesian(rtp)
-        jacobian_det = np.linalg.det(j(rtp))
-        logging.debug("detJ is %f" %(jacobian_det))
-        detj_spherical = r**2*np.sin(theta)
-        logging.debug("The spherical detJ is %f" % detj_spherical)
-        return units.Quantity(atom_xyz, unit=units.nanometers), np.abs(jacobian_det)
-
+        involved_angles = self._get_valid_angles(atoms_with_positions, atom)
+        involved_torsions = self._get_torsions(atoms_with_positions, atom)
+
+        xyz_grid = units.Quantity(np.zeros([n_divisions, n_divisions, 3]), unit=units.nanometers)
+        thetas = units.Quantity(np.arange(0, np.pi, np.pi/n_divisions), unit=units.radians)
+        phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
+
+        #now, for every theta, phi combination, get the xyz coordinates:
+        for i in range(len(thetas)):
+            for j in range(len(phis)):
+                xyz_grid[i, j, :], _ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, thetas[i], phis[j])
+
+        logq = np.zeros([n_divisions, n_divisions])
+
+        #now, for each xyz point in the grid, calculate the log q(theta, phi)
+        for i in range(len(thetas)):
+            for j in range(len(phis)):
+                logq[i, j] = self._torsion_and_angle_logq(xyz_grid[i, j], atom, positions, involved_angles, involved_torsions, beta)
+        logq -= np.max(logq)
+        q = np.exp(logq)
+        Z = np.sum(q)
+        logp = logq - np.log(Z)
+        return logp, Z, q, thetas, phis, xyz_grid
+
+    def _joint_torsion_angle_proposal(self, atom, r, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
+        n_divisions = 50
+        logp, Z, q, thetas, phis, xyz_grid = self._normalize_torsion_and_angle(atom, r, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=n_divisions)
+        logp_flat = np.ravel(logp)
+        theta_phi_idx = np.random.choice(range(len(logp_flat)), p=np.exp(logp_flat))
+        theta_idx, phi_idx = np.unravel_index(theta_phi_idx, [n_divisions, n_divisions])
+        xyz = xyz_grid[theta_idx, phi_idx]
+        logp = logp_flat[theta_phi_idx]
+        theta = thetas[theta_idx]
+        phi = phis[phi_idx]
+        return theta, phi, logp, xyz
