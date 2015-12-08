@@ -7,7 +7,6 @@ import perses.rjmc.topology_proposal as topology_proposal
 import parmed
 import simtk.unit as units
 import logging
-import matplotlib.pyplot as pyplot
 import numpy as np
 import coordinate_tools
 
@@ -681,7 +680,6 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=100)
         #choose from the set of possible torsion angles
         phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp))
-        pyplot.plot(phis, np.exp(logp))
         logp = logp[phi_idx]
         phi = phis[phi_idx]
         return phi, logp
@@ -718,12 +716,6 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         n_divisions = 50
         logp, Z, q, thetas, phis, xyz_grid = self._normalize_torsion_and_angle(atom, r, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=n_divisions)
         logp_flat = np.ravel(logp)
-        #xyz_flat = np.ravel(xyz_grid)
-        #import matplotlib.pyplot as plt
-        #from mpl_toolkits.mplot3d import Axes3D
-        #fig = plt.figure()
-        #ax = fig.add_subplot(111, projection='3d')
-        #ax.scatter(xyz_grid[:,:,0], xyz_grid[:,:,1], xyz_grid[:,:,2])
         theta_phi_idx = np.random.choice(range(len(logp_flat)), p=np.exp(logp_flat))
         theta_idx, phi_idx = np.unravel_index(theta_phi_idx, [n_divisions, n_divisions])
         xyz = xyz_grid[theta_idx, phi_idx]
