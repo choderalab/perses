@@ -415,7 +415,7 @@ class FFGeometryEngine(GeometryEngine):
 
     def _cartesian_to_internal(self, atom_position, bond_position, angle_position, torsion_position):
         """
-        Cartesian to internal function (hah)
+        Cartesian to internal function
         """
         #ensure we have the correct units, then remove them
         atom_position = atom_position.in_units_of(units.nanometers)/units.nanometers
@@ -426,7 +426,7 @@ class FFGeometryEngine(GeometryEngine):
         internal_coords = coordinate_tools._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
 
 
-        return internal_coords, 0
+        return internal_coords, internal_coords[0]**2*np.sin(internal_coords)
 
 
     def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
@@ -441,7 +441,7 @@ class FFGeometryEngine(GeometryEngine):
         torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
         xyz = coordinate_tools._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         xyz = units.Quantity(xyz, unit=units.nanometers)
-        return xyz, 0
+        return xyz, (r/r.unit)**2*np.sin(theta/theta.unit)
 
 
     def _bond_logq(self, r, bond, beta):
