@@ -98,7 +98,7 @@ def test_run_geometry_engine():
                                                                       old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    test_pdb_file = open("erlotinib_gefitinib_after_1.pdb", 'w')
+    #test_pdb_file = open("erlotinib_gefitinib_after_1.pdb", 'w')
 
 
     integrator = openmm.VerletIntegrator(1*units.femtoseconds)
@@ -109,7 +109,7 @@ def test_run_geometry_engine():
     print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal)
-    app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
+    #app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
     context.setPositions(new_positions)
     state2 = context.getState(getEnergy=True)
     print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
@@ -117,8 +117,8 @@ def test_run_geometry_engine():
     integrator.step(1000)
     state3 = context.getState(getEnergy=True, getPositions=True)
     after_dynamics_positions = state3.getPositions()
-    app.PDBFile.writeFile(top2, after_dynamics_positions, file=test_pdb_file)
-    test_pdb_file.close()
+    #app.PDBFile.writeFile(top2, after_dynamics_positions, file=test_pdb_file)
+    #test_pdb_file.close()
 
 
     print("Energy after 1000 steps is %s" % str(state3.getPotentialEnergy()))
