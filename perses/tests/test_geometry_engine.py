@@ -302,12 +302,69 @@ def test_angle():
     theta_g = geometry_engine._calculate_angle(example_coordinates[0], example_coordinates[1], example_coordinates[2])
     assert abs(theta / theta.unit - theta_g) < 1.0e-12
 
+def _omm_torsion_system(torsion):
+    """
+
+    Parameters
+    ----------
+    torsion : parmed.Torsion object
+        A parmed.Torsion object representing a proper torsion
+    Returns
+    -------
+    torsion_system : openmm.System object
+        An OpenMM system that contains 4 particles with a single torsion
+    """
+    torsion_system = openmm.System()
+    for i in range(4):
+        torsion_system.addParticle(1*units.amu)
+    torsion_force = openmm.PeriodicTorsionForce()
+    torsion_system.addForce(torsion_force)
+    force_constant = torsion.type.phi_k
+    periodicity = torsion.type.per
+    phase = torsion.type.phase
+    torsion_force.addTorsion(0,1,2,3, periodicity, phase.in_units_of(units.radians), force_constant.in_units_of(units.kilojoule_per_mole))
+    return torsion_system
+
+def test_torsion_potential():
+    """
+    Test the calculation of a torsion potential, and ensure it matches OpenMM
+    """
+    molecule_name_2 = 'butane'
+    molecule2 = generate_initial_molecule(molecule_name_2)
+    sys, pos, top = oemol_to_openmm_system(molecule2, molecule_name_2)
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    structure = parmed.openmm.load_topology(top, sys)
+    torsions = [geometry_engine._add_torsion_units(torsion) for torsion in structure.dihedrals if not torsion.improper]
+    platform = openmm.Platform.getPlatformByName("Reference")
+    for torsion in torsions:
+        atom_position = pos[torsion.atom1.idx]
+        bond_position = pos[torsion.atom2.idx]
+        angle_position = pos[torsion.atom3.idx]
+        torsion_position = pos[torsion.atom4.idx]
+        torsion_system = _omm_torsion_system(torsion)
+        integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+        context = openmm.Context(torsion_system, integrator, platform)
+        context.setPositions([atom_position, bond_position, angle_position, torsion_position])
+        state = context.getState(getEnergy=True)
+        omm_logq = -beta*state.getPotentialEnergy()
+        internal_coords, _ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
+        geometry_logq = geometry_engine._torsion_logq(torsion, internal_coords[2]*units.radians, beta)
+        assert np.abs(omm_logq-geometry_logq) < 1.0e-12
+
+
+
+
+
+
+
 
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    test_run_geometry_engine()
+    #test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
     #test_angle()
+    test_torsion_potential()

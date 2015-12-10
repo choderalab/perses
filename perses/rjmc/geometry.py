@@ -532,7 +532,7 @@ class FFGeometryEngine(GeometryEngine):
         gamma = torsion.type.phase
         V = torsion.type.phi_k
         n = torsion.type.per
-        logq = -beta*(V/2.0)*(1+units.cos(n*phi-gamma))
+        logq = -beta*V*(1+units.cos(n*phi-gamma))
         return logq
 
     def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
