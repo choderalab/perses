@@ -325,6 +325,28 @@ def _omm_torsion_system(torsion):
     torsion_force.addTorsion(0,1,2,3, periodicity, phase.in_units_of(units.radians), force_constant.in_units_of(units.kilojoule_per_mole))
     return torsion_system
 
+def _omm_angle_system(angle):
+    """
+    Return a system that just has a harmonic angle based on the angle parameters
+
+    Parameters
+    ----------
+    angle : parmed.Angle object
+        parmed angle that has the united parameters
+
+    Returns
+    -------
+    angle_system : openmm.System object
+        System with appropriate angle
+    """
+    angle_system = openmm.System()
+    for i in range(3):
+        angle_system.addParticle(1.0*units.amu)
+    angle_force = openmm.HarmonicAngleForce()
+    angle_system.addForce(angle_force)
+    force_constant = angle.type.k
+    theteq = angle.type.thet
+
 def test_molecule_torsion_potential():
     """
     Test the calculation of a torsion potential, and ensure it matches OpenMM
@@ -385,14 +407,6 @@ def test_arbitrary_torsion_potential():
 
 
 
-def test_angle_potential():
-    """
-    Make sure that the
-    Returns
-    -------
-
-    """
-    pass
 
 
 
