@@ -325,7 +325,7 @@ def _omm_torsion_system(torsion):
     torsion_force.addTorsion(0,1,2,3, periodicity, phase.in_units_of(units.radians), force_constant.in_units_of(units.kilojoule_per_mole))
     return torsion_system
 
-def test_torsion_potential():
+def test_molecule_torsion_potential():
     """
     Test the calculation of a torsion potential, and ensure it matches OpenMM
     """
@@ -352,8 +352,47 @@ def test_torsion_potential():
         geometry_logq = geometry_engine._torsion_logq(torsion, internal_coords[2]*units.radians, beta)
         assert np.abs(omm_logq-geometry_logq) < 1.0e-12
 
+def test_arbitrary_torsion_potential():
+    """
+    Test the torsion potential by rotating an arbitrary particle
+    """
+    n_divisions = 100
+    import perses.rjmc.geometry as geometry
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    periodicity = 2
+    force_constant = 1.0*units.kilojoule_per_mole
+    phase = np.pi*units.radians
+    atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
+    bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
+    angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
+    torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
+    phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
+    r = 1.0*units.nanometers
+    theta = np.pi*units.radians
+    dihedral_type = parmed.DihedralType(force_constant, periodicity, phase)
+    torsion = parmed.Dihedral(parmed.Atom(),parmed.Atom(),parmed.Atom(),parmed.Atom(), type=dihedral_type)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    for phi in phis:
+        geometry_logq = geometry_engine._torsion_logq(torsion, phi, beta)
+        xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
+        system  = _omm_torsion_system(torsion)
+        integrator = openmm.VerletIntegrator(1.0*units.femtoseconds)
+        context = openmm.Context(system, integrator, platform)
+        context.setPositions([xyz, bond_position, angle_position, torsion_position])
+        state = context.getState(getEnergy=True)
+        omm_logq = -beta*state.getPotentialEnergy()
+        assert np.abs(omm_logq-geometry_logq) < 1.0e-12
 
 
+
+def test_angle_potential():
+    """
+    Make sure that the
+    Returns
+    -------
+
+    """
+    pass
 
 
 
@@ -367,4 +406,5 @@ if __name__=="__main__":
     #test_openmm_dihedral()
     #test_try_random_itoc()
     #test_angle()
-    test_torsion_potential()
+    #test_torsion_potential()
+    test_arbitrary_torsion_potential
