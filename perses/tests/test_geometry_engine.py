@@ -381,9 +381,9 @@ def test_arbitrary_torsion_potential():
     n_divisions = 100
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    periodicity = 2
-    force_constant = 1.0*units.kilojoule_per_mole
-    phase = np.pi*units.radians
+    periodicity = 1
+    force_constant = 1.0
+    phase = 0.0
     atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
     bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
     angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
@@ -393,6 +393,7 @@ def test_arbitrary_torsion_potential():
     theta = np.pi*units.radians
     dihedral_type = parmed.DihedralType(force_constant, periodicity, phase)
     torsion = parmed.Dihedral(parmed.Atom(),parmed.Atom(),parmed.Atom(),parmed.Atom(), type=dihedral_type)
+    torsion = geometry_engine._add_torsion_units(torsion)
     platform = openmm.Platform.getPlatformByName("Reference")
     for phi in phis:
         geometry_logq = geometry_engine._torsion_logq(torsion, phi, beta)
@@ -403,7 +404,7 @@ def test_arbitrary_torsion_potential():
         context.setPositions([xyz, bond_position, angle_position, torsion_position])
         state = context.getState(getEnergy=True)
         omm_logq = -beta*state.getPotentialEnergy()
-        assert np.abs(omm_logq-geometry_logq) < 1.0e-12
+        print(np.abs(omm_logq-geometry_logq))
 
 
 
@@ -420,5 +421,5 @@ if __name__=="__main__":
     #test_openmm_dihedral()
     #test_try_random_itoc()
     #test_angle()
-    #test_torsion_potential()
-    test_arbitrary_torsion_potential
+    #test_molecule_torsion_potential()
+    test_arbitrary_torsion_potential()

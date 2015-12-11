@@ -9,6 +9,7 @@ import simtk.unit as units
 import logging
 import numpy as np
 import coordinate_tools
+import simtk.openmm as openmm
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 
@@ -723,3 +724,56 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         theta = thetas[theta_idx]
         phi = phis[phi_idx]
         return theta, phi, logp, xyz
+
+class SystemFactory(object):
+    """
+    This class generates OpenMM systems that allow certain atomic interactions to be turned on/off
+    """
+    _HarmonicBondForceEnergy = "step(growth_idx - {})*(K/2)*(r-r0)^2"
+    _HarmonicAngleForceEnergy = "step(growth_idx - {})*(K/2)*(theta-theta0)^2;"
+    _PeriodicTorsionForceEnergy = "step(growth_idx - {})*k*(1+cos(periodicity*theta-phase))"
+
+
+    def create_modified_system(self, reference_system, growth_index, parameter_name, force_names, force_parameters):
+        """
+        Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
+        for each integer above 0, an additional atom is made interacting, with order determined by growth_index
+
+        Parameters
+        ----------
+        reference_system : simtk.openmm.System object
+            The system containing the relevant forces and particles
+        growth_index : list of int
+            The order in which the atom indices will be proposed
+        parameter_name : str
+            The name of the global context parameter
+        force_names : list of str
+            A list of the names of forces that will be included in this system
+        force_parameters : dict
+            Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
+
+        Returns
+        -------
+        growth_system : simtk.openmm.System object
+            System with the appropriate modifications
+        """
+        growth_system = openmm.System()
+        #create the forces:
+        modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(parameter_name))
+        modified_bond_force.addPerBondParameter("growth_idx")
+        modified_bond_force.addGlobalParameter(parameter_name)
+
+        modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(parameter_name))
+        modified_angle_force.addPerAngleParameter("growth_idx")
+        modified_angle_force.addGlobalParameter(parameter_name)
+
+        modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(parameter_name))
+        modified_torsion_force.addPerTorsionParameter("growth_idx")
+        modified_angle_force.addGlobalParameter(parameter_name)
+
+        #copy the particles over
+        for i in range(reference_system.getNumParticles()):
+            growth_system.addParticle(reference_system.getParticleMass(i))
+
+
+
