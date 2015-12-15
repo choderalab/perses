@@ -757,6 +757,7 @@ class SystemFactory(object):
         growth_system : simtk.openmm.System object
             System with the appropriate modifications
         """
+        reference_forces = { reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces()) }
         growth_system = openmm.System()
         #create the forces:
         modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(parameter_name))
@@ -771,9 +772,21 @@ class SystemFactory(object):
         modified_torsion_force.addPerTorsionParameter("growth_idx")
         modified_angle_force.addGlobalParameter(parameter_name)
 
+        growth_system.addForce(modified_bond_force)
+        growth_system.addForce(modified_angle_force)
+        growth_system.addForce(modified_torsion_force)
+
         #copy the particles over
         for i in range(reference_system.getNumParticles()):
             growth_system.addParticle(reference_system.getParticleMass(i))
+
+        #copy each bond, adding the per-particle parameter as well
+        reference_bond_force = reference_forces['HarmonicBondForce']
+        for bond in range(reference_bond_force.getNumBonds()):
+            bond_parameters = reference_bond_force.getBondParameters(bond)
+
+
+
 
 
 
