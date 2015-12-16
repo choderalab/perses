@@ -761,10 +761,14 @@ class SystemFactory(object):
         growth_system = openmm.System()
         #create the forces:
         modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(parameter_name))
+        modified_bond_force.addPerBondParameter("r0")
+        modified_bond_force.addPerBondParameter("K")
         modified_bond_force.addPerBondParameter("growth_idx")
         modified_bond_force.addGlobalParameter(parameter_name, 0)
 
         modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(parameter_name))
+        modified_angle_force.addPerAngleParameter("theta0")
+        modified_angle_force.addPerAngleParameter("K")
         modified_angle_force.addPerAngleParameter("growth_idx")
         modified_angle_force.addGlobalParameter(parameter_name, 0)
 
@@ -828,7 +832,7 @@ class SystemFactory(object):
         new_atoms_in_force = particle_indices_set.intersection(growth_indices_set)
         if len(new_atoms_in_force) == 0:
             return 0
-        new_atom_growth_order = [growth_indices.index(atom_idx) for atom_idx in new_atoms_in_force]
+        new_atom_growth_order = [growth_indices.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
 
 

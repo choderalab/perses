@@ -414,8 +414,21 @@ def test_create_modified_system():
     system = ala.system
     import perses.rjmc.geometry as geometry
     system_generator = geometry.SystemFactory()
-    modified_system = system_generator.create_modified_system(system, [2,3,4], "growth_lambda")
-    print("done")
+    growth_indices = [2,3,4]
+    modified_system = system_generator.create_modified_system(system, growth_indices, "growth_lambda")
+    integrator = openmm.VerletIntegrator(1.0*units.femtoseconds)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    context = openmm.Context(modified_system, integrator, platform)
+    context.setPositions(ala.positions)
+    #initial energy:
+    initial_state = context.getState(getEnergy=True)
+    print(initial_state.getPotentialEnergy())
+
+    for growth_stage in range(len(growth_indices)):
+        context.setParameter("growth_lambda", growth_stage)
+        state = context.getState(getEnergy=True)
+        print(state.getPotentialEnergy())
+
 
 
 
