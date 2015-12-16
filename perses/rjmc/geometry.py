@@ -773,6 +773,9 @@ class SystemFactory(object):
         modified_angle_force.addGlobalParameter(parameter_name, 0)
 
         modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(parameter_name))
+        modified_torsion_force.addPerTorsionParameter("periodicity")
+        modified_torsion_force.addPerTorsionParameter("phase")
+        modified_torsion_force.addPerTorsionParameter("k")
         modified_torsion_force.addPerTorsionParameter("growth_idx")
         modified_angle_force.addGlobalParameter(parameter_name, 0)
 
