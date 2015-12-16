@@ -384,9 +384,9 @@ def test_arbitrary_torsion_potential():
     periodicity = 1
     force_constant = 1.0
     phase = 0.0
-    atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
-    bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
-    angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
+    atom_position = units.Quantity(np.array([ 0.10557722, -1.10424644, -1.08578826]), unit=units.nanometers)
+    bond_position = units.Quantity(np.array([ 0.0765,  0.1, -0.4005]), unit=units.nanometers)
+    angle_position = units.Quantity(np.array([ 0.0829 , 0.0952, -0.2479]) ,unit=units.nanometers)
     torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
     phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
     r = 1.0*units.nanometers
