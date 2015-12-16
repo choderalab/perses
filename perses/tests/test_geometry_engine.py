@@ -408,7 +408,14 @@ def test_arbitrary_torsion_potential():
 
 
 
-
+def test_create_modified_system():
+    import openmmtools.testsystems as testsystems
+    ala = testsystems.AlanineDipeptideImplicit()
+    system = ala.system
+    import perses.rjmc.geometry as geometry
+    system_generator = geometry.SystemFactory()
+    modified_system = system_generator.create_modified_system(system, [2,3,4], "growth_lambda")
+    print("done")
 
 
 
@@ -422,4 +429,5 @@ if __name__=="__main__":
     #test_try_random_itoc()
     #test_angle()
     #test_molecule_torsion_potential()
-    test_arbitrary_torsion_potential()
+    #test_arbitrary_torsion_potential()
+    test_create_modified_system()

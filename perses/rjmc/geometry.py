@@ -734,7 +734,7 @@ class SystemFactory(object):
     _PeriodicTorsionForceEnergy = "step(growth_idx - {})*k*(1+cos(periodicity*theta-phase))"
 
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, force_names, force_parameters):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -757,20 +757,20 @@ class SystemFactory(object):
         growth_system : simtk.openmm.System object
             System with the appropriate modifications
         """
-        reference_forces = { reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces()) }
+        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
         growth_system = openmm.System()
         #create the forces:
         modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(parameter_name))
         modified_bond_force.addPerBondParameter("growth_idx")
-        modified_bond_force.addGlobalParameter(parameter_name)
+        modified_bond_force.addGlobalParameter(parameter_name, 0)
 
         modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(parameter_name))
         modified_angle_force.addPerAngleParameter("growth_idx")
-        modified_angle_force.addGlobalParameter(parameter_name)
+        modified_angle_force.addGlobalParameter(parameter_name, 0)
 
         modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(parameter_name))
         modified_torsion_force.addPerTorsionParameter("growth_idx")
-        modified_angle_force.addGlobalParameter(parameter_name)
+        modified_angle_force.addGlobalParameter(parameter_name, 0)
 
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
@@ -784,7 +784,7 @@ class SystemFactory(object):
         reference_bond_force = reference_forces['HarmonicBondForce']
         for bond in range(reference_bond_force.getNumBonds()):
             bond_parameters = reference_bond_force.getBondParameters(bond)
-            growth_idx = self._calculate_growth_idx([bond_parameters[:2]], growth_indices)
+            growth_idx = self._calculate_growth_idx(bond_parameters[:2], growth_indices)
             modified_bond_force.addBond(bond_parameters[0], bond_parameters[1], [bond_parameters[2], bond_parameters[3], growth_idx])
 
         #copy each angle, adding the per particle parameter as well
@@ -801,8 +801,7 @@ class SystemFactory(object):
             growth_idx = self._calculate_growth_idx(torsion_parameters[:4], growth_indices)
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
-
-
+        return growth_system
 
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
@@ -824,8 +823,8 @@ class SystemFactory(object):
         growth_idx : int
             The growth_idx parameter
         """
-        particle_indices_set = {particle_indices}
-        growth_indices_set = {growth_indices}
+        particle_indices_set = set(particle_indices)
+        growth_indices_set = set(growth_indices)
         new_atoms_in_force = particle_indices_set.intersection(growth_indices_set)
         if len(new_atoms_in_force) == 0:
             return 0
