@@ -839,6 +839,45 @@ class SystemFactory(object):
         return max(new_atom_growth_order)
 
 
+class TopologyParameterTools(object):
+    """
+    This class contains utilities to extract parameters and information about the topology relevant
+    to making proposals for new atomic positions. It can harvest both relevant forces and relevant
+    parameters.
+    """
+
+    def __init__(self, system, topology, new_atoms, new_to_old_atom_map):
+        self._structure = parmed.openmm.load_topology(topology, system)
+        self._new_to_old_atom_map = new_to_old_atom_map
+        self._new_atoms = new_atoms
+
+    def _calculate_atom_proposal_order(self):
+        """
+        Calculate the order in which new atoms will be proposed
+
+        Returns
+        -------
+        atom_order : dict
+            Dict of the form {atom_index : [list_of_torsions]}
+        """
+        atoms_with_positions = self._new_to_old_atom_map.keys()
+        new_atoms = self._new_atoms
+
+    def _atoms_eligible_for_proposal(self, structure, atoms_with_positions, new_atoms):
+        """
+        Determine which atoms
+        Parameters
+        ----------
+        structure
+        atoms_with_positions
+        new_atoms
+
+        Returns
+        -------
+
+        """
+
+
 
 
 
