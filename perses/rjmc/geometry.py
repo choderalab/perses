@@ -9,6 +9,8 @@ import simtk.unit as units
 import logging
 import numpy as np
 import coordinate_tools
+import simtk.openmm as openmm
+from collections import OrderedDict
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 
@@ -532,7 +534,7 @@ class FFGeometryEngine(GeometryEngine):
         gamma = torsion.type.phase
         V = torsion.type.phi_k
         n = torsion.type.per
-        logq = -beta*(V/2.0)*(1+units.cos(n*phi-gamma))
+        logq = -beta*V*(1+units.cos(n*phi-gamma))
         return logq
 
     def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
@@ -723,3 +725,250 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         theta = thetas[theta_idx]
         phi = phis[phi_idx]
         return theta, phi, logp, xyz
+
+class SystemFactory(object):
+    """
+    This class generates OpenMM systems that allow certain atomic interactions to be turned on/off
+    """
+    _HarmonicBondForceEnergy = "step(growth_idx - {})*(K/2)*(r-r0)^2"
+    _HarmonicAngleForceEnergy = "step(growth_idx - {})*(K/2)*(theta-theta0)^2;"
+    _PeriodicTorsionForceEnergy = "step(growth_idx - {})*k*(1+cos(periodicity*theta-phase))"
+
+
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, force_names=None, force_parameters=None):
+        """
+        Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
+        for each integer above 0, an additional atom is made interacting, with order determined by growth_index
+
+        Parameters
+        ----------
+        reference_system : simtk.openmm.System object
+            The system containing the relevant forces and particles
+        growth_indices : list of int
+            The order in which the atom indices will be proposed
+        parameter_name : str
+            The name of the global context parameter
+        force_names : list of str
+            A list of the names of forces that will be included in this system
+        force_parameters : dict
+            Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
+
+        Returns
+        -------
+        growth_system : simtk.openmm.System object
+            System with the appropriate modifications
+        """
+        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
+        growth_system = openmm.System()
+        #create the forces:
+        modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(parameter_name))
+        modified_bond_force.addPerBondParameter("r0")
+        modified_bond_force.addPerBondParameter("K")
+        modified_bond_force.addPerBondParameter("growth_idx")
+        modified_bond_force.addGlobalParameter(parameter_name, 0)
+
+        modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(parameter_name))
+        modified_angle_force.addPerAngleParameter("theta0")
+        modified_angle_force.addPerAngleParameter("K")
+        modified_angle_force.addPerAngleParameter("growth_idx")
+        modified_angle_force.addGlobalParameter(parameter_name, 0)
+
+        modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(parameter_name))
+        modified_torsion_force.addPerTorsionParameter("periodicity")
+        modified_torsion_force.addPerTorsionParameter("phase")
+        modified_torsion_force.addPerTorsionParameter("k")
+        modified_torsion_force.addPerTorsionParameter("growth_idx")
+        modified_angle_force.addGlobalParameter(parameter_name, 0)
+
+        growth_system.addForce(modified_bond_force)
+        growth_system.addForce(modified_angle_force)
+        growth_system.addForce(modified_torsion_force)
+
+        #copy the particles over
+        for i in range(reference_system.getNumParticles()):
+            growth_system.addParticle(reference_system.getParticleMass(i))
+
+        #copy each bond, adding the per-particle parameter as well
+        reference_bond_force = reference_forces['HarmonicBondForce']
+        for bond in range(reference_bond_force.getNumBonds()):
+            bond_parameters = reference_bond_force.getBondParameters(bond)
+            growth_idx = self._calculate_growth_idx(bond_parameters[:2], growth_indices)
+            modified_bond_force.addBond(bond_parameters[0], bond_parameters[1], [bond_parameters[2], bond_parameters[3], growth_idx])
+
+        #copy each angle, adding the per particle parameter as well
+        reference_angle_force = reference_forces['HarmonicAngleForce']
+        for angle in range(reference_angle_force.getNumAngles()):
+            angle_parameters = reference_angle_force.getAngleParameters(angle)
+            growth_idx = self._calculate_growth_idx(angle_parameters[:3], growth_indices)
+            modified_angle_force.addAngle(angle_parameters[0], angle_parameters[1], angle_parameters[2], [angle_parameters[3], angle_parameters[4], growth_idx])
+
+        #copy each torsion, adding the per particle parameter as well
+        reference_torsion_force = reference_forces['PeriodicTorsionForce']
+        for torsion in range(reference_torsion_force.getNumTorsions()):
+            torsion_parameters = reference_torsion_force.getTorsionParameters(torsion)
+            growth_idx = self._calculate_growth_idx(torsion_parameters[:4], growth_indices)
+            modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
+
+        return growth_system
+
+
+    def _calculate_growth_idx(self, particle_indices, growth_indices):
+        """
+        Utility function to calculate the growth index of a particular force.
+        For each particle index, it will check to see if it is in growth_indices.
+        If not, 0 is added to an array, if yes, the index in growth_indices is added.
+        Finally, the method returns the max of the accumulated array
+
+        Parameters
+        ----------
+        particle_indices : list of int
+            The indices of particles involved in this force
+        growth_indices : list of int
+            The ordered list of indices for atom position proposals
+
+        Returns
+        -------
+        growth_idx : int
+            The growth_idx parameter
+        """
+        particle_indices_set = set(particle_indices)
+        growth_indices_set = set(growth_indices)
+        new_atoms_in_force = particle_indices_set.intersection(growth_indices_set)
+        if len(new_atoms_in_force) == 0:
+            return 0
+        new_atom_growth_order = [growth_indices.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
+        return max(new_atom_growth_order)
+
+
+class TopologyParameterTools(object):
+    """
+    This class contains utilities to extract parameters and information about the topology relevant
+    to making proposals for new atomic positions. It can harvest both relevant forces and relevant
+    parameters.
+    """
+
+    def __init__(self, system, topology, new_atoms, new_to_old_atom_map):
+        self._structure = parmed.openmm.load_topology(topology, system)
+        self._new_to_old_atom_map = new_to_old_atom_map
+        self._new_atoms = new_atoms
+        self._torsions_for_proposal = self._calculate_atom_proposal_order()
+        self._proposal_order = self._torsions_for_proposal.keys()
+
+    def _calculate_atom_proposal_order(self):
+        """
+        Calculate the order in which new atoms will be proposed
+
+        Returns
+        -------
+        atom_order : OrderedDict
+            ordered dictionary, where the key is the atom index, and the value is the set of available torsions
+        """
+        atoms_with_positions_idx = self._new_to_old_atom_map.keys()
+        atoms_with_positions = [self._structure.atoms[atom_idx] for atom_idx in atoms_with_positions_idx]
+        new_atoms = self._new_atoms
+        atom_proposal_order = OrderedDict()
+        while len(new_atoms) > 0:
+            for atom in new_atoms:
+                eligible_atom_torsions = self._eligible_torsions(atom, atoms_with_positions, self._structure)
+                if len(eligible_atom_torsions) > 0:
+                    atom_proposal_order[atom.idx] = eligible_atom_torsions
+        return atom_proposal_order
+
+
+    def _eligible_torsions(self, atom, atoms_with_positions, structure):
+        """
+        Determine the list of torsions that could be used to propose a given
+        atomic position.
+
+        Parameters
+        ----------
+        atom : parmed.Atom object
+            The atom needing a position
+        atoms_with_positions : list of parmed.Atom objects
+            Atoms that already have positions
+        structure : parmed.Structure object
+            Structure of system getting new positions
+
+        Returns
+        -------
+        eligible_torsions : list of parmed.Dihedral
+            A list of the torsions that are valid for proposal, with units
+        """
+        involved_dihedrals = atom.dihedrals
+        atoms_with_positions_set = set(atoms_with_positions)
+        eligible_torsions = []
+        for dihedral in involved_dihedrals:
+            if dihedral.improper:
+                continue
+            if dihedral.atom1 == atom:
+                if {dihedral.atom2, dihedral.atom3, dihedral.atom4}.issubset(atoms_with_positions_set):
+                    eligible_torsions.append(dihedral)
+            elif dihedral.atom4 == atom:
+                if {dihedral.atom3, dihedral.atom2, dihedral.atom1}.issubset(atoms_with_positions_set):
+                    eligible_torsions.append(dihedral)
+        return [self._add_torsion_units(torsion) for torsion in eligible_torsions]
+
+
+    def _add_bond_units(self, bond):
+        """
+        Add the correct units to a harmonic bond
+
+        Arguments
+        ---------
+        bond : parmed bond object
+            The bond to get units
+
+        Returns
+        -------
+
+        """
+        if type(bond.type.k)==units.Quantity:
+            return bond
+        bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
+        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        return bond
+
+    def _add_angle_units(self, angle):
+        """
+        Add the correct units to a harmonic angle
+
+        Arguments
+        ----------
+        angle : parmed angle object
+             the angle to get unit-ed
+
+        Returns
+        -------
+        angle_with_units : parmed angle
+            The angle, but with units on its parameters
+        """
+        if type(angle.type.k)==units.Quantity:
+            return angle
+        angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
+        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        return angle
+
+    def _add_torsion_units(self, torsion):
+        """
+        Add the correct units to a torsion
+
+        Arguments
+        ---------
+        torsion : parmed.dihedral object
+            The torsion needing units
+
+        Returns
+        -------
+        torsion : parmed.dihedral object
+            Torsion but with units added
+        """
+        if type(torsion.type.phi_k)==units.Quantity:
+            return torsion
+        torsion.type.phi_k = units.Quantity(torsion.type.phi_k, unit=units.kilocalorie_per_mole)
+        torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
+        return torsion
+
+
+
+
+
