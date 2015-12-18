@@ -851,6 +851,8 @@ class TopologyParameterTools(object):
         self._structure = parmed.openmm.load_topology(topology, system)
         self._new_to_old_atom_map = new_to_old_atom_map
         self._new_atoms = new_atoms
+        self._torsions_for_proposal = self._calculate_atom_proposal_order()
+        self._proposal_order = self._torsions_for_proposal.keys()
 
     def _calculate_atom_proposal_order(self):
         """
@@ -858,8 +860,8 @@ class TopologyParameterTools(object):
 
         Returns
         -------
-        atom_order : list of int
-            list of the atom indices in order of proposal
+        atom_order : OrderedDict
+            ordered dictionary, where the key is the atom index, and the value is the set of available torsions
         """
         atoms_with_positions_idx = self._new_to_old_atom_map.keys()
         atoms_with_positions = [self._structure.atoms[atom_idx] for atom_idx in atoms_with_positions_idx]
@@ -870,7 +872,7 @@ class TopologyParameterTools(object):
                 eligible_atom_torsions = self._eligible_torsions(atom, atoms_with_positions, self._structure)
                 if len(eligible_atom_torsions) > 0:
                     atom_proposal_order[atom.idx] = eligible_atom_torsions
-
+        return atom_proposal_order
 
 
     def _eligible_torsions(self, atom, atoms_with_positions, structure):
