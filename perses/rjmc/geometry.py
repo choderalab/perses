@@ -10,6 +10,7 @@ import logging
 import numpy as np
 import coordinate_tools
 import simtk.openmm as openmm
+from collections import OrderedDict
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 
@@ -857,27 +858,113 @@ class TopologyParameterTools(object):
 
         Returns
         -------
-        atom_order : dict
-            Dict of the form {atom_index : [list_of_torsions]}
+        atom_order : list of int
+            list of the atom indices in order of proposal
         """
-        atoms_with_positions = self._new_to_old_atom_map.keys()
+        atoms_with_positions_idx = self._new_to_old_atom_map.keys()
+        atoms_with_positions = [self._structure.atoms[atom_idx] for atom_idx in atoms_with_positions_idx]
         new_atoms = self._new_atoms
+        atom_proposal_order = OrderedDict()
+        while len(new_atoms) > 0:
+            for atom in new_atoms:
+                eligible_atom_torsions = self._eligible_torsions(atom, atoms_with_positions, self._structure)
+                if len(eligible_atom_torsions) > 0:
+                    atom_proposal_order[atom.idx] = eligible_atom_torsions
 
-    def _atoms_eligible_for_proposal(self, structure, atoms_with_positions, new_atoms):
+
+
+    def _eligible_torsions(self, atom, atoms_with_positions, structure):
         """
-        Determine which atoms
+        Determine the list of torsions that could be used to propose a given
+        atomic position.
+
         Parameters
         ----------
-        structure
-        atoms_with_positions
-        new_atoms
+        atom : parmed.Atom object
+            The atom needing a position
+        atoms_with_positions : list of parmed.Atom objects
+            Atoms that already have positions
+        structure : parmed.Structure object
+            Structure of system getting new positions
+
+        Returns
+        -------
+        eligible_torsions : list of parmed.Dihedral
+            A list of the torsions that are valid for proposal, with units
+        """
+        involved_dihedrals = atom.dihedrals
+        atoms_with_positions_set = set(atoms_with_positions)
+        eligible_torsions = []
+        for dihedral in involved_dihedrals:
+            if dihedral.improper:
+                continue
+            if dihedral.atom1 == atom:
+                if {dihedral.atom2, dihedral.atom3, dihedral.atom4}.issubset(atoms_with_positions_set):
+                    eligible_torsions.append(dihedral)
+            elif dihedral.atom4 == atom:
+                if {dihedral.atom3, dihedral.atom2, dihedral.atom1}.issubset(atoms_with_positions_set):
+                    eligible_torsions.append(dihedral)
+        return [self._add_torsion_units(torsion) for torsion in eligible_torsions]
+
+
+    def _add_bond_units(self, bond):
+        """
+        Add the correct units to a harmonic bond
+
+        Arguments
+        ---------
+        bond : parmed bond object
+            The bond to get units
 
         Returns
         -------
 
         """
+        if type(bond.type.k)==units.Quantity:
+            return bond
+        bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
+        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        return bond
 
+    def _add_angle_units(self, angle):
+        """
+        Add the correct units to a harmonic angle
 
+        Arguments
+        ----------
+        angle : parmed angle object
+             the angle to get unit-ed
+
+        Returns
+        -------
+        angle_with_units : parmed angle
+            The angle, but with units on its parameters
+        """
+        if type(angle.type.k)==units.Quantity:
+            return angle
+        angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
+        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        return angle
+
+    def _add_torsion_units(self, torsion):
+        """
+        Add the correct units to a torsion
+
+        Arguments
+        ---------
+        torsion : parmed.dihedral object
+            The torsion needing units
+
+        Returns
+        -------
+        torsion : parmed.dihedral object
+            Torsion but with units added
+        """
+        if type(torsion.type.phi_k)==units.Quantity:
+            return torsion
+        torsion.type.phi_k = units.Quantity(torsion.type.phi_k, unit=units.kilocalorie_per_mole)
+        torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
+        return torsion
 
 
 
