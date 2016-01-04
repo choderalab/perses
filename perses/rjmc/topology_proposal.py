@@ -1,6 +1,8 @@
 """
 This file contains the base classes for topology proposals
 """
+### implement updates to TopologyProposal
+### calculate logp in different ways in different subclasses
 
 import simtk.openmm.app as app
 from collections import namedtuple
@@ -110,6 +112,8 @@ class ProteinTransformation(Transformation):
             except AttributeError:
                 pass
         new_topology = modeller.topology
+        ### is this a real topology even though i added .old_index to it??
+        ### and if not...can i just take it back off?
 
         return modeller, TopologyProposal(old_topology, new_topology, 0.0, atom_map, metadata)
 

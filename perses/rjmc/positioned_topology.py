@@ -1,6 +1,5 @@
 """
-Contains base utility class to generate an openmm System
-object from the topology proposal
+whateva whateva
 """
 import simtk.openmm as openmm
 
@@ -24,12 +23,13 @@ class PositionedTopology(object):
         self.residues = []
         self.atoms = []
         self.periodicBoxVectors = topology._periodicBoxVectors
-        self.importTopology(topology)
+        self._importTopology(topology)
         for k, atom in enumerate(self.atoms):
             atom.assignPosition(positions[k])
             atom.oldIndex = atom.index        
+        self._importParameters(system)
 
-    def importTopology(self, topology):
+    def _importTopology(self, topology):
         appToPosAtoms = dict()
         self._importing = True
         for chain in topology.chains():
@@ -46,12 +46,16 @@ class PositionedTopology(object):
         self._importing = False
 
     def addChain(self, id):
+        if not self._importing:
+            self.renumberIndices(string='chain')
         index = self.getNumChains()
         chain = PositionedChain(index, self, id)
         self.chains.append(chain)
         return chain
 
     def addResidue(self, name, positionedChain, id):
+        if not self._importing:
+            self.renumberIndices(string='residue')
         index = self.getNumResidues()
         residue = PositionedResidue(name, index, positionedChain, id)
         self.residues.append(residue)
@@ -60,7 +64,7 @@ class PositionedTopology(object):
 
     def addAtom(self, name, element, positionedResidue, id):
         if not self._importing:
-            self.renumberIndices()
+            self.renumberIndices(string='atom')
         index = self.getNumAtoms()
         atom = PositionedAtom(name, element, index, positionedResidue, id)
         self.atoms.append(atom)
@@ -73,6 +77,17 @@ class PositionedTopology(object):
         atom2.inBonds.append(bond)
         self.bonds.append(bond)
         return bond
+
+    def _importParameters(self, system):
+        forces = {system.getForce(index).__class__.__name__ : new_system.getForce(index) for index in range(new_system.getNumForces())}
+        torsion_force = forces['PeriodicTorsionForce']
+        bond_force = forces['HarmonicBondForce']        
+        # note: at this point index is always = position in atoms[]
+        for k in range(bond_force.getNumBonds()):
+            atom_index_1, atom_index_2, length, k = bond_force.getBondParameters(k)
+            if self.bonds[k].atom1.index not in [atom_index_1, atom_index_2] or self.bonds[k].atom2.index not in [atom_index_1, atom_index_2]:
+                pass #raise ?
+            self.bonds[k].assignParameters(k, length)
 
     def getNumChains(self):
         return len(self.chains)
@@ -101,9 +116,16 @@ class PositionedTopology(object):
                     bond.atom1.inBonds.remove(bond)
         self.renumberIndices()
 
-    def renumberIndices(self):
-        for k, atom in enumerate(self.atoms):
-            atom.index=k
+    def renumberIndices(self, string=None):
+        if string in ['chain', None]:
+            for k, chain in enumerate(self.chains):
+                chain.index=k
+        if string in ['residue', None]:
+            for k, residue in enumerate(self.residues):
+                residue.index=k
+        if string in ['atom', None]:
+            for k, atom in enumerate(self.atoms):
+                atom.index=k
 
     def generateAtomMap(self):
         self.renumberIndices()
