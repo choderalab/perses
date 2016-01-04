@@ -248,7 +248,7 @@ class Transformation(object):
             mapping
         """
 <<<<<<< HEAD
-	return TopologyProposal(app.Topology(), app.Topology(), 0.0, {0 : 0}, {'molecule_smiles' : 'CC'})
+	return TopologyProposal(old_topology=app.Topology(), new_topology=app.Topology(), logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
 class ProteinTransformation(Transformation):
     """
@@ -317,7 +317,7 @@ class ProteinTransformation(Transformation):
         ### is this a real topology even though i added .old_index to it??
         ### and if not...can i just take it back off?
 
-        return modeller, TopologyProposal(old_topology, new_topology, 0.0, atom_map, metadata)
+        return modeller, TopologyProposal(old_topology=old_topology, old_system=current_system, new_topology=new_topology, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
 
     def _parseMutations(self, metadata, modeller):
         index_to_old_name = dict((r.index, r.name) for r in modeller.topology.residues())
