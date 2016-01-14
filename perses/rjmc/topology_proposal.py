@@ -210,9 +210,66 @@ class SmallMoleculeTopologyProposal(TopologyProposal):
     def molecule_smiles(self):
         return self._molecule_smiles
 
->>>>>>> master
+class PolymerTopologyProposal(TopologyProposal):
+    """
+    This is a subclass for simulations involving switching between polymers.
 
-class Transformation(object):
+    Arguments
+    ---------
+    new_topology : simtk.openmm.Topology object
+        openmm Topology representing the proposed new system
+    new_system : simtk.openmm.System object
+        openmm System of the newly proposed state
+    old_topology : simtk.openmm.Topology object
+        openmm Topology of the current system
+    old_system : simtk.openmm.System object
+        openm System of the current state
+    old_positions : [n, 3] np.array, Quantity
+        positions of the old system
+    logp_proposal : float
+        log probability of the proposal
+    new_to_old_atom_map : dict
+        {new_atom_idx : old_atom_idx} map for the two systems
+    metadata : dict
+        additional information
+
+    Properties
+    ----------
+    new_topology : simtk.openmm.Topology object
+        openmm Topology representing the proposed new system
+    new_system : simtk.openmm.System object
+        openmm System of the newly proposed state
+    old_topology : simtk.openmm.Topology object
+        openmm Topology of the current system
+    old_system : simtk.openmm.System object
+        openm System of the current state
+    old_positions : [n, 3] np.array, Quantity
+        positions of the old system
+    logp_proposal : float
+        log probability of the proposal
+    new_to_old_atom_map : dict
+        {new_atom_idx : old_atom_idx} map for the two systems
+    old_to_new_atom_map : dict
+        {old_atom_idx : new_atom_idx} map for the two systems
+    unique_new_atoms : list of int
+        List of indices of the unique new atoms
+    unique_old_atoms : list of int
+        List of indices of the unique old atoms
+    natoms_new : int
+        Number of atoms in the new system
+    natoms_old : int
+        Number of atoms in the old system
+    metadata : dict
+        additional information of interest about the state
+    """
+    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
+                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
+        super(SmallMoleculeTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
+                                                           old_system=old_system, old_positions=old_positions,
+                                                           logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
+    
+
+class ProposalEngine(object):
     """
     This defines a type which, given the requisite metadata, can produce Proposals (namedtuple)
     of new topologies.
@@ -247,14 +304,19 @@ class Transformation(object):
             probabilities, as well as old and new topologies and atom
             mapping
         """
-<<<<<<< HEAD
-	return TopologyProposal(old_topology=app.Topology(), new_topology=app.Topology(), logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
+	return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
-class ProteinTransformation(Transformation):
+class PolymerProposalEngine(ProposalEngine):
+    def __init__(self):
+        pass
+
+    def propose(self, current_system, current_topology, current_positions, current_metadata):
+        return PolymerTopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
+
+class PointMutationEngine(PolymerProposalEngine):
     """
-    This defines a type which, given the requisite metadata, can produce Proposals (namedtuple)
-    of new topologies.
-    
+    Will make all mutations specified in metadata (not choosing)
+ 
     Arguments
     --------
     proposal_metadata : dict
@@ -262,7 +324,7 @@ class ProteinTransformation(Transformation):
     """
 
     def __init__(self, proposal_metadata):
-        # load templates for replacement residues -- can this be done once?
+        # load templates for replacement residues -- should be taken from ff, get rid of templates directory
         self.templates = dict()
         templatesPath = os.path.join(os.path.dirname(__file__), 'templates')
         for file in os.listdir(templatesPath):
@@ -272,7 +334,6 @@ class ProteinTransformation(Transformation):
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
         """
-        Base interface for proposal method.
         
         Arguments
         ---------
@@ -314,10 +375,8 @@ class ProteinTransformation(Transformation):
             except AttributeError:
                 pass
         new_topology = modeller.topology
-        ### is this a real topology even though i added .old_index to it??
-        ### and if not...can i just take it back off?
 
-        return modeller, TopologyProposal(old_topology=old_topology, old_system=current_system, new_topology=new_topology, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
+        return modeller, PolymerTopologyProposal(new_topology=new_topology, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
 
     def _parseMutations(self, metadata, modeller):
         index_to_old_name = dict((r.index, r.name) for r in modeller.topology.residues())
@@ -360,7 +419,7 @@ class ProteinTransformation(Transformation):
         deleteAtoms = list()
         missingAtoms = dict()
         for residue, replaceWith in residue_map:
-            # what the fuck is this doing (chain_number is undefined, will be the index of the final chain)
+            # from pdbfixer: this is not doing anything (chain_number is undefined, will be the index of the final chain)
             #if residue.chain.index != chain_number:
                 #continue  # Only modify specified chain
             residue.name = replaceWith
@@ -427,11 +486,15 @@ class ProteinTransformation(Transformation):
         # add new bonds to the new residues
         return modeller
 
-=======
+
+class PeptideLibraryEngine(PolymerProposalEngine):
+    def __init__(self):
+        pass
+    def propose(self):
         pass
 
 
-class SmallMoleculeTransformation(Transformation):
+class SmallMoleculeProposalEngine(ProposalEngine):
     """
     This class is a base class for transformations in which a small molecule is the part of the simulation
     that is changed. This class contains some base functionality for that process.
@@ -597,7 +660,7 @@ class SmallMoleculeTransformation(Transformation):
         return proposed_idx, self._oemol_list[proposed_idx], 0.0
 
 
-class SingleSmallMolecule(SmallMoleculeTransformation):
+class SingleSmallMolecule(SmallMoleculeProposalEngine):
     """
     This class is an implementation of a proposal to transform a single small molecule
     in implicit solvent
@@ -650,7 +713,7 @@ class SingleSmallMolecule(SmallMoleculeTransformation):
         return system, prmtop.topology, mol_atom_map
 
 
-class SmallMoleculeProteinComplex(SmallMoleculeTransformation):
+class SmallMoleculeProteinComplex(SmallMoleculeProposalEngine):
     """
     This class handles cases where small molecule changes are being sampled in the context of a
     protein : ligand complex. This is currently in implicit solvent only.
@@ -795,4 +858,3 @@ class SmallMoleculeProteinComplex(SmallMoleculeTransformation):
         tleap_input = tleapstr.format(ligand_frcmod=ligand_frcmod, ligand_gaff_mol2=ligand_gaff_mol2,
                                       receptor_filename=self._receptor_pdb, complex_name=complex_name)
         return tleap_input
->>>>>>> master
