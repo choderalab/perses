@@ -299,7 +299,7 @@ class ProposalEngine(object):
             probabilities, as well as old and new topologies and atom
             mapping
         """
-	return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
+        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
 class PolymerProposalEngine(ProposalEngine):
     def __init__(self, proposal_metadata):
@@ -375,6 +375,7 @@ class PointMutationEngine(PolymerProposalEngine):
                 pass
         new_topology = modeller.topology
 
+        # why am i returning modeller
         return modeller, PolymerTopologyProposal(new_topology=new_topology, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
 
     def _propose_mutations(self, modeller, chain_id):
