@@ -307,7 +307,7 @@ class ProposalEngine(object):
 	return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self):
+    def __init__(self, proposal_metadata):
         pass
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
@@ -323,8 +323,9 @@ class PointMutationEngine(PolymerProposalEngine):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, proposal_metadata):
+    def __init__(self, max_point_mutants=0, proposal_metadata):
         # load templates for replacement residues -- should be taken from ff, get rid of templates directory
+        self._max_point_mutants = max_point_mutants
         self.templates = dict()
         templatesPath = os.path.join(os.path.dirname(__file__), 'templates')
         for file in os.listdir(templatesPath):
@@ -344,7 +345,9 @@ class PointMutationEngine(PolymerProposalEngine):
         current_positions : [n,3] ndarray of floats
             The current positions of the system
         current_metadata : dict
-            metadata = {'mutations':[('XXX-##-XXX','X'),('XXX-##-XXX','X')]}
+            put chain_id in there? -- id of the chain to mutate
+            (using the first chain with the id, if there are multiple)
+            {'chain_id' : 'X'}
         Returns
         -------
         proposal : TopologyProposal
@@ -356,16 +359,17 @@ class PointMutationEngine(PolymerProposalEngine):
         atom_map = dict()
         metadata = current_metadata
 
+        chain_id = metadata['chain_id']
         # save old indeces for mapping -- could just directly save positions instead
         modeller = app.Modeller(current_topology, current_positions)
         for atom in modeller.topology.atoms():
             atom.old_index = atom.index
 
-        index_to_new_residues = self._parseMutations(metadata, modeller)
-        residue_map = self._generateResidueMap(modeller, index_to_new_residues)
-        modeller, missingAtoms = self._deleteExcessAtoms(modeller, residue_map)
-        new_residue_map = self._generateResidueMap(modeller, index_to_new_residues)
-        modeller = self._addNewAtoms(modeller, missingAtoms, residue_map, new_residue_map)
+        index_to_new_residues = self._propose_mutations(modeller, chain_id)
+        residue_map = self._generate_residue_map(modeller, index_to_new_residues)
+        modeller, missing_atoms = self._delete_excess_atoms(modeller, residue_map)
+        new_residue_map = self._generate_residue_map(modeller, index_to_new_residues)
+        modeller = self._add_new_atoms(modeller, missing_atoms, residue_map, new_residue_map)
 
         # atoms with an old_index attribute should be mapped
         for k, atom in enumerate(modeller.topology.atoms()):
@@ -378,93 +382,80 @@ class PointMutationEngine(PolymerProposalEngine):
 
         return modeller, PolymerTopologyProposal(new_topology=new_topology, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
 
-    def _parseMutations(self, metadata, modeller):
-        index_to_old_name = dict((r.index, r.name) for r in modeller.topology.residues())
+    def _propose_mutations(self, modeller, chain_id):
         index_to_new_residues = dict()
-
-        for mutation in metadata['mutations']:
-            mut_str = mutation[0]
-            chain_id = mutation[1]
-
-            chain_numbers = list() # will need to return this if it's actually doing anything
-            resSeq_to_index = dict()
-            for chain in modeller.topology.chains():
-                if chain.id == chain_id:
-                    chain_numbers.append(chain_id)
-                    for (residue_number, residue) in enumerate(chain.residues()):
-                        resSeq_to_index[int(residue.id)] = residue_number
-
-            # parse mutation to be made
-            old_name, resSeq, new_name = mut_str.split("-")
-            resSeq = int(resSeq)
-            index = resSeq_to_index[resSeq]
-            # check that residue id exist in the chain
-            if index not in index_to_old_name:
-                raise(KeyError("Cannot find index %d in system!" % index))
-            if index_to_old_name[index] != old_name:
-                raise(ValueError("You asked to mutate %s %d, but that residue is actually %s!" % (old_name, index, index_to_old_name[index])))
-            try:
-                template = self.templates[new_name]
-            except KeyError:
-                raise(KeyError("Cannot find residue %s in template library!" % new_name))
-            index_to_new_residues[index] = new_name
+        # this shouldn't be here
+        aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
+        for chain in modeller.topology.chains():
+            if chain.id == chain_id:
+                # how do i get it to tell me a number of residues
+                num_residues = len(chain._residues)
+                break
+        location_prob = np.array([1.0/num_residues for i in range(num_residues)])
+        for i in range(self._max_point_mutants):
+            proposed_location = np.random.choice(range(num_residues), p=location_prob)
+            original_residue = chain._residues[proposed_location]
+            amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
+            amino_prob[aminos.index(original_residue.name)] = 0.0
+            proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
+            index_to_new_residues[proposed_location] = aminos[proposed_amino_index]
         return index_to_new_residues
 
-    def _generateResidueMap(self, modeller, index_to_new_residues):
+    def _generate_residue_map(self, modeller, index_to_new_residues):
         residue_map = [(r, index_to_new_residues[r.index]) for r in modeller.topology.residues() if r.index in index_to_new_residues]
         return residue_map
 
-    def _deleteExcessAtoms(self, modeller, residue_map):
+    def _delete_excess_atoms(self, modeller, residue_map):
         # delete excess atoms from old residues and identify new atoms for new residues
-        deleteAtoms = list()
-        missingAtoms = dict()
-        for residue, replaceWith in residue_map:
+        delete_atoms = list()
+        missing_atoms = dict()
+        for residue, replace_with in residue_map:
             # from pdbfixer: this is not doing anything (chain_number is undefined, will be the index of the final chain)
             #if residue.chain.index != chain_number:
                 #continue  # Only modify specified chain
-            residue.name = replaceWith
-            template = self.templates[replaceWith]
-            standardAtoms = set(atom.name for atom in template.topology.atoms())
-            templateAtoms = list(template.topology.atoms())
-            atomNames = set(atom.name for atom in residue.atoms())
-            chainResidues = list(residue.chain.residues())
+            residue.name = replace_with
+            template = self.templates[replace_with]
+            standard_atoms = set(atom.name for atom in template.topology.atoms())
+            template_atoms = list(template.topology.atoms())
+            atom_names = set(atom.name for atom in residue.atoms())
+            chain_residues = list(residue.chain.residues())
             for atom in residue.atoms(): # shouldn't remove hydrogen
-                if atom.name not in standardAtoms:
-                    deleteAtoms.append(atom)
-            if residue == chainResidues[0]: # this doesn't apply?
-                templateAtoms = [atom for atom in templateAtoms if atom.name not in ('P', 'OP1', 'OP2')]
+                if atom.name not in standard_atoms:
+                    delete_atoms.append(atom)
+            if residue == chain_residues[0]: # this doesn't apply?
+                template_atoms = [atom for atom in template_atoms if atom.name not in ('P', 'OP1', 'OP2')]
             missing = list()
-            for atom in templateAtoms:
-                if atom.name not in atomNames:
+            for atom in template_atoms:
+                if atom.name not in atom_names:
                     missing.append(atom)
             if len(missing) > 0:
-                missingAtoms[residue] = missing
-        modeller = self._toDelete(modeller, deleteAtoms)
+                missing_atoms[residue] = missing
+        modeller = self._to_delete(modeller, delete_atoms)
 
-        return(modeller, missingAtoms)
+        return(modeller, missing_atoms)
 
-    def _toDelete(self, modeller, deleteAtoms):
-        for atom in deleteAtoms:
+    def _to_delete(self, modeller, delete_atoms):
+        for atom in delete_atoms:
             atom.residue._atoms.remove(atom)
             for bond in modeller.topology._bonds:
                 if atom in bond:
                     modeller.topology._bonds.remove(bond)
         return modeller
 
-    def _addNewAtoms(self, modeller, missingAtoms, old_residue_map, new_residue_map):
+    def _add_new_atoms(self, modeller, missing_atoms, old_residue_map, new_residue_map):
         # add new atoms to new residues
-        newAtoms = list()
+        new_atoms = list()
         for k, residue_ent in enumerate(old_residue_map):
             residue = residue_ent[0]
-            replaceWith = residue_ent[1]
+            replace_with = residue_ent[1]
             # load template to compare bonds
-            template = self.templates[replaceWith]
+            template = self.templates[replace_with]
             # save residue object in current topology
             new_residue = new_residue_map[k][0]
             # add each missing atom
-            for atom in missingAtoms[residue]:
-                newAtom = modeller.topology.addAtom(atom.name, atom.element, new_residue)
-                newAtoms.append(newAtom)
+            for atom in missing_atoms[residue]:
+                new_atom = modeller.topology.addAtom(atom.name, atom.element, new_residue)
+                new_atoms.append(new_atom)
             # make a dictionary to map atom names in new residue to atom object
             new_res_atoms = {}
             for atom in new_residue.atoms():
