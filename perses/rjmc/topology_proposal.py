@@ -321,7 +321,7 @@ class PointMutationEngine(PolymerProposalEngine):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, max_point_mutants=0, proposal_metadata):
+    def __init__(self, max_point_mutants, proposal_metadata):
         # load templates for replacement residues -- should be taken from ff, get rid of templates directory
         self._max_point_mutants = max_point_mutants
         self.templates = dict()
