@@ -316,17 +316,14 @@ class PointMutationEngine(PolymerProposalEngine):
     --------
     proposal_metadata : dict
         Contains information necessary to initialize proposal engine
+        {'ffxmls': [ffxml]}
     """
 
     def __init__(self, max_point_mutants, proposal_metadata):
         # load templates for replacement residues -- should be taken from ff, get rid of templates directory
         self._max_point_mutants = max_point_mutants
-        self.templates = dict()
-        templatesPath = os.path.join(os.path.dirname(__file__), 'templates')
-        for file in os.listdir(templatesPath):
-            templatePdb = app.PDBFile(os.path.join(templatesPath, file))
-            name = next(templatePdb.topology.residues()).name
-            self.templates[name] = templatePdb      
+        ff = app.ForceField(*proposal_metadata['ffxmls'])
+        self.templates = ff._templates
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
         """
@@ -411,8 +408,8 @@ class PointMutationEngine(PolymerProposalEngine):
                 #continue  # Only modify specified chain
             residue.name = replace_with
             template = self.templates[replace_with]
-            standard_atoms = set(atom.name for atom in template.topology.atoms())
-            template_atoms = list(template.topology.atoms())
+            standard_atoms = set(atom.name for atom in template.atoms)
+            template_atoms = list(template.atoms)
             atom_names = set(atom.name for atom in residue.atoms())
             chain_residues = list(residue.chain.residues())
             for atom in residue.atoms(): # shouldn't remove hydrogen
@@ -453,16 +450,16 @@ class PointMutationEngine(PolymerProposalEngine):
                 new_atom = modeller.topology.addAtom(atom.name, atom.element, new_residue)
                 new_atoms.append(new_atom)
             # make a dictionary to map atom names in new residue to atom object
-            new_res_atoms = {}
+            new_res_atoms = dict()
             for atom in new_residue.atoms():
                 new_res_atoms[atom.name] = atom
             # make a list of bonds already existing in new residue
-            new_res_bonds = []
+            new_res_bonds = list()
             for bond in modeller.topology.bonds():
                 if bond[0].residue == new_residue and bond[1].residue == new_residue:
                     new_res_bonds.append((bond[0].name, bond[1].name))
             # make a list of bonds that should exist in new residue
-            template_bonds = [(bond[0].name, bond[1].name) for bond in template.topology.bonds()]
+            template_bonds = [(template.atoms[bond[0]].name, template.atoms[bond[1]].name) for bond in template.bonds]
             # add any bonds that exist in template but not in new residue
             for bond in template_bonds:
                 if bond not in new_res_bonds:
