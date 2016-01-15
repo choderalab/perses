@@ -6,12 +6,10 @@ This file contains the base classes for topology proposals
 
 import simtk.openmm.app as app
 from collections import namedtuple
-<<<<<<< HEAD
 TopologyProposal = namedtuple('TopologyProposal',['old_topology','new_topology','logp', 'new_to_old_atom_map', 'metadata'])
 SamplerState = namedtuple('SamplerState',['topology','system','positions', 'metadata'])
 import copy
 import os
-=======
 import openeye.oechem as oechem
 import numpy as np
 import os
