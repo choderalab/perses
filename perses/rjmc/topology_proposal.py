@@ -3,6 +3,7 @@ This file contains the base classes for topology proposals
 """
 ### calculate logp in different ways in different subclasses
 
+import simtk.openmm as openmm
 import simtk.openmm.app as app
 from collections import namedtuple
 import copy
@@ -365,6 +366,8 @@ class PointMutationEngine(PolymerProposalEngine):
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
         index_to_new_residues = self._propose_mutations(modeller, chain_id)
+        # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
+        metadata['mutations'] = self._save_mutations(modeller, index_to_new_residues)
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
         residue_map = self._generate_residue_map(modeller, index_to_new_residues)
         # modeller : simtk.openmm.app.Modeller extra atoms from old residue have been deleted, missing atoms in new residue not yet added
@@ -377,13 +380,14 @@ class PointMutationEngine(PolymerProposalEngine):
         # k : int
         # atom : simtk.openmm.app.topology.Atom
         for k, atom in enumerate(modeller.topology.atoms()):
+            atom.index=k
             try:
-                atom.index=k
                 atom_map[atom.index] = atom.old_index
             except AttributeError:
                 pass
         new_topology = modeller.topology
 
+#        new_system = openmm.System()
         new_system = self._ff.createSystem(new_topology)
         #### Error: need to make a new system ugh. why.
 
@@ -425,7 +429,31 @@ class PointMutationEngine(PolymerProposalEngine):
             proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
             index_to_new_residues[proposed_location] = aminos[proposed_amino_index]
+            if aminos[proposed_amino_index] == 'HIS':
+                his_state = ['HIE','HID']
+                his_prob = np.array([0.5 for i in range(len(his_state))])
+                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                index_to_new_residues[proposed_location] = his_state[his_choice]
         return index_to_new_residues
+
+    def _save_mutations(self, modeller, index_to_new_residues):
+        """
+        Arguments
+        ---------
+        modeller : simtk.openmm.app.Modeller
+        index_to_new_residues : dict
+            key : int (index, zero-indexed in chain) 
+            value : str (three letter residue name)
+        Returns
+        -------
+        mutations : list(str)
+            XXX-##-XXX
+            three letter WT residue name - id - three letter MUT residue name
+            id is based on the protein sequence NOT zero-indexed
+
+        """
+        return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in modeller.topology.residues() if r.index in index_to_new_residues]
+        
 
     def _generate_residue_map(self, modeller, index_to_new_residues):
         """
@@ -445,7 +473,6 @@ class PointMutationEngine(PolymerProposalEngine):
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
         # r : simtk.openmm.app.topology.Residue, r.index : int, 0-indexed 
         residue_map = [(r, index_to_new_residues[r.index]) for r in modeller.topology.residues() if r.index in index_to_new_residues]
-        # BUG : if making multiple point mutations and the same residue is chosen multiple times, will try to change original residue after it's been altered
         return residue_map
 
     def _delete_excess_atoms(self, modeller, residue_map):
@@ -472,9 +499,15 @@ class PointMutationEngine(PolymerProposalEngine):
         missing_atoms = dict()
         # residue : simtk.openmm.app.topology.Residue (existing residue)
         # replace_with : str (three letter residue name of proposed residue)
-        for residue, replace_with in residue_map:
-            # directly edit the simtk.openmm.app.topology.Residue instance
-            residue.name = replace_with
+        for k, (residue, replace_with) in enumerate(residue_map):
+            # chain_residues : list(simtk.openmm.app.topology.Residue) all residues in chain ==> why
+            chain_residues = list(residue.chain.residues())
+            if residue == chain_residues[0]:
+                replace_with = 'N'+replace_with
+                residue_map[k] = (residue, replace_with)
+            if residue == chain_residues[-1]:
+                replace_with = 'C'+replace_with
+                residue_map[k] = (residue, replace_with) 
             # template : simtk.openmm.app.topology._TemplateData
             template = self._templates[replace_with]
             # standard_atoms : set of unique atom names within new residue : str
@@ -483,14 +516,12 @@ class PointMutationEngine(PolymerProposalEngine):
             template_atoms = list(template.atoms)
             # atom_names : set of unique atom names within existing residue : str
             atom_names = set(atom.name for atom in residue.atoms())
-            # chain_residues : list(simtk.openmm.app.topology.Residue) all residues in chain ==> why
-            chain_residues = list(residue.chain.residues())
             # atom : simtk.openmm.app.topology.Atom in existing residue
             for atom in residue.atoms(): # shouldn't remove hydrogen
                 if atom.name not in standard_atoms:
                     delete_atoms.append(atom)
-            if residue == chain_residues[0]: # this doesn't apply?
-                template_atoms = [atom for atom in template_atoms if atom.name not in ('P', 'OP1', 'OP2')]
+#            if residue == chain_residues[0]: # this doesn't apply?
+#                template_atoms = [atom for atom in template_atoms if atom.name not in ('P', 'OP1', 'OP2')]
             # missing : list(simtk.openmm.app.topology._TemplateAtomData) atoms in new residue not found in existing residue
             missing = list()
             # atom : simtk.openmm.app.topology._TemplateAtomData atoms in new residue
@@ -502,6 +533,8 @@ class PointMutationEngine(PolymerProposalEngine):
                 missing_atoms[residue] = missing
         # modeller : simtk.openmm.app.Modeller extra atoms from old residue have been deleted, missing atoms in new residue not yet added
         modeller = self._to_delete(modeller, delete_atoms)
+        modeller = self._to_delete_bonds(modeller, residue_map)
+        modeller.topology._numAtoms = len(list(modeller.topology.atoms()))
 
         return(modeller, missing_atoms)
 
@@ -525,8 +558,42 @@ class PointMutationEngine(PolymerProposalEngine):
             atom.residue._atoms.remove(atom)
             for bond in modeller.topology._bonds:
                 if atom in bond:
-                    modeller.topology._bonds.remove(bond)
+                    modeller.topology._bonds = filter(lambda a: a != bond, modeller.topology._bonds)
         # modeller : simtk.openmm.app.Modeller extra atoms from old residue have been deleted, missing atoms in new residue not yet added
+        return modeller
+
+    def _to_delete_bonds(self, modeller, residue_map):
+        """
+        Remove any bonds between atoms in both new and old residue that do not belong in new residue
+        (e.g. breaking the ring in PRO)
+        Arguments
+        ---------
+        modeller : simtk.openmm.app.Modeller
+        residue_map : list(tuples)
+            simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue)
+        Returns
+        -------
+        modeller : simtk.openmm.app.Modeller 
+            extra atoms and bonds from old residue have been deleted, missing atoms in new residue not yet added
+        """
+ 
+        for residue, replace_with in residue_map:
+            # template : simtk.openmm.app.topology._TemplateData
+            template = self._templates[replace_with]
+
+            old_res_bonds = list()
+            # bond : tuple(simtk.openmm.app.topology.Atom, simtk.openmm.app.topology.Atom)
+            for atom1, atom2 in modeller.topology._bonds:
+                if atom1.residue == residue or atom2.residue == residue:
+                    old_res_bonds.append((atom1.name, atom2.name))
+            # make a list of bonds that should exist in new residue
+            # template_bonds : list(tuple(str (atom name), str (atom name))) bonds in template
+            template_bonds = [(template.atoms[bond[0]].name, template.atoms[bond[1]].name) for bond in template.bonds]
+            # add any bonds that exist in template but not in new residue
+            for bond in old_res_bonds:
+                if bond not in template_bonds and (bond[1],bond[0]) not in template_bonds:
+                    modeller.topology._bonds = filter(lambda a: a != bond, modeller.topology._bonds)
+                    modeller.topology._bonds = filter(lambda a: a != (bond[1],bond[0]), modeller.topology._bonds)
         return modeller
 
     def _add_new_atoms(self, modeller, missing_atoms, residue_map):
@@ -561,16 +628,21 @@ class PointMutationEngine(PolymerProposalEngine):
             residue = residue_ent[0]
             # replace_with : str (three letter residue name of new residue)
             replace_with = residue_ent[1]
+            # directly edit the simtk.openmm.app.topology.Residue instance
+            residue.name = replace_with
             # load template to compare bonds
             # template : simtk.openmm.app.topology._TemplateData
             template = self._templates[replace_with]
             # add each missing atom
             # atom : simtk.openmm.app.topology._TemplateAtomData
-            for atom in missing_atoms[residue]:
-                # new_atom : simtk.openmm.app.topology.Atom
-                new_atom = modeller.topology.addAtom(atom.name, atom.element, residue)
-                # new_atoms : list(simtk.openmm.app.topology.Atom)
-                new_atoms.append(new_atom)
+            try:
+                for atom in missing_atoms[residue]:
+                    # new_atom : simtk.openmm.app.topology.Atom
+                    new_atom = modeller.topology.addAtom(atom.name, atom.element, residue)
+                    # new_atoms : list(simtk.openmm.app.topology.Atom)
+                    new_atoms.append(new_atom)
+            except KeyError:
+                pass
             # make a dictionary to map atom names in new residue to atom object
             # new_res_atoms : dict, key : str (atom name) , value : simtk.openmm.app.topology.Atom
             new_res_atoms = dict()
@@ -582,20 +654,26 @@ class PointMutationEngine(PolymerProposalEngine):
             # new_res_bonds : list(tuple(str (atom name), str (atom name))) bonds between atoms both within new residue
             new_res_bonds = list()
             # bond : tuple(simtk.openmm.app.topology.Atom, simtk.openmm.app.topology.Atom)
-            for bond in modeller.topology.bonds():
+            for bond in modeller.topology._bonds:
                 if bond[0].residue == residue and bond[1].residue == residue:
                     new_res_bonds.append((bond[0].name, bond[1].name))
             # make a list of bonds that should exist in new residue
             # template_bonds : list(tuple(str (atom name), str (atom name))) bonds in template
             template_bonds = [(template.atoms[bond[0]].name, template.atoms[bond[1]].name) for bond in template.bonds]
             # add any bonds that exist in template but not in new residue
+            for bond in new_res_bonds:
+                if bond not in template_bonds and (bond[1],bond[0]) not in template_bonds:
+                    bonded_0 = new_res_atoms[bond[0]]
+                    bonded_1 = new_res_atoms[bond[1]]
+                    modeller.topology._bonds.remove((bonded_0, bonded_1))
             for bond in template_bonds:
-                if bond not in new_res_bonds:
+                if bond not in new_res_bonds and (bond[1],bond[0]) not in new_res_bonds:
                     # new_bonded_0 : simtk.openmm.app.topology.Atom
                     new_bonded_0 = new_res_atoms[bond[0]]
                     # new_bonded_1 : simtk.openmm.app.topology.Atom
                     new_bonded_1 = new_res_atoms[bond[1]]
                     modeller.topology.addBond(new_bonded_0, new_bonded_1)
+        modeller.topology._numAtoms = len(list(modeller.topology.atoms()))
 
         # add new bonds to the new residues
         return modeller
