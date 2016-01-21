@@ -558,7 +558,7 @@ class PointMutationEngine(PolymerProposalEngine):
             atom.residue._atoms.remove(atom)
             for bond in modeller.topology._bonds:
                 if atom in bond:
-                    modeller.topology._bonds = filter(lambda a: a != bond, modeller.topology._bonds)
+                    modeller.topology._bonds = list(filter(lambda a: a != bond, modeller.topology._bonds))
         # modeller : simtk.openmm.app.Modeller extra atoms from old residue have been deleted, missing atoms in new residue not yet added
         return modeller
 
@@ -592,8 +592,8 @@ class PointMutationEngine(PolymerProposalEngine):
             # add any bonds that exist in template but not in new residue
             for bond in old_res_bonds:
                 if bond not in template_bonds and (bond[1],bond[0]) not in template_bonds:
-                    modeller.topology._bonds = filter(lambda a: a != bond, modeller.topology._bonds)
-                    modeller.topology._bonds = filter(lambda a: a != (bond[1],bond[0]), modeller.topology._bonds)
+                    modeller.topology._bonds = list(filter(lambda a: a != bond, modeller.topology._bonds))
+                    modeller.topology._bonds = list(filter(lambda a: a != (bond[1],bond[0]), modeller.topology._bonds))
         return modeller
 
     def _add_new_atoms(self, modeller, missing_atoms, residue_map):
