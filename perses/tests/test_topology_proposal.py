@@ -311,8 +311,8 @@ def test_mutate_from_every_amino_to_every_other():
 
 
 if __name__ == "__main__":
-#    test_run_point_mutation_propose()
-#    test_run_point_mutation_engine()
+    test_run_point_mutation_propose()
+    test_run_point_mutation_engine()
     test_mutate_from_every_amino_to_every_other()
 
 
