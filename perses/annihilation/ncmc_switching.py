@@ -11,7 +11,20 @@ default_functions = {
     'lambda_torsions' : 'lambda'
     }
 
-class NCMCEngine(object):
+class BaseNCMCEngine(object):
+    """
+    This class serves as the base class for NCMCEngines. It does not
+    do anything.
+    """
+
+    def __init__(self, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=1, timestep=1.0*unit.femtoseconds, constraint_tolerance=None, platform=None):
+        pass
+    def make_alchemical_system(self, topology_proposal, direction='insert'):
+        pass
+    def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None):
+        pass
+
+class NCMCEngine(BaseNCMCEngine):
     """
     NCMC switching engine
 
