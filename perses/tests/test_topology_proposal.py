@@ -1,5 +1,4 @@
 import simtk.openmm.app as app
-from simtk.openmm.app.internal.pdbstructure import PdbStructure
 import copy
 import numpy as np
 try:
@@ -26,8 +25,7 @@ def load_pdbid_to_openmm(pdbid):
         topology = pdbx.topology
         positions = pdbx.positions
     else:    
-        structure = PdbStructure(file)
-        pdb = app.PDBFile(structure)
+        pdb = app.PDBFile(file)
         topology = pdb.topology
         positions = pdb.positions
 
@@ -50,119 +48,8 @@ def _guessFileFormat(file, filename):
         if line.startswith('HEADER') or line.startswith('REMARK') or line.startswith('TITLE '):
             file.seek(0)
             return 'pdb'
-    # It's certainly not a valid PDBx/mmCIF.  Guess that it's a PDB.
     file.seek(0)
     return 'pdb'
-
-def _matchResidue(res, template, bondedToAtom):
-    atoms = list(res.atoms())
-    if len(atoms) != len(template.atoms):
-        return None
-    matches = len(atoms)*[0]
-    hasMatch = len(atoms)*[False]
-
-    renumberAtoms = {}
-    for i in range(len(atoms)):
-        renumberAtoms[atoms[i].index] = i
-    bondedTo = []
-    externalBonds = []
-    for atom in atoms:
-        bonds = [renumberAtoms[x] for x in bondedToAtom[atom.index] if x in renumberAtoms]
-        bondedTo.append(bonds)
-        externalBonds.append(len([x for x in bondedToAtom[atom.index] if x not in renumberAtoms]))
-
-    residueTypeCount = {}
-    for i, atom in enumerate(atoms):
-        key = (atom.element, len(bondedTo[i]), externalBonds[i])
-        if key not in residueTypeCount:
-            residueTypeCount[key] = 1
-        residueTypeCount[key] += 1
-    templateTypeCount = {}
-    for i, atom in enumerate(template.atoms):
-        key = (atom.element, len(atom.bondedTo), atom.externalBonds)
-        if key not in templateTypeCount:
-            templateTypeCount[key] = 1
-        templateTypeCount[key] += 1
-    if residueTypeCount != templateTypeCount:
-        return None
-
-    if _findAtomMatches(atoms, template, bondedTo, externalBonds, matches, hasMatch, 0):
-        return matches
-    return None
-
-
-def _findAtomMatches(atoms, template, bondedTo, externalBonds, matches, hasMatch, position):
-    if position == len(atoms):
-        return True
-    elem = atoms[position].element
-    name = atoms[position].name
-    for i in range(len(atoms)):
-        atom = template.atoms[i]
-        if ((atom.element is not None and atom.element == elem) or (atom.element is None and atom.name == name)) and not hasMatch[i] and len(atom.bondedTo) == len(bondedTo[position]) and atom.externalBonds == externalBonds[position]:
-            # See if the bonds for this identification are consistent
-
-            allBondsMatch = all((bonded > position or matches[bonded] in atom.bondedTo for bonded in bondedTo[position]))
-            if allBondsMatch:
-                # This is a possible match, so trying matching the rest of the residue.
-
-                matches[position] = i
-                hasMatch[i] = True
-                if _findAtomMatches(atoms, template, bondedTo, externalBonds, matches, hasMatch, position+1):
-                    return True
-                hasMatch[i] = False
-    return False
-
-def _match_template_and_res_name(topology, residue_map, forcefield):
-    """
-    Using code from forcefield.py createSystem(), match a residue to the template that will be found when creating system
-    assert that template name matches intended residue name
-
-    Verify correct functioning of _delete_excess_atoms(), _to_delete(), _to_delete_bonds(), and _add_new_atoms() by 
-    asserting a template is found and the template matches the intended residue
-    
-    *** make sure consistent for terminal residues (residue name = N/C + three letter code)
-    """
-    atom_count = 0
-    for atom in  topology.atoms():
-        atom_count += 1
-    assert atom_count == topology._numAtoms
-    bonded_to_atom = list()
-    atom_list = list(topology.atoms())
-    for atom in topology.atoms():
-        bonded_to_atom.append(set())
-    assert len(bonded_to_atom) == len(atom_list)
-    for bond in topology.bonds():
-        assert bond[0].index in range(topology._numAtoms)
-        assert bond[1].index in range(topology._numAtoms)
-        bonded_to_atom[bond[0].index].add(bond[1].index)
-        bonded_to_atom[bond[1].index].add(bond[0].index)
-
-    for residue, new_name in residue_map:
-        assert residue in topology.residues()
-        assert residue.name == new_name
-        template = None
-        matches = None
-        signature = app.forcefield._createResidueSignature([atom.element for atom in residue.atoms()])
-        assert signature in forcefield._templateSignatures.keys()
-        if forcefield._templateSignatures.has_key(signature):
-            for t in forcefield._templateSignatures[signature]:
-                matches = _matchResidue(residue, t, bonded_to_atom)
-#                matches = app.forcefield._matchResidue(residue, t, bonded_to_atom)
-                if matches is not None:
-                    template = t
-                    break
-        #[template, matches] = forcefield._getResidueTemplateMatches(residue, bonded_to_atom)
-        if matches is None:
-            for generator in forcefield._templateGenerators:
-                print(generator)
-                if generator(forcefield, residue):
-                    [template, matches] = forcefield._getResidueTemplateMatches(residue, bonded_to_atom)
-                    if matches is None:
-                        raise Exception('The residue handler %s indicated it had correctly parameterized residue %s, but the generated template did not match the residue signature.' % (generator.__class__.__name__, str(res)))
-                    else:
-                        break
-        assert template is not None
-        assert template.name == residue.name
 
 def test_run_point_mutation_propose():
     pdbid = "2HIU"
@@ -338,8 +225,8 @@ def test_mutate_from_every_amino_to_every_other():
         modeller, missing_atoms = pm_top_engine._delete_excess_atoms(modeller, residue_map)
         modeller = pm_top_engine._add_new_atoms(modeller, missing_atoms, residue_map)
         for k, atom in enumerate(modeller.topology.atoms()):
+            atom.index=k
             try:
-                atom.index=k
                 atom_map[atom.index] = atom.old_index
             except AttributeError:
                 pass
@@ -406,24 +293,16 @@ def test_mutate_from_every_amino_to_every_other():
                 assert residue.name == name
                 # how to count bonds
 
-            _match_template_and_res_name(current_modeller.topology, residue_map, pm_top_engine._ff)
-
             for k, atom in enumerate(current_modeller.topology.atoms()):
+                atom.index=k
                 try:
-                    atom.index=k
                     atom_map[atom.index] = atom.old_index
                 except AttributeError:
                     pass
             new_topology = current_modeller.topology
 
-            try:
-                new_system = pm_top_engine._ff.createSystem(new_topology)
-            except:
-                failed_mutants+=1
-                for atom1, atom2 in current_modeller.topology._bonds:
-                    if atom1.residue == residue or atom2.residue == residue:
-                        print(atom1.name, atom1.residue.name, atom2.name, atom2.residue.name)
-                raise Exception
+            templates = pm_top_engine._ff.getMatchingTemplates(new_topology)
+            assert [templates[index].name == residue.name for index, (residue, name) in enumerate(residue_map)]
 
             new_system = pm_top_engine._ff.createSystem(new_topology)
             pm_top_proposal = topology_proposal.PolymerTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
