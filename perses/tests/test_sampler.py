@@ -42,8 +42,6 @@ def oemol_to_openmm_system(oemol, molecule_name):
     crd = app.AmberInpcrdFile(inpcrd_file)
     return system, crd.getPositions(asNumpy=True), prmtop.topology
 
-def test_run_skeleton():
-    molecule_list = ['a', 'b', 'c']
 
 
 
