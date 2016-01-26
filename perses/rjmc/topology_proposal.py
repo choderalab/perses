@@ -109,6 +109,9 @@ class TopologyProposal(object):
     @property
     def old_positions(self):
         return self._old_positions
+    @old_positions.setter
+    def old_positions(self, positions):
+        self._old_positions = positions
     @property
     def beta(self):
         return self._beta

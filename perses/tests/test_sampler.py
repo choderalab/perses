@@ -82,7 +82,7 @@ def test_run_example():
 
     #initialize GeometryEngine
     geometry_metadata = {'data': 0} #currently ignored
-    geometry_engine = geometry.FFGeometryEngine(geometry_metadata)
+    geometry_engine = geometry.FFAllAngleGeometryEngine(geometry_metadata)
 
     # Run a anumber of iterations.
     niterations = 50
@@ -101,7 +101,7 @@ def test_run_example():
 
         # QUESTION: What about instead initializing StateWeight once, and then using
         # log_state_weight = state_weight.computeLogStateWeight(new_topology, new_system, new_metadata)?
-        log_weight = bias_calculator.g_k(top_proposal.metadata['molecule_smiles'])
+        log_weight = bias_calculator.g_k(top_proposal.molecule_smiles)
 
         # Perform alchemical transformation.
 
@@ -111,9 +111,10 @@ def test_run_example():
         [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(top_proposal, positions, direction='delete')
         #print(ncmc_old_positions)
         #print(ncmc_elimination_logp)
+        top_proposal.old_positions = ncmc_old_positions
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
         # QUESTION: Again, maybe we want to have the geometry engine initialized once only?
-        geometry_proposal = geometry_engine.propose(top_proposal.new_to_old_atom_map, top_proposal.new_system, system, ncmc_old_positions)
+        geometry_proposal = geometry_engine.propose(top_proposal)
 
         # Alchemically introduce new atoms.
         [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(top_proposal, geometry_proposal.new_positions, direction='insert')
@@ -147,3 +148,7 @@ def test_run_example():
 
     print("The total number accepted was %d out of %d iterations" % (n_accepted, niterations))
     print(stats)
+
+
+if __name__=="__main__":
+    test_run_example()
