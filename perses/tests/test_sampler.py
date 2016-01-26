@@ -109,6 +109,7 @@ def test_run_example():
 
         #print(old_alchemical_system)
         [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(top_proposal, positions, direction='delete')
+        assert np.sum(np.isnan(ncmc_old_positions)) == 0
         #print(ncmc_old_positions)
         #print(ncmc_elimination_logp)
         top_proposal.old_positions = ncmc_old_positions
