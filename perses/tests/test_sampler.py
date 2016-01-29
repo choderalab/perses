@@ -85,7 +85,7 @@ def test_run_example():
     geometry_engine = geometry.FFAllAngleGeometryEngine(geometry_metadata)
 
     # Run a anumber of iterations.
-    niterations = 50
+    niterations = 5
     system = initial_sys
     topology = initial_top
     positions = initial_pos
