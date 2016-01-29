@@ -14,6 +14,7 @@ requirements:
     - python
     - setuptools
     - openmm-dev
+    - parmed-dev
     - numpy
     - scipy
     - openmoltools-dev
@@ -26,6 +27,7 @@ requirements:
   run:
     - python
     - openmm-dev
+    - parmed-dev
     - numpy
     - scipy
     - openmoltools-dev
@@ -42,6 +44,7 @@ test:
     - pymbar
   imports:
     - perses
+  
 
 about:
   home: https://github.com/choderalab/perses

@@ -125,4 +125,4 @@ def test_ncmc_integrator_harmonic_oscillator():
         yield f
 
 if __name__ == '__main__':
-    test_ncmc_harmonic_oscillator()
+    test_ncmc_integrator_harmonic_oscillator()
