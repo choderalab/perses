@@ -45,8 +45,6 @@ test:
   imports:
     - perses
   
-  commands:
-    - nosetests perses -vvv
 
 about:
   home: https://github.com/choderalab/perses
