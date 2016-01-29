@@ -30,7 +30,7 @@ script:
   - source activate _test
   - conda install --yes --quiet pip nose nose-timer
   - pip install $OPENEYE_CHANNEL openeye-toolkits
-  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
+  #- cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
 env:
   matrix:
     - python=2.7  CONDA_PY=27 OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
