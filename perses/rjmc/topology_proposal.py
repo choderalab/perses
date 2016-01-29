@@ -198,11 +198,12 @@ class SmallMoleculeTopologyProposal(TopologyProposal):
     """
 
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, molecule_smiles=None, metadata=None):
+                 logp_proposal=None, new_to_old_atom_map=None, molecule_smiles=None, metadata=None, beta=None):
         super(SmallMoleculeTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
                                                            old_system=old_system, old_positions=old_positions,
                                                            logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
         self._molecule_smiles = molecule_smiles
+        self._beta = beta
 
     @property
     def molecule_smiles(self):
@@ -281,7 +282,7 @@ class ProposalEngine(object):
     def __init__(self, proposal_metadata):
         pass
 
-    def propose(self, current_system, current_topology, current_positions, current_metadata):
+    def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
         """
         Base interface for proposal method.
         
@@ -702,7 +703,7 @@ class SmallMoleculeProposalEngine(ProposalEngine):
         self._generated_systems = dict()
         self._generated_topologies = dict()
 
-    def propose(self, current_system, current_topology, current_positions, current_metadata):
+    def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
         """
         Make a proposal for the next small molecule.
 
@@ -739,7 +740,7 @@ class SmallMoleculeProposalEngine(ProposalEngine):
 
         #Create the TopologyProposal and return it
         proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
-                                                 old_positions=current_positions, logp_proposal=logp_proposal,
+                                                 old_positions=current_positions, logp_proposal=logp_proposal, beta=beta,
                                                  new_to_old_atom_map=new_to_old_atom_map, molecule_smiles=proposed_mol_smiles)
 
         return proposal
@@ -901,7 +902,7 @@ class SingleSmallMolecule(SmallMoleculeProposalEngine):
 
         #add the topology to the generated tops, create the system and do the same for it
         self._generated_topologies['mol_smiles'] = prmtop.topology
-        system = prmtop.createSystem(implicitSolvent=app.OBC2)
+        system = prmtop.createSystem(implicitSolvent=None)
         self._generated_systems['mol_smiles'] = system
 
         #return the system and topology, along with the atom map
