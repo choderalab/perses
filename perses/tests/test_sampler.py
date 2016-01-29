@@ -38,7 +38,7 @@ def oemol_to_openmm_system(oemol, molecule_name):
     gaff_mol2, frcmod = openmoltools.openeye.run_antechamber(molecule_name, tripos_mol2_filename)
     prmtop_file, inpcrd_file = openmoltools.utils.run_tleap(molecule_name, gaff_mol2, frcmod)
     prmtop = app.AmberPrmtopFile(prmtop_file)
-    system = prmtop.createSystem(implicitSolvent=app.OBC1)
+    system = prmtop.createSystem(implicitSolvent=None)
     crd = app.AmberInpcrdFile(inpcrd_file)
     return system, crd.getPositions(asNumpy=True), prmtop.topology
 
@@ -144,6 +144,8 @@ def test_run_example():
             state = context.getState(getPositions=True)
             positions = state.getPositions(asNumpy=True)
             del context, integrator, p_system
+
+
 
     print("The total number accepted was %d out of %d iterations" % (n_accepted, niterations))
     print(stats)
