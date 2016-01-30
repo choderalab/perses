@@ -18,9 +18,9 @@ requirements:
     - numpy
     - scipy
     - openmoltools-dev
-    - alchemy-dev
+    - alchemy
     - numexpr
-    - openmmtools-dev
+    - openmmtools
     - pymbar
     - autograd
 
@@ -31,16 +31,16 @@ requirements:
     - numpy
     - scipy
     - openmoltools-dev
-    - alchemy-dev
+    - alchemy
     - numexpr
-    - openmmtools-dev
+    - openmmtools
     - pymbar
     - autograd
 
 test:
   requires:
     - nose
-    - openmmtools-dev
+    - openmmtools
     - pymbar
   imports:
     - perses
