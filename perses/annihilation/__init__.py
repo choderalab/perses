@@ -1,1 +1,1 @@
-from ncmc_switching import NCMCEngine, NCMCAlchemicalIntegrator
+from perses.ncmc_switching import NCMCEngine, NCMCAlchemicalIntegrator

@@ -81,8 +81,10 @@ def test_run_geometry_engine():
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
     """
-    molecule_name_1 = 'pentane'
-    molecule_name_2 = '2-methylpentane'
+    #molecule_name_1 = 'pentane'
+    #molecule_name_2 = '2-methylpentane'
+    molecule_name_1 = 'benzene'
+    molecule_name_2 = 'biphenyl'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -98,7 +100,7 @@ def test_run_geometry_engine():
                                                                       old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    test_pdb_file = open("ethene12diol_3.pdb", 'w')
+    test_pdb_file = open("output.pdb", 'w')
 
 
     integrator = openmm.VerletIntegrator(1*units.femtoseconds)
@@ -296,9 +298,9 @@ def test_angle():
 
 
 if __name__=="__main__":
-    test_coordinate_conversion()
+    #test_coordinate_conversion()
     test_run_geometry_engine()
-    test_existing_coordinates()
-    test_openmm_dihedral()
-    test_try_random_itoc()
-    test_angle()
+    #test_existing_coordinates()
+    #test_openmm_dihedral()
+    #test_try_random_itoc()
+    #test_angle()
