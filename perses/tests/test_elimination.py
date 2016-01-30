@@ -281,7 +281,7 @@ def test_alchemical_elimination_molecule():
         natoms = system.getNumParticles()
         # Eliminate half of the molecule
         # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
-        new_to_old_atom_map = { index : index for index in range(natoms/2) }
+        new_to_old_atom_map = { index : index for index in range(int(natoms/2)) }
 
         from perses.rjmc.topology_proposal import SmallMoleculeTopologyProposal
         topology_proposal = SmallMoleculeTopologyProposal(
