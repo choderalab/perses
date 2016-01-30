@@ -8,7 +8,7 @@ import parmed
 import simtk.unit as units
 import logging
 import numpy as np
-import coordinate_tools
+from perses.rjmc import coordinate_tools
 
 GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 
@@ -16,20 +16,20 @@ GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 class GeometryEngine(object):
     """
     This is the base class for the geometry engine.
-    
+
     Arguments
     ---------
     metadata : dict
         GeometryEngine-related metadata as a dict
     """
-    
+
     def __init__(self, metadata):
         pass
 
     def propose(self, top_proposal):
         """
         Make a geometry proposal for the appropriate atoms.
-        
+
         Arguments
         ----------
         top_proposal : TopologyProposal object
