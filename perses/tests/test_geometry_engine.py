@@ -81,10 +81,10 @@ def test_run_geometry_engine():
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
     """
-    #molecule_name_1 = 'pentane'
-    #molecule_name_2 = '2-methylpentane'
-    molecule_name_1 = 'benzene'
-    molecule_name_2 = 'biphenyl'
+    molecule_name_1 = 'pentane'
+    molecule_name_2 = '2-methylpentane'
+    #molecule_name_1 = 'benzene'
+    #molecule_name_2 = 'biphenyl'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
