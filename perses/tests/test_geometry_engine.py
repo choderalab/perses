@@ -218,7 +218,7 @@ def test_try_random_itoc():
     force = openmm.CustomTorsionForce("theta")
     for i in range(4):
         sys.addParticle(1.0*units.amu)
-    force.addTorsion(0,1,2,3)
+    force.addTorsion(0,1,2,3,[])
     sys.addForce(force)
     atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
     bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)

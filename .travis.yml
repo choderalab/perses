@@ -29,8 +29,8 @@ script:
   - conda build devtools/conda-recipe
   - source activate _test
   # Fix openmm and parmed double dependencies
-  - conda remove --yes openmm openmm-dev && conda install --yes openmm-dev
   - conda remove --yes parmed parmed-dev && conda install --yes parmed-dev
+  - conda remove --yes openmm openmm-dev && conda install --yes openmm-dev
   # Run tests
   - conda install --yes --quiet pip nose nose-timer
   - pip install --upgrade pip
