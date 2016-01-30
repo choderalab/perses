@@ -182,7 +182,7 @@ def test_openmm_dihedral():
     force = openmm.CustomTorsionForce("theta")
     for i in range(4):
         sys.addParticle(1.0*units.amu)
-    force.addTorsion(0,1,2,3)
+    force.addTorsion(0,1,2,3,[])
     sys.addForce(force)
     atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
     bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
@@ -249,7 +249,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     bond_sys.addParticle(1.0*units.amu)
     bond_sys.addParticle(1.0*units.amu)
     bond_force = openmm.CustomBondForce("r")
-    bond_force.addBond(0, 1)
+    bond_force.addBond(0, 1, [])
     bond_sys.addForce(bond_force)
     bond_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
     bond_context = openmm.Context(bond_sys, bond_integrator, platform)
@@ -261,7 +261,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     #now, the angle:
     angle_sys = copy.deepcopy(sys)
     angle_force = openmm.CustomAngleForce("theta")
-    angle_force.addAngle(0,1,2)
+    angle_force.addAngle(0,1,2,[])
     angle_sys.addForce(angle_force)
     angle_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
     angle_context = openmm.Context(angle_sys, angle_integrator, platform)
@@ -273,7 +273,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     #finally, the torsion:
     torsion_sys = copy.deepcopy(sys)
     torsion_force = openmm.CustomTorsionForce("theta")
-    torsion_force.addTorsion(0,1,2,3)
+    torsion_force.addTorsion(0,1,2,3,[])
     torsion_sys.addForce(torsion_force)
     torsion_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
     torsion_context = openmm.Context(torsion_sys, torsion_integrator, platform)
