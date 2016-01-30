@@ -11,9 +11,11 @@ __author__ = 'John D. Chodera'
 
 from simtk import openmm, unit
 from simtk.openmm import app
+import os, os.path
 import sys, math
 import numpy as np
 from functools import partial
+from pkg_resources import resource_filename
 from openeye import oechem
 if sys.version_info >= (3, 0):
     from io import StringIO
@@ -65,6 +67,50 @@ def createOEMolFromIUPAC(iupac_name='bosutinib'):
 
     return mol
 
+def generate_gaff_xml():
+    """
+    Return a file-like object for `gaff.xml`
+    """
+    from openmoltools import amber
+    gaff_dat_filename = amber.find_gaff_dat()
+
+    # Generate ffxml file contents for parmchk-generated frcmod output.
+    leaprc = StringIO("parm = loadamberparams %s" % gaff_dat_filename)
+    import parmed
+    params = parmed.amber.AmberParameterSet.from_leaprc(leaprc)
+    params = parmed.openmm.OpenMMParameterSet.from_parameterset(params)
+    citations = """\
+Wang, J., Wang, W., Kollman P. A.; Case, D. A. "Automatic atom type and bond type perception in molecular mechanical calculations". Journal of Molecular Graphics and Modelling , 25, 2006, 247260.
+Wang, J., Wolf, R. M.; Caldwell, J. W.;Kollman, P. A.; Case, D. A. "Development and testing of a general AMBER force field". Journal of Computational Chemistry, 25, 2004, 1157-1174.
+"""
+    ffxml = str()
+    gaff_xml = StringIO(ffxml)
+    provenance=dict(OriginalFile='gaff.dat', Reference=citations)
+    params.write(gaff_xml, provenance=provenance)
+
+    return gaff_xml
+
+def get_data_filename(relative_path):
+    """Get the full path to one of the reference files shipped for testing
+
+    In the source distribution, these files are in ``perses/data/*/``,
+    but on installation, they're moved to somewhere in the user's python
+    site-packages directory.
+
+    Parameters
+    ----------
+    name : str
+        Name of the file to load (with respect to the openmoltools folder).
+
+    """
+
+    fn = resource_filename('perses', relative_path)
+
+    if not os.path.exists(fn):
+        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
+
+    return fn
+
 def createSystemFromIUPAC(iupac_name):
     """
     Create an openmm system out of an oemol
@@ -96,7 +142,8 @@ def createSystemFromIUPAC(iupac_name):
     # Initialize a forcefield with GAFF.
     # TODO: Fix path for `gaff.xml` since it is not yet distributed with OpenMM
     from simtk.openmm.app import ForceField
-    forcefield = ForceField('gaff.xml')
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    forcefield = ForceField(gaff_xml_filename)
 
     # Generate template and parameters.
     from openmoltools.forcefield_generators import generateResidueTemplate
@@ -143,14 +190,15 @@ def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temp
     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
     return positions
 
-def check_alchemical_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_MAX=6.0):
+def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_MAX=6.0):
     """
-    Test alchemical elimination engine on alanine dipeptide null transformation.
+    Test alchemical elimination engine on null transformations, where some atoms are deleted and then reinserted in a cycle.
 
     Parameters
     ----------
     topology_proposal : TopologyProposal
         The topology proposal to test.
+        This must be a null transformation, where topology_proposal.old_system == topology_proposal.new_system
     ncmc_steps : int, optional, default=50
         Number of NCMC switching steps, or 0 for instantaneous switching.
     NSIGMA_MAX : float, optional, default=6.0
@@ -160,60 +208,91 @@ def check_alchemical_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_MAX=6
     from perses.annihilation.ncmc_switching import NCMCEngine
     ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps)
 
+    # Make sure that old system and new system are identical.
+    if not (topology_proposal.old_system == topology_proposal.new_system):
+        raise Exception("topology_proposal must be a null transformation for this test (old_system == new_system)")
+    for (k,v) in topology_proposal.new_to_old_atom_map.items():
+        if k != v:
+            raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
+
+    # Use a geometry engine to match dimensionality.
     #from perses.rjmc import geometry
     #geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
 
-    print("Atom mapping:")
-    print(topology_proposal.new_to_old_atom_map)
-
-    positions = topology_proposal.old_positions
     niterations = 20 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
+    positions = topology_proposal.old_positions
+    print("")
     for iteration in range(niterations):
         # Equilibrate
         positions = simulate(topology_proposal.old_system, positions)
 
+        # Check that positions are not NaN
+        if(np.any(np.isnan(positions / unit.angstroms))):
+            raise Exception("Positions became NaN during equilibration")
+
         # Delete atoms
-        [ncmc_positions, logP_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
+        [positions, logP_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
 
         # Check that positions are not NaN
-        if(np.any(np.isnan(ncmc_positions / unit.angstroms))):
-            raise Exception("Positions became NaN on NCMC annihilation")
+        if(np.any(np.isnan(positions / unit.angstroms))):
+            raise Exception("Positions became NaN on NCMC deletion")
 
         # Propose geometry change.
         #topology_proposal.old_positions = old_positions
-        #new_positions, logp_proposal = geometry_engine.propose(topology_proposal)
+        #positions, logp_proposal = geometry_engine.propose(topology_proposal)
 
         # Insert atoms
-        #[new_positions, logP_insert] = ncmc_engine.integrate(topology_proposal, new_positions, direction='insert')
+        [positions, logP_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
+
+        # Check that positions are not NaN
+        if(np.any(np.isnan(positions / unit.angstroms))):
+            raise Exception("Positions became NaN on NCMC insertion")
 
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
-        #logP_insert_n[iteration] = logP_insert
-        print("Iteration %5d : %16.8f" % (iteration, logP_delete))
+        logP_insert_n[iteration] = logP_insert
+        #print("Iteration %5d : delete %16.8f kT | insert %16.8f kT" % (iteration, logP_delete, logP_insert))
+
+    # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
+    logP_n = logP_delete_n + logP_insert_n
+    from pymbar import EXP
+    [df, ddf] = EXP(logP_n)
+    #print("df = %12.6f +- %12.5f kT" % (df, ddf))
+    if (abs(df) > NSIGMA_MAX * ddf):
+        msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
+        msg += 'delete logP:\n'
+        msg += str(logP_delete_n) + '\n'
+        msg += 'insert logP:\n'
+        msg += str(logP_insert_n) + '\n'
+        msg += 'logP:\n'
+        msg += str(logP_n) + '\n'
+        raise Exception(msg)
 
 def test_alchemical_elimination_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, and 50 switching steps.
 
     """
-    molecule_name_1 = 'ethane'
-    molecule_name_2 = 'pentane'
-    [molecule1, sys1, pos1, top1] = createSystemFromIUPAC(molecule_name_1)
-    [molecule2, sys2, pos2, top2] = createSystemFromIUPAC(molecule_name_2)
-    new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
-    from perses.rjmc.topology_proposal import SmallMoleculeTopologyProposal
-    topology_proposal = SmallMoleculeTopologyProposal(
-        new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
-        old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+    molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
+    for molecule_name in molecule_names:
+        [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
+        natoms = system.getNumParticles()
+        # Eliminate half of the molecule
+        # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
+        new_to_old_atom_map = { index : index for index in range(natoms/2) }
 
-    for ncmc_nsteps in [0, 1, 50]:
-        f = partial(check_alchemical_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
-        f.description = "Testing alchemical elimination for '%s' -> '%s' with %d NCMC steps" % (molecule_name_1, molecule_name_2, ncmc_nsteps)
-        yield f
+        from perses.rjmc.topology_proposal import SmallMoleculeTopologyProposal
+        topology_proposal = SmallMoleculeTopologyProposal(
+            new_topology=topology, new_system=system, old_topology=topology, old_system=system,
+            old_positions=positions, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
+        for ncmc_nsteps in [0, 1, 50]:
+            f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
+            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
+            yield f
 
-def test_alchemical_elimination_peptide():
+def disable_alchemical_elimination_peptide():
     # Create an alanine dipeptide null transformation, where N-methyl group is deleted and then inserted.
     from openmmtools import testsystems
     testsystem = testsystems.AlanineDipeptideVacuum()
@@ -226,6 +305,6 @@ def test_alchemical_elimination_peptide():
         logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
 
     for ncmc_nsteps in [0, 1, 50]:
-        f = partial(check_alchemical_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
+        f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
