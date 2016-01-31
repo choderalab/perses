@@ -53,7 +53,7 @@ def oemol_to_openmm_system(oemol, molecule_name):
     prmtop_file, inpcrd_file = openmoltools.amber.run_tleap(molecule_name, gaff_mol2, frcmod)
     from parmed.amber import AmberParm
     prmtop = AmberParm(prmtop_file)
-    system = prmtop.createSystem(implicitSolvent=app.OBC1)
+    system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
     crd = app.AmberInpcrdFile(inpcrd_file)
     return system, crd.getPositions(asNumpy=True), prmtop.topology
 
