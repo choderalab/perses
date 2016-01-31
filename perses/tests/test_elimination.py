@@ -257,8 +257,9 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
 
     # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
     logP_n = logP_delete_n + logP_insert_n
+    work_n = - logP_n
     from pymbar import EXP
-    [df, ddf] = EXP(logP_n)
+    [df, ddf] = EXP(work_n)
     #print("df = %12.6f +- %12.5f kT" % (df, ddf))
     if (abs(df) > NSIGMA_MAX * ddf):
         msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)

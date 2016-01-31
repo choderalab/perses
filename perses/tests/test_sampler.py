@@ -57,14 +57,15 @@ def test_run_example():
     nsteps_per_iteration = 50 # number of timesteps for propagation step iteration
     switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
     switching_nsteps = 50 # number of steps to use in NCMC integration
+    niterations = 50 # number of sampler iterations
 
     # Compute kT and inverse temperature.
     kT = kB * temperature
     beta = 1.0 / kT
 
     # Create initial model system, topology, and positions.
-    #smiles_list = ["CC", "CCC", "CCCC", "CCC(C)C", "CC(C)(C)C", "Cc1ccccc1"]
-    smiles_list = ["CC", "CCC", "CCCC", "CCCCC"]
+    smiles_list = ["CC", "CCC", "CCCC", "CCC(C)C", "CC(C)(C)C", "Cc1ccccc1"]
+    #smiles_list = ["CC", "CCC", "CCCC", "CCCCC"]
     stats = { smiles : 0 for smiles in smiles_list } # stats[smiles] is the number of times molecule 'smiles' has been visited
 
     # Initialize sampler state.
@@ -98,7 +99,6 @@ def test_run_example():
 
     # Run a number of iterations.
     # TODO: This should be incorporated into an MCMCSampler / SAMSSampler class.
-    niterations = 20
     n_accepted = 0
     system = initial_sys
     topology = initial_top
