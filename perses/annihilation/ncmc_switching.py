@@ -269,11 +269,15 @@ class NCMCEngine(object):
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
         # Store initial potential if 'insert'
         if direction == 'insert':
+            for parameter_name in available_parameters:
+                context.setParameter(parameter_name, 0)
             potential = context.getState(getEnergy=True).getPotentialEnergy()
         # Only take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
         integrator.step(1)
         # Store final potential if 'insert'
         if direction == 'delete':
+            for parameter_name in available_parameters:
+                context.setParameter(parameter_name, 0)
             potential = context.getState(getEnergy=True).getPotentialEnergy()
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
