@@ -57,7 +57,7 @@ def test_run_example():
     nsteps_per_iteration = 50 # number of timesteps for propagation step iteration
     switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
     switching_nsteps = 50 # number of steps to use in NCMC integration
-    niterations = 50 # number of sampler iterations
+    niterations = 20 # number of sampler iterations
     pdb_filename = 'output.pdb'
     write_pdb_file = False # if True, a PDB file is written
 
@@ -187,7 +187,6 @@ def test_run_example():
     print(stats)
 
     if write_pdb_file:
-        PDBFile.writeFooter(topology, file=outfile)
         outfile.close()
 
 if __name__=="__main__":

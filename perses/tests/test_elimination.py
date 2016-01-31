@@ -252,7 +252,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
         logP_insert_n[iteration] = logP_insert
-        logP_switch_n[iteration] = - (potential_insert - potential_delete)) / kT
+        logP_switch_n[iteration] = - (potential_insert - potential_delete) / kT
         #print("Iteration %5d : delete %16.8f kT | insert %16.8f kT" % (iteration, logP_delete, logP_insert))
 
     # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
