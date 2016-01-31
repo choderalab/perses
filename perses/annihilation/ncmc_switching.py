@@ -1,5 +1,6 @@
 import numpy as np
 import copy
+import logging
 from simtk import openmm, unit
 
 
@@ -268,6 +269,8 @@ class NCMCEngine(object):
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         logP_NCMC = integrator.getLogAcceptanceProbability()
+        # DEBUG
+        print("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
         # Clean up NCMC switching integrator.
         del context, integrator
 

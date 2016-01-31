@@ -54,9 +54,9 @@ def test_run_example():
     pressure = 1.0 * unit.atmospheres # pressure
     collision_rate = 5.0 / unit.picoseconds # collision rate for Langevin dynamics
     timestep = 1.0 * unit.femtoseconds # propagation timestep
-    nsteps_per_iteration = 500 # number of timesteps for propagation step iteration
+    nsteps_per_iteration = 50 # number of timesteps for propagation step iteration
     switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
-    switching_nsteps = 500 # number of steps to use in NCMC integration
+    switching_nsteps = 50 # number of steps to use in NCMC integration
 
     # Compute kT and inverse temperature.
     kT = kB * temperature
