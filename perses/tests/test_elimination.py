@@ -215,15 +215,14 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         if k != v:
             raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
 
-    # Use a geometry engine to match dimensionality.
-    #from perses.rjmc import geometry
-    #geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-
-    niterations = 20 # number of round-trip switching trials
+    nequil = 5 # number of equilibration iterations
+    niterations = 30 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     positions = topology_proposal.old_positions
     print("")
+    for iteration in range(nequil):
+        positions = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
         # Equilibrate
         positions = simulate(topology_proposal.old_system, positions)
@@ -238,10 +237,6 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
             raise Exception("Positions became NaN on NCMC deletion")
-
-        # Propose geometry change.
-        #topology_proposal.old_positions = old_positions
-        #positions, logp_proposal = geometry_engine.propose(topology_proposal)
 
         # Insert atoms
         [positions, logP_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
@@ -262,7 +257,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     [df, ddf] = EXP(work_n)
     #print("df = %12.6f +- %12.5f kT" % (df, ddf))
     if (abs(df) > NSIGMA_MAX * ddf):
-        msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
+        msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
         msg += 'delete logP:\n'
         msg += str(logP_delete_n) + '\n'
         msg += 'insert logP:\n'
