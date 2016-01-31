@@ -270,7 +270,7 @@ class NCMCEngine(object):
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         logP_NCMC = integrator.getLogAcceptanceProbability()
         # DEBUG
-        print("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
+        log.debug("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
         # Clean up NCMC switching integrator.
         del context, integrator
 
