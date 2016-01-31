@@ -6,12 +6,14 @@ import openmoltools
 import openeye.oeiupac as oeiupac
 import openeye.oeomega as oeomega
 import simtk.openmm.app as app
-import simtk.unit as units
+import simtk.unit as unit
 import numpy as np
 import parmed
 
-kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
-beta = 1.0/ (300.0*units.kelvin*kB)
+kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+temperature = 300.0 * unit.kelvin
+kT = kB * temperature
+beta = 1.0/kT
 
 def generate_molecule_from_smiles(smiles):
     """
@@ -103,7 +105,7 @@ def test_run_geometry_engine():
     test_pdb_file = open("output.pdb", 'w')
 
 
-    integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
     context = openmm.Context(sys2, integrator)
     context.setPositions(pos2)
     state = context.getState(getEnergy=True)
@@ -134,32 +136,32 @@ def test_existing_coordinates():
         atom3_position = pos[torsion.atom3.idx]
         atom4_position = pos[torsion.atom4.idx]
         _internal_coordinates, _ = geometry_engine._cartesian_to_internal(atom1_position, atom2_position, atom3_position, atom4_position)
-        internal_coordinates = internal_in_units(_internal_coordinates)
+        internal_coordinates = internal_in_unit(_internal_coordinates)
         recalculated_atom1_position, _ = geometry_engine._internal_to_cartesian(atom2_position, atom3_position, atom4_position, internal_coordinates[0], internal_coordinates[1], internal_coordinates[2])
         n = np.linalg.norm(atom1_position-recalculated_atom1_position)
         print(n)
 
-def internal_in_units(internal_coords):
-    r = internal_coords[0]*units.nanometers if type(internal_coords[0]) != units.Quantity else internal_coords[0]
-    theta = internal_coords[1]*units.radians if type(internal_coords[1]) != units.Quantity else internal_coords[1]
-    phi = internal_coords[2]*units.radians if type(internal_coords[2]) != units.Quantity else internal_coords[2]
+def internal_in_unit(internal_coords):
+    r = internal_coords[0]*unit.nanometers if type(internal_coords[0]) != unit.Quantity else internal_coords[0]
+    theta = internal_coords[1]*unit.radians if type(internal_coords[1]) != unit.Quantity else internal_coords[1]
+    phi = internal_coords[2]*unit.radians if type(internal_coords[2]) != unit.Quantity else internal_coords[2]
     return [r, theta, phi]
 
 def test_coordinate_conversion():
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    example_coordinates = units.Quantity(np.random.normal(size=[100,3]), unit=units.nanometers)
+    example_coordinates = unit.Quantity(np.random.normal(size=[100,3]), unit=unit.nanometers)
     #try to transform random coordinates to and from
     for i in range(200):
         indices = np.random.randint(100, size=4)
-        atom_position = units.Quantity(np.array([ 0.80557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
-        bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
-        angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
-        torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
+        atom_position = unit.Quantity(np.array([ 0.80557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
+        bond_position = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
+        angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
+        torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
         rtp, detJ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
-        r = rtp[0]*units.nanometers
-        theta = rtp[1]*units.radians
-        phi = rtp[2]*units.radians
+        r = rtp[0]*unit.nanometers
+        theta = rtp[1]*unit.radians
+        phi = rtp[2]*unit.radians
         xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         assert np.linalg.norm(xyz-atom_position) < 1.0e-12
 
@@ -177,17 +179,17 @@ def test_openmm_dihedral():
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     import simtk.openmm as openmm
-    integrator = openmm.VerletIntegrator(1.0*units.femtoseconds)
+    integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
     sys = openmm.System()
     force = openmm.CustomTorsionForce("theta")
     for i in range(4):
-        sys.addParticle(1.0*units.amu)
+        sys.addParticle(1.0*unit.amu)
     force.addTorsion(0,1,2,3,[])
     sys.addForce(force)
-    atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
-    bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
-    angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
-    torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
+    atom_position = unit.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
+    bond_position = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
+    angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
+    torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
     rtp, detJ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
     platform = openmm.Platform.getPlatformByName("Reference")
     context = openmm.Context(sys, integrator, platform)
@@ -198,13 +200,13 @@ def test_openmm_dihedral():
 
     #rotate about the torsion:
     n_divisions = 100
-    phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
+    phis = unit.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=unit.radians)
     omm_phis = np.zeros(n_divisions)
     for i, phi in enumerate(phis):
-        xyz_atom1, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, rtp[0]*units.nanometers, rtp[1]*units.radians, phi)
+        xyz_atom1, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, rtp[0]*unit.nanometers, rtp[1]*unit.radians, phi)
         context.setPositions([xyz_atom1, bond_position, angle_position, torsion_position])
         state = context.getState(getEnergy=True)
-        omm_phis[i] = state.getPotentialEnergy()/units.kilojoule_per_mole
+        omm_phis[i] = state.getPotentialEnergy()/unit.kilojoule_per_mole
 
     return 0
 
@@ -213,23 +215,23 @@ def test_try_random_itoc():
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     import simtk.openmm as openmm
-    integrator = openmm.VerletIntegrator(1.0*units.femtoseconds)
+    integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
     sys = openmm.System()
     force = openmm.CustomTorsionForce("theta")
     for i in range(4):
-        sys.addParticle(1.0*units.amu)
+        sys.addParticle(1.0*unit.amu)
     force.addTorsion(0,1,2,3,[])
     sys.addForce(force)
-    atom_position = units.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=units.nanometers)
-    bond_position = units.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=units.nanometers)
-    angle_position = units.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=units.nanometers)
-    torsion_position = units.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=units.nanometers)
+    atom_position = unit.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
+    bond_position = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
+    angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
+    torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
     for i in range(10):
-        atom_position += units.Quantity(np.random.normal(size=3), unit=units.nanometers)
+        atom_position += unit.Quantity(np.random.normal(size=3), unit=unit.nanometers)
         r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
-        r = (r/r.unit)*units.nanometers
-        theta = (theta/theta.unit)*units.radians
-        phi = (phi/phi.unit)*units.radians
+        r = (r/r.unit)*unit.nanometers
+        theta = (theta/theta.unit)*unit.radians
+        phi = (phi/phi.unit)*unit.radians
         recomputed_xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         new_r, new_theta, new_phi = _get_internal_from_omm(recomputed_xyz,bond_position, angle_position, torsion_position)
         crtp = geometry_engine._cartesian_to_internal(recomputed_xyz,bond_position, angle_position, torsion_position)
@@ -242,16 +244,16 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     sys = openmm.System()
     platform = openmm.Platform.getPlatformByName("Reference")
     for i in range(4):
-        sys.addParticle(1.0*units.amu)
+        sys.addParticle(1.0*unit.amu)
 
     #first, the bond length:
     bond_sys = openmm.System()
-    bond_sys.addParticle(1.0*units.amu)
-    bond_sys.addParticle(1.0*units.amu)
+    bond_sys.addParticle(1.0*unit.amu)
+    bond_sys.addParticle(1.0*unit.amu)
     bond_force = openmm.CustomBondForce("r")
     bond_force.addBond(0, 1, [])
     bond_sys.addForce(bond_force)
-    bond_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    bond_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
     bond_context = openmm.Context(bond_sys, bond_integrator, platform)
     bond_context.setPositions([atom_coords, bond_coords])
     bond_state = bond_context.getState(getEnergy=True)
@@ -263,7 +265,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     angle_force = openmm.CustomAngleForce("theta")
     angle_force.addAngle(0,1,2,[])
     angle_sys.addForce(angle_force)
-    angle_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    angle_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
     angle_context = openmm.Context(angle_sys, angle_integrator, platform)
     angle_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
     angle_state = angle_context.getState(getEnergy=True)
@@ -275,7 +277,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     torsion_force = openmm.CustomTorsionForce("theta")
     torsion_force.addTorsion(0,1,2,3,[])
     torsion_sys.addForce(torsion_force)
-    torsion_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+    torsion_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
     torsion_context = openmm.Context(torsion_sys, torsion_integrator, platform)
     torsion_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
     torsion_state = torsion_context.getState(getEnergy=True)

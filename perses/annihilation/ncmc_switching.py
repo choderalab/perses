@@ -30,8 +30,8 @@ class NCMCEngine(object):
     >>> topology_proposal = TopologyProposal(old_system=testsystem.system, old_topology=testsystem.topology, old_positions=testsystem.positions, new_system=testsystem.system, new_topology=testsystem.topology, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
     >>> ncmc_engine = NCMCEngine(temperature=300.0*unit.kelvin, functions=default_functions, nsteps=50, timestep=1.0*unit.femtoseconds)
     >>> positions = testsystem.positions
-    >>> [positions, logP_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
-    >>> [positions, logP_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
+    >>> [positions, logP_delete, potential_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
+    >>> [positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
 
     """
 
@@ -237,6 +237,9 @@ class NCMCEngine(object):
             The final positions after `nsteps` steps of alchemical switching
         logP : float
             The log acceptance probability of the switch
+        potential : simtk.unit.Quantity with units compatible with kilocalories_per_mole
+            For `delete`, the potential energy of the final (alchemically eliminated) conformation.
+            For `insert`, the potential energy of the initial (alchemically eliminated) conformation.
 
         """
         if direction not in ['insert', 'delete']:
@@ -264,8 +267,14 @@ class NCMCEngine(object):
         # Set velocities to temperature and apply velocity constraints.
         context.setVelocitiesToTemperature(self.temperature)
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
+        # Store initial potential if 'insert'
+        if direction == 'insert':
+            potential = context.getState(getEnergy=True).getPotentialEnergy()
         # Only take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
         integrator.step(1)
+        # Store final potential if 'insert'
+        if direction == 'delete':
+            potential = context.getState(getEnergy=True).getPotentialEnergy()
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         logP_NCMC = integrator.getLogAcceptanceProbability()
@@ -284,7 +293,7 @@ class NCMCEngine(object):
         del alchemical_system
 
         # Return
-        return [final_positions, logP]
+        return [final_positions, logP, potential]
 
 class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     """

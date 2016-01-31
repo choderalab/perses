@@ -58,6 +58,8 @@ def test_run_example():
     switching_timestep = 1.0 * unit.femtosecond # timestep for NCMC velocity Verlet integrations
     switching_nsteps = 50 # number of steps to use in NCMC integration
     niterations = 50 # number of sampler iterations
+    pdb_filename = 'output.pdb'
+    write_pdb_file = False # if True, a PDB file is written
 
     # Compute kT and inverse temperature.
     kT = kB * temperature
@@ -97,6 +99,11 @@ def test_run_example():
     # TODO: bias calculator should return unitless quantities
     current_log_weight = bias_calculator.g_k(smiles) / kT
 
+    if write_pdb_file:
+        outfile = open(pdb_filename, 'w')
+        from simtk.openmm.app import PDBFile
+        pdbfile = PDBFile.writeHeader(initial_top, file=outfile)
+
     # Run a number of iterations.
     # TODO: This should be incorporated into an MCMCSampler / SAMSSampler class.
     n_accepted = 0
@@ -117,7 +124,7 @@ def test_run_example():
         potential = context.getState(getEnergy=True).getPotentialEnergy()
         if np.isnan(potential/kT):
             raise Exception("Potential energy of full system is NaN")
-        print('Iteration %5d: potential = %12.3f kT' % (iteration, potential/kT))
+        print('Iteration %5d: %12s : potential = %12.3f kT' % (iteration, smiles, potential/kT))
         integrator.step(nsteps_per_iteration)
         state = context.getState(getPositions=True)
         positions = state.getPositions(asNumpy=True)
@@ -137,7 +144,7 @@ def test_run_example():
         log_weight = bias_calculator.g_k(top_proposal.molecule_smiles) / kT
 
         # Alchemically eliminate atoms being removed.
-        [ncmc_old_positions, ncmc_elimination_logp] = ncmc_engine.integrate(top_proposal, positions, direction='delete')
+        [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = ncmc_engine.integrate(top_proposal, positions, direction='delete')
         # Check that positions are not NaN
         if np.any(np.isnan(ncmc_old_positions)):
             raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
@@ -148,15 +155,18 @@ def test_run_example():
         geometry_new_positions, geometry_logp  = geometry_engine.propose(top_proposal)
 
         # Alchemically introduce new atoms.
-        [ncmc_new_positions, ncmc_introduction_logp] = ncmc_engine.integrate(top_proposal, geometry_new_positions, direction='insert')
+        [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = ncmc_engine.integrate(top_proposal, geometry_new_positions, direction='insert')
         # Check that positions are not NaN
         if np.any(np.isnan(ncmc_new_positions)):
             raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
 
+        # Compute change in eliminated potential contribution.
+        switch_logp = - (potential_insert - potential_delete) / kT
+
         # Compute total log acceptance probability, including all components.
-        logp_accept = top_proposal.logp_proposal + geometry_logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
-        print("Proposal from '%12s' -> '%12s' : logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e log_weight %+10.4e current_log_weight %+10.4e]"
-            % (smiles, top_proposal.molecule_smiles, logp_accept, top_proposal.logp_proposal, geometry_logp, ncmc_elimination_logp, ncmc_introduction_logp, log_weight, current_log_weight))
+        logp_accept = top_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
+        print("Proposal from '%12s' -> '%12s' : logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e log_weight %+10.4e current_log_weight %+10.4e]"
+            % (smiles, top_proposal.molecule_smiles, logp_accept, top_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, log_weight, current_log_weight))
 
         # Accept or reject.
         accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
@@ -170,8 +180,15 @@ def test_run_example():
         # Update statistics.
         stats[smiles] += 1
 
+        if write_pdb_file:
+            PDBFile.writeModel(topology, positions, file=outfile, modelIndex=iteration)
+
     print("The total number accepted was %d out of %d iterations" % (n_accepted, niterations))
     print(stats)
+
+    if write_pdb_file:
+        PDBFile.writeFooter(topology, file=outfile)
+        outfile.close()
 
 if __name__=="__main__":
     test_run_example()
