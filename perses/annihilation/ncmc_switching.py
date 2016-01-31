@@ -1,5 +1,6 @@
 import numpy as np
 import copy
+import logging
 from simtk import openmm, unit
 
 
@@ -268,6 +269,8 @@ class NCMCEngine(object):
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         logP_NCMC = integrator.getLogAcceptanceProbability()
+        # DEBUG
+        logging.debug("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
         # Clean up NCMC switching integrator.
         del context, integrator
 
@@ -479,7 +482,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addComputeGlobal('final_total_energy', 'kinetic + energy')
 
         # Compute log acceptance probability.
-        self.addComputeGlobal('log_ncmc_acceptance_probability', '(final_total_energy - initial_total_energy) / %f' % kT)
+        self.addComputeGlobal('log_ncmc_acceptance_probability', '-1 * (final_total_energy - initial_total_energy) / %f' % kT)
 
     def getLogAcceptanceProbability(self):
         return self.getGlobalVariableByName('log_ncmc_acceptance_probability')
