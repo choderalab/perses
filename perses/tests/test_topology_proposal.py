@@ -67,11 +67,11 @@ def test_specify_allowed_mutants():
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
     metadata = {'chain_id' : 'A'}
-    metadata['mutation_library'] = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
+    allowed_mutations = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
 
     import perses.rjmc.topology_proposal as topology_proposal
 
-    pm_top_engine = topology_proposal.PointMutationEngine(max_point_mutants,proposal_metadata)
+    pm_top_engine = topology_proposal.PointMutationEngine(max_point_mutants,proposal_metadata, allowed_mutations=allowed_mutations)
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology, modeller.positions, metadata)
 
 
