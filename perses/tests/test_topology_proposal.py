@@ -51,6 +51,30 @@ def _guessFileFormat(file, filename):
     file.seek(0)
     return 'pdb'
 
+def test_specify_allowed_mutants():
+    pdbid = "2HIU"
+    topology, positions = load_pdbid_to_openmm(pdbid)
+    modeller = app.Modeller(topology, positions)
+    for chain in modeller.topology.chains():
+        pass
+
+    modeller.delete([chain])
+
+    ff_filename = "amber99sbildn.xml"
+    max_point_mutants = 1
+    proposal_metadata = {'ffxmls':[ff_filename]}
+
+    ff = app.ForceField(ff_filename)
+    system = ff.createSystem(modeller.topology)
+    metadata = {'chain_id' : 'A'}
+    metadata['mutation_library'] = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
+
+    import perses.rjmc.topology_proposal as topology_proposal
+
+    pm_top_engine = topology_proposal.PointMutationEngine(max_point_mutants,proposal_metadata)
+    pm_top_proposal = pm_top_engine.propose(system, modeller.topology, modeller.positions, metadata)
+
+
 def test_run_point_mutation_propose():
     pdbid = "2HIU"
     topology, positions = load_pdbid_to_openmm(pdbid)
@@ -314,6 +338,6 @@ if __name__ == "__main__":
     test_run_point_mutation_propose()
     test_run_point_mutation_engine()
     test_mutate_from_every_amino_to_every_other()
-
+    test_specify_allowed_mutants()
 
 
