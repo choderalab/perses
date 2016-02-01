@@ -14,10 +14,11 @@ requirements:
     - python
     - setuptools
     - openmm-dev
+    - parmed-dev
     - numpy
     - scipy
     - openmoltools-dev
-    - alchemy >=1.1.3
+    - alchemy
     - numexpr
     - openmmtools
     - pymbar
@@ -26,10 +27,11 @@ requirements:
   run:
     - python
     - openmm-dev
+    - parmed-dev
     - numpy
     - scipy
     - openmoltools-dev
-    - alchemy >=1.1.3
+    - alchemy
     - numexpr
     - openmmtools
     - pymbar
@@ -42,6 +44,7 @@ test:
     - pymbar
   imports:
     - perses
+
 
 about:
   home: https://github.com/choderalab/perses

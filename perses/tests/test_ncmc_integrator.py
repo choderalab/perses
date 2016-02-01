@@ -24,7 +24,7 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 # TESTS
 ################################################################################
 
-def collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ghmc_nsteps=200, ncmc_nsteps=50, niterations=20, direction='insert'):
+def collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ghmc_nsteps=200, ncmc_nsteps=50, niterations=40, direction='insert'):
     """
     Collect switching data.
 
@@ -62,7 +62,7 @@ def collect_switching_data(system, positions, functions, temperature, collision_
         # Switch
         integrator.setCurrentIntegrator(1)
         integrator.step(1)
-        work_n[iteration] = ncmc_integrator.getLogAcceptanceProbability()
+        work_n[iteration] = - ncmc_integrator.getLogAcceptanceProbability()
 
     # Clean up
     del context, integrator
@@ -125,4 +125,4 @@ def test_ncmc_integrator_harmonic_oscillator():
         yield f
 
 if __name__ == '__main__':
-    test_ncmc_harmonic_oscillator()
+    test_ncmc_integrator_harmonic_oscillator()

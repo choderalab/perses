@@ -109,6 +109,9 @@ class TopologyProposal(object):
     @property
     def old_positions(self):
         return self._old_positions
+    @old_positions.setter
+    def old_positions(self, positions):
+        self._old_positions = positions
     @property
     def beta(self):
         return self._beta
@@ -195,11 +198,12 @@ class SmallMoleculeTopologyProposal(TopologyProposal):
     """
 
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, molecule_smiles=None, metadata=None):
+                 logp_proposal=None, new_to_old_atom_map=None, molecule_smiles=None, metadata=None, beta=None):
         super(SmallMoleculeTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
                                                            old_system=old_system, old_positions=old_positions,
                                                            logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
         self._molecule_smiles = molecule_smiles
+        self._beta = beta
 
     @property
     def molecule_smiles(self):
@@ -262,13 +266,13 @@ class PolymerTopologyProposal(TopologyProposal):
 #        super(PolymerTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
 #                                                           old_system=old_system, old_positions=old_positions,
 #                                                           logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
-    
+
 
 class ProposalEngine(object):
     """
     This defines a type which, given the requisite metadata, can produce Proposals (namedtuple)
     of new topologies.
-    
+
     Arguments
     --------
     proposal_metadata : dict
@@ -278,10 +282,10 @@ class ProposalEngine(object):
     def __init__(self, proposal_metadata):
         pass
 
-    def propose(self, current_system, current_topology, current_positions, current_metadata):
+    def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
         """
         Base interface for proposal method.
-        
+
         Arguments
         ---------
         current_system : simtk.openmm.System object
@@ -311,7 +315,7 @@ class PolymerProposalEngine(ProposalEngine):
 class PointMutationEngine(PolymerProposalEngine):
     """
     Will make all mutations specified in metadata (not choosing)
- 
+
     Arguments
     --------
     max_point_mutants : int  (should this be in metadata?)
@@ -328,7 +332,7 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
         """
-        
+
         Arguments
         ---------
         current_system : simtk.openmm.System object
@@ -403,7 +407,7 @@ class PointMutationEngine(PolymerProposalEngine):
         Returns
         -------
         index_to_new_residues : dict
-            key : int (index, zero-indexed in chain) 
+            key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
         """
         index_to_new_residues = dict()
@@ -443,7 +447,7 @@ class PointMutationEngine(PolymerProposalEngine):
         ---------
         modeller : simtk.openmm.app.Modeller
         index_to_new_residues : dict
-            key : int (index, zero-indexed in chain) 
+            key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
         Returns
         -------
@@ -454,7 +458,7 @@ class PointMutationEngine(PolymerProposalEngine):
 
         """
         return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in modeller.topology.residues() if r.index in index_to_new_residues]
-        
+
 
     def _generate_residue_map(self, modeller, index_to_new_residues):
         """
@@ -464,7 +468,7 @@ class PointMutationEngine(PolymerProposalEngine):
         ---------
         modeller : simtk.openmm.app.Modeller
         index_to_new_residues : dict
-            key : int (index, zero-indexed in chain) 
+            key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
         Returns
         -------
@@ -472,7 +476,7 @@ class PointMutationEngine(PolymerProposalEngine):
             simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue)
         """
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
-        # r : simtk.openmm.app.topology.Residue, r.index : int, 0-indexed 
+        # r : simtk.openmm.app.topology.Residue, r.index : int, 0-indexed
         residue_map = [(r, index_to_new_residues[r.index]) for r in modeller.topology.residues() if r.index in index_to_new_residues]
         return residue_map
 
@@ -487,10 +491,10 @@ class PointMutationEngine(PolymerProposalEngine):
             simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue)
         Returns
         -------
-        modeller : simtk.openmm.app.Modeller 
+        modeller : simtk.openmm.app.Modeller
             extra atoms from old residue have been deleted, missing atoms in new residue not yet added
         missing_atoms : dict
-            key : simtk.openmm.app.topology.Residue 
+            key : simtk.openmm.app.topology.Residue
             value : list(simtk.openmm.app.topology._TemplateAtomData)
         """
         # delete excess atoms from old residues and identify new atoms for new residues
@@ -508,7 +512,7 @@ class PointMutationEngine(PolymerProposalEngine):
                 residue_map[k] = (residue, replace_with)
             if residue == chain_residues[-1]:
                 replace_with = 'C'+replace_with
-                residue_map[k] = (residue, replace_with) 
+                residue_map[k] = (residue, replace_with)
             # template : simtk.openmm.app.topology._TemplateData
             template = self._templates[replace_with]
             # standard_atoms : set of unique atom names within new residue : str
@@ -546,11 +550,11 @@ class PointMutationEngine(PolymerProposalEngine):
         Arguments
         ---------
         modeller : simtk.openmm.app.Modeller
-        delete_atoms : list(simtk.openmm.app.topology.Atom) 
+        delete_atoms : list(simtk.openmm.app.topology.Atom)
             atoms from existing residue not in new residue
         Returns
         -------
-        modeller : simtk.openmm.app.Modeller 
+        modeller : simtk.openmm.app.Modeller
             extra atoms from old residue have been deleted, missing atoms in new residue not yet added
         """
         # delete_atoms : list(simtk.openmm.app.topology.Atom) atoms from existing residue not in new residue
@@ -574,10 +578,10 @@ class PointMutationEngine(PolymerProposalEngine):
             simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue)
         Returns
         -------
-        modeller : simtk.openmm.app.Modeller 
+        modeller : simtk.openmm.app.Modeller
             extra atoms and bonds from old residue have been deleted, missing atoms in new residue not yet added
         """
- 
+
         for residue, replace_with in residue_map:
             # template : simtk.openmm.app.topology._TemplateData
             template = self._templates[replace_with]
@@ -603,16 +607,16 @@ class PointMutationEngine(PolymerProposalEngine):
 
         Arguments
         ---------
-        modeller : simtk.openmm.app.Modeller 
+        modeller : simtk.openmm.app.Modeller
             extra atoms from old residue have been deleted, missing atoms in new residue not yet added
         missing_atoms : dict
-            key : simtk.openmm.app.topology.Residue 
+            key : simtk.openmm.app.topology.Residue
             value : list(simtk.openmm.app.topology._TemplateAtomData)
         residue_map : list(tuples)
             simtk.openmm.app.topology.Residue, str (three letter residue name of new residue)
         Returns
         -------
-        modeller : simtk.openmm.app.Modeller 
+        modeller : simtk.openmm.app.Modeller
             new residue has all correct atoms for desired mutation
         """
         # add new atoms to new residues
@@ -649,7 +653,7 @@ class PointMutationEngine(PolymerProposalEngine):
             new_res_atoms = dict()
             # atom : simtk.openmm.app.topology.Atom
             for atom in residue.atoms():
-                # atom.name : str 
+                # atom.name : str
                 new_res_atoms[atom.name] = atom
             # make a list of bonds already existing in new residue
             # new_res_bonds : list(tuple(str (atom name), str (atom name))) bonds between atoms both within new residue
@@ -700,7 +704,7 @@ class SmallMoleculeProposalEngine(ProposalEngine):
         self._generated_systems = dict()
         self._generated_topologies = dict()
 
-    def propose(self, current_system, current_topology, current_positions, current_metadata):
+    def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
         """
         Make a proposal for the next small molecule.
 
@@ -737,7 +741,7 @@ class SmallMoleculeProposalEngine(ProposalEngine):
 
         #Create the TopologyProposal and return it
         proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
-                                                 old_positions=current_positions, logp_proposal=logp_proposal,
+                                                 old_positions=current_positions, logp_proposal=logp_proposal, beta=beta,
                                                  new_to_old_atom_map=new_to_old_atom_map, molecule_smiles=proposed_mol_smiles)
 
         return proposal
@@ -899,7 +903,7 @@ class SingleSmallMolecule(SmallMoleculeProposalEngine):
 
         #add the topology to the generated tops, create the system and do the same for it
         self._generated_topologies['mol_smiles'] = prmtop.topology
-        system = prmtop.createSystem(implicitSolvent=app.OBC2)
+        system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
         self._generated_systems['mol_smiles'] = system
 
         #return the system and topology, along with the atom map
@@ -956,7 +960,7 @@ class SmallMoleculeProteinComplex(SmallMoleculeProposalEngine):
 
         prmtop = self._run_tleap(proposed_molecule)
         topology = prmtop.topology
-        system = prmtop.createSystem(implicitSolvent=app.OBC2)
+        system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
 
         self._generated_systems[molecule_smiles] = system
         self._generated_topologies[molecule_smiles] = topology
