@@ -314,6 +314,7 @@ class PointMutationEngine(PolymerProposalEngine):
  
     Arguments
     --------
+    max_point_mutants : int  (should this be in metadata?)
     proposal_metadata : dict
         Contains information necessary to initialize proposal engine
         {'ffxmls': [ffxml]}
