@@ -852,6 +852,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #map the atoms between the new and old molecule only:
         mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
 
+        #adjust the log proposal for the alignment:
+        total_logp = alignment_logp + logp_proposal
+
         #adjust the atom map for the presence of the receptor:
         adjusted_atom_map = {}
         for (key, value) in mol_atom_map:
@@ -859,8 +862,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
                 #Create the TopologyProposal and return it
         proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
-                                                 old_positions=current_positions, logp_proposal=logp_proposal, beta=beta,
+                                                 old_positions=current_positions, logp_proposal=total_logp, beta=beta,
                                                  new_to_old_atom_map=adjusted_atom_map, molecule_smiles=proposed_mol_smiles)
+        return proposal
 
     def _find_mol_start_index(self, topology, resname='MOL'):
         """
