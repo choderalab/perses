@@ -292,7 +292,7 @@ def test_angle():
     """
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    example_coordinates = units.Quantity(np.random.normal(size=[4,3]))
+    example_coordinates = unit.Quantity(np.random.normal(size=[4,3]))
     r, theta, phi = _get_internal_from_omm(example_coordinates[0], example_coordinates[1], example_coordinates[2], example_coordinates[3])
     theta_g = geometry_engine._calculate_angle(example_coordinates[0], example_coordinates[1], example_coordinates[2])
     assert abs(theta / theta.unit - theta_g) < 1.0e-12
