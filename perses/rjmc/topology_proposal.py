@@ -13,6 +13,10 @@ import numpy as np
 import openeye.oeomega as oeomega
 import tempfile
 import openeye.oegraphsim as oegraphsim
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 import openmoltools
 import logging
 try:
@@ -741,6 +745,51 @@ class PeptideLibraryEngine(PolymerProposalEngine):
     def propose(self):
         pass
 
+
+class SystemGenerator(object):
+    """
+    This is a utility class to generate OpenMM Systems from
+    topology objects.
+
+    Parameters
+    ----------
+    forcefields_to_use : list of string
+        List of the names of ffxml files that will be used in system creation.
+    metadata : dict, optional
+        Metadata associated with the SystemGenerator.
+    """
+
+    def __init__(self, forcefields_to_use, metadata=None):
+        self._forcefields = forcefields_to_use
+
+    def build_system(self, new_topology, oemol_list, forcefield_kwargs=None):
+        """
+        Build a system from the new_topology, adding templates
+        for the molecules in oemol_list
+
+        Parameters
+        ----------
+        new_topology : simtk.openmm.app.Topology object
+            The topology of the system
+        oemol_list : list of oechem.OEMol objects
+            List of small-molecules that will need
+            to be parameterized.
+        forcefield_kwargs : dict of arguments to createSystem, optional
+            Allows specification of various aspects of system creation.
+
+        Returns
+        -------
+        new_system : openmm.System
+            A system object generated from the topology
+        """
+        from openmoltools import forcefield_generators
+        forcefield = app.ForceField(*self._forcefields)
+        templates_ffxmls = [forcefield_generators.generateResidueTemplate(oemol) for oemol in oemol_list]
+        for template_ffxml in templates_ffxmls:
+            forcefield.registerResidueTemplate(templates_ffxmls[0])
+            forcefield.loadFile(StringIO(templates_ffxmls[1]))
+        system = forcefield.createSystem(new_topology, **forcefield_kwargs)
+        return system
 
 class SmallMoleculeProposalEngine(ProposalEngine):
     """
