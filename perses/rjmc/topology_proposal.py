@@ -838,10 +838,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         current_mol_idx = self._oemol_smile_dict[current_mol_smiles]
         current_mol = self._oemol_list[current_mol_idx]
 
+        current_mol_start_index = 0
+
         #choose the next molecule to simulate:
         proposed_idx, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
                                                                            current_positions, current_mol_smiles)
         proposed_mol_smiles = self._smiles_list[proposed_idx]
+
+        proposed_topology, new_mol_start_index = self._build_new_topology(proposed_mol)
 
         #map the atoms between the new and old molecule only:
         mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
@@ -851,6 +855,30 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                                                  old_positions=current_positions, logp_proposal=logp_proposal, beta=beta,
                                                  new_to_old_atom_map=new_to_old_atom_map, molecule_smiles=proposed_mol_smiles)
 
+    def _find_mol_start_index(self, topology, resname='Mol'):
+        """
+        Find the starting index of the molecule in the topology.
+        Throws an exception if resname is not present.
+
+        Parameters
+        ----------
+        topology : app.Topology object
+            The topology containing the molecule
+        resname : string, optional
+            The name of the molecule. Default MOL.
+
+        Returns
+        -------
+        mol_start_idx : int
+            start index of the molecule
+        """
+        mol_residues = [res for res in topology.residues() if res.name==resname]
+        if len(mol_residues)!=1:
+            raise ValueError("There can only be one residue with a specific name in the topology.")
+        mol_residue = mol_residues[0]
+        atoms = list(mol_residue.atoms())
+        mol_start_idx = atoms[0].index
+        return mol_start_idx
 
     def _build_new_topology(self, oemol_proposed):
         """
