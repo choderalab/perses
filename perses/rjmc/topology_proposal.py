@@ -11,6 +11,7 @@ import openeye.oechem as oechem
 import numpy as np
 import openeye.oeomega as oeomega
 import tempfile
+from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 try:
     from StringIO import StringIO
@@ -754,14 +755,19 @@ class SystemGenerator(object):
     ----------
     forcefields_to_use : list of string
         List of the names of ffxml files that will be used in system creation.
+    forcefield_kwargs : dict of arguments to createSystem, optional
+        Allows specification of various aspects of system creation.
     metadata : dict, optional
         Metadata associated with the SystemGenerator.
     """
 
-    def __init__(self, forcefields_to_use, metadata=None):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None):
         self._forcefields = forcefields_to_use
+        self._forcefield_kwargs = forcefield_kwargs
+        self._forcefield = app.ForceField(*self._forcefields)
+        self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
-    def build_system(self, new_topology, forcefield_kwargs=None):
+    def build_system(self, new_topology):
         """
         Build a system from the new_topology, adding templates
         for the molecules in oemol_list
@@ -770,18 +776,14 @@ class SystemGenerator(object):
         ----------
         new_topology : simtk.openmm.app.Topology object
             The topology of the system
-        forcefield_kwargs : dict of arguments to createSystem, optional
-            Allows specification of various aspects of system creation.
+
 
         Returns
         -------
         new_system : openmm.System
             A system object generated from the topology
         """
-        from openmoltools import forcefield_generators
-        forcefield = app.ForceField(*self._forcefields)
-        forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-        system = forcefield.createSystem(new_topology, **forcefield_kwargs)
+        system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
         return system
 
 class SmallMoleculeSetProposalEngine(ProposalEngine):
@@ -849,6 +851,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                                                  old_positions=current_positions, logp_proposal=logp_proposal, beta=beta,
                                                  new_to_old_atom_map=new_to_old_atom_map, molecule_smiles=proposed_mol_smiles)
 
+
+    def _build_new_topology(self, oemol_proposed):
+        """
+        Construct a new topology
+        Parameters
+        ----------
+        oemol_proposed
+
+        Returns
+        -------
+
+        """
 
 
     def _smiles_to_oemol(self):
