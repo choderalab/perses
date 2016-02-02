@@ -72,10 +72,11 @@ def test_run_example():
     smiles = 'CC' # current sampler state
     initial_molecule = generate_initial_molecule("CC")
     initial_sys, initial_pos, initial_top = oemol_to_openmm_system(initial_molecule, "ligand_old")
+    system_generator = topology_proposal.SystemGenerator(["gaff.xml"])
 
     # Create proposal metadata, such as the list of molecules to sample (SMILES here)
     proposal_metadata = {'smiles_list': smiles_list}
-    transformation = topology_proposal.SingleSmallMolecule(proposal_metadata)
+    transformation = topology_proposal.SmallMoleculeSetProposalEngine(smiles_list, app.Topology(), system_generator)
 
     # Initialize weight calculation engine, along with its metadata
     bias_calculator = bias_engine.MinimizedPotentialBias(smiles_list, implicit_solvent=None)
