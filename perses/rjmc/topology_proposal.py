@@ -857,12 +857,33 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         Construct a new topology
         Parameters
         ----------
-        oemol_proposed
+        oemol_proposed : oechem.OEMol object
+            the proposed OEMol object
 
         Returns
         -------
-
+        new_topology : app.Topology object
+            A topology with the receptor and the proposed oemol
+        mol_start_index : int
+            The first index of the small molecule
         """
+        mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
+        new_topology = copy.deepcopy(self._receptor_topology)
+        mol_start_index = 0
+        newAtoms = {}
+        for chain in mol_topology.chains():
+            newChain = new_topology.addChain(chain.id)
+            for residue in chain.residues():
+                newResidue = new_topology.addResidue(residue.name, newChain, residue.id)
+                for atom in residue.atoms():
+                    newAtom = new_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                    if atom.index == 0:
+                        mol_start_index = newAtom.index
+                    newAtoms[atom] = newAtom
+        for bond in mol_topology.bonds():
+            new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        
+        return new_topology, mol_start_index
 
 
     def _smiles_to_oemol(self):
