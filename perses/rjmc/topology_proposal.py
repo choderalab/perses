@@ -282,7 +282,7 @@ class ProposalEngine(object):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, proposal_metadata, system_generator):
+    def __init__(self, system_generator, proposal_metadata):
         self._system_generator = system_generator
 
     def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
@@ -787,14 +787,138 @@ class SystemGenerator(object):
 class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
     This class proposes new small molecules from a prespecified set. It uses
-    exponentiated tanimoto for proposal probabilities.
+    uniform proposal probabilities, but can be extended.
 
+    Parameters
+    ----------
+    list_of_smiles : list of string
+        list of smiles that will be sampled
+    receptor_topology : app.Topology object
+        topology of the receptor
+    system_generator : SystemGenerator object
+        SystemGenerator initialized with the appropriate forcefields
+    proposal_metadata : dict
+        metadata for the proposal engine
     """
 
     def __init__(self, list_of_smiles, receptor_topology, system_generator, proposal_metadata=None):
         self._list_of_smiles = list_of_smiles
-        self._receptor_pdb = receptor_topology
+        self._receptor_topology = receptor_topology
+        super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata)
 
+    def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
+        """
+        Propose the next state, given the current state
+
+        Parameters
+        ----------
+        current_system : openmm.System object
+            the system of the current state
+        current_topology : app.Topology object
+            the topology of the current state
+        current_positions : [n, 3] np.ndarray of float
+            current positions
+        beta : float
+            inverse temperature
+        current_metadata : dict
+            dict containing current smiles as a key
+
+        Returns
+        -------
+        proposal : SmallMoleculeTopologyProposal object
+           topology proposal object
+        """
+        pass
+
+    def _smiles_to_oemol(self):
+        """
+        Convert the list of smiles into a list of oemol objects. Explicit hydrogens
+        are added, but no geometry is created.
+
+        Returns
+        -------
+        oemols : np.array of type object
+            array of oemols
+        """
+        list_of_smiles = self._smiles_list
+        oemols = np.zeros(self._n_molecules, dtype=object)
+        oemol_smile_dict = dict()
+        for i, smile in enumerate(list_of_smiles):
+            mol = oechem.OEMol()
+            oechem.OESmilesToMol(mol, smile)
+            oechem.OEAddExplicitHydrogens(mol)
+            omega = oeomega.OEOmega()
+            omega.SetMaxConfs(1)
+            omega(mol)
+            oemols[i] = mol
+            oemol_smile_dict[smile] = i
+        return oemols, oemol_smile_dict
+
+    def _get_mol_atom_map(self, current_molecule, proposed_molecule):
+        """
+        Given two molecules, returns the mapping of atoms between them.
+
+        Arguments
+        ---------
+        current_molecule : openeye.oechem.oemol object
+             The current molecule in the sampler
+        proposed_molecule : openeye.oechem.oemol object
+             The proposed new molecule
+
+        Returns
+        -------
+        new_to_old_atom_map : dict
+            Dictionary of {new_idx : old_idx} format.
+        logp_alignment : float
+            logp of the molecule alignment if there is more than one
+        """
+        oegraphmol_current = oechem.OEGraphMol(current_molecule)
+        oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
+        mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
+        atomexpr = oechem.OEExprOpts_AtomicNumber
+        bondexpr = 0
+        mcs.Init(oegraphmol_current, atomexpr, bondexpr)
+        mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
+        unique = True
+        matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        match = np.random.choice(matches)
+        new_to_old_atom_map = {}
+        for matchpair in match.GetAtoms():
+            old_index = matchpair.pattern.GetIdx()
+            new_index = matchpair.target.GetIdx()
+            new_to_old_atom_map[new_index] = old_index
+        return new_to_old_atom_map, 1.0/len(matches)
+
+    def _propose_molecule(self, system, topology, positions, molecule_smiles):
+        """
+        Simple method that randomly chooses a molecule unformly.
+        Symmetric proposal, so logp is 0. Override with a mixin.
+
+        Arguments
+        ---------
+        system : simtk.openmm.System object
+            The current system
+        topology : simtk.openmm.app.Topology object
+            The current topology
+        positions : [n, 3] np.ndarray of floats (Quantity nm)
+            The current positions of the system
+        molecule_smiles : dict
+            The current molecule smiles
+
+        Returns
+        -------
+        proposed_idx : int
+             The index of the proposed oemol
+        mol : oechem.OEMol
+            The next molecule to simulate
+        logp : float
+            The log probability of the choice
+        """
+        current_idx = self._smiles_list.index(molecule_smiles)
+        prob = np.array([1.0/(self._n_molecules-1) for i in range(self._n_molecules)])
+        prob[current_idx] = 0.0
+        proposed_idx = np.random.choice(range(self._n_molecules), p=prob)
+        return proposed_idx, self._oemol_list[proposed_idx], 0.0
 
 class SmallMoleculeProposalEngine(ProposalEngine):
     """
