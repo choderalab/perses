@@ -1,7 +1,6 @@
 """
 This file contains the base classes for topology proposals
 """
-### calculate logp in different ways in different subclasses
 
 import simtk.openmm as openmm
 import simtk.openmm.app as app
@@ -283,8 +282,8 @@ class ProposalEngine(object):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, proposal_metadata):
-        pass
+    def __init__(self, proposal_metadata, system_generator):
+        self._system_generator = system_generator
 
     def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
         """
@@ -761,9 +760,8 @@ class SystemGenerator(object):
 
     def __init__(self, forcefields_to_use, metadata=None):
         self._forcefields = forcefields_to_use
-        self._ffxmls_and_templates = {}
 
-    def build_system(self, new_topology, oemol, forcefield_kwargs=None):
+    def build_system(self, new_topology, forcefield_kwargs=None):
         """
         Build a system from the new_topology, adding templates
         for the molecules in oemol_list
@@ -772,9 +770,6 @@ class SystemGenerator(object):
         ----------
         new_topology : simtk.openmm.app.Topology object
             The topology of the system
-        oemol : oechem.OEMol objects
-            small-molecule that will need
-            to be parameterized.
         forcefield_kwargs : dict of arguments to createSystem, optional
             Allows specification of various aspects of system creation.
 
@@ -785,14 +780,7 @@ class SystemGenerator(object):
         """
         from openmoltools import forcefield_generators
         forcefield = app.ForceField(*self._forcefields)
-        isocan_smiles = oechem.OECreateIsoSmiString(oemol)
-        if isocan_smiles in self._ffxmls_and_templates.keys():
-            residue_template, template_ffxml = self._ffxmls_and_templates[isocan_smiles]
-        else:
-            residue_template, template_ffxml = forcefield_generators.generateResidueTemplate(oemol)
-            self._ffxmls_and_templates[isocan_smiles] = [template_ffxml, residue_template]
-        forcefield.registerResidueTemplate(residue_template)
-        forcefield.loadFile(StringIO(template_ffxml))
+        forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
         system = forcefield.createSystem(new_topology, **forcefield_kwargs)
         return system
 
@@ -803,7 +791,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     """
 
-    def __init__(self, list_of_smiles, receptor_topology, metadata=None):
+    def __init__(self, list_of_smiles, receptor_topology, system_generator, proposal_metadata=None):
         self._list_of_smiles = list_of_smiles
         self._receptor_pdb = receptor_topology
 
