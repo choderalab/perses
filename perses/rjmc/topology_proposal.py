@@ -761,8 +761,9 @@ class SystemGenerator(object):
 
     def __init__(self, forcefields_to_use, metadata=None):
         self._forcefields = forcefields_to_use
+        self._ffxmls_and_templates = {}
 
-    def build_system(self, new_topology, oemol_list, forcefield_kwargs=None):
+    def build_system(self, new_topology, oemol, forcefield_kwargs=None):
         """
         Build a system from the new_topology, adding templates
         for the molecules in oemol_list
@@ -771,8 +772,8 @@ class SystemGenerator(object):
         ----------
         new_topology : simtk.openmm.app.Topology object
             The topology of the system
-        oemol_list : list of oechem.OEMol objects
-            List of small-molecules that will need
+        oemol : oechem.OEMol objects
+            small-molecule that will need
             to be parameterized.
         forcefield_kwargs : dict of arguments to createSystem, optional
             Allows specification of various aspects of system creation.
@@ -784,12 +785,28 @@ class SystemGenerator(object):
         """
         from openmoltools import forcefield_generators
         forcefield = app.ForceField(*self._forcefields)
-        templates_ffxmls = [forcefield_generators.generateResidueTemplate(oemol) for oemol in oemol_list]
-        for template_ffxml in templates_ffxmls:
-            forcefield.registerResidueTemplate(templates_ffxmls[0])
-            forcefield.loadFile(StringIO(templates_ffxmls[1]))
+        isocan_smiles = oechem.OECreateIsoSmiString(oemol)
+        if isocan_smiles in self._ffxmls_and_templates.keys():
+            residue_template, template_ffxml = self._ffxmls_and_templates[isocan_smiles]
+        else:
+            residue_template, template_ffxml = forcefield_generators.generateResidueTemplate(oemol)
+            self._ffxmls_and_templates[isocan_smiles] = [template_ffxml, residue_template]
+        forcefield.registerResidueTemplate(residue_template)
+        forcefield.loadFile(StringIO(template_ffxml))
         system = forcefield.createSystem(new_topology, **forcefield_kwargs)
         return system
+
+class SmallMoleculeSetProposalEngine(ProposalEngine):
+    """
+    This class proposes new small molecules from a prespecified set. It uses
+    exponentiated tanimoto for proposal probabilities.
+
+    """
+
+    def __init__(self, list_of_smiles, receptor_topology, metadata=None):
+        self._list_of_smiles = list_of_smiles
+        self._receptor_pdb = receptor_topology
+
 
 class SmallMoleculeProposalEngine(ProposalEngine):
     """
