@@ -314,20 +314,24 @@ class PolymerProposalEngine(ProposalEngine):
 
 class PointMutationEngine(PolymerProposalEngine):
     """
-    Will make all mutations specified in metadata (not choosing)
 
     Arguments
     --------
+    max_point_mutants : int  (should this be in metadata?)
     proposal_metadata : dict
         Contains information necessary to initialize proposal engine
         {'ffxmls': [ffxml]}
+    allowed_mutations : list(list(tuple)) -- OPTIONAL
+        default = None
+        ('residue id to mutate','desired mutant residue name (3-letter code)')
     """
 
-    def __init__(self, max_point_mutants, proposal_metadata):
+    def __init__(self, max_point_mutants, proposal_metadata, allowed_mutations=None):
         # load templates for replacement residues -- should be taken from ff, get rid of templates directory
         self._max_point_mutants = max_point_mutants
         self._ff = app.ForceField(*proposal_metadata['ffxmls'])
         self._templates = self._ff._templates
+        self._allowed_mutations = allowed_mutations
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
         """
@@ -341,7 +345,7 @@ class PointMutationEngine(PolymerProposalEngine):
         current_positions : [n,3] ndarray of floats
             The current positions of the system
         current_metadata : dict
-            put chain_id in there? -- id of the chain to mutate
+            ['chain_id'] -- id of the chain to mutate
             (using the first chain with the id, if there are multiple)
             {'chain_id' : 'X'}
         Returns
@@ -368,8 +372,12 @@ class PointMutationEngine(PolymerProposalEngine):
             # atom.old_index : int
             atom.old_index = atom.index
 
-        # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
-        index_to_new_residues = self._propose_mutations(modeller, chain_id)
+        if self._allowed_mutations is not None:
+            allowed_mutations = self._allowed_mutations
+            index_to_new_residues = self._choose_mutation_from_allowed(modeller, chain_id, allowed_mutations)
+        else:
+            # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
+            index_to_new_residues = self._propose_mutations(modeller, chain_id)
         # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
         metadata['mutations'] = self._save_mutations(modeller, index_to_new_residues)
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
@@ -397,12 +405,19 @@ class PointMutationEngine(PolymerProposalEngine):
 
         return PolymerTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
 
-    def _propose_mutations(self, modeller, chain_id):
+    def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations):
         """
+        Used when allowed mutations have been specified
+        Assume (for now) uniform probability of selecting each specified mutant
+
         Arguments
         ---------
         modeller : simtk.openmm.app.Modeller
         chain_id : str
+        allowed_mutations : list(list(tuple))
+            list of allowed mutant states; each entry in the list is a list because multiple mutations may be desired
+            tuple : (str, str) -- residue id and three-letter amino acid code of desired mutant
+
         Returns
         -------
         index_to_new_residues : dict
@@ -410,12 +425,49 @@ class PointMutationEngine(PolymerProposalEngine):
             value : str (three letter residue name)
         """
         index_to_new_residues = dict()
+        
+        # chain : simtk.openmm.app.topology.Chain
+        for chain in modeller.topology.chains():
+            if chain.id == chain_id:
+                break
+        residue_id_to_index = [residue.id for residue in chain._residues]
+        # location_prob : np.array, probability value for each residue location (uniform)
+        location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations))])
+        proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
+        for residue_id, residue_name in allowed_mutations[proposed_location]:
+            # original_residue : simtk.openmm.app.topology.Residue
+            original_residue = chain._residues[residue_id_to_index.index(residue_id)]
+            # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+            index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
+            if residue_name == 'HIS':
+                his_state = ['HIE','HID']
+                his_prob = np.array([0.5 for i in range(len(his_state))])
+                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
+
+        # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+        return index_to_new_residues
+
+    def _propose_mutations(self, modeller, chain_id):
+        """
+        Arguments
+        ---------
+        modeller : simtk.openmm.app.Modeller
+        chain_id : str
+
+        Returns
+        -------
+        index_to_new_residues : dict
+            key : int (index, zero-indexed in chain)
+            value : str (three letter residue name)
+        """
+        index_to_new_residues = dict()
+        
         # this shouldn't be here
         aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
         # chain : simtk.openmm.app.topology.Chain
         for chain in modeller.topology.chains():
             if chain.id == chain_id:
-                # how do i get it to tell me a number of residues
                 # num_residues : int
                 num_residues = len(chain._residues)
                 break
