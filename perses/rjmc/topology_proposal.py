@@ -838,24 +838,31 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         current_mol_idx = self._oemol_smile_dict[current_mol_smiles]
         current_mol = self._oemol_list[current_mol_idx]
 
-        current_mol_start_index = 0
+        current_mol_start_index = self._find_mol_start_index(current_topology)
 
         #choose the next molecule to simulate:
         proposed_idx, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
                                                                            current_positions, current_mol_smiles)
         proposed_mol_smiles = self._smiles_list[proposed_idx]
 
-        proposed_topology, new_mol_start_index = self._build_new_topology(proposed_mol)
+        new_topology, new_mol_start_index = self._build_new_topology(proposed_mol)
+        new_system = self._system_generator.build_system(new_topology)
+
 
         #map the atoms between the new and old molecule only:
         mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
 
+        #adjust the atom map for the presence of the receptor:
+        adjusted_atom_map = {}
+        for (key, value) in mol_atom_map:
+            adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
+
                 #Create the TopologyProposal and return it
         proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
                                                  old_positions=current_positions, logp_proposal=logp_proposal, beta=beta,
-                                                 new_to_old_atom_map=new_to_old_atom_map, molecule_smiles=proposed_mol_smiles)
+                                                 new_to_old_atom_map=adjusted_atom_map, molecule_smiles=proposed_mol_smiles)
 
-    def _find_mol_start_index(self, topology, resname='Mol'):
+    def _find_mol_start_index(self, topology, resname='MOL'):
         """
         Find the starting index of the molecule in the topology.
         Throws an exception if resname is not present.
