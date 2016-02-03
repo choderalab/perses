@@ -763,7 +763,7 @@ class SystemGenerator(object):
 
     def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None):
         self._forcefields = forcefields_to_use
-        self._forcefield_kwargs = forcefield_kwargs
+        self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefields)
         self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
