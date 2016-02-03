@@ -857,7 +857,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         #adjust the atom map for the presence of the receptor:
         adjusted_atom_map = {}
-        for (key, value) in mol_atom_map:
+        for (key, value) in mol_atom_map.items():
             adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
 
                 #Create the TopologyProposal and return it
@@ -941,7 +941,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for i, smile in enumerate(list_of_smiles):
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smile)
+            mol.SetTitle("MOL")
             oechem.OEAddExplicitHydrogens(mol)
+            oechem.OETriposAtomNames(mol)
+            oechem.OETriposBondTypeNames(mol)
             omega = oeomega.OEOmega()
             omega.SetMaxConfs(1)
             omega(mol)
