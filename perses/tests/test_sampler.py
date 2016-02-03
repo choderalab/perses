@@ -59,10 +59,10 @@ def oemol_to_openmm_system(oemol, molecule_name):
 
 def oemol_to_omm_ff(oemol, molecule_name):
     from perses.rjmc import topology_proposal
-    from openmoltools import forcefiled_generators
+    from openmoltools import forcefield_generators
     gaff_xml_filename = get_data_filename('data/gaff.xml')
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    topology = forcefiled_generators.generateTopologyFromOEMol(oemol)
+    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
     system = system_generator.build_system(topology)
     positions = extractPositionsFromOEMOL(oemol)
     return system, positions, topology
