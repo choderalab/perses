@@ -32,6 +32,8 @@ def generate_initial_molecule(mol_smiles):
     mol = oechem.OEMol()
     oechem.OESmilesToMol(mol, mol_smiles)
     oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega(mol)
