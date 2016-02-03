@@ -5,6 +5,8 @@ import openeye.oechem as oechem
 import openeye.oeomega as oeomega
 import openmoltools
 import logging
+from pkg_resources import resource_filename
+import os
 import copy
 import perses.rjmc.topology_proposal as topology_proposal
 import perses.bias.bias_engine as bias_engine
@@ -72,7 +74,8 @@ def test_run_example():
     smiles = 'CC' # current sampler state
     initial_molecule = generate_initial_molecule("CC")
     initial_sys, initial_pos, initial_top = oemol_to_openmm_system(initial_molecule, "ligand_old")
-    system_generator = topology_proposal.SystemGenerator(["gaff.xml"])
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
 
     # Create proposal metadata, such as the list of molecules to sample (SMILES here)
     proposal_metadata = {'smiles_list': smiles_list}
@@ -173,6 +176,25 @@ def test_run_example():
 
     print("The total number accepted was %d out of %d iterations" % (n_accepted, niterations))
     print(stats)
+
+def get_data_filename(relative_path):
+    """Get the full path to one of the reference files shipped for testing
+    In the source distribution, these files are in ``perses/data/*/``,
+    but on installation, they're moved to somewhere in the user's python
+    site-packages directory.
+    Parameters
+    ----------
+    name : str
+        Name of the file to load (with respect to the openmoltools folder).
+    """
+
+    fn = resource_filename('perses', relative_path)
+
+    if not os.path.exists(fn):
+        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
+
+    return fn
+
 
 if __name__=="__main__":
     test_run_example()
