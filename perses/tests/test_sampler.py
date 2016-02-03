@@ -18,6 +18,13 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 # TURN LOGGER ON
 #logging.basicConfig(level=logging.DEBUG)
 
+def extractPositionsFromOEMOL(molecule):
+    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
+    coords = molecule.GetCoords()
+    for index in range(molecule.NumAtoms()):
+        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
+    return positions
+
 def generate_initial_molecule(mol_smiles):
     """
     Generate an oemol with a geometry
@@ -50,6 +57,16 @@ def oemol_to_openmm_system(oemol, molecule_name):
     crd = app.AmberInpcrdFile(inpcrd_file)
     return system, crd.getPositions(asNumpy=True), prmtop.topology
 
+def oemol_to_omm_ff(oemol, molecule_name):
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefiled_generators
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    topology = forcefiled_generators.generateTopologyFromOEMol(oemol)
+    system = system_generator.build_system(topology)
+    positions = extractPositionsFromOEMOL(oemol)
+    return system, positions, topology
+
 def test_run_example():
     # Run parameters
     temperature = 300.0 * unit.kelvin # temperature
@@ -73,7 +90,7 @@ def test_run_example():
     # Initialize sampler state.
     smiles = 'CC' # current sampler state
     initial_molecule = generate_initial_molecule("CC")
-    initial_sys, initial_pos, initial_top = oemol_to_openmm_system(initial_molecule, "ligand_old")
+    initial_sys, initial_pos, initial_top = oemol_to_omm_ff(initial_molecule, "ligand_old")
     gaff_xml_filename = get_data_filename('data/gaff.xml')
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
 
