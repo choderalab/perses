@@ -807,7 +807,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._receptor_topology = receptor_topology
         self._smiles_list = list_of_smiles
         self._n_molecules = len(list_of_smiles)
-        self._oemol_list, self._oemol_smile_dict = self._smiles_to_oemol()
         self._generated_systems = dict()
         self._generated_topologies = dict()
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata)
@@ -834,19 +833,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : SmallMoleculeTopologyProposal object
            topology proposal object
         """
-        current_mol_smiles = self._topology_to_smiles(current_topology)
-        current_mol_idx = self._oemol_smile_dict[current_mol_smiles]
-        current_mol = self._oemol_list[current_mol_idx]
+        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
 
         current_mol_start_index = self._find_mol_start_index(current_topology)
 
         #choose the next molecule to simulate:
-        proposed_idx, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
+        proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
                                                                            current_positions, current_mol_smiles)
-        proposed_mol_smiles = self._smiles_list[proposed_idx]
 
         new_topology, new_mol_start_index = self._build_new_topology(proposed_mol)
         new_system = self._system_generator.build_system(new_topology)
+        smiles_new, _ = self._topology_to_smiles(new_topology)
+        assert smiles_new == proposed_mol_smiles
 
 
         #map the atoms between the new and old molecule only:
@@ -882,6 +880,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         -------
         smiles_string : string
             an isomeric canonicalized SMILES string representing the molecule
+        oemol : oechem.OEMol object
+            molecule
         """
 
         matching_molecules = [res for res in topology.residues() if res.name==molecule_name]
@@ -890,7 +890,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
         smiles_string = oechem.OECreateIsoSmiString(oemol)
-        return smiles_string
+        return smiles_string, oemol
 
 
     def _find_mol_start_index(self, topology, resname='MOL'):
@@ -952,32 +952,25 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return new_topology, mol_start_index
 
 
-    def _smiles_to_oemol(self):
+    def _smiles_to_oemol(self, smiles_string):
         """
-        Convert the list of smiles into a list of oemol objects. Explicit hydrogens
-        are added, but no geometry is created.
+        Convert the SMILES string into an OEMol
 
         Returns
         -------
         oemols : np.array of type object
             array of oemols
         """
-        list_of_smiles = self._smiles_list
-        oemols = np.zeros(self._n_molecules, dtype=object)
-        oemol_smile_dict = dict()
-        for i, smile in enumerate(list_of_smiles):
-            mol = oechem.OEMol()
-            oechem.OESmilesToMol(mol, smile)
-            mol.SetTitle("MOL")
-            oechem.OEAddExplicitHydrogens(mol)
-            oechem.OETriposAtomNames(mol)
-            oechem.OETriposBondTypeNames(mol)
-            omega = oeomega.OEOmega()
-            omega.SetMaxConfs(1)
-            omega(mol)
-            oemols[i] = mol
-            oemol_smile_dict[smile] = i
-        return oemols, oemol_smile_dict
+        mol = oechem.OEMol()
+        oechem.OESmilesToMol(mol, smiles_string)
+        mol.SetTitle("MOL")
+        oechem.OEAddExplicitHydrogens(mol)
+        oechem.OETriposAtomNames(mol)
+        oechem.OETriposBondTypeNames(mol)
+        omega = oeomega.OEOmega()
+        omega.SetMaxConfs(1)
+        omega(mol)
+        return mol
 
     def _get_mol_atom_map(self, current_molecule, proposed_molecule):
         """
@@ -1040,8 +1033,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             The log probability of the choice
         """
         current_idx = self._smiles_list.index(molecule_smiles)
-        prob = np.array([1.0/(self._n_molecules-1) for i in range(self._n_molecules)])
-        prob[current_idx] = 0.0
-        proposed_idx = np.random.choice(range(self._n_molecules), p=prob)
-        return proposed_idx, self._oemol_list[proposed_idx], 0.0
+        #prob = np.array([1.0/(self._n_molecules-1) for i in range(self._n_molecules)])
+        proposed_smiles = np.random.choice(self._smiles_list)
+        proposed_mol = self._smiles_to_oemol(proposed_smiles)
+        return proposed_smiles, proposed_mol, 0.0
 

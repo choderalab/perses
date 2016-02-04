@@ -2,7 +2,9 @@ import simtk.openmm.app as app
 import simtk.openmm as openmm
 import simtk.unit as unit
 import copy
+from pkg_resources import resource_filename
 import numpy as np
+import os
 try:
     from urllib.request import urlopen
     from io import StringIO
@@ -16,6 +18,24 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 kT = kB * temperature
 beta = 1.0 / kT
 
+def get_data_filename(relative_path):
+    """Get the full path to one of the reference files shipped for testing
+    In the source distribution, these files are in ``perses/data/*/``,
+    but on installation, they're moved to somewhere in the user's python
+    site-packages directory.
+    Parameters
+    ----------
+    name : str
+        Name of the file to load (with respect to the openmoltools folder).
+    """
+
+    fn = resource_filename('perses', relative_path)
+
+    if not os.path.exists(fn):
+        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
+
+    return fn
+
 def extractPositionsFromOEMOL(molecule):
     positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
     coords = molecule.GetCoords()
@@ -27,6 +47,8 @@ def generate_initial_molecule(mol_smiles):
     """
     Generate an oemol with a geometry
     """
+    import openeye.oechem as oechem
+    import openeye.oeomega as oeomega
     mol = oechem.OEMol()
     oechem.OESmilesToMol(mol, mol_smiles)
     mol.SetTitle("MOL")
@@ -56,8 +78,9 @@ def test_small_molecule_proposals():
     from openmoltools import forcefield_generators
     import openeye.oechem as oechem
     list_of_smiles = ['CCC','CCCC','CCCCC']
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
     stats_dict = {smiles : 0 for smiles in list_of_smiles}
-    system_generator = topology_proposal.SystemGenerator(['gaff.xml'])
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, app.Topology(), system_generator)
     initial_molecule = generate_initial_molecule('CCC')
     initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
@@ -72,8 +95,10 @@ def test_small_molecule_proposals():
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        smiles_string = oechem.OECreateIsoSmiString(oemol)
-        assert smiles_string==new_proposal.molecule_smiles
+        smiles_string = oechem.OEMolToSmiles(oemol)
+        old_smiles = proposal.molecule_smiles
+        assert smiles_string==old_smiles
+        proposal = new_proposal
 
 
 
@@ -410,5 +435,6 @@ if __name__ == "__main__":
     test_run_point_mutation_engine()
     test_mutate_from_every_amino_to_every_other()
     test_specify_allowed_mutants()
+    test_small_molecule_proposals()
 
 
