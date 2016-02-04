@@ -404,7 +404,10 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addGlobalVariable('initial_total_energy', 0.0) # initial total energy (kinetic + potential)
         self.addGlobalVariable('final_total_energy', 0.0) # final total energy (kinetic + potential)
         self.addGlobalVariable('log_ncmc_acceptance_probability', 0.0) # log of NCMC acceptance probability
-        self.addGlobalVariable('dti', timestep.in_unit_system(unit.md_unit_system))
+        if nsteps == 0:
+            self.addGlobalVariable('dti', 0.0) # inner timestep
+        else:
+            self.addGlobalVariable('dti', timestep.value_in_unit_system(unit.md_unit_system) / float(nsteps)) # inner timestep
         self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
         self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
 
@@ -432,7 +435,6 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         # Store initial total energy.
         self.addComputeSum("kinetic", "0.5*m*v*v")
         self.addComputeGlobal('initial_total_energy', 'kinetic + energy')
-        self.addComputeGlobal('dti', 'dt/%f' % nsteps)
 
         #
         # Initial Velocity Verlet propagation step
@@ -468,11 +470,10 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             # Alchemical perturbation step
             #
 
-            delta_lambda = 1.0/nsteps
             if direction == 'insert':
-                self.addComputeGlobal('lambda', '%f' % (delta_lambda * (step+1)))
+                self.addComputeGlobal('lambda', 'max(0,min(1,%f))' % (float(step+1.0) / float(nsteps)))
             elif direction == 'delete':
-                self.addComputeGlobal('lambda', '%f' % (delta_lambda * (nsteps - step - 1)))
+                self.addComputeGlobal('lambda', 'max(0,min(1,%f))' % (float(nsteps - step - 1) / float(nsteps)))
 
             # Update Context parameters according to provided functions.
             for context_parameter in functions:
@@ -496,6 +497,8 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
 
         # Compute log acceptance probability.
         self.addComputeGlobal('log_ncmc_acceptance_probability', '-1 * (final_total_energy - initial_total_energy) / %f' % kT)
+
+        return
 
     def getLogAcceptanceProbability(self):
         return self.getGlobalVariableByName('log_ncmc_acceptance_probability')

@@ -55,7 +55,7 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
-def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=20.0/unit.picoseconds):
+def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds):
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = openmm.Context(system, integrator)
     context.setPositions(positions)
@@ -80,7 +80,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    platform = openmm.Platform.getPlatformByName('OpenCL')
+    platform = openmm.Platform.getPlatformByName('CPU')
     ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform)
 
     # Make sure that old system and new system are identical.
@@ -143,7 +143,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         msg += str(logP_n) + '\n'
         raise Exception(msg)
 
-def test_ncmc_alchemical_integrator():
+def test_ncmc_alchemical_integrator_stability():
     """
     Test NCMCAlchemicalIntegrator
 
@@ -168,7 +168,7 @@ def test_ncmc_alchemical_integrator():
         from perses.annihilation.ncmc_switching import NCMCAlchemicalIntegrator
         temperature = 300.0 * unit.kelvin
         functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
-        ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete', nsteps=1, timestep=1.0*unit.femtoseconds)
+        ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete', nsteps=10, timestep=1.0*unit.femtoseconds)
 
         # Create a Context
         platform = openmm.Platform.getPlatformByName('OpenCL')
@@ -178,17 +178,18 @@ def test_ncmc_alchemical_integrator():
         # Run the integrator
         ncmc_integrator.step(1)
 
-        # Retrieve the log acceptance probability
-        log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
-
-        if np.isnan(log_ncmc):
-            raise Exception('NCMCAlchemicalIntegrator gave NaN log acceptance probability')
+        # Check positions are finite
+        positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+        if np.isnan(np.any(positions / positions.unit)):
+            raise Exception('NCMCAlchemicalIntegrator gave NaN positions')
+        if np.isnan(ncmc_integrator.getLogAcceptanceProbability()):
+            raise Exception('NCMCAlchemicalIntegrator gave NaN logAcceptanceProbability')
 
         del context, ncmc_integrator
 
 def test_ncmc_engine_molecule():
     """
-    Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, and 50 switching steps.
+    Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
 
     """
     molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
@@ -204,7 +205,7 @@ def test_ncmc_engine_molecule():
         topology_proposal = SmallMoleculeTopologyProposal(
             new_topology=topology, new_system=system, old_topology=topology, old_system=system,
             old_positions=positions, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
-        for ncmc_nsteps in [0, 1, 50]:
+        for ncmc_nsteps in [0, 1, 2, 50]:
             f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
@@ -221,7 +222,7 @@ def disable_alchemical_elimination_peptide():
         new_system=testsystem.system, new_topology=testsystem.topology,
         logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
 
-    for ncmc_nsteps in [0, 1, 50]:
+    for ncmc_nsteps in [0, 1, 2, 50]:
         f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
