@@ -206,7 +206,8 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps)
+    platform = openmm.Platform.getPlatformByName('CPU')
+    ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps, platform=platform)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -304,3 +305,8 @@ def disable_alchemical_elimination_peptide():
         f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
+
+if __name__ == "__main__":
+    print(__name__)
+    for x in test_alchemical_elimination_molecule():
+        x()
