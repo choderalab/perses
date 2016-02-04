@@ -812,7 +812,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._generated_topologies = dict()
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata)
 
-    def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
+    def propose(self, current_system, current_topology, current_positions, beta, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -1027,7 +1027,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             The current topology
         positions : [n, 3] np.ndarray of floats (Quantity nm)
             The current positions of the system
-        molecule_smiles : dict
+        molecule_smiles : string
             The current molecule smiles
 
         Returns
