@@ -62,7 +62,8 @@ def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temp
     context.setVelocitiesToTemperature(temperature)
     integrator.step(nsteps)
     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-    return positions
+    velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
+    return [positions, velocities]
 
 def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_MAX=6.0):
     """
@@ -80,7 +81,8 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    platform = openmm.Platform.getPlatformByName('Reference')
+    platform = openmm.Platform.getPlatformByName('OpenCL')
+    platform.setPropertyDefaultValue('OpenCLPrecision', 'double')
     ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform)
 
     # Make sure that old system and new system are identical.
@@ -98,10 +100,10 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     positions = topology_proposal.old_positions
     print("")
     for iteration in range(nequil):
-        positions = simulate(topology_proposal.old_system, positions)
+        [positions, velocities] = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
         # Equilibrate
-        positions = simulate(topology_proposal.old_system, positions)
+        [positions, velocities] = simulate(topology_proposal.old_system, positions)
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
@@ -143,7 +145,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         msg += str(logP_n) + '\n'
         raise Exception(msg)
 
-def test_ncmc_alchemical_integrator_stability():
+def disable_ncmc_alchemical_integrator_stability():
     """
     Test NCMCAlchemicalIntegrator
 
@@ -187,7 +189,7 @@ def test_ncmc_alchemical_integrator_stability():
 
         del context, ncmc_integrator
 
-def test_ncmc_engine_molecule():
+def disable_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
 
@@ -209,6 +211,68 @@ def test_ncmc_engine_molecule():
             f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
+
+
+def test_ncmc_integrator_platforms():
+    """
+    Compare NCMC integrator behavior across platforms.
+
+    """
+    molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
+    for molecule_name in molecule_names:
+        from perses.tests.utils import createSystemFromIUPAC
+        [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
+
+        # Eliminate half of the molecule
+        # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
+        alchemical_atoms = [ index for index in range(int(system.getNumParticles()/2)) ]
+
+        # Create an alchemically-modified system.
+        from alchemy import AbsoluteAlchemicalFactory
+        alchemical_factory = AbsoluteAlchemicalFactory(system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
+
+        # Return the alchemically-modified system in fully-interacting form.
+        alchemical_system = alchemical_factory.createPerturbedSystem()
+
+        # Create an NCMC switching integrator.
+        from perses.annihilation.ncmc_switching import NCMCAlchemicalIntegrator
+        temperature = 300.0 * unit.kelvin
+        functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
+
+        print("")
+        niterations = 10
+        for iteration in range(niterations):
+            # Equilibrate
+            [positions, velocities] = simulate(alchemical_system, positions)
+            
+            print("ITERATION %5d : Starting from identical positions and velocities..." % iteration)
+            for platform_index in range(openmm.Platform.getNumPlatforms()):
+                platform = openmm.Platform.getPlatform(platform_index)
+                platform_name = platform.getName()
+
+                # Create integrator
+                ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete', nsteps=10, timestep=1.0*unit.femtoseconds)
+
+                # Create a Context
+                context = openmm.Context(alchemical_system, ncmc_integrator, platform)
+                context.setPositions(positions)
+                context.setVelocities(velocities)
+
+                # Run the integrator
+                ncmc_integrator.step(1)
+
+                # Report positions and logP
+                final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+                log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
+                str = '%12s : %16.8f :' % (platform_name, log_ncmc)
+                for i in range(system.getNumParticles()):
+                    str += ' ['
+                    for j in range(3):
+                        str += '%8.3f' % (final_positions[i,j] / unit.angstroms)
+                    str += ']'
+                print(str)
+
+                del context, ncmc_integrator
 
 def disable_alchemical_elimination_peptide():
     # Create an alanine dipeptide null transformation, where N-methyl group is deleted and then inserted.
