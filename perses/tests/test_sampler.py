@@ -40,26 +40,6 @@ def generate_initial_molecule(mol_smiles):
     omega(mol)
     return mol
 
-def oemol_to_openmm_system(oemol, molecule_name):
-    """
-    Create an openmm system out of an oemol
-
-    Returns
-    -------
-    system : openmm.System object
-        the system from the molecule
-    positions : [n,3] np.array of floats
-    """
-    from openmoltools.amber import run_tleap, run_antechamber
-    from openmoltools.openeye import molecule_to_mol2
-    _ , tripos_mol2_filename = molecule_to_mol2(oemol, tripos_mol2_filename=molecule_name + '.tripos.mol2', conformer=0, residue_name='MOL')
-    gaff_mol2, frcmod = run_antechamber(molecule_name, tripos_mol2_filename)
-    prmtop_file, inpcrd_file = run_tleap(molecule_name, gaff_mol2, frcmod)
-    prmtop = app.AmberPrmtopFile(prmtop_file)
-    system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
-    crd = app.AmberInpcrdFile(inpcrd_file)
-    return system, crd.getPositions(asNumpy=True), prmtop.topology
-
 def oemol_to_omm_ff(oemol, molecule_name):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators

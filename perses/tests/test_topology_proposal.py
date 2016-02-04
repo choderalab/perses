@@ -1,4 +1,5 @@
 import simtk.openmm.app as app
+import simtk.openmm as openmm
 import copy
 import numpy as np
 try:
@@ -7,6 +8,20 @@ try:
 except:
     from urllib2 import urlopen
     from cStringIO import StringIO
+
+def test_small_molecule_proposals():
+    """
+    Make sure the small molecule proposal engine generates molecules uniformly
+    """
+    from perses.rjmc import topology_proposal
+    list_of_smiles = ['CCC','CCCC','CCCCC']
+    stats_dict = {smiles : 0 for smiles in list_of_smiles}
+    system_generator = topology_proposal.SystemGenerator(['gaff.xml'])
+    proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, app.Topology(), system_generator)
+    initial_system =
+    for i in range(50):
+
+
 
 
 def load_pdbid_to_openmm(pdbid):
