@@ -29,6 +29,9 @@ else:
 ################################################################################
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+temperature = 300.0 * unit.kelvin
+kT = kB * temperature
+beta = 1.0/kT
 
 ################################################################################
 # TESTS
@@ -181,7 +184,7 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
-def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=300.0*unit.kelvin, collision_rate=20.0/unit.picoseconds):
+def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=20.0/unit.picoseconds):
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = openmm.Context(system, integrator)
     context.setPositions(positions)
@@ -209,6 +212,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     platform = openmm.Platform.getPlatformByName('CPU')
     ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps, platform=platform)
 
+
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
         raise Exception("topology_proposal must be a null transformation for this test (old_system == new_system)")
@@ -220,6 +224,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     niterations = 30 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
+    logP_switch_n = np.zeros([niterations], np.float64)
     positions = topology_proposal.old_positions
     print("")
     for iteration in range(nequil):
@@ -233,14 +238,14 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
             raise Exception("Positions became NaN during equilibration")
 
         # Delete atoms
-        [positions, logP_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
+        [positions, logP_delete, potential_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
             raise Exception("Positions became NaN on NCMC deletion")
 
         # Insert atoms
-        [positions, logP_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
+        [positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
@@ -249,10 +254,11 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
         logP_insert_n[iteration] = logP_insert
+        logP_switch_n[iteration] = - (potential_insert - potential_delete) / kT
         #print("Iteration %5d : delete %16.8f kT | insert %16.8f kT" % (iteration, logP_delete, logP_insert))
 
     # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
-    logP_n = logP_delete_n + logP_insert_n
+    logP_n = logP_delete_n + logP_insert_n + logP_switch_n
     work_n = - logP_n
     from pymbar import EXP
     [df, ddf] = EXP(work_n)
