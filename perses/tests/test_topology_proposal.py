@@ -1,5 +1,6 @@
 import simtk.openmm.app as app
 import simtk.openmm as openmm
+import simtk.unit as unit
 import copy
 import numpy as np
 try:
@@ -8,6 +9,12 @@ try:
 except:
     from urllib2 import urlopen
     from cStringIO import StringIO
+
+temperature = 300*unit.kelvin
+kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+# Compute kT and inverse temperature.
+kT = kB * temperature
+beta = 1.0 / kT
 
 def extractPositionsFromOEMOL(molecule):
     positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
@@ -43,17 +50,32 @@ def oemol_to_omm_ff(oemol, molecule_name):
 
 def test_small_molecule_proposals():
     """
-    Make sure the small molecule proposal engine generates molecules uniformly
+    Make sure the small molecule proposal engine generates molecules
     """
     from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    import openeye.oechem as oechem
     list_of_smiles = ['CCC','CCCC','CCCCC']
     stats_dict = {smiles : 0 for smiles in list_of_smiles}
     system_generator = topology_proposal.SystemGenerator(['gaff.xml'])
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, app.Topology(), system_generator)
     initial_molecule = generate_initial_molecule('CCC')
     initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
-    initial_proposal = proposal_engine.propose(initial_system, initial_topology, initial_positions, beta, {'molecule_smiles' : 'CCC'})
+    proposal = proposal_engine.propose(initial_system, initial_topology, initial_positions, beta)
     for i in range(50):
+        #positions are ignored here, and we don't want to run the geometry engine
+        new_proposal = proposal_engine.propose(proposal.old_system, proposal.old_topology, initial_positions, beta)
+        stats_dict[new_proposal.molecule_smiles] += 1
+        #check that the molecule it generated is actually the smiles we expect
+        matching_molecules = [res for res in proposal.new_topology.residues() if res.name=='MOL']
+        if len(matching_molecules) != 1:
+            raise ValueError("More than one residue with the same name!")
+        mol_res = matching_molecules[0]
+        oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
+        smiles_string = oechem.OECreateIsoSmiString(oemol)
+        assert smiles_string==new_proposal.molecule_smiles
+
+
 
 
 
