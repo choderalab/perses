@@ -265,11 +265,11 @@ class PolymerTopologyProposal(TopologyProposal):
     metadata : dict
         additional information of interest about the state
     """
-#    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-#                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
-#        super(PolymerTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
-#                                                           old_system=old_system, old_positions=old_positions,
-#                                                           logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
+    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
+                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
+        super(PolymerTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
+                                                           old_system=old_system, old_positions=old_positions,
+                                                           logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
 
 
 class ProposalEngine(object):
@@ -310,8 +310,8 @@ class ProposalEngine(object):
         return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self, proposal_metadata):
-        pass
+    def __init__(self, system_generator, proposal_metadata):
+        super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata)
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
         return PolymerTopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
@@ -330,7 +330,8 @@ class PointMutationEngine(PolymerProposalEngine):
         ('residue id to mutate','desired mutant residue name (3-letter code)')
     """
 
-    def __init__(self, max_point_mutants, proposal_metadata, allowed_mutations=None):
+    def __init__(self, system_generator, max_point_mutants, proposal_metadata, allowed_mutations=None):
+        super(PointMutationEngine,self).__init__(system_generator, proposal_metadata)
         # load templates for replacement residues -- should be taken from ff, get rid of templates directory
         self._max_point_mutants = max_point_mutants
         self._ff = app.ForceField(*proposal_metadata['ffxmls'])
@@ -403,9 +404,8 @@ class PointMutationEngine(PolymerProposalEngine):
                 pass
         new_topology = modeller.topology
 
-#        new_system = openmm.System()
-        new_system = self._ff.createSystem(new_topology)
-        #### Error: need to make a new system ugh. why.
+        # new_system : simtk.openmm.System
+        new_system = self._system_generator.build_system(new_topology)
 
         return PolymerTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
 
@@ -658,7 +658,7 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _add_new_atoms(self, modeller, missing_atoms, residue_map):
         """
-        add new atoms to new residues
+        add new atoms (and corresponding bonds) to new residues
 
         Arguments
         ---------
