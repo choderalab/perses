@@ -321,7 +321,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
     >>> temperature = 300.0 * unit.kelvin
-    >>> functions = { 'alchemical_sterics' : 'lambda' }
+    >>> functions = { 'lambda_sterics' : 'lambda' }
     >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)

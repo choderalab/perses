@@ -37,135 +37,6 @@ beta = 1.0/kT
 # TESTS
 ################################################################################
 
-# TODO: Move some of these utility routines to openmoltools.
-
-def extractPositionsFromOEMOL(molecule):
-    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
-    coords = molecule.GetCoords()
-    for index in range(molecule.NumAtoms()):
-        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
-    return positions
-
-def createOEMolFromIUPAC(iupac_name='bosutinib'):
-    from openeye import oechem, oeiupac, oeomega
-
-    # Create molecule.
-    mol = oechem.OEMol()
-    oeiupac.OEParseIUPACName(mol, iupac_name)
-    mol.SetTitle(iupac_name)
-
-    # Assign aromaticity and hydrogens.
-    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
-    oechem.OEAddExplicitHydrogens(mol)
-
-    # Create atom names.
-    oechem.OETriposAtomNames(mol)
-
-    # Assign geometry
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega.SetIncludeInput(False)
-    omega.SetStrictStereo(True)
-    omega(mol)
-
-    return mol
-
-def generate_gaff_xml():
-    """
-    Return a file-like object for `gaff.xml`
-    """
-    from openmoltools import amber
-    gaff_dat_filename = amber.find_gaff_dat()
-
-    # Generate ffxml file contents for parmchk-generated frcmod output.
-    leaprc = StringIO("parm = loadamberparams %s" % gaff_dat_filename)
-    import parmed
-    params = parmed.amber.AmberParameterSet.from_leaprc(leaprc)
-    params = parmed.openmm.OpenMMParameterSet.from_parameterset(params)
-    citations = """\
-Wang, J., Wang, W., Kollman P. A.; Case, D. A. "Automatic atom type and bond type perception in molecular mechanical calculations". Journal of Molecular Graphics and Modelling , 25, 2006, 247260.
-Wang, J., Wolf, R. M.; Caldwell, J. W.;Kollman, P. A.; Case, D. A. "Development and testing of a general AMBER force field". Journal of Computational Chemistry, 25, 2004, 1157-1174.
-"""
-    ffxml = str()
-    gaff_xml = StringIO(ffxml)
-    provenance=dict(OriginalFile='gaff.dat', Reference=citations)
-    params.write(gaff_xml, provenance=provenance)
-
-    return gaff_xml
-
-def get_data_filename(relative_path):
-    """Get the full path to one of the reference files shipped for testing
-
-    In the source distribution, these files are in ``perses/data/*/``,
-    but on installation, they're moved to somewhere in the user's python
-    site-packages directory.
-
-    Parameters
-    ----------
-    name : str
-        Name of the file to load (with respect to the openmoltools folder).
-
-    """
-
-    fn = resource_filename('perses', relative_path)
-
-    if not os.path.exists(fn):
-        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
-
-    return fn
-
-def createSystemFromIUPAC(iupac_name):
-    """
-    Create an openmm system out of an oemol
-
-    Parameters
-    ----------
-    iupac_name : str
-        IUPAC name
-
-    Returns
-    -------
-    molecule : openeye.OEMol
-        OEMol molecule
-    system : openmm.System object
-        OpenMM system
-    positions : [n,3] np.array of floats
-        Positions
-    topology : openmm.app.Topology object
-        Topology
-    """
-
-    # Create OEMol
-    molecule = createOEMolFromIUPAC(iupac_name)
-
-    # Generate a topology.
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    topology = generateTopologyFromOEMol(molecule)
-
-    # Initialize a forcefield with GAFF.
-    # TODO: Fix path for `gaff.xml` since it is not yet distributed with OpenMM
-    from simtk.openmm.app import ForceField
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    forcefield = ForceField(gaff_xml_filename)
-
-    # Generate template and parameters.
-    from openmoltools.forcefield_generators import generateResidueTemplate
-    [template, ffxml] = generateResidueTemplate(molecule)
-
-    # Register the template.
-    forcefield.registerResidueTemplate(template)
-
-    # Add the parameters.
-    forcefield.loadFile(StringIO(ffxml))
-
-    # Create the system.
-    system = forcefield.createSystem(topology)
-
-    # Extract positions
-    positions = extractPositionsFromOEMOL(molecule)
-
-    return (molecule, system, positions, topology)
-
 def align_molecules(mol1, mol2):
     """
     MCSS two OEmols. Return the mapping of new : old atoms
@@ -209,7 +80,8 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps)
+    platform = openmm.Platform.getPlatformByName('OpenCL')
+    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -271,13 +143,57 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         msg += str(logP_n) + '\n'
         raise Exception(msg)
 
-def test_alchemical_elimination_molecule():
+def test_ncmc_alchemical_integrator():
+    """
+    Test NCMCAlchemicalIntegrator
+
+    """
+    molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
+    for molecule_name in molecule_names:
+        from perses.tests.utils import createSystemFromIUPAC
+        [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
+
+        # Eliminate half of the molecule
+        # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
+        alchemical_atoms = [ index for index in range(int(system.getNumParticles()/2)) ]
+
+        # Create an alchemically-modified system.
+        from alchemy import AbsoluteAlchemicalFactory
+        alchemical_factory = AbsoluteAlchemicalFactory(system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
+
+        # Return the alchemically-modified system in fully-interacting form.
+        alchemical_system = alchemical_factory.createPerturbedSystem()
+
+        # Create an NCMC switching integrator.
+        from perses.annihilation.ncmc_switching import NCMCAlchemicalIntegrator
+        temperature = 300.0 * unit.kelvin
+        functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
+        ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete', nsteps=1, timestep=1.0*unit.femtoseconds)
+
+        # Create a Context
+        platform = openmm.Platform.getPlatformByName('OpenCL')
+        context = openmm.Context(alchemical_system, ncmc_integrator, platform)
+        context.setPositions(positions)
+
+        # Run the integrator
+        ncmc_integrator.step(1)
+
+        # Retrieve the log acceptance probability
+        log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
+
+        if np.isnan(log_ncmc):
+            raise Exception('NCMCAlchemicalIntegrator gave NaN log acceptance probability')
+
+        del context, ncmc_integrator
+
+def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, and 50 switching steps.
 
     """
     molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
     for molecule_name in molecule_names:
+        from perses.tests.utils import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
         natoms = system.getNumParticles()
         # Eliminate half of the molecule
