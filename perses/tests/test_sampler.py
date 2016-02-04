@@ -5,6 +5,8 @@ import openeye.oechem as oechem
 import openeye.oeomega as oeomega
 import openmoltools
 import logging
+from pkg_resources import resource_filename
+import os
 import copy
 import perses.rjmc.topology_proposal as topology_proposal
 import perses.bias.bias_engine as bias_engine
@@ -16,37 +18,37 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 # TURN LOGGER ON
 #logging.basicConfig(level=logging.DEBUG)
 
+def extractPositionsFromOEMOL(molecule):
+    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
+    coords = molecule.GetCoords()
+    for index in range(molecule.NumAtoms()):
+        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
+    return positions
+
 def generate_initial_molecule(mol_smiles):
     """
     Generate an oemol with a geometry
     """
     mol = oechem.OEMol()
     oechem.OESmilesToMol(mol, mol_smiles)
+    mol.SetTitle("MOL")
     oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega(mol)
     return mol
 
-def oemol_to_openmm_system(oemol, molecule_name):
-    """
-    Create an openmm system out of an oemol
-
-    Returns
-    -------
-    system : openmm.System object
-        the system from the molecule
-    positions : [n,3] np.array of floats
-    """
-    from openmoltools.amber import run_tleap, run_antechamber
-    from openmoltools.openeye import molecule_to_mol2
-    _ , tripos_mol2_filename = molecule_to_mol2(oemol, tripos_mol2_filename=molecule_name + '.tripos.mol2', conformer=0, residue_name='MOL')
-    gaff_mol2, frcmod = run_antechamber(molecule_name, tripos_mol2_filename)
-    prmtop_file, inpcrd_file = run_tleap(molecule_name, gaff_mol2, frcmod)
-    prmtop = app.AmberPrmtopFile(prmtop_file)
-    system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
-    crd = app.AmberInpcrdFile(inpcrd_file)
-    return system, crd.getPositions(asNumpy=True), prmtop.topology
+def oemol_to_omm_ff(oemol, molecule_name):
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
+    system = system_generator.build_system(topology)
+    positions = extractPositionsFromOEMOL(oemol)
+    return system, positions, topology
 
 def test_run_example():
     # Run parameters
@@ -73,11 +75,13 @@ def test_run_example():
     # Initialize sampler state.
     smiles = 'CC' # current sampler state
     initial_molecule = generate_initial_molecule("CC")
-    initial_sys, initial_pos, initial_top = oemol_to_openmm_system(initial_molecule, "ligand_old")
+    initial_sys, initial_pos, initial_top = oemol_to_omm_ff(initial_molecule, "ligand_old")
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
 
     # Create proposal metadata, such as the list of molecules to sample (SMILES here)
     proposal_metadata = {'smiles_list': smiles_list}
-    transformation = topology_proposal.SingleSmallMolecule(proposal_metadata)
+    transformation = topology_proposal.SmallMoleculeSetProposalEngine(smiles_list, app.Topology(), system_generator)
 
     # Initialize weight calculation engine, along with its metadata
     bias_calculator = bias_engine.MinimizedPotentialBias(smiles_list, implicit_solvent=None)
@@ -90,7 +94,8 @@ def test_run_example():
         'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
         }
-    ncmc_engine = ncmc_switching.NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    ncmc_engine = ncmc_switching.NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions, platform=platform)
 
     #initialize GeometryEngine
     geometry_metadata = {'data': 0} #currently ignored
@@ -119,7 +124,7 @@ def test_run_example():
 
         # Propagate with Langevin dynamics to achieve ergodic sampling
         integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
-        context = openmm.Context(system, integrator)
+        context = openmm.Context(system, integrator, platform)
         context.setPositions(positions)
         potential = context.getState(getEnergy=True).getPotentialEnergy()
         if np.isnan(potential/kT):
@@ -186,8 +191,24 @@ def test_run_example():
     print("The total number accepted was %d out of %d iterations" % (n_accepted, niterations))
     print(stats)
 
-    if write_pdb_file:
-        outfile.close()
+def get_data_filename(relative_path):
+    """Get the full path to one of the reference files shipped for testing
+    In the source distribution, these files are in ``perses/data/*/``,
+    but on installation, they're moved to somewhere in the user's python
+    site-packages directory.
+    Parameters
+    ----------
+    name : str
+        Name of the file to load (with respect to the openmoltools folder).
+    """
+
+    fn = resource_filename('perses', relative_path)
+
+    if not os.path.exists(fn):
+        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
+
+    return fn
+
 
 if __name__=="__main__":
     test_run_example()
