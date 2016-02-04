@@ -80,8 +80,8 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    platform = openmm.Platform.getPlatformByName('OpenCL')
-    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform, constraint_tolerance=1.0e-8)
+    platform = openmm.Platform.getPlatformByName('Reference')
+    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -91,7 +91,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
             raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
 
     nequil = 5 # number of equilibration iterations
-    niterations = 30 # number of round-trip switching trials
+    niterations = 50 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     logP_switch_n = np.zeros([niterations], np.float64)
@@ -143,7 +143,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         msg += str(logP_n) + '\n'
         raise Exception(msg)
 
-def disable_ncmc_alchemical_integrator_stability():
+def test_ncmc_alchemical_integrator_stability():
     """
     Test NCMCAlchemicalIntegrator
 
@@ -187,7 +187,7 @@ def disable_ncmc_alchemical_integrator_stability():
 
         del context, ncmc_integrator
 
-def disable_ncmc_engine_molecule():
+def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
 
@@ -209,75 +209,6 @@ def disable_ncmc_engine_molecule():
             f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
-
-def test_compare_platforms():
-    """
-    Compare platform energies and forces.
-    """
-    molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
-    for molecule_name in molecule_names:
-        from perses.tests.utils import createSystemFromIUPAC
-        [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
-
-        # Eliminate half of the molecule
-        # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
-        alchemical_atoms = [ index for index in range(int(system.getNumParticles()/2)) ]
-
-        # Create an alchemically-modified system.
-        from alchemy import AbsoluteAlchemicalFactory
-        alchemical_factory = AbsoluteAlchemicalFactory(system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
-
-        # Return the alchemically-modified system in fully-interacting form.
-        alchemical_system = alchemical_factory.createPerturbedSystem()
-
-        # Get list of available global parameters
-        parameters = list()
-        for force_index in range(alchemical_system.getNumForces()):
-            force = alchemical_system.getForce(force_index)
-            if hasattr(force, 'getNumGlobalParameters'):
-                for parameter_index in range(force.getNumGlobalParameters()):
-                    parameters.append(force.getGlobalParameterName(parameter_index))
-
-        niterations = 10
-        platform_names = [ openmm.Platform.getPlatform(index).getName() for index in range(openmm.Platform.getNumPlatforms()) ]
-        for iteration in range(niterations):
-            lambda_value = float(niterations - iteration - 1) / float(niterations)
-
-            # Equilibrate
-            positions = simulate(alchemical_system, positions)
-
-            # Compare platforms
-            platform_energy = dict()
-            platform_force = dict()
-            for platform_index in range(openmm.Platform.getNumPlatforms()):
-                platform = openmm.Platform.getPlatform(platform_index)
-                platform_name = platform.getName()
-
-                # Create a Context
-                integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-                context = openmm.Context(alchemical_system, integrator, platform)
-                context.setPositions(positions)
-
-                # Set parameters
-                for parameter_name in parameters:
-                    context.setParameter(parameter_name, lambda_value)
-
-                # Get energy and forces
-                state = context.getState(getEnergy=True, getForces=True)
-                platform_energy[platform_name] = state.getPotentialEnergy()
-                platform_force[platform_name] = state.getForces(asNumpy=True)
-                del context, integrator
-
-            print("ITERATION %8d / %8d : LAMBDA = %12.6f" % (iteration, niterations, lambda_value))
-            for platform_name in platform_names:
-                energy_unit = unit.kilocalories_per_mole
-                force_unit = unit.kilocalories_per_mole / unit.angstroms
-                energy = platform_energy[platform_name] / energy_unit
-                energy_error = (platform_energy[platform_name] - platform_energy['Reference']) / energy_unit
-                force_rms = np.sqrt(np.sum((platform_force[platform_name] / force_unit)**2))
-                force_rms_error = np.sqrt(np.sum(((platform_force[platform_name] - platform_force['Reference']) / force_unit)**2))
-
-                print("%24s %12.6f %12.6f kcal/mol %12.6f %12.6f kcal/mol/A" % (platform_name, energy, energy_error, force_rms, force_rms_error))
 
 def disable_alchemical_elimination_peptide():
     # Create an alanine dipeptide null transformation, where N-methyl group is deleted and then inserted.
