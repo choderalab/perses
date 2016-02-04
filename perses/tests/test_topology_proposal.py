@@ -9,6 +9,38 @@ except:
     from urllib2 import urlopen
     from cStringIO import StringIO
 
+def extractPositionsFromOEMOL(molecule):
+    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
+    coords = molecule.GetCoords()
+    for index in range(molecule.NumAtoms()):
+        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
+    return positions
+
+def generate_initial_molecule(mol_smiles):
+    """
+    Generate an oemol with a geometry
+    """
+    mol = oechem.OEMol()
+    oechem.OESmilesToMol(mol, mol_smiles)
+    mol.SetTitle("MOL")
+    oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega(mol)
+    return mol
+
+def oemol_to_omm_ff(oemol, molecule_name):
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
+    system = system_generator.build_system(topology)
+    positions = extractPositionsFromOEMOL(oemol)
+    return system, positions, topology
+
 def test_small_molecule_proposals():
     """
     Make sure the small molecule proposal engine generates molecules uniformly
@@ -18,7 +50,9 @@ def test_small_molecule_proposals():
     stats_dict = {smiles : 0 for smiles in list_of_smiles}
     system_generator = topology_proposal.SystemGenerator(['gaff.xml'])
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, app.Topology(), system_generator)
-    initial_system =
+    initial_molecule = generate_initial_molecule('CCC')
+    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+    initial_proposal = proposal_engine.propose(initial_system, initial_topology, initial_positions, beta, {'molecule_smiles' : 'CCC'})
     for i in range(50):
 
 

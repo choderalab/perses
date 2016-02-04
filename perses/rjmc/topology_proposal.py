@@ -834,7 +834,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : SmallMoleculeTopologyProposal object
            topology proposal object
         """
-        current_mol_smiles = current_metadata['molecule_smiles']
+        current_mol_smiles = self._topology_to_smiles(current_topology)
         current_mol_idx = self._oemol_smile_dict[current_mol_smiles]
         current_mol = self._oemol_list[current_mol_idx]
 
@@ -865,6 +865,33 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                                                  old_positions=current_positions, logp_proposal=total_logp, beta=beta,
                                                  new_to_old_atom_map=adjusted_atom_map, molecule_smiles=proposed_mol_smiles)
         return proposal
+
+    def _topology_to_smiles(self, topology, molecule_name="MOL"):
+        """
+        Get the smiles string corresponding to a specific residue in an
+        OpenMM Topology
+
+        Parameters
+        ----------
+        topology : app.Topology
+            The topology containing the molecule of interest
+        molecule_name : string, optional
+            The name of the residue. Default MOL
+
+        Returns
+        -------
+        smiles_string : string
+            an isomeric canonicalized SMILES string representing the molecule
+        """
+
+        matching_molecules = [res for res in topology.residues() if res.name==molecule_name]
+        if len(matching_molecules) != 1:
+            raise ValueError("More than one residue with the same name!")
+        mol_res = matching_molecules[0]
+        oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
+        smiles_string = oechem.OECreateIsoSmiString(oemol)
+        return smiles_string
+
 
     def _find_mol_start_index(self, topology, resname='MOL'):
         """
