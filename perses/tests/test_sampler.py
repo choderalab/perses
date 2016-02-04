@@ -112,7 +112,8 @@ def test_run_example():
         'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
         }
-    ncmc_engine = ncmc_switching.NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    ncmc_engine = ncmc_switching.NCMCEngine(temperature=temperature, timestep=switching_timestep, nsteps=switching_nsteps, functions=switching_functions, platform=platform)
 
     #initialize GeometryEngine
     geometry_metadata = {'data': 0} #currently ignored
@@ -136,7 +137,7 @@ def test_run_example():
 
         # Propagate with Langevin dynamics to achieve ergodic sampling
         integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
-        context = openmm.Context(system, integrator)
+        context = openmm.Context(system, integrator, platform)
         context.setPositions(positions)
         potential = context.getState(getEnergy=True).getPotentialEnergy()
         if np.isnan(potential/kT):
