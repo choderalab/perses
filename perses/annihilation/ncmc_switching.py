@@ -493,7 +493,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addComputeGlobal('final_total_energy', 'kinetic + energy')
 
         # Compute log acceptance probability.
-        self.addComputeGlobal('log_ncmc_acceptance_probability', '- (final_total_energy - initial_total_energy) / %f' % kT)
+        self.addComputeGlobal('log_ncmc_acceptance_probability', '-1 * (final_total_energy - initial_total_energy) / %f' % kT)
 
         return
 

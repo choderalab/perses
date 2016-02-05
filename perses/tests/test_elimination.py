@@ -55,9 +55,12 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
-def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds):
+def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds, platform=None):
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
-    context = openmm.Context(system, integrator)
+    if platform == None:
+        context = openmm.Context(system, integrator)
+    else:
+        context = openmm.Context(system, integrator, platform)
     context.setPositions(positions)
     context.setVelocitiesToTemperature(temperature)
     integrator.step(nsteps)
@@ -81,8 +84,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    platform = openmm.Platform.getPlatformByName('OpenCL')
-    platform.setPropertyDefaultValue('OpenCLPrecision', 'double')
+    platform = openmm.Platform.getPlatformByName('Reference')
     ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform)
 
     # Make sure that old system and new system are identical.
@@ -100,10 +102,10 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     positions = topology_proposal.old_positions
     print("")
     for iteration in range(nequil):
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
+        [positions, velocities] = simulate(topology_proposal.old_system, positions, platform=platform)
     for iteration in range(niterations):
         # Equilibrate
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
+        [positions, velocities] = simulate(topology_proposal.old_system, positions, platform=platform)
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
@@ -123,11 +125,14 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         if(np.any(np.isnan(positions / unit.angstroms))):
             raise Exception("Positions became NaN on NCMC insertion")
 
+        # Compute probability of switching geometries.
+        logP_switch = - (potential_insert - potential_delete) / kT
+
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
         logP_insert_n[iteration] = logP_insert
-        logP_switch_n[iteration] = - (potential_insert - potential_delete) / kT
-        #print("Iteration %5d : delete %16.8f kT | insert %16.8f kT" % (iteration, logP_delete, logP_insert))
+        logP_switch_n[iteration] = logP_switch
+        #print("Iteration %5d : delete %16.8f kT | insert %16.8f kT | geometry switch %16.8f" % (iteration, logP_delete, logP_insert, logP_switch))
 
     # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
     logP_n = logP_delete_n + logP_insert_n + logP_switch_n
@@ -145,7 +150,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         msg += str(logP_n) + '\n'
         raise Exception(msg)
 
-def disable_ncmc_alchemical_integrator_stability():
+def test_ncmc_alchemical_integrator_stability():
     """
     Test NCMCAlchemicalIntegrator
 
@@ -173,8 +178,7 @@ def disable_ncmc_alchemical_integrator_stability():
         ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete', nsteps=10, timestep=1.0*unit.femtoseconds)
 
         # Create a Context
-        platform = openmm.Platform.getPlatformByName('OpenCL')
-        context = openmm.Context(alchemical_system, ncmc_integrator, platform)
+        context = openmm.Context(alchemical_system, ncmc_integrator)
         context.setPositions(positions)
 
         # Run the integrator
@@ -189,10 +193,9 @@ def disable_ncmc_alchemical_integrator_stability():
 
         del context, ncmc_integrator
 
-def disable_ncmc_engine_molecule():
+def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
-
     """
     molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
     for molecule_name in molecule_names:
@@ -212,75 +215,15 @@ def disable_ncmc_engine_molecule():
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
-
-def test_ncmc_integrator_platforms():
+def test_alchemical_elimination_peptide():
     """
-    Compare NCMC integrator behavior across platforms.
-
+    Test alchemical elimination for the alanine dipeptide.
     """
-    molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
-    for molecule_name in molecule_names:
-        from perses.tests.utils import createSystemFromIUPAC
-        [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
-
-        # Eliminate half of the molecule
-        # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
-        alchemical_atoms = [ index for index in range(int(system.getNumParticles()/2)) ]
-
-        # Create an alchemically-modified system.
-        from alchemy import AbsoluteAlchemicalFactory
-        alchemical_factory = AbsoluteAlchemicalFactory(system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
-
-        # Return the alchemically-modified system in fully-interacting form.
-        alchemical_system = alchemical_factory.createPerturbedSystem()
-
-        # Create an NCMC switching integrator.
-        from perses.annihilation.ncmc_switching import NCMCAlchemicalIntegrator
-        temperature = 300.0 * unit.kelvin
-        functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
-
-        print("")
-        niterations = 10
-        for iteration in range(niterations):
-            # Equilibrate
-            [positions, velocities] = simulate(alchemical_system, positions)
-            
-            print("ITERATION %5d : Starting from identical positions and velocities..." % iteration)
-            for platform_index in range(openmm.Platform.getNumPlatforms()):
-                platform = openmm.Platform.getPlatform(platform_index)
-                platform_name = platform.getName()
-
-                # Create integrator
-                ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete', nsteps=10, timestep=1.0*unit.femtoseconds)
-
-                # Create a Context
-                context = openmm.Context(alchemical_system, ncmc_integrator, platform)
-                context.setPositions(positions)
-                context.setVelocities(velocities)
-
-                # Run the integrator
-                ncmc_integrator.step(1)
-
-                # Report positions and logP
-                final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-                log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
-                str = '%12s : %16.8f :' % (platform_name, log_ncmc)
-                for i in range(system.getNumParticles()):
-                    str += ' ['
-                    for j in range(3):
-                        str += '%8.3f' % (final_positions[i,j] / unit.angstroms)
-                    str += ']'
-                print(str)
-
-                del context, ncmc_integrator
-
-def disable_alchemical_elimination_peptide():
     # Create an alanine dipeptide null transformation, where N-methyl group is deleted and then inserted.
     from openmmtools import testsystems
     testsystem = testsystems.AlanineDipeptideVacuum()
     from perses.rjmc.topology_proposal import TopologyProposal
     new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
-    from perses.rjmc.topology_proposal import TopologyProposal
     topology_proposal = TopologyProposal(
         old_system=testsystem.system, old_topology=testsystem.topology, old_positions=testsystem.positions,
         new_system=testsystem.system, new_topology=testsystem.topology,
