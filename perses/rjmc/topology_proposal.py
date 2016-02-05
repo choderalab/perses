@@ -1,7 +1,6 @@
 """
 This file contains the base classes for topology proposals
 """
-### calculate logp in different ways in different subclasses
 
 import simtk.openmm as openmm
 import simtk.openmm.app as app
@@ -12,7 +11,12 @@ import openeye.oechem as oechem
 import numpy as np
 import openeye.oeomega as oeomega
 import tempfile
+from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 import openmoltools
 import logging
 try:
@@ -261,11 +265,11 @@ class PolymerTopologyProposal(TopologyProposal):
     metadata : dict
         additional information of interest about the state
     """
-#    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-#                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
-#        super(PolymerTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
-#                                                           old_system=old_system, old_positions=old_positions,
-#                                                           logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
+    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
+                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
+        super(PolymerTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
+                                                           old_system=old_system, old_positions=old_positions,
+                                                           logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
 
 
 class ProposalEngine(object):
@@ -279,8 +283,8 @@ class ProposalEngine(object):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, proposal_metadata):
-        pass
+    def __init__(self, system_generator, proposal_metadata):
+        self._system_generator = system_generator
 
     def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
         """
@@ -306,8 +310,8 @@ class ProposalEngine(object):
         return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self, proposal_metadata):
-        pass
+    def __init__(self, system_generator, proposal_metadata):
+        super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata)
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
         return PolymerTopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
@@ -326,7 +330,8 @@ class PointMutationEngine(PolymerProposalEngine):
         ('residue id to mutate','desired mutant residue name (3-letter code)')
     """
 
-    def __init__(self, max_point_mutants, proposal_metadata, allowed_mutations=None):
+    def __init__(self, system_generator, max_point_mutants, proposal_metadata, allowed_mutations=None):
+        super(PointMutationEngine,self).__init__(system_generator, proposal_metadata)
         # load templates for replacement residues -- should be taken from ff, get rid of templates directory
         self._max_point_mutants = max_point_mutants
         self._ff = app.ForceField(*proposal_metadata['ffxmls'])
@@ -399,9 +404,8 @@ class PointMutationEngine(PolymerProposalEngine):
                 pass
         new_topology = modeller.topology
 
-#        new_system = openmm.System()
-        new_system = self._ff.createSystem(new_topology)
-        #### Error: need to make a new system ugh. why.
+        # new_system : simtk.openmm.System
+        new_system = self._system_generator.build_system(new_topology)
 
         return PolymerTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
 
@@ -654,7 +658,7 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _add_new_atoms(self, modeller, missing_atoms, residue_map):
         """
-        add new atoms to new residues
+        add new atoms (and corresponding bonds) to new residues
 
         Arguments
         ---------
@@ -742,107 +746,231 @@ class PeptideLibraryEngine(PolymerProposalEngine):
         pass
 
 
-class SmallMoleculeProposalEngine(ProposalEngine):
+class SystemGenerator(object):
     """
-    This class is a base class for transformations in which a small molecule is the part of the simulation
-    that is changed. This class contains some base functionality for that process.
+    This is a utility class to generate OpenMM Systems from
+    topology objects.
+
+    Parameters
+    ----------
+    forcefields_to_use : list of string
+        List of the names of ffxml files that will be used in system creation.
+    forcefield_kwargs : dict of arguments to createSystem, optional
+        Allows specification of various aspects of system creation.
+    metadata : dict, optional
+        Metadata associated with the SystemGenerator.
     """
 
-    def __init__(self, proposal_metadata):
-        self._smiles_list = proposal_metadata['smiles_list']
-        self._n_molecules = len(proposal_metadata['smiles_list'])
-        self._oemol_list, self._oemol_smile_dict = self._smiles_to_oemol()
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None):
+        self._forcefields = forcefields_to_use
+        self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
+        self._forcefield = app.ForceField(*self._forcefields)
+        self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    def build_system(self, new_topology):
+        """
+        Build a system from the new_topology, adding templates
+        for the molecules in oemol_list
+
+        Parameters
+        ----------
+        new_topology : simtk.openmm.app.Topology object
+            The topology of the system
+
+
+        Returns
+        -------
+        new_system : openmm.System
+            A system object generated from the topology
+        """
+        system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
+        return system
+
+class SmallMoleculeSetProposalEngine(ProposalEngine):
+    """
+    This class proposes new small molecules from a prespecified set. It uses
+    uniform proposal probabilities, but can be extended.
+
+    Parameters
+    ----------
+    list_of_smiles : list of string
+        list of smiles that will be sampled
+    receptor_topology : app.Topology object
+        topology of the receptor
+    system_generator : SystemGenerator object
+        SystemGenerator initialized with the appropriate forcefields
+    proposal_metadata : dict
+        metadata for the proposal engine
+    """
+
+    def __init__(self, list_of_smiles, receptor_topology, system_generator, proposal_metadata=None):
+        self._receptor_topology = receptor_topology
+        self._smiles_list = list_of_smiles
+        self._n_molecules = len(list_of_smiles)
         self._generated_systems = dict()
         self._generated_topologies = dict()
+        super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata)
 
-    def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
+    def propose(self, current_system, current_topology, current_positions, beta, current_metadata=None):
         """
-        Make a proposal for the next small molecule.
+        Propose the next state, given the current state
 
-        Arguments
-        ---------
-        system : simtk.openmm.System object
-            The current system
-        topology : simtk.openmm.app.Topology object
-            The current topology
-        positions : [n, 3] np.ndarray of floats (Quantity nm)
-            The current positions of the system
+        Parameters
+        ----------
+        current_system : openmm.System object
+            the system of the current state
+        current_topology : app.Topology object
+            the topology of the current state
+        current_positions : [n, 3] np.ndarray of float
+            current positions
+        beta : float
+            inverse temperature
         current_metadata : dict
-            The current metadata
+            dict containing current smiles as a key
 
         Returns
         -------
-        proposal : TopologyProposal namedtuple
-            Contains new system, new topology, new to old atom map, and logp, as well as metadata
+        proposal : SmallMoleculeTopologyProposal object
+           topology proposal object
         """
-        current_mol_smiles = current_metadata['molecule_smiles']
-        current_mol_idx = self._oemol_smile_dict[current_mol_smiles]
-        current_mol = self._oemol_list[current_mol_idx]
+        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+
+        current_mol_start_index = self._find_mol_start_index(current_topology)
 
         #choose the next molecule to simulate:
-        proposed_idx, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
+        proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
                                                                            current_positions, current_mol_smiles)
-        proposed_mol_smiles = self._smiles_list[proposed_idx]
+
+        new_topology, new_mol_start_index = self._build_new_topology(proposed_mol)
+        new_system = self._system_generator.build_system(new_topology)
+        smiles_new, _ = self._topology_to_smiles(new_topology)
+        assert smiles_new == proposed_mol_smiles
+
 
         #map the atoms between the new and old molecule only:
-        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol)
+        mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
 
-        #build the topology and system containing the new molecule:
-        new_system, new_topology, new_to_old_atom_map = self._build_system(proposed_mol, proposed_mol_smiles, mol_atom_map)
+        #adjust the log proposal for the alignment:
+        total_logp = alignment_logp + logp_proposal
 
-        #Create the TopologyProposal and return it
+        #adjust the atom map for the presence of the receptor:
+        adjusted_atom_map = {}
+        for (key, value) in mol_atom_map.items():
+            adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
+
+                #Create the TopologyProposal and return it
         proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
-                                                 old_positions=current_positions, logp_proposal=logp_proposal, beta=beta,
-                                                 new_to_old_atom_map=new_to_old_atom_map, molecule_smiles=proposed_mol_smiles)
-
+                                                 old_positions=current_positions, logp_proposal=total_logp, beta=beta,
+                                                 new_to_old_atom_map=adjusted_atom_map, molecule_smiles=proposed_mol_smiles)
         return proposal
 
-    def _build_system(self, proposed_molecule, molecule_smiles, mol_atom_map):
+    def _topology_to_smiles(self, topology, molecule_name="MOL"):
         """
-        This is a stub for methods that will build a system for a new proposed molecule.
+        Get the smiles string corresponding to a specific residue in an
+        OpenMM Topology
 
-        Arguments
-        ---------
-        proposed_molecule : oemol
-             The next proposed molecule
-        molecule_smiles : string
-             The smiles string representing the molecule
-        mol_atom_map : dict
-             The map of old ligand atoms to new ligand atoms
+        Parameters
+        ----------
+        topology : app.Topology
+            The topology containing the molecule of interest
+        molecule_name : string, optional
+            The name of the residue. Default MOL
+
         Returns
         -------
-        new_system : simtk.openmm.System
-             A new system object for the molecule-X pair
-        new_topology : simtk.openmm.Topology
-             A new topology object for the molecule-X pair
-        new_to_old_atom_map : dict
-             The new to old atom map (using complex system indices)
+        smiles_string : string
+            an isomeric canonicalized SMILES string representing the molecule
+        oemol : oechem.OEMol object
+            molecule
         """
-        raise NotImplementedError
 
-    def _smiles_to_oemol(self):
+        matching_molecules = [res for res in topology.residues() if res.name==molecule_name]
+        if len(matching_molecules) != 1:
+            raise ValueError("More than one residue with the same name!")
+        mol_res = matching_molecules[0]
+        oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
+        smiles_string = oechem.OECreateIsoSmiString(oemol)
+        return smiles_string, oemol
+
+
+    def _find_mol_start_index(self, topology, resname='MOL'):
         """
-        Convert the list of smiles into a list of oemol objects. Explicit hydrogens
-        are added, but no geometry is created.
+        Find the starting index of the molecule in the topology.
+        Throws an exception if resname is not present.
+
+        Parameters
+        ----------
+        topology : app.Topology object
+            The topology containing the molecule
+        resname : string, optional
+            The name of the molecule. Default MOL.
+
+        Returns
+        -------
+        mol_start_idx : int
+            start index of the molecule
+        """
+        mol_residues = [res for res in topology.residues() if res.name==resname]
+        if len(mol_residues)!=1:
+            raise ValueError("There can only be one residue with a specific name in the topology.")
+        mol_residue = mol_residues[0]
+        atoms = list(mol_residue.atoms())
+        mol_start_idx = atoms[0].index
+        return mol_start_idx
+
+    def _build_new_topology(self, oemol_proposed):
+        """
+        Construct a new topology
+        Parameters
+        ----------
+        oemol_proposed : oechem.OEMol object
+            the proposed OEMol object
+
+        Returns
+        -------
+        new_topology : app.Topology object
+            A topology with the receptor and the proposed oemol
+        mol_start_index : int
+            The first index of the small molecule
+        """
+        mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
+        new_topology = copy.deepcopy(self._receptor_topology)
+        mol_start_index = 0
+        newAtoms = {}
+        for chain in mol_topology.chains():
+            newChain = new_topology.addChain(chain.id)
+            for residue in chain.residues():
+                newResidue = new_topology.addResidue(residue.name, newChain, residue.id)
+                for atom in residue.atoms():
+                    newAtom = new_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                    if atom.index == 0:
+                        mol_start_index = newAtom.index
+                    newAtoms[atom] = newAtom
+        for bond in mol_topology.bonds():
+            new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        
+        return new_topology, mol_start_index
+
+
+    def _smiles_to_oemol(self, smiles_string):
+        """
+        Convert the SMILES string into an OEMol
 
         Returns
         -------
         oemols : np.array of type object
             array of oemols
         """
-        list_of_smiles = self._smiles_list
-        oemols = np.zeros(self._n_molecules, dtype=object)
-        oemol_smile_dict = dict()
-        for i, smile in enumerate(list_of_smiles):
-            mol = oechem.OEMol()
-            oechem.OESmilesToMol(mol, smile)
-            oechem.OEAddExplicitHydrogens(mol)
-            omega = oeomega.OEOmega()
-            omega.SetMaxConfs(1)
-            omega(mol)
-            oemols[i] = mol
-            oemol_smile_dict[smile] = i
-        return oemols, oemol_smile_dict
+        mol = oechem.OEMol()
+        oechem.OESmilesToMol(mol, smiles_string)
+        mol.SetTitle("MOL")
+        oechem.OEAddExplicitHydrogens(mol)
+        oechem.OETriposAtomNames(mol)
+        oechem.OETriposBondTypeNames(mol)
+        omega = oeomega.OEOmega()
+        omega.SetMaxConfs(1)
+        omega(mol)
+        return mol
 
     def _get_mol_atom_map(self, current_molecule, proposed_molecule):
         """
@@ -859,6 +987,8 @@ class SmallMoleculeProposalEngine(ProposalEngine):
         -------
         new_to_old_atom_map : dict
             Dictionary of {new_idx : old_idx} format.
+        logp_alignment : float
+            logp of the molecule alignment if there is more than one
         """
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
@@ -868,13 +998,14 @@ class SmallMoleculeProposalEngine(ProposalEngine):
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
-        match = [m for m in mcs.Match(oegraphmol_proposed, unique)][0]
+        matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        match = np.random.choice(matches)
         new_to_old_atom_map = {}
         for matchpair in match.GetAtoms():
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
             new_to_old_atom_map[new_index] = old_index
-        return new_to_old_atom_map
+        return new_to_old_atom_map, 1.0/len(matches)
 
     def _propose_molecule(self, system, topology, positions, molecule_smiles):
         """
@@ -889,7 +1020,7 @@ class SmallMoleculeProposalEngine(ProposalEngine):
             The current topology
         positions : [n, 3] np.ndarray of floats (Quantity nm)
             The current positions of the system
-        molecule_smiles : dict
+        molecule_smiles : string
             The current molecule smiles
 
         Returns
@@ -902,207 +1033,8 @@ class SmallMoleculeProposalEngine(ProposalEngine):
             The log probability of the choice
         """
         current_idx = self._smiles_list.index(molecule_smiles)
-        prob = np.array([1.0/(self._n_molecules-1) for i in range(self._n_molecules)])
-        prob[current_idx] = 0.0
-        proposed_idx = np.random.choice(range(self._n_molecules), p=prob)
-        return proposed_idx, self._oemol_list[proposed_idx], 0.0
+        #prob = np.array([1.0/(self._n_molecules-1) for i in range(self._n_molecules)])
+        proposed_smiles = np.random.choice(self._smiles_list)
+        proposed_mol = self._smiles_to_oemol(proposed_smiles)
+        return proposed_smiles, proposed_mol, 0.0
 
-
-class SingleSmallMolecule(SmallMoleculeProposalEngine):
-    """
-    This class is an implementation of a proposal to transform a single small molecule
-    in implicit solvent
-    """
-
-
-    def _build_system(self, proposed_molecule, molecule_smiles, mol_atom_map):
-        """
-        This will build a new system for the proposed molecule in implicit solvent
-
-        Arguments
-        ---------
-        proposed_molecule : oemol
-             The next proposed molecule
-        molecule_smiles : string
-             The smiles string representing the molecule
-        mol_atom_map : dict
-             The map of old ligand atoms to new ligand atoms
-        Returns
-        -------
-        new_system : simtk.openmm.System
-             A new system object for the molecule-X pair
-        new_topology : simtk.openmm.Topology
-             A new topology object for the molecule-X pair
-        new_to_old_atom_map : dict
-             The new to old atom map (same as input here)
-        """
-
-        #if we've already made the system, return that and get out
-        if molecule_smiles in self._generated_systems.keys():
-            return self._generated_systems['mol_smiles'], self._generated_topologies['mol_smiles'], mol_atom_map
-
-        #run antechamber to parameterize, and tleap to create the prmtop
-        molecule_name = 'ligand'
-        _, tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(proposed_molecule,
-                                                                        tripos_mol2_filename=molecule_name + '.tripos.mol2',
-                                                                        conformer=0, residue_name=molecule_name)
-        gaff_mol2, frcmod = openmoltools.amber.run_antechamber(molecule_name, tripos_mol2_filename)
-        prmtop_file, inpcrd_file = openmoltools.amber.run_tleap(molecule_name, gaff_mol2, frcmod)
-
-        #read in the prmtop
-        prmtop = app.AmberPrmtopFile(prmtop_file)
-
-        #add the topology to the generated tops, create the system and do the same for it
-        self._generated_topologies['mol_smiles'] = prmtop.topology
-        system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
-        self._generated_systems['mol_smiles'] = system
-
-        #return the system and topology, along with the atom map
-        return system, prmtop.topology, mol_atom_map
-
-
-class SmallMoleculeProteinComplex(SmallMoleculeProposalEngine):
-    """
-    This class handles cases where small molecule changes are being sampled in the context of a
-    protein : ligand complex. This is currently in implicit solvent only.
-
-    Arguments
-    ---------
-    proposal_metadata : dict
-         the metadata for the entire run. Should include a list of SMILES as well as
-         the absolute path location of a simulation-ready receptor pdb file.
-    """
-
-    def __init__(self, proposal_metadata):
-        self._receptor_pdb = proposal_metadata['receptor_pdb']
-        self._receptor_topology = app.PDBFile(self._receptor_pdb).getTopology()
-        self._natoms_receptor = self._receptor_topology._numAtoms
-
-        super(SmallMoleculeProteinComplex, self).__init__(proposal_metadata)
-
-    def _build_system(self, proposed_molecule, molecule_smiles, mol_atom_map):
-        """
-        This method builds a new system and topology containing the proposed molecule, as well
-        as the corrected atom map (indices shifted by n_atoms_receptor)
-
-        Arguments
-        ---------
-        proposed_molecule : oemol
-             The next proposed molecule
-        molecule_smiles : string
-             The smiles string representing the molecule
-        mol_atom_map : dict
-             The map of old ligand atoms to new ligand atoms
-        Returns
-        -------
-        new_system : simtk.openmm.System
-             A new system object for the molecule-X pair
-        new_topology : simtk.openmm.Topology
-             A new topology object for the molecule-X pair
-        new_to_old_atom_map : dict
-             The new to old atom map
-        """
-        #adjust the indices of the ligands by n_atoms_receptor
-        new_atom_map = {key + self._natoms_receptor : value + self._natoms_receptor for key, value in mol_atom_map.items()}
-
-        #check to see if the system has already been made. if so, return it.
-        if molecule_smiles in self._generated_systems.keys():
-            return self._generated_systems[molecule_smiles], self._generated_topologies[molecule_smiles], new_atom_map
-
-        prmtop = self._run_tleap(proposed_molecule)
-        topology = prmtop.topology
-        system = prmtop.createSystem(implicitSolvent=None, removeCMMotion=False)
-
-        self._generated_systems[molecule_smiles] = system
-        self._generated_topologies[molecule_smiles] = topology
-
-        return system, topology, new_atom_map
-
-    def _run_tleap(self, proposed_molecule):
-        """
-        Utility function to run tleap in a temp directory, generating an AmberPrmtopFile
-        object containing the proposed molecule and the receptor associated with this object
-
-        Arguments
-        ---------
-        proposed_molecule : oechem.oemol
-            The proposed new oemol to simulate with the receptor
-
-        Returns
-        -------
-        prmtop : simtk.openmm.app.AmberPrmtopFile
-            AmberPrmtopFile containing the receptor and molecule
-        """
-        cwd = os.getcwd()
-        temp_dir = os.mkdtemp()
-        os.chdir(temp_dir)
-
-        #run antechamber to get parameters for molecule
-        ligand_name = 'ligand'
-        _ , tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(proposed_molecule, tripos_mol2_filename=ligand_name + '.tripos.mol2', conformer=0, residue_name=ligand_name)
-        gaff_mol2, frcmod = openmoltools.amber.run_antechamber(ligand_name, tripos_mol2_filename)
-
-        #now get ready to run tleap to generate prmtop
-        tleap_input = self._gen_tleap_input(gaff_mol2, frcmod, "complex")
-        tleap_file = open('tleap_commands', 'w')
-        tleap_file.writelines(tleap_input)
-        tleap_file.close()
-        tleap_cmd_str = "tleap -f %s " % tleap_file.name
-
-        #call tleap, log output to logger
-        output = getoutput(tleap_cmd_str)
-        logging.debug(output)
-
-        #read in the prmtop file
-        prmtop = app.AmberPrmtopFile("complex.prmtop")
-
-        #return and clean up
-        os.chdir(cwd)
-        os.rmdir(temp_dir)
-
-        return prmtop
-
-
-    def _gen_tleap_input(self, ligand_gaff_mol2, ligand_frcmod, complex_name):
-        """
-        This is a utility function to generate the input string necessary to run tleap
-        """
-
-        tleapstr = """
-        # Load AMBER '96 forcefield for protein.
-        source oldff/leaprc.ff99SBildn
-
-        # Load GAFF parameters.
-        source leaprc.gaff
-
-        # Set GB radii to recommended values for OBC.
-        set default PBRadii mbondi2
-
-        # Load in protein.
-        receptor = loadPdb {receptor_filename}
-
-        # Load parameters for ligand.
-        loadAmberParams {ligand_frcmod}
-
-        # Load ligand.
-        ligand = loadMol2 {ligand_gaf_fmol2}
-
-        # Create complex.
-        complex = combine {{ receptor ligand }}
-
-        # Check complex.
-        check complex
-
-        # Report on net charge.
-        charge complex
-
-        # Write parameters.
-        saveAmberParm complex {complex_name}.prmtop {complex_name}.inpcrd
-
-        # Exit
-        quit
-        """
-
-        tleap_input = tleapstr.format(ligand_frcmod=ligand_frcmod, ligand_gaff_mol2=ligand_gaff_mol2,
-                                      receptor_filename=self._receptor_pdb, complex_name=complex_name)
-        return tleap_input

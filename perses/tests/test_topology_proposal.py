@@ -1,12 +1,108 @@
 import simtk.openmm.app as app
+import simtk.openmm as openmm
+import simtk.unit as unit
 import copy
+from pkg_resources import resource_filename
 import numpy as np
+import os
 try:
     from urllib.request import urlopen
     from io import StringIO
 except:
     from urllib2 import urlopen
     from cStringIO import StringIO
+
+temperature = 300*unit.kelvin
+kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+# Compute kT and inverse temperature.
+kT = kB * temperature
+beta = 1.0 / kT
+
+def get_data_filename(relative_path):
+    """Get the full path to one of the reference files shipped for testing
+    In the source distribution, these files are in ``perses/data/*/``,
+    but on installation, they're moved to somewhere in the user's python
+    site-packages directory.
+    Parameters
+    ----------
+    name : str
+        Name of the file to load (with respect to the openmoltools folder).
+    """
+
+    fn = resource_filename('perses', relative_path)
+
+    if not os.path.exists(fn):
+        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
+
+    return fn
+
+def extractPositionsFromOEMOL(molecule):
+    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
+    coords = molecule.GetCoords()
+    for index in range(molecule.NumAtoms()):
+        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
+    return positions
+
+def generate_initial_molecule(mol_smiles):
+    """
+    Generate an oemol with a geometry
+    """
+    import openeye.oechem as oechem
+    import openeye.oeomega as oeomega
+    mol = oechem.OEMol()
+    oechem.OESmilesToMol(mol, mol_smiles)
+    mol.SetTitle("MOL")
+    oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega(mol)
+    return mol
+
+def oemol_to_omm_ff(oemol, molecule_name):
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
+    system = system_generator.build_system(topology)
+    positions = extractPositionsFromOEMOL(oemol)
+    return system, positions, topology
+
+def test_small_molecule_proposals():
+    """
+    Make sure the small molecule proposal engine generates molecules
+    """
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    import openeye.oechem as oechem
+    list_of_smiles = ['CCC','CCCC','CCCCC']
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    stats_dict = {smiles : 0 for smiles in list_of_smiles}
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, app.Topology(), system_generator)
+    initial_molecule = generate_initial_molecule('CCC')
+    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+    proposal = proposal_engine.propose(initial_system, initial_topology, initial_positions, beta)
+    for i in range(50):
+        #positions are ignored here, and we don't want to run the geometry engine
+        new_proposal = proposal_engine.propose(proposal.old_system, proposal.old_topology, initial_positions, beta)
+        stats_dict[new_proposal.molecule_smiles] += 1
+        #check that the molecule it generated is actually the smiles we expect
+        matching_molecules = [res for res in proposal.new_topology.residues() if res.name=='MOL']
+        if len(matching_molecules) != 1:
+            raise ValueError("More than one residue with the same name!")
+        mol_res = matching_molecules[0]
+        oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
+        smiles_string = oechem.OEMolToSmiles(oemol)
+        old_smiles = proposal.molecule_smiles
+        assert smiles_string==old_smiles
+        proposal = new_proposal
+
+
+
+
 
 
 def load_pdbid_to_openmm(pdbid):
@@ -52,6 +148,11 @@ def _guessFileFormat(file, filename):
     return 'pdb'
 
 def test_specify_allowed_mutants():
+    """
+    Make sure proposals can be made using optional argument allowed_mutations
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
+
     pdbid = "2HIU"
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
@@ -69,13 +170,18 @@ def test_specify_allowed_mutants():
     metadata = {'chain_id' : 'A'}
     allowed_mutations = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
 
-    import perses.rjmc.topology_proposal as topology_proposal
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(max_point_mutants,proposal_metadata, allowed_mutations=allowed_mutations)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants,proposal_metadata, allowed_mutations=allowed_mutations)
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology, modeller.positions, metadata)
 
 
 def test_run_point_mutation_propose():
+    """
+    Propose a random mutation in insulin
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
+
     pdbid = "2HIU"
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
@@ -92,105 +198,20 @@ def test_run_point_mutation_propose():
     system = ff.createSystem(modeller.topology)
     metadata = {'chain_id' : 'A'}
 
-    import perses.rjmc.topology_proposal as topology_proposal
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(max_point_mutants,proposal_metadata)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants,proposal_metadata)
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology, modeller.positions, metadata)
 
-def test_run_point_mutation_engine():
-
-    pdbid = "2HIU"
-    topology, positions = load_pdbid_to_openmm(pdbid)
-    modeller = app.Modeller(topology, positions)
-    for chain in modeller.topology.chains():
-        pass
-
-    modeller.delete([chain])
-
-    ff_filename = "amber99sbildn.xml"
-    max_point_mutants = 1
-    proposal_metadata = {'ffxmls':[ff_filename]}
-
-    ff = app.ForceField(ff_filename)
-    system = ff.createSystem(modeller.topology)
-    metadata = {'chain_id' : 'A'}
-
-    import perses.rjmc.topology_proposal as topology_proposal
-
-    pm_top_engine = topology_proposal.PointMutationEngine(max_point_mutants,proposal_metadata)
-
-    current_system = system
-    current_topology = modeller.topology
-    current_positions = modeller.positions
-
-    old_topology = copy.deepcopy(current_topology)
-    #atom_map = dict()
-
-    chain_id = metadata['chain_id']
-    for atom in modeller.topology.atoms():
-        atom.old_index = atom.index
-
-
-    #index_to_new_residues = dict()
-    aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
-    # chain : simtk.openmm.app.topology.Chain
-    for chain in modeller.topology.chains():
-        if chain.id == chain_id:
-            # num_residues : int
-            num_residues = len(chain._residues)
-            break
-    for proposed_location in range(num_residues):
-        matching_amino_found = 0
-        for proposed_amino in aminos:
-            index_to_new_residues = dict()
-            atom_map = dict()
-            original_residue = chain._residues[proposed_location]
-            if original_residue.name == proposed_amino or ((original_residue.name == 'HIE' or original_residue.name == 'HID') and proposed_amino == 'HIS'):
-                matching_amino_found+=1
-                continue
-            index_to_new_residues[proposed_location] = proposed_amino
-            if proposed_amino == 'HIS':
-                his_state = ['HIE','HID']
-                his_prob = np.array([0.5 for i in range(len(his_state))])
-                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-                index_to_new_residues[proposed_location] = his_state[his_choice]
-
-            current_modeller = copy.deepcopy(modeller)
-
-            metadata['mutations'] = pm_top_engine._save_mutations(current_modeller, index_to_new_residues)
-            residue_map = pm_top_engine._generate_residue_map(current_modeller, index_to_new_residues)
-            for res_pair in residue_map:
-                residue = res_pair[0]
-                name = res_pair[1]
-                assert residue.index in index_to_new_residues.keys()
-                assert index_to_new_residues[residue.index] == name
-                assert residue.name+'-'+str(residue.id)+'-'+name in metadata['mutations']
-            current_modeller, missing_atoms = pm_top_engine._delete_excess_atoms(current_modeller, residue_map)
-            current_modeller = pm_top_engine._add_new_atoms(current_modeller, missing_atoms, residue_map)
-            for res_pair in residue_map:
-                residue = res_pair[0]
-                name = res_pair[1]
-                assert residue.name == name
-                # how to count bonds
-
-
-            for k, atom in enumerate(current_modeller.topology.atoms()):
-                try:
-                    atom.index=k
-                    atom_map[atom.index] = atom.old_index
-                except AttributeError:
-                    pass
-            new_topology = current_modeller.topology
-
-            assert len(metadata['mutations']) <= max_point_mutants
-
-            new_system = pm_top_engine._ff.createSystem(new_topology)
-            pm_top_proposal = topology_proposal.PolymerTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
-        assert matching_amino_found == 1
-
-   # return pm_top_proposal
 
 def test_mutate_from_every_amino_to_every_other():
+    """
+    Make sure mutations are successfuly between every possible pair of before-and-after residues
+    Mutate Ecoli F-ATPase alpha subunit to all 20 amino acids (test going FROM all possibilities)
+    Mutate each residue to all 19 alternatives
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
+
     aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
 
     failed_mutants = 0
@@ -211,16 +232,15 @@ def test_mutate_from_every_amino_to_every_other():
     system = ff.createSystem(modeller.topology)
     metadata = {'chain_id' : 'A'}
 
-    import perses.rjmc.topology_proposal as topology_proposal
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(max_point_mutants,proposal_metadata)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants,proposal_metadata)
 
     current_system = system
     current_topology = modeller.topology
     current_positions = modeller.positions
 
     old_topology = copy.deepcopy(current_topology)
-    #atom_map = dict()
 
     chain_id = metadata['chain_id']
     for atom in modeller.topology.atoms():
@@ -315,7 +335,6 @@ def test_mutate_from_every_amino_to_every_other():
                 residue = res_pair[0]
                 name = res_pair[1]
                 assert residue.name == name
-                # how to count bonds
 
             for k, atom in enumerate(current_modeller.topology.atoms()):
                 atom.index=k
@@ -325,10 +344,12 @@ def test_mutate_from_every_amino_to_every_other():
                     pass
             new_topology = current_modeller.topology
 
+            assert len(metadata['mutations']) <= max_point_mutants
+
             templates = pm_top_engine._ff.getMatchingTemplates(new_topology)
             assert [templates[index].name == residue.name for index, (residue, name) in enumerate(residue_map)]
 
-            new_system = pm_top_engine._ff.createSystem(new_topology)
+            new_system = pm_top_engine._system_generator.build_system(new_topology)
             pm_top_proposal = topology_proposal.PolymerTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
         assert matching_amino_found == 1
 
@@ -336,8 +357,8 @@ def test_mutate_from_every_amino_to_every_other():
 
 if __name__ == "__main__":
     test_run_point_mutation_propose()
-    test_run_point_mutation_engine()
     test_mutate_from_every_amino_to_every_other()
     test_specify_allowed_mutants()
+    test_small_molecule_proposals()
 
 

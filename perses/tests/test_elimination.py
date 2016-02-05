@@ -84,8 +84,7 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    platform = openmm.Platform.getPlatformByName('Reference')
-    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform)
+    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -102,10 +101,10 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     positions = topology_proposal.old_positions
     print("")
     for iteration in range(nequil):
-        [positions, velocities] = simulate(topology_proposal.old_system, positions, platform=platform)
+        [positions, velocities] = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
         # Equilibrate
-        [positions, velocities] = simulate(topology_proposal.old_system, positions, platform=platform)
+        [positions, velocities] = simulate(topology_proposal.old_system, positions)
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
@@ -149,6 +148,25 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         msg += 'logP:\n'
         msg += str(logP_n) + '\n'
         raise Exception(msg)
+
+def test_alchemical_elimination_sidechain():
+    """
+    Test alchemical elimination for sidechains.
+    """
+    # Create a sidechain null transformation.
+    from openmmtools import testsystems
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    from perses.rjmc.topology_proposal import TopologyProposal
+    new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
+    topology_proposal = TopologyProposal(
+        old_system=testsystem.system, old_topology=testsystem.topology, old_positions=testsystem.positions,
+        new_system=testsystem.system, new_topology=testsystem.topology,
+        logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
+
+    for ncmc_nsteps in [0, 1, 2, 50]:
+        f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
+        f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
+        yield f
 
 def test_ncmc_alchemical_integrator_stability():
     """
@@ -233,3 +251,8 @@ def test_alchemical_elimination_peptide():
         f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
+
+if __name__ == "__main__":
+    print(__name__)
+    for x in test_alchemical_elimination_molecule():
+        x()
