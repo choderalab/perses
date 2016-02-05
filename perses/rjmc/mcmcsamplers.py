@@ -23,9 +23,10 @@ class MCMCSampler(object):
         Initial positions of the system
     """
 
-    def __init__(self, system, integrator, positions, platform_name='CPU'):
+    def __init__(self, system, integrator, positions, platform_name='CPU', pressure=None):
         self._system = system
         self._integrator = integrator
+        self._pressure = pressure
         self._initial_positions = positions
         platform = openmm.Platform.getPlatformByName(platform_name)
         self._context = openmm.Context(system, integrator, platform)
@@ -41,6 +42,9 @@ class MCMCSampler(object):
         """
         self._integrator.step(nsteps)
 
+    def set_context_parameter(self, context_parameter_name, context_parameter_value):
+
+
     @property
     def potential_energy(self):
         state = self._context.getState(getEnergy=True)
@@ -53,3 +57,14 @@ class MCMCSampler(object):
     def kinetic_energy(self):
         state = self._context.getState(getEnergy=True)
         return state.getKineticEnergy()
+    @property
+    def context(self):
+        return self._context
+    @property
+    def system(self):
+        return self._system
+    @property
+    def pressure(self):
+        if self._pressure is None:
+            raise Exception("Pressure is not specified!")
+        return self._pressure
