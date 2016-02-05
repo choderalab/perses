@@ -149,26 +149,46 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
         msg += str(logP_n) + '\n'
         raise Exception(msg)
 
-def test_alchemical_elimination_sidechain():
+def test_alchemical_elimination_mutation():
     """
-    Test alchemical elimination for sidechains.
+    Test alchemical elimination for mutations.
     """
-    # Create a sidechain null transformation.
+
+    ff_filename = "amber99sbildn.xml"
+    max_point_mutants = 1
+    proposal_metadata = {'ffxmls':[ff_filename]}
+
+    # Create peptide.
     from openmmtools import testsystems
     testsystem = testsystems.AlanineDipeptideVacuum()
+    [topology, system, positions] = [testsystem.topology, testsystem.system, testsystem.positions]
+
+    # Create forcefield.
+    ff = app.ForceField(ff_filename)
+    metadata = {'chain_id' : ' '}
+    allowed_mutations = [[('2','GLY')]]
+
+    from perses.rjmc.topology_proposal import SystemGenerator
+    system_generator = SystemGenerator([ff_filename])
+
+    # Create a topology proposal fro mutating ALA -> GLY
+    from perses.rjmc.topology_proposal import PointMutationEngine
+    proposal_engine = PointMutationEngine(system_generator, max_point_mutants, proposal_metadata, allowed_mutations=allowed_mutations)
+    topology_proposal = proposal_engine.propose(system, topology, positions, metadata)
+
+    # Modify atom mapping to get a null transformation.
     from perses.rjmc.topology_proposal import TopologyProposal
-    new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
+    new_to_old_atom_map = { atom1 : atom1 for atom1 in topology_proposal.new_to_old_atom_map }
     topology_proposal = TopologyProposal(
-        old_system=testsystem.system, old_topology=testsystem.topology, old_positions=testsystem.positions,
-        new_system=testsystem.system, new_topology=testsystem.topology,
-        logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
+                new_topology=topology_proposal.old_topology, new_system=topology_proposal.old_system, old_topology=topology_proposal.old_topology, old_system=topology_proposal.old_system,
+                old_positions=positions, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=topology_proposal.metadata)
 
     for ncmc_nsteps in [0, 1, 2, 50]:
         f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
-        f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
+        f.description = "Testing alchemical null transformation of ALA sidechain in alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
 
-def test_ncmc_alchemical_integrator_stability():
+def test_ncmc_alchemical_integrator_stability_molecules():
     """
     Test NCMCAlchemicalIntegrator
 
