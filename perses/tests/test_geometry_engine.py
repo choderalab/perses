@@ -129,8 +129,8 @@ def test_run_geometry_engine():
     molecule2 = generate_initial_molecule(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
-    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
+    sys1, pos1, top1 = oemol_to_openmm_system_amber(molecule1, molecule_name_1)
+    sys2, pos2, top2 = oemol_to_openmm_system_amber(molecule2, molecule_name_2)
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
@@ -287,8 +287,8 @@ def test_logp_reverse():
     molecule2 = generate_initial_molecule(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
-    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
+    sys1, pos1, top1 = oemol_to_openmm_system_amber(molecule1, molecule_name_1)
+    sys2, pos2, top2 = oemol_to_openmm_system_amber(molecule2, molecule_name_2)
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
@@ -301,7 +301,7 @@ def test_logp_reverse():
 
     #now pretend that the new coordinates are the old, and calculate logp again
     #reverse the atom map:
-    old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping}
+    old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping.items()}
     sm_reverse_proposal = topology_proposal.SmallMoleculeTopologyProposal(new_topology=top1, new_system=sys1, old_topology=top2, old_system=sys2,
                                                                       old_positions=pos2, logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, metadata={'test':0.0})
     logp_reverse = geometry_engine.logp_reverse(sm_reverse_proposal, pos1, new_positions)

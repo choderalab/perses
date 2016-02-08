@@ -171,7 +171,6 @@ class FFGeometryEngine(GeometryEngine):
         """
         beta = top_proposal.beta
         logp = 0.0
-        top_proposal = topology_proposal.SmallMoleculeTopologyProposal()
         structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
         atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_old) if atom_idx not in top_proposal.unique_old_atoms]
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_old_atoms]
