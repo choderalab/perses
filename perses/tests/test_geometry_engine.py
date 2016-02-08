@@ -42,6 +42,8 @@ def generate_molecule_from_smiles(smiles):
     mol = oechem.OEMol()
     oechem.OESmilesToMol(mol, smiles)
     oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega(mol)
@@ -54,6 +56,8 @@ def generate_initial_molecule(iupac_name):
     mol = oechem.OEMol()
     oeiupac.OEParseIUPACName(mol, iupac_name)
     oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega(mol)
@@ -287,8 +291,8 @@ def test_logp_reverse():
     molecule2 = generate_initial_molecule(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1, top1 = oemol_to_openmm_system_amber(molecule1, molecule_name_1)
-    sys2, pos2, top2 = oemol_to_openmm_system_amber(molecule2, molecule_name_2)
+    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
+    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
