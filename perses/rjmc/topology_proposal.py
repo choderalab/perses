@@ -429,7 +429,7 @@ class PointMutationEngine(PolymerProposalEngine):
             value : str (three letter residue name)
         """
         index_to_new_residues = dict()
-        
+
         # chain : simtk.openmm.app.topology.Chain
         for chain in modeller.topology.chains():
             if chain.id == chain_id:
@@ -466,7 +466,7 @@ class PointMutationEngine(PolymerProposalEngine):
             value : str (three letter residue name)
         """
         index_to_new_residues = dict()
-        
+
         # this shouldn't be here
         aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
         # chain : simtk.openmm.app.topology.Chain
@@ -948,7 +948,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                     newAtoms[atom] = newAtom
         for bond in mol_topology.bonds():
             new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
-        
+
         return new_topology, mol_start_index
 
 
@@ -1037,4 +1037,3 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposed_smiles = np.random.choice(self._smiles_list)
         proposed_mol = self._smiles_to_oemol(proposed_smiles)
         return proposed_smiles, proposed_mol, 0.0
-
