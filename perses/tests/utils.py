@@ -1,4 +1,41 @@
-]##################################################################
+"""
+Unit tests for NCMC switching engine.
+
+"""
+
+__author__ = 'John D. Chodera'
+
+################################################################################
+# IMPORTS
+################################################################################
+
+from simtk import openmm, unit
+from simtk.openmm import app
+import os, os.path
+import sys, math
+import numpy as np
+from functools import partial
+from pkg_resources import resource_filename
+from openeye import oechem
+if sys.version_info >= (3, 0):
+    from io import StringIO
+    from subprocess import getstatusoutput
+else:
+    from cStringIO import StringIO
+    from commands import getstatusoutput
+
+################################################################################
+# CONSTANTS
+################################################################################
+
+kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+temperature = 300.0 * unit.kelvin
+kT = kB * temperature
+beta = 1.0/kT
+
+################################################################################
+# UTILITIES
+################################################################################]
 
 # TODO: Move some of these utility routines to openmoltools.
 
