@@ -49,6 +49,8 @@ class TopologyProposal(object):
         log probability of the proposal
     new_to_old_atom_map : dict
         {new_atom_idx : old_atom_idx} map for the two systems
+    chemical_state_key : str
+        The current chemical state (unique)
     metadata : dict
         additional information of interest about the state
 
@@ -78,12 +80,14 @@ class TopologyProposal(object):
         Number of atoms in the new system
     natoms_old : int
         Number of atoms in the old system
+    chemical_state_key : str
+        The current chemical state
     metadata : dict
         additional information of interest about the state
     """
 
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
+                 logp_proposal=None, new_to_old_atom_map=None, chemical_state_key=None, metadata=None):
 
         self._new_topology = new_topology
         self._new_system = new_system
@@ -91,6 +95,7 @@ class TopologyProposal(object):
         self._old_system = old_system
         self._old_positions = old_positions
         self._logp_proposal = logp_proposal
+        self._chemical_state_key = chemical_state_key
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = [atom for atom in range(self._new_system.getNumParticles()) if atom not in self._new_to_old_atom_map.keys()]
@@ -137,76 +142,11 @@ class TopologyProposal(object):
     def n_atoms_old(self):
         return self._old_system.getNumParticles()
     @property
+    def chemical_state_key(self):
+        return self._chemical_state_key
+    @property
     def metadata(self):
         return self._metadata
-
-class SmallMoleculeTopologyProposal(TopologyProposal):
-    """
-    This is a subclass for simulations involving switching between small molecules.
-
-    Arguments
-    ---------
-    new_topology : simtk.openmm.Topology object
-        openmm Topology representing the proposed new system
-    new_system : simtk.openmm.System object
-        openmm System of the newly proposed state
-    old_topology : simtk.openmm.Topology object
-        openmm Topology of the current system
-    old_system : simtk.openmm.System object
-        openm System of the current state
-    old_positions : [n, 3] np.array, Quantity
-        positions of the old system
-    logp_proposal : float
-        log probability of the proposal
-    new_to_old_atom_map : dict
-        {new_atom_idx : old_atom_idx} map for the two systems
-    molecule_smiles : string
-        SMILES string of the current molecule
-    metadata : dict
-        additional information
-
-    Properties
-    ----------
-    new_topology : simtk.openmm.Topology object
-        openmm Topology representing the proposed new system
-    new_system : simtk.openmm.System object
-        openmm System of the newly proposed state
-    old_topology : simtk.openmm.Topology object
-        openmm Topology of the current system
-    old_system : simtk.openmm.System object
-        openm System of the current state
-    old_positions : [n, 3] np.array, Quantity
-        positions of the old system
-    logp_proposal : float
-        log probability of the proposal
-    new_to_old_atom_map : dict
-        {new_atom_idx : old_atom_idx} map for the two systems
-    old_to_new_atom_map : dict
-        {old_atom_idx : new_atom_idx} map for the two systems
-    unique_new_atoms : list of int
-        List of indices of the unique new atoms
-    unique_old_atoms : list of int
-        List of indices of the unique old atoms
-    natoms_new : int
-        Number of atoms in the new system
-    natoms_old : int
-        Number of atoms in the old system
-    molecule_smiles : string
-        SMILES string of the current molecule
-    metadata : dict
-        additional information of interest about the state
-    """
-
-    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, molecule_smiles=None, metadata=None):
-        super(SmallMoleculeTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
-                                                           old_system=old_system, old_positions=old_positions,
-                                                           logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
-        self._molecule_smiles = molecule_smiles
-
-    @property
-    def molecule_smiles(self):
-        return self._molecule_smiles
 
 class PolymerTopologyProposal(TopologyProposal):
     """
@@ -856,9 +796,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
 
                 #Create the TopologyProposal and return it
-        proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
+        proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
                                                  old_positions=current_positions, logp_proposal=total_logp,
-                                                 new_to_old_atom_map=adjusted_atom_map, molecule_smiles=proposed_mol_smiles)
+                                                 new_to_old_atom_map=adjusted_atom_map, chemical_state_key=proposed_mol_smiles)
         return proposal
 
     def _topology_to_smiles(self, topology, molecule_name="MOL"):
