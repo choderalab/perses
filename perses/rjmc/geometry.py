@@ -72,7 +72,7 @@ class FFGeometryEngine(GeometryEngine):
     def __init__(self, metadata):
         self._metadata = metadata
 
-    def propose(self, top_proposal):
+    def propose(self, top_proposal, beta):
         """
         Make a geometry proposal for the appropriate atoms.
 
@@ -80,6 +80,8 @@ class FFGeometryEngine(GeometryEngine):
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
+        beta : float, in kT
+            The inverse temperature
 
         Returns
         -------
@@ -88,7 +90,6 @@ class FFGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
-        beta = top_proposal.beta
         logp_proposal = 0.0
         structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_new_atoms]
@@ -151,7 +152,7 @@ class FFGeometryEngine(GeometryEngine):
         return new_positions, logp_proposal
 
 
-    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates):
+    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
         """
         Calculate the logp for the given geometry proposal
 
@@ -163,13 +164,14 @@ class FFGeometryEngine(GeometryEngine):
             The coordinates of the system after the proposal
         old_coordiantes : [n, 3] np.ndarray
             The coordinates of the system before the proposal
+        beta : float, in kT
+            The inverse temperature
 
         Returns
         -------
         logp : float
             The log probability of the proposal for the given transformation
         """
-        beta = top_proposal.beta
         logp = 0.0
         structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
         atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_old) if atom_idx not in top_proposal.unique_old_atoms]
