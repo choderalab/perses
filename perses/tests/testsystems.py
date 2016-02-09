@@ -126,9 +126,16 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         thermodynamic_states['vacuum']   = ThermodynamicState(system=testsystems['vacuum'].system, temperature=300*unit.kelvin)
 
         # Create SAMS samplers
-        from perses.samplers.samplers import SAMSSampler
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        mcmc_samplers = dict()
+        ee_samplers = dict()
         sams_samplers = dict()
         for environment in environments:
+            box_vectors = None
+            if environment == 'explicit': box_vectors = testsystems[environment].box_vectors
+            sampler_state = SamplerState(system=testsystem[environment].system, positions=positions[environment], box_vectors=box_vectors)
+            mcmc_samplers[environment] = MCMCSampler(themodynamic_state[environment], sampler_state)
+            ee_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state, proposal_engiens[environment])
             sams_samplers[environment] = SAMSSampler(thermodynamic_states[environment],
                 system_generator=system_generators[environment], proposal_engine=proposal_engines[environment],
                 topology=topologies[environment], positions=positions[environment])

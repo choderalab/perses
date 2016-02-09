@@ -504,13 +504,20 @@ class SAMSSampler(object):
     http://www.stat.rutgers.edu/home/ztan/Publication/SAMS_redo4.pdf
 
     """
-    def __init__(self, thermodynamic_state, system_generator, proposal_engine, topology, positions):
+    def __init__(self, thermodynamic_state, proposal_engine, topology, positions):
         """
         Create a SAMS Sampler.
+
+        Parameters
+        ----------
+        thermodynamic_state
+        proposal_engine
+
         """
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.thermodynamic_state = thermodynamic_state
+        self.sampler = ExpandedEnsembleSampler(sampler, topology, state, proposal_engine)
         self.system_generator = system_generator
         self.proposal_engine = proposal_engine
         self.topology = topology
@@ -525,7 +532,7 @@ class SAMSSampler(object):
         """
         Update the underlying expanded ensembles sampler.
         """
-        self.expanded_ensemble_sampler.update()
+        self.sampler.update()
 
     def update_logZ_estimates(self):
         """
@@ -598,7 +605,7 @@ class MultiTargetDesign(object):
         """
         Update all samplers.
         """
-        for sampler in target_samplers:
+        for sampler in self.target_samplers:
             sampler.update()
 
     def update_target_probabilities(self):
