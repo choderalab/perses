@@ -21,13 +21,13 @@ import copy
 # CONSTANTS
 ################################################################################
 
-from perses.thermodynamics import kB
+from perses.samplers.thermodynamics import kB
 
 ################################################################################
 # THERMODYNAMIC STATE
 ################################################################################
 
-from perses.thermodynamics import ThermodynamicState
+from perses.samplers.thermodynamics import ThermodynamicState
 
 #=============================================================================================
 # MCMC sampler state
@@ -465,12 +465,11 @@ class ExpandedEnsembleSampler(object):
         self.update_method = 'default'
         self.iteration = 0
 
-    self.update_sampler(self):
+    def update_sampler(self):
         """
         Update the chemical state index.
         """
         proposal = self.proposal_engine.propose(self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions, beta, metadata)
-
 
     def update(self):
         """
@@ -512,7 +511,7 @@ class SAMSSampler(object):
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.thermodynamic_state = thermodynamic_state
-        self.system_generator = system_generators
+        self.system_generator = system_generator
         self.proposal_engine = proposal_engine
         self.topology = topology
         self.positions = positions
@@ -522,13 +521,13 @@ class SAMSSampler(object):
         self.update_method = 'default'
         self.iteration = 0
 
-    self.update_sampler(self):
+    def update_sampler(self):
         """
         Update the underlying expanded ensembles sampler.
         """
         self.expanded_ensemble_sampler.update()
 
-    self.update_logZ_estimates(self):
+    def update_logZ_estimates(self):
         """
         Update the logZ estimates according to self.update_method.
         """
@@ -624,7 +623,7 @@ class MultiTargetDesign(object):
             log_target_probabilities[key] -= log_sum
 
         # Store.
-        self.log_target_probabilities = log_target_probabiltiies.
+        self.log_target_probabilities = log_target_probabiltiies
 
     def update(self):
         """

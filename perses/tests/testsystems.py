@@ -33,7 +33,7 @@ from openmmtools import testsystems
 # CONSTANTS
 ################################################################################
 
-from perses.thermodynamics import kB
+from perses.samplers.thermodynamics import kB
 
 ################################################################################
 # TEST SYSTEMS
@@ -89,11 +89,12 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
-        system_generator['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
+        system_generators = dict()
+        system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : app.HBonds })
-        system_generator['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
+        system_generators['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : app.HBonds })
-        system_generator['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
+        system_generators['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : app.HBonds })
 
         # Create peptide in solvent.
@@ -101,37 +102,53 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         testsystems = dict()
         testsystems['explicit'] = AlanineDipeptideExplicit()
         testsystems['implicit'] = AlanineDipeptideImplicit()
-        testsystem['vacuum']    = AlanineDipeptideVacuum()
+        testsystems['vacuum']    = AlanineDipeptideVacuum()
 
         # Store topologies and positions.
+        topologies = dict()
+        positions = dict()
         for environment in environments:
             topologies[environment] = testsystems[environment].topology
-            positions[environment] = testsystem[environment].positions
+            positions[environment] = testsystems[environment].positions
 
         # Set up the proposal engines.
         from perses.rjmc.topology_proposal import PointMutationEngine
-        proposal_metadata = dict()
+        proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
+        proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, proposal_metadata)
+            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, proposal_metadata=proposal_metadata)
 
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
-        thermodynamic_states['explicit'] = ThermodynamicState(temperature=300*unit.kelvin, pressure=1*unit.atmospheres)
-        thermodynamic_states['implicit'] = ThermodynamicState(temperature=300*unit.kelvin)
-        thermodynamic_states['vacuum']   = ThermodynamicState(temperature=300*unit.kelvin)
+        thermodynamic_states = dict()
+        thermodynamic_states['explicit'] = ThermodynamicState(system=testsystems['explicit'].system, temperature=300*unit.kelvin, pressure=1*unit.atmospheres)
+        thermodynamic_states['implicit'] = ThermodynamicState(system=testsystems['implicit'].system, temperature=300*unit.kelvin)
+        thermodynamic_states['vacuum']   = ThermodynamicState(system=testsystems['vacuum'].system, temperature=300*unit.kelvin)
 
         # Create SAMS samplers
         from perses.samplers.samplers import SAMSSampler
+        sams_samplers = dict()
         for environment in environments:
-            sams_sampler[environment] = SAMSSampler(thermodynamic_states[environment],
+            sams_samplers[environment] = SAMSSampler(thermodynamic_states[environment],
                 system_generator=system_generators[environment], proposal_engine=proposal_engines[environment],
                 topology=topologies[environment], positions=positions[environment])
 
         # Store things.
         self.environments = environments
         self.topologies = topologies
-        self.positions = Positions
+        self.positions = positions
         self.system_generators = system_generators
         self.proposal_engines = proposal_engines
         self.thermodynamic_states = thermodynamic_states
         self.sams_samplers = sams_samplers
+
+def test_AlanineDipeptideSAMS():
+    """
+    Testing AlanineDipeptideSAMS...
+    """
+    from perses.tests.testsystems import AlanineDipeptideSAMS
+    testsystem = AlanineDipeptideSAMS()
+    # Build a system
+    system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    # Retrieve a SAMSSampler
+    sams_sampler = testsystem.sams_samplers['implicit']
