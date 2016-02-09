@@ -788,7 +788,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
 
                 #Create the TopologyProposal and return it
-        proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
+        proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
                                                  old_positions=current_positions, logp_proposal=total_logp,
                                                  new_to_old_atom_map=adjusted_atom_map, molecule_smiles=proposed_mol_smiles)
         return proposal
