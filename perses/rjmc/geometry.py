@@ -174,7 +174,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         logp = 0.0
         old_structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-        old_atoms_with_positions = [old_structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.values()]
+        old_atoms_with_positions = [old_structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
         old_unique_atoms = [old_structure.atoms[idx] for idx in top_proposal.unique_old_atoms]
 
         #copy common atomic positions
