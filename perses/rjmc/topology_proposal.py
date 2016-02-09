@@ -49,6 +49,8 @@ class TopologyProposal(object):
         log probability of the proposal
     new_to_old_atom_map : dict
         {new_atom_idx : old_atom_idx} map for the two systems
+    chemical_state_key : str
+        The current chemical state (unique)
     metadata : dict
         additional information of interest about the state
 
@@ -78,12 +80,14 @@ class TopologyProposal(object):
         Number of atoms in the new system
     natoms_old : int
         Number of atoms in the old system
+    chemical_state_key : str
+        The current chemical state
     metadata : dict
         additional information of interest about the state
     """
 
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
+                 logp_proposal=None, new_to_old_atom_map=None, chemical_state_key=None, metadata=None):
 
         self._new_topology = new_topology
         self._new_system = new_system
@@ -91,6 +95,7 @@ class TopologyProposal(object):
         self._old_system = old_system
         self._old_positions = old_positions
         self._logp_proposal = logp_proposal
+        self._chemical_state_key = chemical_state_key
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = [atom for atom in range(self._new_system.getNumParticles()) if atom not in self._new_to_old_atom_map.keys()]
@@ -136,6 +141,9 @@ class TopologyProposal(object):
     @property
     def n_atoms_old(self):
         return self._old_system.getNumParticles()
+    @property
+    def chemical_state_key(self):
+        return self._chemical_state_key
     @property
     def metadata(self):
         return self._metadata
@@ -790,7 +798,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 #Create the TopologyProposal and return it
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
                                                  old_positions=current_positions, logp_proposal=total_logp,
-                                                 new_to_old_atom_map=adjusted_atom_map, molecule_smiles=proposed_mol_smiles)
+                                                 new_to_old_atom_map=adjusted_atom_map, chemical_state_key=proposed_mol_smiles)
         return proposal
 
     def _topology_to_smiles(self, topology, molecule_name="MOL"):
