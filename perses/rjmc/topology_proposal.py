@@ -83,7 +83,7 @@ class TopologyProposal(object):
     """
 
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, metadata=None, beta=None):
+                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
 
         self._new_topology = new_topology
         self._new_system = new_system
@@ -96,7 +96,6 @@ class TopologyProposal(object):
         self._unique_new_atoms = [atom for atom in range(self._new_system.getNumParticles()) if atom not in self._new_to_old_atom_map.keys()]
         self._unique_old_atoms = [atom for atom in range(self._old_system.getNumParticles()) if atom not in self._new_to_old_atom_map.values()]
         self._metadata = metadata
-        self._beta = beta
 
     @property
     def new_topology(self):
@@ -116,9 +115,6 @@ class TopologyProposal(object):
     @old_positions.setter
     def old_positions(self, positions):
         self._old_positions = positions
-    @property
-    def beta(self):
-        return self._beta
     @property
     def logp_proposal(self):
         return self._logp_proposal
@@ -202,12 +198,11 @@ class SmallMoleculeTopologyProposal(TopologyProposal):
     """
 
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, molecule_smiles=None, metadata=None, beta=None):
+                 logp_proposal=None, new_to_old_atom_map=None, molecule_smiles=None, metadata=None):
         super(SmallMoleculeTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
                                                            old_system=old_system, old_positions=old_positions,
                                                            logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
         self._molecule_smiles = molecule_smiles
-        self._beta = beta
 
     @property
     def molecule_smiles(self):
@@ -286,7 +281,7 @@ class ProposalEngine(object):
     def __init__(self, system_generator, proposal_metadata):
         self._system_generator = system_generator
 
-    def propose(self, current_system, current_topology, current_positions, beta, current_metadata):
+    def propose(self, current_system, current_topology, current_positions, current_metadata):
         """
         Base interface for proposal method.
 
@@ -786,6 +781,10 @@ class SystemGenerator(object):
         system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
         return system
 
+    @property
+    def ffxmls(self):
+        return self._forcefields
+
 class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
     This class proposes new small molecules from a prespecified set. It uses
@@ -811,7 +810,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._generated_topologies = dict()
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata)
 
-    def propose(self, current_system, current_topology, current_positions, beta, current_metadata=None):
+    def propose(self, current_system, current_topology, current_positions, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -823,8 +822,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             the topology of the current state
         current_positions : [n, 3] np.ndarray of float
             current positions
-        beta : float
-            inverse temperature
         current_metadata : dict
             dict containing current smiles as a key
 
@@ -860,7 +857,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
                 #Create the TopologyProposal and return it
         proposal = SmallMoleculeTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
-                                                 old_positions=current_positions, logp_proposal=total_logp, beta=beta,
+                                                 old_positions=current_positions, logp_proposal=total_logp,
                                                  new_to_old_atom_map=adjusted_atom_map, molecule_smiles=proposed_mol_smiles)
         return proposal
 
