@@ -140,7 +140,6 @@ class FFGeometryEngine(GeometryEngine):
                 #convert to cartesian
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r_proposed, theta_proposed, phi_proposed)
                 detJ=0.0
-                rtp_test = self._cartesian_to_internal(xyz, new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx])
 
                 #add new position to array of new positions
                 new_positions[atom.idx] = xyz
@@ -204,20 +203,23 @@ class FFGeometryEngine(GeometryEngine):
                 angle_coords = old_coordinates[angle_atom.idx]
                 torsion_coords = old_coordinates[torsion_atom.idx]
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
+                r = internal_coordinates[0]*units.angstrom
+                theta = internal_coordinates[1]*units.radian
+                phi = internal_coordinates[2]*units.radian
 
                 #propose a bond and calculate its probability
                 bond = self._get_relevant_bond(atom, bond_atom)
                 bond_k = bond.type.k
                 sigma_r = units.sqrt(1/(beta*bond_k))
                 logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit)) #need to eliminate unit to allow numpy log
-                logp_r = self._bond_logq(internal_coordinates[0], bond, beta) - logZ_r
+                logp_r = self._bond_logq(r, bond, beta) - logZ_r
 
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
                 angle_k = angle.type.k
                 sigma_theta = units.sqrt(1/(beta*angle_k))
                 logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit)) #need to eliminate unit to allow numpy log
-                logp_theta = self._angle_logq(internal_coordinates[1], angle, beta) - logZ_theta
+                logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
 
                 #calculate torsion probability
                 logp_phi = self._torsion_logp(atom, atom_coords, torsion, old_atoms_with_positions, old_coordinates, beta)
