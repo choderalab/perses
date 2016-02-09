@@ -173,21 +173,22 @@ class FFGeometryEngine(GeometryEngine):
             The log probability of the proposal for the given transformation
         """
         logp = 0.0
-        structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-        atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_old) if atom_idx not in top_proposal.unique_old_atoms]
-        new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_old_atoms]
-        #we'll need to copy the current positions of the core to the old system
-        #In the case of C-A --> C/-A -> C/-B ---> C-B these are the same
-        reverse_proposal_coordinates = units.Quantity(np.zeros([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
-        for atom in atoms_with_positions:
-            new_index = top_proposal.old_to_new_atom_map[atom.idx]
-            reverse_proposal_coordinates[atom.idx] = new_coordinates[new_index]
+        old_structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
+        old_atoms_with_positions = [old_structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.values()]
+        old_unique_atoms = [old_structure.atoms[idx] for idx in top_proposal.unique_old_atoms]
+
+        #copy common atomic positions
+        for atom in old_structure.atoms:
+            if atom.idx in old_atoms_with_positions:
+                corresponding_new_index = top_proposal.old_to_new_atom_map[atom.idx]
+                old_coordinates[atom.idx] = new_coordinates[corresponding_new_index]
+
 
         #maintain a running list of the atoms still needing logp
-        while(len(new_atoms)>0):
-            atoms_for_proposal = self._atoms_eligible_for_proposal(new_atoms, structure, atoms_with_positions)
+        while(len(old_unique_atoms)>0):
+            atoms_for_proposal = self._atoms_eligible_for_proposal(old_unique_atoms, old_structure, old_atoms_with_positions)
             for atom in atoms_for_proposal:
-                torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
+                torsion, logp_choice = self._choose_torsion(old_atoms_with_positions, atom)
                 if torsion.atom1 == atom:
                     bond_atom = torsion.atom2
                     angle_atom = torsion.atom3
@@ -199,9 +200,9 @@ class FFGeometryEngine(GeometryEngine):
                 #get the internal coordinate representation
                 #we want to see the probability of old_atom where all other coordinates are new_atom
                 atom_coords = old_coordinates[atom.idx]
-                bond_coords = reverse_proposal_coordinates[bond_atom.idx]
-                angle_coords = reverse_proposal_coordinates[angle_atom.idx]
-                torsion_coords = reverse_proposal_coordinates[torsion_atom.idx]
+                bond_coords = old_coordinates[bond_atom.idx]
+                angle_coords = old_coordinates[angle_atom.idx]
+                torsion_coords = old_coordinates[torsion_atom.idx]
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
 
                 #propose a bond and calculate its probability
@@ -219,11 +220,11 @@ class FFGeometryEngine(GeometryEngine):
                 logp_theta = self._angle_logq(internal_coordinates[1], angle, beta) - logZ_theta
 
                 #calculate torsion probability
-                logp_phi = self._torsion_logp(atom, atom_coords, torsion, atoms_with_positions, reverse_proposal_coordinates, beta)
+                logp_phi = self._torsion_logp(atom, atom_coords, torsion, old_atoms_with_positions, old_coordinates, beta)
                 logp = logp + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
 
-                atoms_with_positions.append(atom)
-                new_atoms.remove(atom)
+                old_atoms_with_positions.append(atom)
+                old_unique_atoms.remove(atom)
         return logp
 
     def _get_relevant_bond(self, atom1, atom2):
