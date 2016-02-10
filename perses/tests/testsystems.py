@@ -121,9 +121,11 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        thermodynamic_states['explicit'] = ThermodynamicState(system=testsystems['explicit'].system, temperature=300*unit.kelvin, pressure=1*unit.atmospheres)
-        thermodynamic_states['implicit'] = ThermodynamicState(system=testsystems['implicit'].system, temperature=300*unit.kelvin)
-        thermodynamic_states['vacuum']   = ThermodynamicState(system=testsystems['vacuum'].system, temperature=300*unit.kelvin)
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+        thermodynamic_states['explicit'] = ThermodynamicState(system=testsystems['explicit'].system, temperature=temperature, pressure=pressure)
+        thermodynamic_states['implicit'] = ThermodynamicState(system=testsystems['implicit'].system, temperature=temperature)
+        thermodynamic_states['vacuum']   = ThermodynamicState(system=testsystems['vacuum'].system, temperature=temperature)
 
         # Create SAMS samplers
         from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
@@ -131,10 +133,11 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         ee_samplers = dict()
         sams_samplers = dict()
         for environment in environments:
-            box_vectors = None
-            if environment == 'explicit': box_vectors = testsystems[environment].box_vectors
-            sampler_state = SamplerState(system=testsystem[environment].system, positions=positions[environment], box_vectors=box_vectors)
-            mcmc_samplers[environment] = MCMCSampler(themodynamic_state[environment], sampler_state)
+            if environment == 'explicit':
+                sampler_state = SamplerState(system=testsystems[environment].system, positions=positions[environment], box_vectors=testsystems[environment].system.getDefaultPeriodicBoxVectors())
+            else:
+                sampler_state = SamplerState(system=testsystems[environment].system, positions=positions[environment])
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
             ee_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state, proposal_engiens[environment])
             sams_samplers[environment] = SAMSSampler(thermodynamic_states[environment],
                 system_generator=system_generators[environment], proposal_engine=proposal_engines[environment],

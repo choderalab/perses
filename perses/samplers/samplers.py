@@ -17,17 +17,19 @@ import numpy as np
 from openmmtools import testsystems
 import copy
 
+from perses.samplers import thermodynamics
+
 ################################################################################
 # CONSTANTS
 ################################################################################
 
-from perses.samplers.thermodynamics import kB
+from thermodynamics import kB
 
 ################################################################################
 # THERMODYNAMIC STATE
 ################################################################################
 
-from perses.samplers.thermodynamics import ThermodynamicState
+from thermodynamics import ThermodynamicState
 
 #=============================================================================================
 # MCMC sampler state
@@ -140,12 +142,12 @@ class SamplerState(object):
         >>> # Create a Context.
         >>> import simtk.openmm as mm
         >>> import simtk.unit as u
-        >>> integrator = mm.VerletIntegrator(1.0 * u.femtoseconds)
-        >>> platform = mm.Platform.getPlatformByName('Reference')
-        >>> context = mm.Context(test.system, integrator, platform)
+        >>> integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        >>> platform = openmm.Platform.getPlatformByName('Reference')
+        >>> context = openmm.Context(test.system, integrator, platform)
         >>> # Set positions and velocities.
         >>> context.setPositions(test.positions)
-        >>> context.setVelocitiesToTemperature(298 * u.kelvin)
+        >>> context.setVelocitiesToTemperature(298 * unit.kelvin)
         >>> # Create a sampler state from the Context.
         >>> sampler_state = SamplerState.createFromContext(context)
         >>> # Clean up.
@@ -205,7 +207,7 @@ class SamplerState(object):
         >>> # Create a Context.
         >>> import simtk.openmm as mm
         >>> import simtk.unit as u
-        >>> integrator = mm.VerletIntegrator(1.0*u.femtoseconds)
+        >>> integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
         >>> context = sampler_state.createContext(integrator)
         >>> # Clean up.
         >>> del context
@@ -220,7 +222,7 @@ class SamplerState(object):
         >>> # Create a Context.
         >>> import simtk.openmm as mm
         >>> import simtk.unit as u
-        >>> integrator = mm.VerletIntegrator(1.0*u.femtoseconds)
+        >>> integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
         >>> context = sampler_state.createContext(integrator)
         >>> # Clean up.
         >>> del context
@@ -236,13 +238,13 @@ class SamplerState(object):
 
         # Use a Verlet integrator if none is specified.
         if integrator is None:
-            integrator = mm.VerletIntegrator(1.0 * u.femtoseconds)
+            integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
 
         # Create a Context.
         if platform:
-            context = mm.Context(self.system, integrator, platform)
+            context = openmm.Context(self.system, integrator, platform)
         else:
-            context = mm.Context(self.system, integrator)
+            context = openmm.Context(self.system, integrator)
 
         # Set box vectors, if specified.
         if (self.box_vectors is not None):
@@ -259,8 +261,6 @@ class SamplerState(object):
         # Set velocities, if specified.
         if (self.velocities is not None):
             context.setVelocities(self.velocities)
-        else:
-            context.setVelcocitiesToTemperature(self.temperature)
 
         return context
 
@@ -294,7 +294,7 @@ class SamplerState(object):
         timer = Timer()
 
         if (tolerance is None):
-            tolerance = 1.0 * u.kilocalories_per_mole / u.angstroms
+            tolerance = 1.0 * unit.kilocalories_per_mole / unit.angstroms
 
         if (maxIterations is None):
             maxIterations = 100
@@ -330,7 +330,7 @@ class SamplerState(object):
 
         Currently checks only the positions.
         """
-        x = self.positions / u.nanometers
+        x = self.positions / unit.nanometers
 
         if np.any(np.isnan(x)):
             return True
@@ -387,17 +387,10 @@ class MCMCSampler(object):
         """
         from openmmtools.integrators import GHMCIntegrator
         integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
-
-        # Create Context
         context = sampler_state.createContext(integrator=integrator)
-
-        # Integrate
+        context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
         integrator.step(self.nsteps)
-
-        # Retrieve sampler state
         self.sampler_state = SamplerState.createFromContext(context)
-
-        # Clean up
         del context, integrator
 
         # Increment iteration count
