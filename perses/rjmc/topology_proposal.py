@@ -148,65 +148,6 @@ class TopologyProposal(object):
     def metadata(self):
         return self._metadata
 
-class PolymerTopologyProposal(TopologyProposal):
-    """
-    This is a subclass for simulations involving switching between polymers.
-
-    Arguments
-    ---------
-    new_topology : simtk.openmm.Topology object
-        openmm Topology representing the proposed new system
-    new_system : simtk.openmm.System object
-        openmm System of the newly proposed state
-    old_topology : simtk.openmm.Topology object
-        openmm Topology of the current system
-    old_system : simtk.openmm.System object
-        openm System of the current state
-    old_positions : [n, 3] np.array, Quantity
-        positions of the old system
-    logp_proposal : float
-        log probability of the proposal
-    new_to_old_atom_map : dict
-        {new_atom_idx : old_atom_idx} map for the two systems
-    metadata : dict
-        additional information
-
-    Properties
-    ----------
-    new_topology : simtk.openmm.Topology object
-        openmm Topology representing the proposed new system
-    new_system : simtk.openmm.System object
-        openmm System of the newly proposed state
-    old_topology : simtk.openmm.Topology object
-        openmm Topology of the current system
-    old_system : simtk.openmm.System object
-        openm System of the current state
-    old_positions : [n, 3] np.array, Quantity
-        positions of the old system
-    logp_proposal : float
-        log probability of the proposal
-    new_to_old_atom_map : dict
-        {new_atom_idx : old_atom_idx} map for the two systems
-    old_to_new_atom_map : dict
-        {old_atom_idx : new_atom_idx} map for the two systems
-    unique_new_atoms : list of int
-        List of indices of the unique new atoms
-    unique_old_atoms : list of int
-        List of indices of the unique old atoms
-    natoms_new : int
-        Number of atoms in the new system
-    natoms_old : int
-        Number of atoms in the old system
-    metadata : dict
-        additional information of interest about the state
-    """
-    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, metadata=None):
-        super(PolymerTopologyProposal,self).__init__(new_topology=new_topology, new_system=new_system, old_topology=old_topology,
-                                                           old_system=old_system, old_positions=old_positions,
-                                                           logp_proposal=logp_proposal, new_to_old_atom_map=new_to_old_atom_map, metadata=metadata)
-
-
 class ProposalEngine(object):
     """
     This defines a type which, given the requisite metadata, can produce Proposals (namedtuple)
@@ -218,7 +159,7 @@ class ProposalEngine(object):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, system_generator, proposal_metadata):
+    def __init__(self, system_generator, metadata=None):
         self._system_generator = system_generator
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
@@ -249,7 +190,7 @@ class PolymerProposalEngine(ProposalEngine):
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata)
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
-        return PolymerTopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
+        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
 
 class PointMutationEngine(PolymerProposalEngine):
     """
