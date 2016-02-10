@@ -68,9 +68,14 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         Proposal engines
     themodynamic_states : dict of thermodynamic_states
         Themodynamic states for each environment
+    mcmc_samplers : dict of MCMCSampler objects
+        MCMCSampler objects for environments
+    exen_samplers : dict of ExpandedEnsembleSampler objects
+        ExpandedEnsembleSampler objects for environments
     sams_samplers : dict of SAMSSampler objects
         SAMSSampler objects for environments
-
+    designer : MultiTargetDesign sampler
+        Example MultiTargetDesign sampler for implicit solvent hydration free energies
 
     Examples
     --------
