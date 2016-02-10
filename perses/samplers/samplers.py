@@ -20,6 +20,13 @@ import copy
 from perses.samplers import thermodynamics
 
 ################################################################################
+# LOGGER
+################################################################################
+
+import logging
+logger = logging.getLogger(__name__)
+
+################################################################################
 # CONSTANTS
 ################################################################################
 
@@ -92,7 +99,6 @@ class SamplerState(object):
     Create a sampler state for a system with box vectors.
 
     >>> # Create a test system
-    >>> import testsystems
     >>> test = testsystems.LennardJonesFluid()
     >>> # Create a sampler state manually.
     >>> box_vectors = test.system.getDefaultPeriodicBoxVectors()
@@ -101,7 +107,6 @@ class SamplerState(object):
     Create a sampler state for a system without box vectors.
 
     >>> # Create a test system
-    >>> import testsystems
     >>> test = testsystems.LennardJonesCluster()
     >>> # Create a sampler state manually.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
@@ -153,7 +158,6 @@ class SamplerState(object):
         --------
 
         >>> # Create a test system
-        >>> import testsystems
         >>> test = testsystems.AlanineDipeptideVacuum()
         >>> # Create a Context.
         >>> import simtk.openmm as mm
@@ -215,7 +219,6 @@ class SamplerState(object):
         Create a context for a system with periodic box vectors.
 
         >>> # Create a test system
-        >>> import testsystems
         >>> test = testsystems.LennardJonesFluid()
         >>> # Create a sampler state manually.
         >>> box_vectors = test.system.getDefaultPeriodicBoxVectors()
@@ -231,7 +234,6 @@ class SamplerState(object):
         Create a context for a system without periodic box vectors.
 
         >>> # Create a test system
-        >>> import testsystems
         >>> test = testsystems.LennardJonesCluster()
         >>> # Create a sampler state manually.
         >>> sampler_state = SamplerState(positions=test.positions, system=test.system)
@@ -299,7 +301,6 @@ class SamplerState(object):
         --------
 
         >>> # Create a test system
-        >>> import testsystems
         >>> test = testsystems.AlanineDipeptideVacuum()
         >>> # Create a sampler state.
         >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
@@ -307,7 +308,6 @@ class SamplerState(object):
         >>> sampler_state.minimize()
 
         """
-        timer = Timer()
 
         if (tolerance is None):
             tolerance = 1.0 * unit.kilocalories_per_mole / unit.angstroms
@@ -317,14 +317,10 @@ class SamplerState(object):
 
         # Use LocalEnergyMinimizer
         from simtk.openmm import LocalEnergyMinimizer
-        timer.start("Context creation")
         context = self.createContext(platform=platform)
         logger.debug("LocalEnergyMinimizer: platform is %s" % context.getPlatform().getName())
         logger.debug("Minimizing with tolerance %s and %d max. iterations." % (tolerance, maxIterations))
-        timer.stop("Context creation")
-        timer.start("LocalEnergyMinimizer minimize")
         LocalEnergyMinimizer.minimize(context, tolerance, maxIterations)
-        timer.stop("LocalEnergyMinimizer minimize")
 
         # Retrieve data.
         sampler_state = SamplerState.createFromContext(context)
@@ -333,8 +329,6 @@ class SamplerState(object):
         self.total_energy = sampler_state.total_energy
 
         del context
-
-        timer.report_timing()
 
         return
 
@@ -373,6 +367,20 @@ class MCMCSampler(object):
     References
     ----------
     [1]
+
+    Examples
+    --------
+    >>> # Create a test system
+    >>> test = testsystems.AlanineDipeptideVacuum()
+    >>> # Create a sampler state.
+    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+    >>> # Create a thermodynamic state.
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
+    >>> # Create an MCMC sampler
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Run the sampler
+    >>> sampler.run()
+
     """
     def __init__(self, thermodynamic_state, sampler_state):
         """
@@ -455,7 +463,30 @@ class ExpandedEnsembleSampler(object):
 
     References
     ----------
-    [1]
+    [1] Lyubartsev AP, Martsinovski AA, Shevkunov SV, and Vorontsov-Velyaminov PN. New approach to Monte Carlo calculation of the free energy: Method of expanded ensembles. JCP 96:1776, 1992
+    http://dx.doi.org/10.1063/1.462133
+
+    Examples
+    --------
+    >>> # Create a test system
+    >>> test = testsystems.AlanineDipeptideVacuum()
+    >>> # Create a SystemGenerator and rebuild the System.
+    >>> from perses.rjmc.topology_proposal import SystemGenerator
+    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : app.HBonds })
+    >>> test.system = system_generator.build_system(test.topology)
+    >>> # Create a sampler state.
+    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+    >>> # Create a thermodynamic state.
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
+    >>> # Create an MCMC sampler
+    >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Create an Expanded Ensemble sampler
+    >>> from perses.rjmc.topology_proposal import PointMutationEngine
+    >>> proposal_engines[environment] = PointMutationEngine(system_generator, max_point_mutants=1, proposal_metadata=None)
+    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
+    >>> # Run the sampler
+    >>> exen_sampler.run()
+
     """
     def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=dict()):
         """
@@ -607,6 +638,29 @@ class SAMSSampler(object):
     ----------
     [1] Tan, Z. (2015) Optimally adjusted mixture sampling and locally weighted histogram analysis, Journal of Computational and Graphical Statistics, to appear. (Supplement)
     http://www.stat.rutgers.edu/home/ztan/Publication/SAMS_redo4.pdf
+
+    Examples
+    --------
+    >>> # Create a test system
+    >>> test = testsystems.AlanineDipeptideVacuum()
+    >>> # Create a SystemGenerator and rebuild the System.
+    >>> from perses.rjmc.topology_proposal import SystemGenerator
+    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : app.HBonds })
+    >>> test.system = system_generator.build_system(test.topology)
+    >>> # Create a sampler state.
+    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+    >>> # Create a thermodynamic state.
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
+    >>> # Create an MCMC sampler
+    >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Create an Expanded Ensemble sampler
+    >>> from perses.rjmc.topology_proposal import PointMutationEngine
+    >>> proposal_engines[environment] = PointMutationEngine(system_generator, max_point_mutants=1, proposal_metadata=None)
+    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
+    >>> # Create a SAMS sampler
+    >>> sams_sampler = SAMSSampler(exen_sampler)
+    >>> # Run the sampler
+    >>> sams_sampler.run()
 
     """
     def __init__(self, sampler, logZ=None, update_method='default'):
