@@ -128,9 +128,10 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         thermodynamic_states['vacuum']   = ThermodynamicState(system=testsystems['vacuum'].system, temperature=temperature)
 
         # Create SAMS samplers
+        chemical_state_key = 'ACE-ALA-NME' # TODO: Fix this to whatever they decide is the way to formulate PointMutationEngine chemical state keys
         from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
-        ee_samplers = dict()
+        exen_samplers = dict()
         sams_samplers = dict()
         for environment in environments:
             if environment == 'explicit':
@@ -138,10 +139,13 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
             else:
                 sampler_state = SamplerState(system=testsystems[environment].system, positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
-            ee_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state, proposal_engiens[environment])
-            sams_samplers[environment] = SAMSSampler(thermodynamic_states[environment],
-                system_generator=system_generators[environment], proposal_engine=proposal_engines[environment],
-                topology=topologies[environment], positions=positions[environment])
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment])
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+
+        # Create test MultiTargetDesign sampler.
+        from perses.samplers.samplers import MultiTargetDesign
+        target_samplers = { sams_samplers['implicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
+        designer = MultiTargetDesign(target_samplers)
 
         # Store things.
         self.environments = environments
@@ -151,6 +155,7 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         self.proposal_engines = proposal_engines
         self.thermodynamic_states = thermodynamic_states
         self.sams_samplers = sams_samplers
+        self.designer = designer
 
 def test_AlanineDipeptideSAMS():
     """

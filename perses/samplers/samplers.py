@@ -31,9 +31,25 @@ from thermodynamics import kB
 
 from thermodynamics import ThermodynamicState
 
-#=============================================================================================
+################################################################################
+# UTILITY FUNCTIONS
+################################################################################
+
+def log_sum_exp(a_n):
+    """
+    Compute log(sum(exp(a_n)))
+
+    Parameters
+    ----------
+    a_n : dict of objects : floats
+
+    """
+    a_n = np.array(list(a_n.values()))
+    return np.log( np.sum( np.exp(a_n - a_n.max() ) ) )
+
+################################################################################
 # MCMC sampler state
-#=============================================================================================
+################################################################################
 
 class SamplerState(object):
     """
@@ -393,6 +409,12 @@ class MCMCSampler(object):
         self.sampler_state = SamplerState.createFromContext(context)
         del context, integrator
 
+        # TODO: We currently are forced to update the default box vectors in System because we don't propagate them elsewhere in the code
+        # so if they change during simulation, we're in trouble.  We should instead have the code use SamplerState throughout, and likely
+        # should generalize SamplerState to include additional dynamical variables (like chemical state key?)
+        if self.sampler_state.box_vectors is not None:
+            self.thermodynamic_state.system.setDefaultPeriodicBoxVectors(self.sampler_state.box_vectors)
+
         # Increment iteration count
         self.iteration += 1
 
@@ -423,7 +445,7 @@ class ExpandedEnsembleSampler(object):
     ----------
     [1]
     """
-    def __init__(self, sampler, topology, state, proposal_engine, log_weights=None):
+    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=dict()):
         """
         Create an expanded ensemble sampler.
 
@@ -443,33 +465,100 @@ class ExpandedEnsembleSampler(object):
             ProposalEngine to use for proposing new chemical states
         log_weights : dict of object : float
             Log weights to use for expanded ensemble biases.
+        scheme : str, optional, default='ncmc-geometry-ncmc'
+            Update scheme. One of ['ncmc-geometry-ncmc', 'geometry-ncmc-geometry', 'geometry-ncmc']
+        options : dict, optional, default=dict()
+            Options for initializing switching scheme, such as 'timestep', 'nsteps', 'functions' for NCMC
         """
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
         self.topology = topology
-        self.state = state
-        self.system_generator = system_generator
+        self.state_key = state_key
         self.proposal_engine = proposal_engine
+        self.log_weights = log_weights
+        self.scheme = scheme
+        if self.log_weights is None: self.log_weights = dict()
+
         # Initialize
-        self.thermodynamic_state = mcmc_sampler.thermodynamic_state
-        self.keys = set()
-        self.log_weight = dict() # log weights for chemical states
-        self.update_method = 'default'
         self.iteration = 0
+        option_names = ['timestep', 'nsteps', 'functions']
+        for option_name in option_names:
+            if option_name not in options:
+                options[option_name] = None
+        from perses.annihilation.ncmc_switching import NCMCEngine
+        self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'])
+        from perses.rjmc.geometry import FFAllAngleGeometryEngine
+        geometry_engine = FFAllAngleGeometryEngine({'data': 0})
+
+    @property
+    def state_keys(self):
+        return log_weight.keys()
+
+    def update_positions(self):
+        """
+        Sample new positions.
+        """
+        self.sampler.update()
 
     def update_sampler(self):
         """
-        Update the chemical state index.
+        Sample the thermodynamic state.
         """
-        proposal = self.proposal_engine.propose(self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions, beta, metadata)
+        if self.scheme == 'ncmc-geometry-ncmc':
+            # Propose new chemical state.
+            [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
+            metadata = None # TODO: Get rid of this once metadata argument is eliminated
+            topology_proposal = self.proposal_engine.propose(system, topology, positions, metadata)
+            log_weight = self.log_weights[proposal.chemical_state_key]
+
+            # Alchemically eliminate atoms being removed.
+            [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
+            # Check that positions are not NaN
+            if np.any(np.isnan(ncmc_old_positions)):
+                raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
+
+            # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
+            top_proposal.old_positions = ncmc_old_positions
+            geometry_new_positions, geometry_logp  = self.geometry_engine.propose(top_proposal)
+
+            # Alchemically introduce new atoms.
+            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
+            # Check that positions are not NaN
+            if np.any(np.isnan(ncmc_new_positions)):
+                raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
+
+            # Compute change in eliminated potential contribution.
+            switch_logp = - (potential_insert - potential_delete) / kT
+
+            # Compute total log acceptance probability, including all components.
+            logp_accept = top_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
+            print("Proposal from '%12s' -> '%12s' : logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e log_weight %+10.4e current_log_weight %+10.4e]"
+                % (smiles, top_proposal.molecule_smiles, logp_accept, top_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, log_weight, current_log_weight))
+
+            # Accept or reject.
+            accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
+            if accept:
+                self.sampler.thermodynamic_state.system = topology_proposal.new_system
+                self.topology = topology_proposal.new_topology
+                self.sampler.positions = ncmc_new_positions
+                self.state_key = topology_proposal.chemical_state_key
+                self.naccepted += 1
+            else:
+                self.nrejected += 1
+
+        else:
+            raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
+
+        # Update statistics.
+        self.stats[self.state_key] += 1
+
 
     def update(self):
         """
         Update the sampler with one step of sampling.
         """
         self.update_sampler()
-        self.update_logZ_estimates()
         self.iteration += 1
 
 ################################################################################
@@ -482,10 +571,10 @@ class SAMSSampler(object):
 
     Properties
     ----------
-    keys : set of objects
+    state_keys : set of objects
         The names of states sampled by the sampler.
     logZ : dict() of keys : float
-        logZ[key] is the log partition function (up to an additive constant) estimate for state `key`
+        logZ[key] is the log partition function (up to an additive constant) estimate for chemical state `key`
     update_method : str
         Update method.  One of ['default']
     iteration : int
@@ -497,29 +586,35 @@ class SAMSSampler(object):
     http://www.stat.rutgers.edu/home/ztan/Publication/SAMS_redo4.pdf
 
     """
-    def __init__(self, thermodynamic_state, proposal_engine, topology, positions):
+    def __init__(self, sampler, logZ=None, update_method='default'):
         """
         Create a SAMS Sampler.
 
         Parameters
         ----------
-        thermodynamic_state
-        proposal_engine
+        sampler : ExpandedEnsembleSampler
+            The expanded ensemble sampler used to sample both configurations and discrete thermodynamic states.
+        logZ : dict of key : float, optional, default=None
+            If specified, the log partition functions for each state will be initialized to the specified dictionary.
+        update_method : str, optional, default='default'
+            SAMS update algorithm
 
         """
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
-        self.thermodynamic_state = thermodynamic_state
-        self.sampler = ExpandedEnsembleSampler(sampler, topology, state, proposal_engine)
-        self.system_generator = system_generator
-        self.proposal_engine = proposal_engine
-        self.topology = topology
-        self.positions = positions
+        self.sampler = sampler
+        if logZ is not None:
+            self.logZ = self.logZ
+        else:
+            self.logZ = dict()
+        self.update_method = update_method
+
         # Initialize.
-        self.keys = set()
-        self.logZ = dict()
-        self.update_method = 'default'
         self.iteration = 0
+
+    @property
+    def state_keys(self):
+        return logZ.keys()
 
     def update_sampler(self):
         """
@@ -551,6 +646,18 @@ class SAMSSampler(object):
         self.update_logZ_estimates()
         self.iteration += 1
 
+    def run(self, niterations=1):
+        """
+        Run the sampler for the specified number of iterations
+
+        Parameters
+        ----------
+        niterations : int, optional, default=1
+            Number of iterations to run the sampler for.
+        """
+        for iteration in range(niterations):
+            self.update()
+
 ################################################################################
 # MULTITARGET OPTIMIZATION SAMPLER
 ################################################################################
@@ -559,6 +666,15 @@ class MultiTargetDesign(object):
     """
     Multi-objective design using self-adjusted mixture sampling with additional recursion steps
     that update target weights on the fly.
+
+    Parameters
+    ----------
+    samplers : list of SAMSSampler
+        The SAMS samplers whose relative partition functions go into the design objective computation.
+    sampler_exponents : dict of SAMSSampler : float
+        samplers.keys() are the samplers, and samplers[key]
+    log_target_probabilities : dict of hashable object : float
+        log_target_probabilities[key] is the computed log objective function (target probability) for chemical state `key`
 
     """
     def __init__(self, target_samplers):
@@ -589,16 +705,21 @@ class MultiTargetDesign(object):
 
         """
         # Store target samplers.
-        self.target_samplers = target_samplers
+        self.sampler_exponents = target_samplers
+        self.samplers = list(target_samplers.keys())
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
+
+    @property
+    def state_keys(self):
+        return log_target_probabilities.keys()
 
     def update_samplers(self):
         """
         Update all samplers.
         """
-        for sampler in self.target_samplers:
+        for sampler in self.samplers:
             sampler.update()
 
     def update_target_probabilities(self):
@@ -606,15 +727,15 @@ class MultiTargetDesign(object):
         Update all target probabilities.
         """
         # Gather list of all keys.
-        all_keys = set()
-        for sampler in target_samplers:
-            for key in sampler.keys:
-                all_keys.add(key)
+        state_keys = set()
+        for sampler in self.samplers:
+            for key in sampler.state_keys:
+                state_keys.add(key)
 
         # Compute unnormalized log target probabilities.
-        log_target_probabilities = { key : 0.0 for key in all_keys }
-        for (sampler, log_weight) in target_samplers.items():
-            for key in sampler.keys:
+        log_target_probabilities = { key : 0.0 for key in state_keys }
+        for (sampler, log_weight) in self.sampler_exponents.items():
+            for key in sampler.state_keys:
                 log_target_probabilities[key] += log_weight * sampler.logZ[key]
 
         # Normalize
@@ -627,7 +748,7 @@ class MultiTargetDesign(object):
 
     def update(self):
         """
-        Run one iteration.
+        Run one iteration of the sampler.
         """
         self.update_samplers()
         self.update_target_probabilities()
