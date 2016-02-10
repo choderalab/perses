@@ -83,7 +83,7 @@ class TopologyProposal(object):
         additional information of interest about the state
     """
 
-    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
+    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None,
                  logp_proposal=None, new_to_old_atom_map=None,old_chemical_state_key=None, new_chemical_state_key=None, metadata=None):
 
         if new_chemical_state_key is None or old_chemical_state_key is None:
@@ -92,7 +92,6 @@ class TopologyProposal(object):
         self._new_system = new_system
         self._old_topology = old_topology
         self._old_system = old_system
-        self._old_positions = old_positions
         self._logp_proposal = logp_proposal
         self._new_chemical_state_key = new_chemical_state_key
         self._old_chemical_state_key = old_chemical_state_key
@@ -114,12 +113,6 @@ class TopologyProposal(object):
     @property
     def old_system(self):
         return self._old_system
-    @property
-    def old_positions(self):
-        return self._old_positions
-    @old_positions.setter
-    def old_positions(self, positions):
-        self._old_positions = positions
     @property
     def logp_proposal(self):
         return self._logp_proposal
