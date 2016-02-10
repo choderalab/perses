@@ -2,15 +2,12 @@
 This contains the base class for the geometry engine, which proposes new positions
 for each additional atom that must be added.
 """
-from collections import namedtuple
-import perses.rjmc.topology_proposal as topology_proposal
 import parmed
 import simtk.unit as units
 import logging
 import numpy as np
 from perses.rjmc import coordinate_tools
 
-GeometryProposal = namedtuple('GeometryProposal',['new_positions','logp'])
 
 
 class GeometryEngine(object):
@@ -23,10 +20,10 @@ class GeometryEngine(object):
         GeometryEngine-related metadata as a dict
     """
 
-    def __init__(self, metadata):
+    def __init__(self, metadata=None):
         pass
 
-    def propose(self, top_proposal):
+    def propose(self, top_proposal, beta):
         """
         Make a geometry proposal for the appropriate atoms.
 
@@ -34,6 +31,8 @@ class GeometryEngine(object):
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
+        beta : float
+            The inverse temperature
 
         Returns
         -------
@@ -42,7 +41,7 @@ class GeometryEngine(object):
         """
         return np.array([0.0,0.0,0.0])
 
-    def logp(self, top_proposal, new_coordinates, old_coordinates):
+    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
         """
         Calculate the logp for the given geometry proposal
 
@@ -56,6 +55,8 @@ class GeometryEngine(object):
             The coordinates of the system before the proposal
         direction : str, either 'forward' or 'reverse'
             whether the transformation is for the forward NCMC move or the reverse
+        beta : float
+            The inverse temperature
 
         Returns
         -------
@@ -69,7 +70,7 @@ class FFGeometryEngine(GeometryEngine):
     This class is a base class for GeometryEngines which rely on forcefield information for
     making matching proposals
     """
-    def __init__(self, metadata):
+    def __init__(self, metadata=None):
         self._metadata = metadata
 
     def propose(self, top_proposal, beta):
@@ -80,7 +81,7 @@ class FFGeometryEngine(GeometryEngine):
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
-        beta : float, in kT
+        beta : float
             The inverse temperature
 
         Returns
@@ -163,7 +164,7 @@ class FFGeometryEngine(GeometryEngine):
             The coordinates of the system after the proposal
         old_coordiantes : [n, 3] np.ndarray
             The coordinates of the system before the proposal
-        beta : float, in kT
+        beta : float
             The inverse temperature
 
         Returns
@@ -320,7 +321,7 @@ class FFGeometryEngine(GeometryEngine):
         torsion : parmed.dihedral object
             Torsion but with units added
         """
-        if type(torsion.type.phi_k)==units.Quantity:
+        if type(torsion.type.phi_k) == units.Quantity:
             return torsion
         torsion.type.phi_k = units.Quantity(torsion.type.phi_k, unit=units.kilocalorie_per_mole)
         torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
