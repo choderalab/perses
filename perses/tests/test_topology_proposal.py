@@ -84,10 +84,10 @@ def test_small_molecule_proposals():
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, app.Topology(), system_generator)
     initial_molecule = generate_initial_molecule('CCC')
     initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
-    proposal = proposal_engine.propose(initial_system, initial_topology, initial_positions, beta)
+    proposal = proposal_engine.propose(initial_system, initial_topology)
     for i in range(50):
         #positions are ignored here, and we don't want to run the geometry engine
-        new_proposal = proposal_engine.propose(proposal.old_system, proposal.old_topology, initial_positions, beta)
+        new_proposal = proposal_engine.propose(proposal.old_system, proposal.old_topology)
         stats_dict[new_proposal.molecule_smiles] += 1
         #check that the molecule it generated is actually the smiles we expect
         matching_molecules = [res for res in proposal.new_topology.residues() if res.name=='MOL']
@@ -358,6 +358,6 @@ if __name__ == "__main__":
     test_run_point_mutation_propose()
     test_mutate_from_every_amino_to_every_other()
     test_specify_allowed_mutants()
-    test_small_molecule_proposals()
+#    test_small_molecule_proposals()
 
 
