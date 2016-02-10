@@ -141,7 +141,7 @@ def test_run_example():
 
         # Propose a transformation from one chemical species to another.
         state_metadata = {'molecule_smiles' : smiles}
-        top_proposal = transformation.propose(system, topology, positions, beta, state_metadata) # get a new molecule
+        top_proposal = transformation.propose(system, topology, positions, state_metadata) # get a new molecule
 
         # QUESTION: What about instead initializing StateWeight once, and then using
         # log_state_weight = state_weight.computeLogStateWeight(new_topology, new_system, new_metadata)?
@@ -178,7 +178,7 @@ def test_run_example():
         if accept:
             logging.debug("accept")
             n_accepted += 1
-            (system, topology, positions, current_log_weight, smiles) = (top_proposal.new_system, top_proposal.new_topology, ncmc_new_positions, log_weight, top_proposal.molecule_smiles)
+            (system, topology, positions, current_log_weight, smiles) = (top_proposal.new_system, top_proposal.new_topology, ncmc_new_positions, log_weight, top_proposal.chemical_state_key)
         else:
             logging.debug("reject")
 
