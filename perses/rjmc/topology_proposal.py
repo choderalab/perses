@@ -25,9 +25,6 @@ except ImportError:
     from commands import getoutput  # If python 2
 
 
-SamplerState = namedtuple('SamplerState', ['topology', 'system', 'positions', 'metadata'])
-
-
 class TopologyProposal(object):
     """
     This is a container class with convenience methods to access various objects needed
