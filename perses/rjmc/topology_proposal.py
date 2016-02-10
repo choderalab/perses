@@ -84,17 +84,18 @@ class TopologyProposal(object):
     """
 
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
-                 logp_proposal=None, new_to_old_atom_map=None, chemical_state_key=None, metadata=None):
+                 logp_proposal=None, new_to_old_atom_map=None,old_chemical_state_key=None, new_chemical_state_key=None, metadata=None):
 
-        if chemical_state_key is None:
-            raise ValueError("chemical_state_key must be set.")
+        if new_chemical_state_key is None or old_chemical_state_key is None:
+            raise ValueError("chemical_state_keys must be set.")
         self._new_topology = new_topology
         self._new_system = new_system
         self._old_topology = old_topology
         self._old_system = old_system
         self._old_positions = old_positions
         self._logp_proposal = logp_proposal
-        self._chemical_state_key = chemical_state_key
+        self._new_chemical_state_key = new_chemical_state_key
+        self._old_chemical_state_key = old_chemical_state_key
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = [atom for atom in range(self._new_system.getNumParticles()) if atom not in self._new_to_old_atom_map.keys()]
@@ -141,8 +142,11 @@ class TopologyProposal(object):
     def n_atoms_old(self):
         return self._old_system.getNumParticles()
     @property
-    def chemical_state_key(self):
-        return self._chemical_state_key
+    def new_chemical_state_key(self):
+        return self._new_chemical_state_key
+    @property
+    def old_chemical_state_key(self):
+        return self._old_chemical_state_key
     @property
     def metadata(self):
         return self._metadata
@@ -182,7 +186,7 @@ class ProposalEngine(object):
             probabilities, as well as old and new topologies and atom
             mapping
         """
-        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
+        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, old_chemical_state_key="C", new_chemical_state_key="C", logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
     def compute_state_key(self, topology):
         """
@@ -748,7 +752,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 #Create the TopologyProposal and return it
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
                                                  old_positions=current_positions, logp_proposal=total_logp,
-                                                 new_to_old_atom_map=adjusted_atom_map, chemical_state_key=proposed_mol_smiles)
+                                                 new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
         return proposal
 
     def _topology_to_smiles(self, topology, molecule_name="MOL"):
@@ -797,7 +801,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             isomeric canonical SMILES
 
         """
-        chemical_state_key = self._topology_to_smiles(topology,molecule_name=molecule_name)
+        chemical_state_key, _ = self._topology_to_smiles(topology,molecule_name=molecule_name)
         return chemical_state_key
 
     def _find_mol_start_index(self, topology, resname='MOL'):
