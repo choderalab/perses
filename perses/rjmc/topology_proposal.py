@@ -86,6 +86,8 @@ class TopologyProposal(object):
     def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None, old_positions=None,
                  logp_proposal=None, new_to_old_atom_map=None, chemical_state_key=None, metadata=None):
 
+        if chemical_state_key is None:
+            raise ValueError("chemical_state_key must be set.")
         self._new_topology = new_topology
         self._new_system = new_system
         self._old_topology = old_topology
@@ -297,7 +299,7 @@ class PointMutationEngine(PolymerProposalEngine):
         # new_system : simtk.openmm.System
         new_system = self._system_generator.build_system(new_topology)
 
-        return PolymerTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
+        return TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
 
     def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations):
         """
