@@ -403,7 +403,7 @@ class MCMCSampler(object):
         """
         from openmmtools.integrators import GHMCIntegrator
         integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
-        context = sampler_state.createContext(integrator=integrator)
+        context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
         integrator.step(self.nsteps)
         self.sampler_state = SamplerState.createFromContext(context)
@@ -413,10 +413,22 @@ class MCMCSampler(object):
         # so if they change during simulation, we're in trouble.  We should instead have the code use SamplerState throughout, and likely
         # should generalize SamplerState to include additional dynamical variables (like chemical state key?)
         if self.sampler_state.box_vectors is not None:
-            self.thermodynamic_state.system.setDefaultPeriodicBoxVectors(self.sampler_state.box_vectors)
+            self.thermodynamic_state.system.setDefaultPeriodicBoxVectors(*self.sampler_state.box_vectors)
 
         # Increment iteration count
         self.iteration += 1
+
+    def run(self, niterations=1):
+        """
+        Run the sampler for the specified number of iterations
+
+        Parameters
+        ----------
+        niterations : int, optional, default=1
+            Number of iterations to run the sampler for.
+        """
+        for iteration in range(niterations):
+            self.update()
 
 ################################################################################
 # EXPANDED ENSEMBLE SAMPLER
@@ -553,13 +565,24 @@ class ExpandedEnsembleSampler(object):
         # Update statistics.
         self.stats[self.state_key] += 1
 
-
     def update(self):
         """
         Update the sampler with one step of sampling.
         """
         self.update_sampler()
         self.iteration += 1
+
+    def run(self, niterations=1):
+        """
+        Run the sampler for the specified number of iterations
+
+        Parameters
+        ----------
+        niterations : int, optional, default=1
+            Number of iterations to run the sampler for.
+        """
+        for iteration in range(niterations):
+            self.update()
 
 ################################################################################
 # SAMS SAMPLER

@@ -154,6 +154,8 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         self.system_generators = system_generators
         self.proposal_engines = proposal_engines
         self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
         self.designer = designer
 

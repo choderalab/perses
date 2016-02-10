@@ -1,6 +1,8 @@
 """
 Samplers for perses automated molecular design.
 
+TODO: Refactor tests into a test class so that AlanineDipeptideSAMS test system only needs to be constructed once for a battery of tests.
+
 """
 
 __author__ = 'John D. Chodera'
@@ -15,6 +17,7 @@ import os, os.path
 import sys, math
 import numpy as np
 import logging
+from functools import partial
 
 import perses.tests.testsystems
 
@@ -24,21 +27,40 @@ import perses.rjmc.geometry as geometry
 import perses.annihilation.ncmc_switching as ncmc_switching
 
 ################################################################################
-# TEST SAMPLERS
+# TEST MCMCSAMPLER
 ################################################################################
 
-def test_peptide_mutations_implicit():
+def test_alanine_dipeptide_samplers():
     """
-    Test mutation of alanine dipeptide in implcit solvent hydration free energy calculation.
+    Test samplers
     """
     # Retrieve the test system.
     from perses.tests.testsystems import AlanineDipeptideSAMS
     testsystem = AlanineDipeptideSAMS()
-    # Create the design sampler
+    # Test MCMCSampler samplers.
+    for environment in testsystem.environments:
+        mcmc_sampler = testsystem.mcmc_samplers[environment]
+        f = partial(mcmc_sampler.run)
+        f.description = "Testing MCMC sampler with alanine dipeptide '%s'" % environment
+        yield f
+    # Test ExpandedEnsembleSampler samplers.
+    for environment in testsystem.environments:
+        exen_sampler = testsystem.exen_samplers[environment]
+        f = partial(exen_sampler.run)
+        f.description = "Testing expanded ensemble sampler with alanine dipeptide '%s'" % environment
+        yield f
+    # Test SAMSSampler samplers.
+    for environment in testsystem.environments:
+        sams_sampler = testsystem.sams_samplers[environment]
+        f = partial(exen_sampler.run)
+        f.description = "Testing SAMS sampler with alanine dipeptide '%s'" % environment
+        yield f
+    # Test MultiTargetDesign sampler for implicit hydration free energy
     from perses.samplers.samplers import MultiTargetDesign
     # Construct a target function for identifying mutants that maximize the peptide implicit solvent hydration free energy
-    target_samplers = { testsystem.sams_samplers['implicit'] : 1.0, testsystem.sams_samplers['vacuum'] : -1.0 }
-    # Set up the design sampler.
-    designer = MultiTargetDesign(target_samplers)
-    # Run the designer engine
-    designer.run()
+    for environment in testsystem.environments:
+        target_samplers = { testsystem.sams_samplers[environment] : 1.0, testsystem.sams_samplers['vacuum'] : -1.0 }
+        designer = MultiTargetDesign(target_samplers)
+        f = partial(designer.run)
+        f.description = "Testing MultiTargetDesign sampler with alanine dipeptide mutation transfer free energy from vacuum -> %s" % environment
+        yield f
