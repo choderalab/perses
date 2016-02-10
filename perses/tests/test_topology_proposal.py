@@ -163,17 +163,16 @@ def test_specify_allowed_mutants():
 
     ff_filename = "amber99sbildn.xml"
     max_point_mutants = 1
-    proposal_metadata = {'ffxmls':[ff_filename]}
 
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
-    metadata = {'chain_id' : 'A'}
+    chain_id = 'A'
     allowed_mutations = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants,proposal_metadata, allowed_mutations=allowed_mutations)
-    pm_top_proposal = pm_top_engine.propose(system, modeller.topology, modeller.positions, metadata)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants, chain_id, allowed_mutations=allowed_mutations)
+    pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
 
 
 def test_run_point_mutation_propose():
@@ -192,16 +191,15 @@ def test_run_point_mutation_propose():
 
     ff_filename = "amber99sbildn.xml"
     max_point_mutants = 1
-    proposal_metadata = {'ffxmls':[ff_filename]}
 
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
-    metadata = {'chain_id' : 'A'}
+    chain_id = 'A'
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants,proposal_metadata)
-    pm_top_proposal = pm_top_engine.propose(system, modeller.topology, modeller.positions, metadata)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants, chain_id)
+    pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
 
 
 def test_mutate_from_every_amino_to_every_other():
@@ -226,15 +224,14 @@ def test_mutate_from_every_amino_to_every_other():
 
     ff_filename = "amber99sbildn.xml"
     max_point_mutants = 1
-    proposal_metadata = {'ffxmls':[ff_filename]}
 
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
-    metadata = {'chain_id' : 'A'}
+    chain_id = 'A'
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants,proposal_metadata)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants, chain_id)
 
     current_system = system
     current_topology = modeller.topology
@@ -242,7 +239,7 @@ def test_mutate_from_every_amino_to_every_other():
 
     old_topology = copy.deepcopy(current_topology)
 
-    chain_id = metadata['chain_id']
+    metadata = dict()
     for atom in modeller.topology.atoms():
         atom.old_index = atom.index
 
@@ -294,6 +291,7 @@ def test_mutate_from_every_amino_to_every_other():
 
     old_topology = copy.deepcopy(current_topology)
 
+    old_chemical_state_key = pm_top_engine.compute_state_key(old_topology)
 
     for chain in modeller.topology.chains():
         if chain.id == chain_id:
@@ -349,8 +347,9 @@ def test_mutate_from_every_amino_to_every_other():
             templates = pm_top_engine._ff.getMatchingTemplates(new_topology)
             assert [templates[index].name == residue.name for index, (residue, name) in enumerate(residue_map)]
 
+            new_chemical_state_key = pm_top_engine.compute_state_key(new_topology)
             new_system = pm_top_engine._system_generator.build_system(new_topology)
-            pm_top_proposal = topology_proposal.PolymerTopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
+            pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
         assert matching_amino_found == 1
 
 

@@ -156,7 +156,7 @@ class ProposalEngine(object):
     def __init__(self, system_generator, proposal_metadata=None):
         self._system_generator = system_generator
 
-    def propose(self, current_system, current_topology, current_metadata):
+    def propose(self, current_system, current_topology, current_metadata=None):
         """
         Base interface for proposal method.
 
@@ -166,8 +166,6 @@ class ProposalEngine(object):
             The current system object
         current_topology : simtk.openmm.app.Topology object
             The current topology
-        current_positions : [n,3] ndarray of floats
-            The current positions of the system
         current_metadata : dict
             Additional metadata about the state
         Returns
@@ -197,35 +195,38 @@ class ProposalEngine(object):
         pass
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self, system_generator, proposal_metadata):
+    def __init__(self, system_generator, proposal_metadata=None):
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata)
 
-    def propose(self, current_system, current_topology, current_metadata):
-        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
+    def propose(self, current_system, current_topology, current_metadata=None):
+        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_chemical_state_key="C", new_chemical_state_key="C", logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
 
 class PointMutationEngine(PolymerProposalEngine):
     """
 
     Arguments
     --------
-    max_point_mutants : int  (should this be in metadata?)
-    proposal_metadata : dict
+    system_generator : SystemGenerator
+    max_point_mutants : int 
+    proposal_metadata : dict -- OPTIONAL
         Contains information necessary to initialize proposal engine
-        {'ffxmls': [ffxml]}
+    chain_id : str
+        id of the chain to mutate
+        (using the first chain with the id, if there are multiple)
     allowed_mutations : list(list(tuple)) -- OPTIONAL
         default = None
         ('residue id to mutate','desired mutant residue name (3-letter code)')
     """
 
-    def __init__(self, system_generator, max_point_mutants, proposal_metadata, allowed_mutations=None):
-        super(PointMutationEngine,self).__init__(system_generator, proposal_metadata)
-        # load templates for replacement residues -- should be taken from ff, get rid of templates directory
+    def __init__(self, system_generator, max_point_mutants, chain_id, proposal_metadata=None, allowed_mutations=None):
+        super(PointMutationEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata)
         self._max_point_mutants = max_point_mutants
-        self._ff = app.ForceField(*proposal_metadata['ffxmls'])
+        self._ff = system_generator.forcefield 
         self._templates = self._ff._templates
         self._allowed_mutations = allowed_mutations
+        self._chain_id = chain_id
 
-    def propose(self, current_system, current_topology, current_positions, current_metadata):
+    def propose(self, current_system, current_topology, current_metadata=None):
         """
 
         Arguments
@@ -234,12 +235,7 @@ class PointMutationEngine(PolymerProposalEngine):
             The current system object
         current_topology : simtk.openmm.app.Topology object
             The current topology
-        current_positions : [n,3] ndarray of floats
-            The current positions of the system
-        current_metadata : dict
-            ['chain_id'] -- id of the chain to mutate
-            (using the first chain with the id, if there are multiple)
-            {'chain_id' : 'X'}
+        current_metadata : dict -- OPTIONAL
         Returns
         -------
         proposal : TopologyProposal
@@ -253,11 +249,16 @@ class PointMutationEngine(PolymerProposalEngine):
         atom_map = dict()
         # metadata : dict, key = 'chain_id' , value : str
         metadata = current_metadata
+        if metadata == None:
+            metadata = dict()
+        # old_chemical_state_key : str
+        old_chemical_state_key = self.compute_state_key(current_topology)
 
         # chain_id : str
-        chain_id = metadata['chain_id']
+        chain_id = self._chain_id
         # save old indeces for mapping -- could just directly save positions instead
         # modeller : simtk.openmm.app.Modeller
+        current_positions = np.zeros((current_topology.getNumAtoms(), 3))
         modeller = app.Modeller(current_topology, current_positions)
         # atom : simtk.openmm.app.topology.Atom
         for atom in modeller.topology.atoms():
@@ -291,10 +292,12 @@ class PointMutationEngine(PolymerProposalEngine):
                 pass
         new_topology = modeller.topology
 
+        # new_chemical_state_key : str
+        new_chemical_state_key = self.compute_state_key(new_topology)
         # new_system : simtk.openmm.System
         new_system = self._system_generator.build_system(new_topology)
 
-        return TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
+        return TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
 
     def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations):
         """
@@ -625,6 +628,36 @@ class PointMutationEngine(PolymerProposalEngine):
         # add new bonds to the new residues
         return modeller
 
+    def compute_state_key(self, topology):
+        one_letter_code = {
+            'ALA': 'A',
+            'ARG': 'R',
+            'ASN': 'N',
+            'ASP': 'D',
+            'CYS': 'C',
+            'GLN': 'Q',
+            'GLU': 'E',
+            'GLY': 'G',
+            'HID': 'H',
+            'HIE': 'H',
+            'HIS': 'H',
+            'ILE': 'I',
+            'LEU': 'L',
+            'LYS': 'K',
+            'MET': 'M',
+            'PHE': 'F',
+            'PRO': 'P',
+            'SER': 'S',
+            'THR': 'T',
+            'TRP': 'W',
+            'TYR': 'Y',
+            'VAL': 'V'
+        }
+        chemical_state_key = ''
+        for res in topology.residues():
+            chemical_state_key+=one_letter_code[res.name]
+
+        return chemical_state_key
 
 class SystemGenerator(object):
     """
@@ -642,9 +675,9 @@ class SystemGenerator(object):
     """
 
     def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None):
-        self._forcefields = forcefields_to_use
+        self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
-        self._forcefield = app.ForceField(*self._forcefields)
+        self._forcefield = app.ForceField(*self._forcefield_xmls)
         self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     def build_system(self, new_topology):
@@ -668,7 +701,11 @@ class SystemGenerator(object):
 
     @property
     def ffxmls(self):
-        return self._forcefields
+        return self._forcefield_xmls
+    
+    @property
+    def forcefield(self):
+        return self._forcefield
 
 class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
@@ -705,14 +742,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             the system of the current state
         current_topology : app.Topology object
             the topology of the current state
-        current_positions : [n, 3] np.ndarray of float
-            current positions
         current_metadata : dict
             dict containing current smiles as a key
 
         Returns
         -------
-        proposal : SmallMoleculeTopologyProposal object
+        proposal : TopologyProposal object
            topology proposal object
         """
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
