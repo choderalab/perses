@@ -358,6 +358,6 @@ if __name__ == "__main__":
     test_run_point_mutation_propose()
     test_mutate_from_every_amino_to_every_other()
     test_specify_allowed_mutants()
-#    test_small_molecule_proposals()
+    test_small_molecule_proposals()
 
 
