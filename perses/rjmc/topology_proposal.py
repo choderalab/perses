@@ -165,7 +165,7 @@ class ProposalEngine(object):
     def __init__(self, system_generator, proposal_metadata=None):
         self._system_generator = system_generator
 
-    def propose(self, current_system, current_topology, current_positions, current_metadata):
+    def propose(self, current_system, current_topology, current_metadata):
         """
         Base interface for proposal method.
 
@@ -186,7 +186,7 @@ class ProposalEngine(object):
             probabilities, as well as old and new topologies and atom
             mapping
         """
-        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, old_chemical_state_key="C", new_chemical_state_key="C", logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
+        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_chemical_state_key="C", new_chemical_state_key="C", logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
     def compute_state_key(self, topology):
         """
@@ -209,8 +209,8 @@ class PolymerProposalEngine(ProposalEngine):
     def __init__(self, system_generator, proposal_metadata):
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata)
 
-    def propose(self, current_system, current_topology, current_positions, current_metadata):
-        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
+    def propose(self, current_system, current_topology, current_metadata):
+        return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
 
 class PointMutationEngine(PolymerProposalEngine):
     """
@@ -704,7 +704,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._generated_topologies = dict()
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata)
 
-    def propose(self, current_system, current_topology, current_positions, current_metadata=None):
+    def propose(self, current_system, current_topology, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -730,7 +730,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         #choose the next molecule to simulate:
         proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
-                                                                           current_positions, current_mol_smiles)
+                                                                                current_mol_smiles)
 
         new_topology, new_mol_start_index = self._build_new_topology(proposed_mol)
         new_system = self._system_generator.build_system(new_topology)
@@ -749,9 +749,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for (key, value) in mol_atom_map.items():
             adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
 
-                #Create the TopologyProposal and return it
-        proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system,
-                                                 old_positions=current_positions, logp_proposal=total_logp,
+        #Create the TopologyProposal and return it
+        proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
                                                  new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
         return proposal
 
@@ -918,7 +917,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map, 1.0/len(matches)
 
-    def _propose_molecule(self, system, topology, positions, molecule_smiles):
+    def _propose_molecule(self, system, topology, molecule_smiles):
         """
         Simple method that randomly chooses a molecule unformly.
         Symmetric proposal, so logp is 0. Override with a mixin.
@@ -943,8 +942,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         logp : float
             The log probability of the choice
         """
-        current_idx = self._smiles_list.index(molecule_smiles)
-        #prob = np.array([1.0/(self._n_molecules-1) for i in range(self._n_molecules)])
         proposed_smiles = np.random.choice(self._smiles_list)
         proposed_mol = self._smiles_to_oemol(proposed_smiles)
         return proposed_smiles, proposed_mol, 0.0
