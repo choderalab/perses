@@ -40,8 +40,6 @@ class TopologyProposal(object):
         openmm Topology of the current system
     old_system : simtk.openmm.System object
         openm System of the current state
-    old_positions : [n, 3] np.array, Quantity
-        positions of the old system
     logp_proposal : float
         log probability of the proposal
     new_to_old_atom_map : dict
