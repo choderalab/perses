@@ -11,6 +11,10 @@ Alanine dipeptide in various environments (vacuum, implicit, explicit):
 >>> system_generator = testsystem.system_generator['explicit']
 >>> sams_sampler = testsystem.sams_sampler['explicit']
 
+TODO
+----
+* Rename `AlanineDipeptideSAMS` to `AlanineDipeptideExample`?
+
 """
 
 __author__ = 'John D. Chodera'
