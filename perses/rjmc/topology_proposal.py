@@ -158,7 +158,7 @@ class ProposalEngine(object):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, system_generator, metadata=None):
+    def __init__(self, system_generator, proposal_metadata=None):
         self._system_generator = system_generator
 
     def propose(self, current_system, current_topology, current_positions, current_metadata):
