@@ -182,6 +182,23 @@ class ProposalEngine(object):
         """
         return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_positions=current_positions, logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata={'molecule_smiles' : 'CC'})
 
+    def compute_state_key(self, topology):
+        """
+        Compute the corresponding state key of a given topology,
+        according to this proposal engine's scheme.
+
+        Parameters
+        ----------
+        topology : app.Topology
+            the topology in question
+
+        Returns
+        -------
+        chemical_state_key : str
+            The chemical_state_key
+        """
+        pass
+
 class PolymerProposalEngine(ProposalEngine):
     def __init__(self, system_generator, proposal_metadata):
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata)
@@ -612,13 +629,6 @@ class PointMutationEngine(PolymerProposalEngine):
         return modeller
 
 
-class PeptideLibraryEngine(PolymerProposalEngine):
-    def __init__(self):
-        pass
-    def propose(self):
-        pass
-
-
 class SystemGenerator(object):
     """
     This is a utility class to generate OpenMM Systems from
@@ -767,6 +777,26 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         smiles_string = oechem.OECreateIsoSmiString(oemol)
         return smiles_string, oemol
 
+    def compute_state_key(self, topology, molecule_name="MOL"):
+        """
+        Given a topology, come up with a state key string.
+        For this class, the state key is an isomeric canonical SMILES.
+
+        Parameters
+        ----------
+        topology : app.Topology object
+            The topology object in question.
+        molecule_name : str, optional
+            The name of the molecule residue in the topology, default MOL
+
+        Returns
+        -------
+        chemical_state_key : str
+            isomeric canonical SMILES
+
+        """
+        chemical_state_key = self._topology_to_smiles(topology,molecule_name=molecule_name)
+        return chemical_state_key
 
     def _find_mol_start_index(self, topology, resname='MOL'):
         """
