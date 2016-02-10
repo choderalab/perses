@@ -195,11 +195,15 @@ class ProposalEngine(object):
         pass
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self, system_generator, proposal_metadata=None):
+    def __init__(self, system_generator, chain_id, proposal_metadata=None):
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata)
+        self._chain_id = chain_id
 
     def propose(self, current_system, current_topology, current_metadata=None):
         return TopologyProposal(new_topology=app.Topology(), old_topology=app.Topology(), old_system=current_system, old_chemical_state_key="C", new_chemical_state_key="C", logp_proposal=0.0, new_to_old_atom_map={0 : 0}, metadata=current_metadata)
+
+    def compute_state_key(self, topology):
+        return ''
 
 class PointMutationEngine(PolymerProposalEngine):
     """
@@ -219,12 +223,11 @@ class PointMutationEngine(PolymerProposalEngine):
     """
 
     def __init__(self, system_generator, max_point_mutants, chain_id, proposal_metadata=None, allowed_mutations=None):
-        super(PointMutationEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata)
+        super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata)
         self._max_point_mutants = max_point_mutants
         self._ff = system_generator.forcefield 
         self._templates = self._ff._templates
         self._allowed_mutations = allowed_mutations
-        self._chain_id = chain_id
 
     def propose(self, current_system, current_topology, current_metadata=None):
         """
