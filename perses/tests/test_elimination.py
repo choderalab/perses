@@ -94,7 +94,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
             raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
 
     nequil = 5 # number of equilibration iterations
-    niterations = 50 # number of round-trip switching trials
+    niterations = 25 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     logP_switch_n = np.zeros([niterations], np.float64)

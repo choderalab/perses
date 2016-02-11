@@ -12,7 +12,9 @@ default_functions = {
     'lambda_torsions' : 'lambda'
     }
 
-
+default_temperature = 300.0*unit.kelvin
+default_nsteps = 1
+default_timestep = 1.0 * unit.femtoseconds
 
 class NCMCEngine(object):
     """
@@ -35,7 +37,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=300.0*unit.kelvin, functions=default_functions, nsteps=1, timestep=1.0*unit.femtoseconds, constraint_tolerance=None, platform=None):
+    def __init__(self, temperature=default_temperature, functions=default_functions, nsteps=default_nsteps, timestep=default_timestep, constraint_tolerance=None, platform=None):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -56,6 +58,16 @@ class NCMCEngine(object):
             If specified, the platform to use for OpenMM simulations.
 
         """
+        # Handle some defaults.
+        if functions == None:
+            functions = default_functions
+        if nsteps == None:
+            nsteps = default_nsteps
+        if timestep == None:
+            timestep = default_timestep
+        if temperature == None:
+            temperature = default_temperature
+
         self.temperature = temperature
         self.functions = copy.deepcopy(functions)
         self.nsteps = nsteps
