@@ -308,6 +308,8 @@ def test_logp_reverse():
     sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top1, new_system=sys1, old_topology=top2, old_system=sys2,
                                                                       logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, metadata={'test':0.0})
     logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
+    print(logp_proposal)
+    print(logp_reverse)
     print(logp_reverse-logp_proposal)
 
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):

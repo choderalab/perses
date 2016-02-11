@@ -127,19 +127,16 @@ class FFGeometryEngine(GeometryEngine):
                 logp_r = self._bond_logq(r_proposed, bond, beta) - logZ_r
 
                 #propose an angle and calculate its probability
-                propose_angle_separately = True
-                if propose_angle_separately:
-                    angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-                    theta_proposed = self._propose_angle(angle, beta)
-                    angle_k = angle.type.k
-                    sigma_theta = units.sqrt(1/(beta*angle_k))
-                    logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit))
-                    logp_theta = self._angle_logq(theta_proposed, angle, beta) - logZ_theta
+                angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
+                theta_proposed = self._propose_angle(angle, beta)
+                angle_k = angle.type.k
+                sigma_theta = units.sqrt(1/(beta*angle_k))
+                logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit))
+                logp_theta = self._angle_logq(theta_proposed, angle, beta) - logZ_theta
 
-                    #propose a torsion angle and calcualate its probability
-                    phi_proposed, logp_phi = self._propose_torsion(atom, r_proposed, theta_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
-                else:
-                    theta_proposed, phi_proposed, logp_theta_phi, xyz = self._joint_torsion_angle_proposal(atom, r_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
+                #propose a torsion angle and calcualate its probability
+                phi_proposed, logp_phi = self._propose_torsion(atom, r_proposed, theta_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
+
                 #convert to cartesian
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r_proposed, theta_proposed, phi_proposed)
 
@@ -695,7 +692,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         r = internal_coordinates[0]*units.nanometers
         theta = internal_coordinates[1]*units.radians
         phi = internal_coordinates[2]*units.radians
-        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=50)
         #find the phi that's closest to the internal_coordinate phi:
         phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-phi))
         return logp[phi_idx]
@@ -705,49 +702,9 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         Propose a torsion angle, including energetic contributions from other torsions and angles
         """
         #first, let's get the normalizing constant of this distribution
-        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=50)
         #choose from the set of possible torsion angles
         phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp))
         logp = logp[phi_idx]
         phi = phis[phi_idx]
         return phi, logp
-
-    def _normalize_torsion_and_angle(self, atom, r, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000):
-        """
-        Construct a grid of points on the surface of a sphere bounded by the bond length
-        """
-        involved_angles = self._get_valid_angles(atoms_with_positions, atom)
-        involved_torsions = self._get_torsions(atoms_with_positions, atom)
-
-        xyz_grid = units.Quantity(np.zeros([n_divisions, n_divisions, 3]), unit=units.nanometers)
-        thetas = units.Quantity(np.arange(0, np.pi, np.pi/n_divisions), unit=units.radians)
-        phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
-
-        #now, for every theta, phi combination, get the xyz coordinates:
-        for i in range(len(thetas)):
-            for j in range(len(phis)):
-                xyz_grid[i, j, :], _ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, thetas[i], phis[j])
-
-        logq = np.zeros([n_divisions, n_divisions])
-
-        #now, for each xyz point in the grid, calculate the log q(theta, phi)
-        for i in range(len(thetas)):
-            for j in range(len(phis)):
-                logq[i, j] = self._torsion_and_angle_logq(xyz_grid[i, j], atom, positions, involved_angles, involved_torsions, beta)
-        logq -= np.max(logq)
-        q = np.exp(logq)
-        Z = np.sum(q)
-        logp = logq - np.log(Z)
-        return logp, Z, q, thetas, phis, xyz_grid
-
-    def _joint_torsion_angle_proposal(self, atom, r, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
-        n_divisions = 50
-        logp, Z, q, thetas, phis, xyz_grid = self._normalize_torsion_and_angle(atom, r, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=n_divisions)
-        logp_flat = np.ravel(logp)
-        theta_phi_idx = np.random.choice(range(len(logp_flat)), p=np.exp(logp_flat))
-        theta_idx, phi_idx = np.unravel_index(theta_phi_idx, [n_divisions, n_divisions])
-        xyz = xyz_grid[theta_idx, phi_idx]
-        logp = logp_flat[theta_phi_idx]
-        theta = thetas[theta_idx]
-        phi = phis[phi_idx]
-        return theta, phi, logp, xyz
