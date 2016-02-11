@@ -482,7 +482,8 @@ class ExpandedEnsembleSampler(object):
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
-    >>> proposal_engine = PointMutationEngine(system_generator, max_point_mutants=1, chain_id=' ', proposal_metadata=None)
+    >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
+    >>> proposal_engine = PointMutationEngine(system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
     >>> # Run the sampler
     >>> exen_sampler.run()
@@ -532,11 +533,11 @@ class ExpandedEnsembleSampler(object):
         from perses.annihilation.ncmc_switching import NCMCEngine
         self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'])
         from perses.rjmc.geometry import FFAllAngleGeometryEngine
-        geometry_engine = FFAllAngleGeometryEngine({'data': 0})
+        self.geometry_engine = FFAllAngleGeometryEngine({'data': 0})
 
     @property
     def state_keys(self):
-        return log_weight.keys()
+        return log_weights.keys()
 
     def update_positions(self):
         """
@@ -552,7 +553,12 @@ class ExpandedEnsembleSampler(object):
             # Propose new chemical state.
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
-            log_weight = self.log_weights[proposal.chemical_state_key]
+
+            # Determine log weight
+            state_key = topology_proposal.new_chemical_state_key
+            if state_key not in self.log_weights:
+                self.log_weights[state_key] = 0.0
+            log_weight = self.log_weights[state_key]
 
             # Alchemically eliminate atoms being removed.
             [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
@@ -561,8 +567,8 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
 
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
-            top_proposal.old_positions = ncmc_old_positions
-            geometry_new_positions, geometry_logp  = self.geometry_engine.propose(top_proposal)
+            topology_proposal.old_positions = ncmc_old_positions
+            geometry_new_positions, geometry_logp  = self.geometry_engine.propose(topology_proposal)
 
             # Alchemically introduce new atoms.
             [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
@@ -584,7 +590,7 @@ class ExpandedEnsembleSampler(object):
                 self.sampler.thermodynamic_state.system = topology_proposal.new_system
                 self.topology = topology_proposal.new_topology
                 self.sampler.positions = ncmc_new_positions
-                self.state_key = topology_proposal.chemical_state_key
+                self.state_key = topology_proposal.new_chemical_state_key
                 self.naccepted += 1
             else:
                 self.nrejected += 1
@@ -654,7 +660,8 @@ class SAMSSampler(object):
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
-    >>> proposal_engine = PointMutationEngine(system_generator, max_point_mutants=1, chain_id=' ', proposal_metadata=None)
+    >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
+    >>> proposal_engine = PointMutationEngine(system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
     >>> # Create a SAMS sampler
     >>> sams_sampler = SAMSSampler(exen_sampler)

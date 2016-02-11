@@ -124,8 +124,9 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
+        allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id=' ', proposal_metadata=proposal_metadata)
+            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id='1', proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState

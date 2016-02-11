@@ -211,7 +211,7 @@ class PointMutationEngine(PolymerProposalEngine):
     Arguments
     --------
     system_generator : SystemGenerator
-    max_point_mutants : int 
+    max_point_mutants : int
     proposal_metadata : dict -- OPTIONAL
         Contains information necessary to initialize proposal engine
     chain_id : str
@@ -225,7 +225,7 @@ class PointMutationEngine(PolymerProposalEngine):
     def __init__(self, system_generator, max_point_mutants, chain_id, proposal_metadata=None, allowed_mutations=None):
         super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata)
         self._max_point_mutants = max_point_mutants
-        self._ff = system_generator.forcefield 
+        self._ff = system_generator.forcefield
         self._templates = self._ff._templates
         self._allowed_mutations = allowed_mutations
 
@@ -363,11 +363,16 @@ class PointMutationEngine(PolymerProposalEngine):
         # this shouldn't be here
         aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
         # chain : simtk.openmm.app.topology.Chain
+        chain_found = False
         for chain in modeller.topology.chains():
             if chain.id == chain_id:
                 # num_residues : int
                 num_residues = len(chain._residues)
+                chain_found = True
                 break
+        if not chain_found:
+            chains = [ chain.id for chain in modeller.topology.chains() ]
+            raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
         # location_prob : np.array, probability value for each residue location (uniform)
         location_prob = np.array([1.0/num_residues for i in range(num_residues)])
         for i in range(self._max_point_mutants):
@@ -633,8 +638,10 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def compute_state_key(self, topology):
         chemical_state_key = ''
-        for res in topology.residues():
-            chemical_state_key+=res.name
+        for (index, res) in enumerate(topology.residues()):
+            if (index > 0):
+                chemical_state_key += '-'
+            chemical_state_key += res.name
 
         return chemical_state_key
 
@@ -681,7 +688,7 @@ class SystemGenerator(object):
     @property
     def ffxmls(self):
         return self._forcefield_xmls
-    
+
     @property
     def forcefield(self):
         return self._forcefield
