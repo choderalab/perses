@@ -658,7 +658,10 @@ class PointMutationEngine(PolymerProposalEngine):
         }
         chemical_state_key = ''
         for res in topology.residues():
-            chemical_state_key+=one_letter_code[res.name]
+            try:
+                chemical_state_key+=one_letter_code[res.name]
+            except KeyError:
+                chemical_state_key+='X'
 
         return chemical_state_key
 
