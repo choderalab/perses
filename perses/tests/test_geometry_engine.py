@@ -281,8 +281,9 @@ def test_logp_reverse():
     """
     Make sure logp_reverse and logp_forward are consistent
     """
-    molecule_name_1 = 'pentane'
-    molecule_name_2 = '2-methylpentane'
+    np.seterr(all='raise')
+    molecule_name_1 = 'ethane'
+    molecule_name_2 = 'propane'
     #molecule_name_1 = 'benzene'
     #molecule_name_2 = 'biphenyl'
 
@@ -297,16 +298,16 @@ def test_logp_reverse():
     import perses.rjmc.topology_proposal as topology_proposal
 
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
-                                                                      old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+                                                                    logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, beta)
+    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
 
     #now pretend that the new coordinates are the old, and calculate logp again
     #reverse the atom map:
     old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping.items()}
-    sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
-                                                                      old_positions=pos2, logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, metadata={'test':0.0})
-    logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, pos1, new_positions, beta)
+    sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top1, new_system=sys1, old_topology=top2, old_system=sys2,
+                                                                      logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, metadata={'test':0.0})
+    logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
     print(logp_reverse-logp_proposal)
 
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):

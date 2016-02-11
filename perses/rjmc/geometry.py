@@ -6,6 +6,7 @@ import parmed
 import simtk.unit as units
 import logging
 import numpy as np
+import copy
 from perses.rjmc import coordinate_tools
 
 
@@ -23,7 +24,7 @@ class GeometryEngine(object):
     def __init__(self, metadata=None):
         pass
 
-    def propose(self, top_proposal, beta):
+    def propose(self, top_proposal, current_positions, beta):
         """
         Make a geometry proposal for the appropriate atoms.
 
@@ -73,7 +74,7 @@ class FFGeometryEngine(GeometryEngine):
     def __init__(self, metadata=None):
         self._metadata = metadata
 
-    def propose(self, top_proposal, beta):
+    def propose(self, top_proposal, current_positions, beta):
         """
         Make a geometry proposal for the appropriate atoms.
 
@@ -96,10 +97,11 @@ class FFGeometryEngine(GeometryEngine):
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_new_atoms]
         atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
         new_positions = units.Quantity(np.zeros([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
+        current_positions = current_positions.in_units_of(units.nanometers)
         #copy positions
         for atom in atoms_with_positions:
             old_index = top_proposal.new_to_old_atom_map[atom.idx]
-            new_positions[atom.idx] = top_proposal.old_positions[old_index]
+            new_positions[atom.idx] = current_positions[old_index]
 
         #maintain a running list of the atoms still needing positions
         while(len(new_atoms)>0):
@@ -140,12 +142,11 @@ class FFGeometryEngine(GeometryEngine):
                     theta_proposed, phi_proposed, logp_theta_phi, xyz = self._joint_torsion_angle_proposal(atom, r_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
                 #convert to cartesian
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r_proposed, theta_proposed, phi_proposed)
-                detJ=0.0
 
                 #add new position to array of new positions
                 new_positions[atom.idx] = xyz
                 #accumulate logp
-                logp_proposal = logp_proposal + logp_choice + logp_r + logp_theta +logp_phi + np.log(detJ+1)
+                logp_proposal = logp_proposal + logp_choice + logp_r + logp_theta +logp_phi + np.log(detJ)
 
                 atoms_with_positions.append(atom)
                 new_atoms.remove(atom)
@@ -176,6 +177,8 @@ class FFGeometryEngine(GeometryEngine):
         old_structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
         old_atoms_with_positions = [old_structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
         old_unique_atoms = [old_structure.atoms[idx] for idx in top_proposal.unique_old_atoms]
+        old_coordinates = old_coordinates.in_units_of(units.nanometers)
+        new_coordinates = new_coordinates.in_units_of(units.nanometers)
 
         #copy common atomic positions
         for atom in old_structure.atoms:
@@ -204,7 +207,7 @@ class FFGeometryEngine(GeometryEngine):
                 angle_coords = old_coordinates[angle_atom.idx]
                 torsion_coords = old_coordinates[torsion_atom.idx]
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
-                r = internal_coordinates[0]*units.angstrom
+                r = internal_coordinates[0]*atom_coords.unit
                 theta = internal_coordinates[1]*units.radian
                 phi = internal_coordinates[2]*units.radian
 
@@ -229,6 +232,23 @@ class FFGeometryEngine(GeometryEngine):
                 old_atoms_with_positions.append(atom)
                 old_unique_atoms.remove(atom)
         return logp
+
+    def _get_proposal_order(self, topology_for_proposal, reference_topology, new_to_old_atom_map):
+        """
+        Get the order of proposal for the atoms needing proposal. Also get a list of torsions
+        that could be used in each atom's proposal.
+
+        Parameters
+        ----------
+        topology_for_proposal
+        reference_topology
+        new_to_old_atom_map
+
+        Returns
+        -------
+        atoms_for_proposal : dict of {atom :
+
+        """
 
     def _get_relevant_bond(self, atom1, atom2):
         """
@@ -423,15 +443,15 @@ class FFGeometryEngine(GeometryEngine):
         Cartesian to internal function
         """
         #ensure we have the correct units, then remove them
-        atom_position = atom_position.in_units_of(units.nanometers)/units.nanometers
-        bond_position = bond_position.in_units_of(units.nanometers)/units.nanometers
-        angle_position = angle_position.in_units_of(units.nanometers)/units.nanometers
-        torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
+        atom_position = atom_position.value_in_unit(units.nanometers)
+        bond_position = bond_position.value_in_unit(units.nanometers)
+        angle_position = angle_position.value_in_unit(units.nanometers)
+        torsion_position = torsion_position.value_in_unit(units.nanometers)
 
         internal_coords = coordinate_tools._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
 
 
-        return internal_coords, internal_coords[0]**2*np.sin(internal_coords)
+        return internal_coords, internal_coords[0]**2*np.sin(internal_coords[1])
 
 
     def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
@@ -671,10 +691,13 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
             bond_atom = torsion.atom3
             angle_atom = torsion.atom2
             torsion_atom = torsion.atom1
-        internal_coordinates = self._cartesian_to_internal(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        logp, Z, q, phis = self._normalize_torsion_proposal(atom, internal_coordinates[0], internal_coordinates[1], bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
+        internal_coordinates, _ = self._cartesian_to_internal(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
+        r = internal_coordinates[0]*units.nanometers
+        theta = internal_coordinates[1]*units.radians
+        phi = internal_coordinates[2]*units.radians
+        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         #find the phi that's closest to the internal_coordinate phi:
-        phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-internal_coordinates[2]))
+        phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-phi))
         return logp[phi_idx]
 
     def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
@@ -682,7 +705,7 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         Propose a torsion angle, including energetic contributions from other torsions and angles
         """
         #first, let's get the normalizing constant of this distribution
-        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=100)
+        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000)
         #choose from the set of possible torsion angles
         phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp))
         logp = logp[phi_idx]
