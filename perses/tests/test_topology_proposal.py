@@ -88,7 +88,7 @@ def test_small_molecule_proposals():
     for i in range(50):
         #positions are ignored here, and we don't want to run the geometry engine
         new_proposal = proposal_engine.propose(proposal.old_system, proposal.old_topology)
-        stats_dict[new_proposal.molecule_smiles] += 1
+        stats_dict[new_proposal._smiles_list] += 1
         #check that the molecule it generated is actually the smiles we expect
         matching_molecules = [res for res in proposal.new_topology.residues() if res.name=='MOL']
         if len(matching_molecules) != 1:

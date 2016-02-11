@@ -98,8 +98,8 @@ def test_run_geometry_engine():
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
 
-    sm_top_proposal = topology_proposal.SmallMoleculeTopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
-                                                                      old_positions=pos1, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+    sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
+                                                                      old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     test_pdb_file = open("output.pdb", 'w')
