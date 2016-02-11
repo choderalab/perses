@@ -632,36 +632,9 @@ class PointMutationEngine(PolymerProposalEngine):
         return modeller
 
     def compute_state_key(self, topology):
-        one_letter_code = {
-            'ALA': 'A',
-            'ARG': 'R',
-            'ASN': 'N',
-            'ASP': 'D',
-            'CYS': 'C',
-            'GLN': 'Q',
-            'GLU': 'E',
-            'GLY': 'G',
-            'HID': 'H',
-            'HIE': 'H',
-            'HIS': 'H',
-            'ILE': 'I',
-            'LEU': 'L',
-            'LYS': 'K',
-            'MET': 'M',
-            'PHE': 'F',
-            'PRO': 'P',
-            'SER': 'S',
-            'THR': 'T',
-            'TRP': 'W',
-            'TYR': 'Y',
-            'VAL': 'V'
-        }
         chemical_state_key = ''
         for res in topology.residues():
-            try:
-                chemical_state_key+=one_letter_code[res.name]
-            except KeyError:
-                chemical_state_key+='X'
+            chemical_state_key+=res.name
 
         return chemical_state_key
 
