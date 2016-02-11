@@ -125,7 +125,7 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, proposal_metadata=proposal_metadata)
+            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id=' ', proposal_metadata=proposal_metadata)
 
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState

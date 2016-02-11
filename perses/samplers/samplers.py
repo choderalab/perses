@@ -482,7 +482,7 @@ class ExpandedEnsembleSampler(object):
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
-    >>> proposal_engines[environment] = PointMutationEngine(system_generator, max_point_mutants=1, proposal_metadata=None)
+    >>> proposal_engine = PointMutationEngine(system_generator, max_point_mutants=1, chain_id=' ', proposal_metadata=None)
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
     >>> # Run the sampler
     >>> exen_sampler.run()
@@ -551,8 +551,7 @@ class ExpandedEnsembleSampler(object):
         if self.scheme == 'ncmc-geometry-ncmc':
             # Propose new chemical state.
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
-            metadata = None # TODO: Get rid of this once metadata argument is eliminated
-            topology_proposal = self.proposal_engine.propose(system, topology, positions, metadata)
+            topology_proposal = self.proposal_engine.propose(system, topology)
             log_weight = self.log_weights[proposal.chemical_state_key]
 
             # Alchemically eliminate atoms being removed.
@@ -655,7 +654,7 @@ class SAMSSampler(object):
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
-    >>> proposal_engines[environment] = PointMutationEngine(system_generator, max_point_mutants=1, proposal_metadata=None)
+    >>> proposal_engine = PointMutationEngine(system_generator, max_point_mutants=1, chain_id=' ', proposal_metadata=None)
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
     >>> # Create a SAMS sampler
     >>> sams_sampler = SAMSSampler(exen_sampler)
