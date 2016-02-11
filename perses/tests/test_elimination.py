@@ -68,7 +68,7 @@ def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temp
     velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
     return [positions, velocities]
 
-def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_MAX=6.0):
+def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0):
     """
     Test alchemical elimination engine on null transformations, where some atoms are deleted and then reinserted in a cycle.
 
@@ -98,7 +98,6 @@ def check_alchemical_null_elimination(topology_proposal, ncmc_nsteps=50, NSIGMA_
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     logP_switch_n = np.zeros([niterations], np.float64)
-    positions = topology_proposal.old_positions
     print("")
     for iteration in range(nequil):
         [positions, velocities] = simulate(topology_proposal.old_system, positions)
@@ -184,7 +183,7 @@ def test_alchemical_elimination_mutation():
                 old_chemical_state_key='AA', new_chemical_state_key='AG', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=topology_proposal.metadata)
 
     for ncmc_nsteps in [0, 1, 2, 50]:
-        f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
+        f = partial(check_alchemical_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical null transformation of ALA sidechain in alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
 
@@ -249,7 +248,7 @@ def test_ncmc_engine_molecule():
             new_topology=topology, new_system=system, old_topology=topology, old_system=system,
             old_chemical_state_key='', new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
         for ncmc_nsteps in [0, 1, 2, 50]:
-            f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
+            f = partial(check_alchemical_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
@@ -269,7 +268,7 @@ def test_alchemical_elimination_peptide():
         logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
 
     for ncmc_nsteps in [0, 1, 2, 50]:
-        f = partial(check_alchemical_null_elimination, topology_proposal, ncmc_nsteps=ncmc_nsteps)
+        f = partial(check_alchemical_null_elimination, topology_proposal, testsystem.positions, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
 
