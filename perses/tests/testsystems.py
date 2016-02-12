@@ -135,9 +135,9 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Create peptide in solvent.
         from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
         testsystems = dict()
-        testsystems['explicit'] = AlanineDipeptideExplicit()
-        testsystems['implicit'] = AlanineDipeptideImplicit()
-        testsystems['vacuum']    = AlanineDipeptideVacuum()
+        testsystems['explicit'] = AlanineDipeptideExplicit(constraints=None)
+        testsystems['implicit'] = AlanineDipeptideImplicit(constraints=None)
+        testsystems['vacuum']    = AlanineDipeptideVacuum(constraints=None)
 
         # Store topologies and positions.
         topologies = dict()
