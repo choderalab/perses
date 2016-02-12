@@ -226,10 +226,9 @@ class FFGeometryEngine(GeometryEngine):
                     logp_r = self._bond_logq(r, bond, beta) - logZ_r
                 else:
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.old_system)
-                    if np.abs(r-constraint) > 0:
-                        logp_r = -np.inf
-                    else:
-                        logp_r = 0.0
+                    if constraint is None:
+                        raise Exception("No Bond or constraint between atom %d and %d" % (atom.idx, bond_atom.idx))
+                    logp_r = 0.0
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
                 angle_k = angle.type.k
