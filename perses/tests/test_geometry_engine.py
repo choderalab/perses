@@ -307,7 +307,7 @@ def test_logp_reverse():
     old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping.items()}
     sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top1, new_system=sys1, old_topology=top2, old_system=sys2,
                                                                       logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, metadata={'test':0.0})
-    logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
+    logp_reverse = geometry_engine.logp_reverse(sm_reverse_proposal, pos1, new_positions, beta)
     print(logp_proposal)
     print(logp_reverse)
     print(logp_reverse-logp_proposal)
