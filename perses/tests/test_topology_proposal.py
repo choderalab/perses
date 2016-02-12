@@ -419,12 +419,12 @@ def test_run_peptide_library_engine():
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
-#    test_run_point_mutation_propose()
-#    test_mutate_from_every_amino_to_every_other()
-#    test_specify_allowed_mutants()
+    test_run_point_mutation_propose()
+    test_mutate_from_every_amino_to_every_other()
+    test_specify_allowed_mutants()
     test_limiting_allowed_residues()
     test_run_peptide_library_engine()
-#    test_small_molecule_proposals()
+    test_small_molecule_proposals()
 
 
 
