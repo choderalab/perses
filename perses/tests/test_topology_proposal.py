@@ -96,8 +96,8 @@ def test_small_molecule_proposals():
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
         smiles_string = oechem.OEMolToSmiles(oemol)
-        old_smiles = proposal.molecule_smiles
-        assert smiles_string==old_smiles
+        new_smiles = proposal.new_chemical_state_key
+        assert smiles_string==new_smiles
         proposal = new_proposal
 
 
