@@ -76,19 +76,19 @@ def test_alkanes_samplers():
     for environment in testsystem.environments:
         mcmc_sampler = testsystem.mcmc_samplers[environment]
         f = partial(mcmc_sampler.run)
-        f.description = "Testing MCMC sampler with alanine dipeptide '%s'" % environment
+        f.description = "Testing MCMC sampler with alkanes '%s'" % environment
         yield f
     # Test ExpandedEnsembleSampler samplers.
     for environment in testsystem.environments:
         exen_sampler = testsystem.exen_samplers[environment]
         f = partial(exen_sampler.run)
-        f.description = "Testing expanded ensemble sampler with alanine dipeptide '%s'" % environment
+        f.description = "Testing expanded ensemble sampler with alkanes '%s'" % environment
         yield f
     # Test SAMSSampler samplers.
     for environment in testsystem.environments:
         sams_sampler = testsystem.sams_samplers[environment]
         f = partial(exen_sampler.run)
-        f.description = "Testing SAMS sampler with alanine dipeptide '%s'" % environment
+        f.description = "Testing SAMS sampler with alkanes '%s'" % environment
         yield f
     # Test MultiTargetDesign sampler for implicit hydration free energy
     from perses.samplers.samplers import MultiTargetDesign
@@ -97,5 +97,5 @@ def test_alkanes_samplers():
         target_samplers = { testsystem.sams_samplers[environment] : 1.0, testsystem.sams_samplers['vacuum'] : -1.0 }
         designer = MultiTargetDesign(target_samplers)
         f = partial(designer.run)
-        f.description = "Testing MultiTargetDesign sampler with alanine dipeptide mutation transfer free energy from vacuum -> %s" % environment
+        f.description = "Testing MultiTargetDesign sampler with alkanes mutation transfer free energy from vacuum -> %s" % environment
         yield f
