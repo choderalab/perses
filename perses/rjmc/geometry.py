@@ -123,14 +123,15 @@ class FFGeometryEngine(GeometryEngine):
                 #propose a bond and calculate its probability
                 #if it's not a bond, it's a constraint
                 bond = self._get_relevant_bond(atom, bond_atom)
-                if type(bond)==parmed.Atom:
+                if bond is not None:
                     r_proposed = self._propose_bond(bond, beta)
                     bond_k = bond.type.k
                     sigma_r = units.sqrt(1/(beta*bond_k))
                     logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit))
                     logp_r = self._bond_logq(r_proposed, bond, beta) - logZ_r
                 else:
-                    r_proposed = bond #set bond length to exactly constraint
+                    constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
+                    r_proposed = constraint #set bond length to exactly constraint
                     logp_r = 0.0
 
                 #propose an angle and calculate its probability
@@ -218,13 +219,14 @@ class FFGeometryEngine(GeometryEngine):
                 #propose a bond and calculate its probability, if it's a bond.
                 #Otherwise, it's a constraint.
                 bond = self._get_relevant_bond(atom, bond_atom)
-                if type(bond)==parmed.Atom:
+                if bond is not None:
                     bond_k = bond.type.k
                     sigma_r = units.sqrt(1/(beta*bond_k))
                     logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit)) #need to eliminate unit to allow numpy log
                     logp_r = self._bond_logq(r, bond, beta) - logZ_r
                 else:
-                    if np.abs(r-bond) > 0:
+                    constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.old_system)
+                    if np.abs(r-constraint) > 0:
                         logp_r = -np.inf
                     else:
                         logp_r = 0.0
@@ -263,7 +265,7 @@ class FFGeometryEngine(GeometryEngine):
     def _get_relevant_bond(self, atom1, atom2, system):
         """
         utility function to get the bond connecting atoms 1 and 2.
-        Returns either a bond object or a constraint distance
+        Returns either a bond object or None
         (since there is no constraint class)
 
         Arguments
@@ -278,16 +280,14 @@ class FFGeometryEngine(GeometryEngine):
         Returns
         -------
         bond : bond object
-            Bond connecting the two atoms, if there is one
-        constraint_parameter : unit.Quantity, nm
-            Constraint parameter, if there is a constraint
+            Bond connecting the two atoms, if there is one. None if constrained or
+            no bond.
         """
         bonds_1 = set(atom1.bonds)
         bonds_2 = set(atom2.bonds)
         relevant_bond_set = bonds_1.intersection(bonds_2)
         if len(relevant_bond_set)==0: #this means there is a bond constraint
-             constraint_parameter = self._get_bond_constraint(atom1, atom2, system)
-             return constraint_parameter
+             return None
         relevant_bond = relevant_bond_set.pop()
         relevant_bond_with_units = self._add_bond_units(relevant_bond)
         return relevant_bond_with_units
