@@ -539,6 +539,29 @@ class ExpandedEnsembleSampler(object):
     def state_keys(self):
         return log_weights.keys()
 
+    def get_log_weight(self, state_key):
+        """
+        Get the log weight of the specified state.
+
+        Parameters
+        ----------
+        state_key : hashable object
+            The state key (e.g. chemical state key) to look up.
+
+        Returns
+        -------
+        log_weight : float
+            The log weight of the provided state key.
+
+        Note
+        ----
+        This adds the key to the self.log_weights dict.
+
+        """
+        if state_key not in self.log_weights:
+            self.log_weights[state_key] = 0.0
+        return self.log_weights[state_key]
+
     def update_positions(self):
         """
         Sample new positions.
@@ -554,11 +577,13 @@ class ExpandedEnsembleSampler(object):
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
 
+            # Determine state keys
+            old_state_key = self.state_key
+            new_state_key = topology_proposal.new_chemical_state_key
+
             # Determine log weight
-            state_key = topology_proposal.new_chemical_state_key
-            if state_key not in self.log_weights:
-                self.log_weights[state_key] = 0.0
-            log_weight = self.log_weights[state_key]
+            old_log_weight = self.get_log_weight(old_state_key)
+            new_log_weight = self.get_log_weight(new_state_key)
 
             # Alchemically eliminate atoms being removed.
             [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
@@ -576,12 +601,12 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
 
             # Compute change in eliminated potential contribution.
-            switch_logp = - (potential_insert - potential_delete) / kT
+            switch_logp = - self.sampler.thermodynamic_state.beta * (potential_insert - potential_delete)
 
             # Compute total log acceptance probability, including all components.
-            logp_accept = top_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
+            logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
             print("Proposal from '%12s' -> '%12s' : logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e log_weight %+10.4e current_log_weight %+10.4e]"
-                % (smiles, top_proposal.molecule_smiles, logp_accept, top_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, log_weight, current_log_weight))
+                % (old_state_key, new_state_key, logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, log_weight, current_log_weight))
 
             # Accept or reject.
             accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
