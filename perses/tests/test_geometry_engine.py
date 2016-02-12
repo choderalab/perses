@@ -298,7 +298,7 @@ def test_logp_reverse():
     import perses.rjmc.topology_proposal as topology_proposal
 
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
-                                                                    logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+                                                                    logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, new_chemical_state_key="CCC", old_chemical_state_key="CC", metadata={'test':0.0})
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
 
@@ -306,7 +306,7 @@ def test_logp_reverse():
     #reverse the atom map:
     old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping.items()}
     sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top1, new_system=sys1, old_topology=top2, old_system=sys2,
-                                                                      logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, metadata={'test':0.0})
+                                                                      logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, new_chemical_state_key="CC", old_chemical_state_key="CCCC", metadata={'test':0.0})
     logp_reverse = geometry_engine.logp_reverse(sm_reverse_proposal, pos1, new_positions, beta)
     print(logp_proposal)
     print(logp_reverse)
@@ -380,4 +380,4 @@ if __name__=="__main__":
     #test_openmm_dihedral()
     #test_try_random_itoc()
     #test_angle()
-    #test_logp_reverse()
+    test_logp_reverse()
