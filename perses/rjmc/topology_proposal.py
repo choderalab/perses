@@ -658,13 +658,16 @@ class SystemGenerator(object):
         Allows specification of various aspects of system creation.
     metadata : dict, optional
         Metadata associated with the SystemGenerator.
+    use_antechamber : bool, optional, default=True
+        If True, will add the GAFF residue template generator.
     """
 
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
-        self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+        if use_antechamber:
+            self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     def build_system(self, new_topology):
         """
