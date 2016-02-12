@@ -567,8 +567,7 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
 
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
-            topology_proposal.old_positions = ncmc_old_positions
-            geometry_new_positions, geometry_logp  = self.geometry_engine.propose(topology_proposal)
+            geometry_new_positions, geometry_logp  = self.geometry_engine.propose(topology_proposal, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
 
             # Alchemically introduce new atoms.
             [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
