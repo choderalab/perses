@@ -245,7 +245,7 @@ class FFGeometryEngine(GeometryEngine):
                 old_unique_atoms.remove(atom)
         return logp
 
-    def _get_relevant_bond(self, atom1, atom2, system):
+    def _get_relevant_bond(self, atom1, atom2):
         """
         utility function to get the bond connecting atoms 1 and 2.
         Returns either a bond object or None
@@ -257,8 +257,6 @@ class FFGeometryEngine(GeometryEngine):
              One of the atoms in the bond
         atom2 : parmed.atom object
              The other atom in the bond
-        system : openmm.System object
-            The system (containing constraints)
 
         Returns
         -------
