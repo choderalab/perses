@@ -660,15 +660,13 @@ class PeptideLibraryEngine(PolymerProposalEngine):
     Arguments
     --------
     system_generator : SystemGenerator
-    max_point_mutants : int
-    proposal_metadata : dict -- OPTIONAL
-        Contains information necessary to initialize proposal engine
+    library : list of strings
+        each string is a 1-letter-code list of amino acid sequence
     chain_id : str
         id of the chain to mutate
         (using the first chain with the id, if there are multiple)
-    allowed_mutations : list(list(tuple)) -- OPTIONAL
-        default = None
-        ('residue id to mutate','desired mutant residue name (3-letter code)')
+    proposal_metadata : dict -- OPTIONAL
+        Contains information necessary to initialize proposal engine
     """
 
     def __init__(self, system_generator, library, chain_id, proposal_metadata=None):
@@ -678,9 +676,82 @@ class PeptideLibraryEngine(PolymerProposalEngine):
         self._templates = self._ff._templates
 
     def _choose_mutant(self, modeller, metadata):
+        """
+        Used when library of pepide sequences has been provided
+        Assume (for now) uniform probability of selecting each peptide
+
+        Arguments
+        ---------
+        modeller : simtk.openmm.app.Modeller
+        chain_id : str
+        allowed_mutations : list(list(tuple))
+            list of allowed mutant states; each entry in the list is a list because multiple mutations may be desired
+            tuple : (str, str) -- residue id and three-letter amino acid code of desired mutant
+
+        Returns
+        -------
+        index_to_new_residues : dict
+            key : int (index, zero-indexed in chain)
+            value : str (three letter residue name)
+        metadata : dict
+            has not been altered
+        """
+        library = self._library
+
         index_to_new_residues = dict()
+
+        # chain : simtk.openmm.app.topology.Chain
+        chain_found = False
+        for chain in modeller.topology.chains():
+            if chain.id == chain_id:
+                chain_found = True
+                break
+        if not chain_found:
+            chains = [ chain.id for chain in modeller.topology.chains() ]
+            raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
+        residue_id_to_index = [residue.id for residue in chain._residues]
+        # location_prob : np.array, probability value for each residue location (uniform)
+        location_prob = np.array([1.0/len(library) for i in range(len(library))])
+        proposed_location = np.random.choice(range(len(library)), p=location_prob)
+        for residue_id, residue_one_letter in enumerate(library[proposed_location]):
+            # original_residue : simtk.openmm.app.topology.Residue
+            original_residue = chain._residues[residue_id_to_index.index(residue_id)]
+            residue_name = self._one_to_three_letter_code(residue_one_letter)
+            # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+            index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
+            if residue_name == 'HIS':
+                his_state = ['HIE','HID']
+                his_prob = np.array([0.5 for i in range(len(his_state))])
+                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
+
+        # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues, metadata
 
+    def _one_to_three_letter_code(self, residue_one_letter):
+        three_letter_code = {
+            'A' : 'ALA',
+            'C' : 'CYS',
+            'D' : 'ASP',
+            'E' : 'GLU',
+            'F' : 'PHE',
+            'G' : 'GLY',
+            'H' : 'HIS',
+            'I' : 'ILE',
+            'K' : 'LYS',
+            'L' : 'LEU',
+            'M' : 'MET',
+            'N' : 'ASN',
+            'P' : 'PRO',
+            'Q' : 'GLN',
+            'R' : 'ARG',
+            'S' : 'SER',
+            'T' : 'THR',
+            'V' : 'VAL',
+            'W' : 'TRP',
+            'Y' : 'TYR'
+        }  
+        return three_letter_code[residue_one_letter]
 
 class SystemGenerator(object):
     """
