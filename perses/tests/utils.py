@@ -70,6 +70,47 @@ def createOEMolFromIUPAC(iupac_name='bosutinib'):
 
     return mol
 
+def createOEMolFromSMILES(smiles='CC', title='MOL'):
+    """
+    Generate an oemol with a geometry
+    """
+    from openeye import oechem, oeiupac, oeomega
+
+    # Create molecule
+    mol = oechem.OEMol()
+    oechem.OESmilesToMol(mol, smiles)
+
+    # Set title.
+    mol.SetTitle(title)
+
+    # Assign aromaticity and hydrogens.
+    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
+    oechem.OEAddExplicitHydrogens(mol)
+
+    # Create atom names.
+    oechem.OETriposAtomNames(mol)
+
+    # Assign geometry
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega.SetIncludeInput(False)
+    omega.SetStrictStereo(True)
+    omega(mol)
+
+    return mol
+
+def oemol_to_omm_ff(oemol, molecule_name):
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
+    system = system_generator.build_system(topology)
+    positions = extractPositionsFromOEMOL(oemol)
+    return system, positions, topology
+
+
+
 def generate_gaff_xml():
     """
     Return a file-like object for `gaff.xml`
