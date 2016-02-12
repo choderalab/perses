@@ -267,9 +267,9 @@ class FFGeometryEngine(GeometryEngine):
         bonds_1 = set(atom1.bonds)
         bonds_2 = set(atom2.bonds)
         relevant_bond_set = bonds_1.intersection(bonds_2)
-        if len(relevant_bond_set)==0: #this means there is a bond constraint
-             return None
         relevant_bond = relevant_bond_set.pop()
+        if relevant_bond.type is None:
+            return None
         relevant_bond_with_units = self._add_bond_units(relevant_bond)
         return relevant_bond_with_units
 
