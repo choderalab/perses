@@ -7,13 +7,9 @@ Examples
 Alanine dipeptide in various environments (vacuum, implicit, explicit):
 
 >>> from perses.tests.testsystems import AlaninDipeptideSAMS
->>> testsystem = AlanineDipeptideSAMS()
+>>> testsystem = AlanineDipeptideTestSystem()
 >>> system_generator = testsystem.system_generator['explicit']
 >>> sams_sampler = testsystem.sams_sampler['explicit']
-
-TODO
-----
-* Rename `AlanineDipeptideSAMS` to `AlanineDipeptideExample`?
 
 """
 
@@ -43,7 +39,7 @@ from perses.samplers.thermodynamics import kB
 # TEST SYSTEMS
 ################################################################################
 
-class SAMSTestSystem(object):
+class PersesTestSystem(object):
     def __init__(self):
         self.environments = list()
         self.topologies = dict()
@@ -51,9 +47,12 @@ class SAMSTestSystem(object):
         self.system_generators = dict()
         self.proposal_engines = dict()
         self.thermodynamic_states = dict()
+        self.mcmc_samplers = dict()
+        self.exen_samplers = dict()
         self.sams_samplers = dict()
+        self.designer = None
 
-class AlanineDipeptideSAMS(SAMSTestSystem):
+class AlanineDipeptideTestSystem(PersesTestSystem):
     """
     Create a consistent set of SAMS samplers useful for testing PointMutationEngine on alanine dipeptide in various solvents.
     This is useful for testing a variety of components.
@@ -84,8 +83,8 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
     Examples
     --------
 
-    >>> from perses.tests.testsystems import AlanineDipeptideSAMS
-    >>> testsystem = AlanineDipeptideSAMS()
+    >>> from perses.tests.testsystems import AlanineDipeptideTestSystem
+    >>> testsystem = AlanineDipeptideTestSystem()
     # Build a system
     >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
@@ -93,7 +92,7 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
 
     """
     def __init__(self):
-        super(AlanineDipeptideSAMS, self).__init__()
+        super(AlanineDipeptideTestSystem, self).__init__()
         environments = ['explicit', 'implicit', 'vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -169,12 +168,12 @@ class AlanineDipeptideSAMS(SAMSTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
-def test_AlanineDipeptideSAMS():
+def test_AlanineDipeptideTestSystem():
     """
-    Testing AlanineDipeptideSAMS...
+    Testing AlanineDipeptideTestSystem...
     """
-    from perses.tests.testsystems import AlanineDipeptideSAMS
-    testsystem = AlanineDipeptideSAMS()
+    from perses.tests.testsystems import AlanineDipeptideTestSystem
+    testsystem = AlanineDipeptideTestSystem()
     # Build a system
     system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler

@@ -779,8 +779,8 @@ class MultiTargetDesign(object):
         Examples
         --------
         Set up a mutation sampler to maximize implicit solvent hydration free energy.
-        >>> from perses.tests.testsystems import AlanineDipeptideSAMS
-        >>> testsystem = AlanineDipeptideSAMS()
+        >>> from perses.tests.testsystems import AlanineDipeptideTestSystem
+        >>> testsystem = AlanineDipeptideTestSystem()
         >>> # Set up target samplers.
         >>> target_samplers = { testsystem.sams_samplers['implicit'] : 1.0, testsystem.sams_samplers['vacuum'] : -1.0 }
         >>> # Set up the design sampler.

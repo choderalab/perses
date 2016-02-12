@@ -35,8 +35,8 @@ def test_alanine_dipeptide_samplers():
     Test samplers
     """
     # Retrieve the test system.
-    from perses.tests.testsystems import AlanineDipeptideSAMS
-    testsystem = AlanineDipeptideSAMS()
+    from perses.tests.testsystems import AlanineDipeptideTestSystem
+    testsystem = AlanineDipeptideTestSystem()
     # Test MCMCSampler samplers.
     for environment in testsystem.environments:
         mcmc_sampler = testsystem.mcmc_samplers[environment]
