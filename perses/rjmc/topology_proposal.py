@@ -679,13 +679,27 @@ class SystemGenerator(object):
         new_topology : simtk.openmm.app.Topology object
             The topology of the system
 
-
         Returns
         -------
         new_system : openmm.System
             A system object generated from the topology
         """
-        system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
+        try:
+            system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
+        except Exception as e:
+            from simtk import unit
+            nparticles = sum([1 for atom in new_topology.atoms()])
+            positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.angstroms)
+            # Write PDB file of failed topology
+            from simtk.openmm.app import PDBFile
+            outfile = open('BuildSystem-failure.pdb', 'w')
+            pdbfile = PDBFile.writeFile(new_topology, positions, outfile)
+            outfile.close()
+            msg = str(e)
+            msg += "\n"
+            msg += "PDB file written as 'BuildSystem-failure.pdb'"
+            raise Exception(msg)
+
         return system
 
     @property
