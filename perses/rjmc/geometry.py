@@ -245,23 +245,6 @@ class FFGeometryEngine(GeometryEngine):
                 old_unique_atoms.remove(atom)
         return logp
 
-    def _get_proposal_order(self, topology_for_proposal, reference_topology, new_to_old_atom_map):
-        """
-        Get the order of proposal for the atoms needing proposal. Also get a list of torsions
-        that could be used in each atom's proposal.
-
-        Parameters
-        ----------
-        topology_for_proposal
-        reference_topology
-        new_to_old_atom_map
-
-        Returns
-        -------
-        atoms_for_proposal : dict of {atom :
-
-        """
-
     def _get_relevant_bond(self, atom1, atom2, system):
         """
         utility function to get the bond connecting atoms 1 and 2.
