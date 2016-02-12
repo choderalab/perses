@@ -30,13 +30,13 @@ logger = logging.getLogger(__name__)
 # CONSTANTS
 ################################################################################
 
-from thermodynamics import kB
+from perses.samplers.thermodynamics import kB
 
 ################################################################################
 # THERMODYNAMIC STATE
 ################################################################################
 
-from thermodynamics import ThermodynamicState
+from perses.samplers.thermodynamics import ThermodynamicState
 
 ################################################################################
 # UTILITY FUNCTIONS
