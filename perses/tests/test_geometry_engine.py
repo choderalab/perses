@@ -9,11 +9,31 @@ import simtk.openmm.app as app
 import simtk.unit as unit
 import numpy as np
 import parmed
+from pkg_resources import resource_filename
+import os
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
+
+def get_data_filename(relative_path):
+    """Get the full path to one of the reference files shipped for testing
+    In the source distribution, these files are in ``perses/data/*/``,
+    but on installation, they're moved to somewhere in the user's python
+    site-packages directory.
+    Parameters
+    ----------
+    name : str
+        Name of the file to load (with respect to the openmoltools folder).
+    """
+
+    fn = resource_filename('perses', relative_path)
+
+    if not os.path.exists(fn):
+        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
+
+    return fn
 
 def generate_molecule_from_smiles(smiles):
     """
@@ -22,6 +42,8 @@ def generate_molecule_from_smiles(smiles):
     mol = oechem.OEMol()
     oechem.OESmilesToMol(mol, smiles)
     oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega(mol)
@@ -34,12 +56,31 @@ def generate_initial_molecule(iupac_name):
     mol = oechem.OEMol()
     oeiupac.OEParseIUPACName(mol, iupac_name)
     oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega(mol)
     return mol
 
 def oemol_to_openmm_system(oemol, molecule_name):
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
+    system = system_generator.build_system(topology)
+    positions = extractPositionsFromOEMOL(oemol)
+    return system, positions, topology
+
+def extractPositionsFromOEMOL(molecule):
+    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
+    coords = molecule.GetCoords()
+    for index in range(molecule.NumAtoms()):
+        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
+    return positions
+
+def oemol_to_openmm_system_amber(oemol, molecule_name):
     """
     Create an openmm system out of an oemol
 
@@ -92,8 +133,8 @@ def test_run_geometry_engine():
     molecule2 = generate_initial_molecule(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
-    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
+    sys1, pos1, top1 = oemol_to_openmm_system_amber(molecule1, molecule_name_1)
+    sys2, pos2, top2 = oemol_to_openmm_system_amber(molecule2, molecule_name_2)
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
@@ -120,7 +161,6 @@ def test_run_geometry_engine():
 
 def test_existing_coordinates():
     """
-    predUS
     for each torsion, calculate position of atom1
     """
     molecule_name_2 = 'butane'
@@ -237,6 +277,40 @@ def test_try_random_itoc():
         crtp = geometry_engine._cartesian_to_internal(recomputed_xyz,bond_position, angle_position, torsion_position)
         print(atom_position-recomputed_xyz)
 
+def test_logp_reverse():
+    """
+    Make sure logp_reverse and logp_forward are consistent
+    """
+    np.seterr(all='raise')
+    molecule_name_1 = 'ethane'
+    molecule_name_2 = 'propane'
+    #molecule_name_1 = 'benzene'
+    #molecule_name_2 = 'biphenyl'
+
+    molecule1 = generate_initial_molecule(molecule_name_1)
+    molecule2 = generate_initial_molecule(molecule_name_2)
+    new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
+
+    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
+    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
+
+    import perses.rjmc.geometry as geometry
+    import perses.rjmc.topology_proposal as topology_proposal
+
+    sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
+                                                                    logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
+
+    #now pretend that the new coordinates are the old, and calculate logp again
+    #reverse the atom map:
+    old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping.items()}
+    sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top1, new_system=sys1, old_topology=top2, old_system=sys2,
+                                                                      logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, metadata={'test':0.0})
+    logp_reverse = geometry_engine.logp_reverse(sm_reverse_proposal, pos1, new_positions, beta)
+    print(logp_proposal)
+    print(logp_reverse)
+    print(logp_reverse-logp_proposal)
 
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     import copy
@@ -301,8 +375,9 @@ def test_angle():
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    test_run_geometry_engine()
+    #test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
     #test_angle()
+    test_logp_reverse()
