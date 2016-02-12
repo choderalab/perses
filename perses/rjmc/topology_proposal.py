@@ -670,7 +670,7 @@ class PeptideLibraryEngine(PolymerProposalEngine):
     """
 
     def __init__(self, system_generator, library, chain_id, proposal_metadata=None):
-        super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata)
+        super(PeptideLibraryEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata)
         self._library = library
         self._ff = system_generator.forcefield
         self._templates = self._ff._templates
@@ -701,6 +701,7 @@ class PeptideLibraryEngine(PolymerProposalEngine):
         index_to_new_residues = dict()
 
         # chain : simtk.openmm.app.topology.Chain
+        chain_id = self._chain_id
         chain_found = False
         for chain in modeller.topology.chains():
             if chain.id == chain_id:
@@ -709,21 +710,20 @@ class PeptideLibraryEngine(PolymerProposalEngine):
         if not chain_found:
             chains = [ chain.id for chain in modeller.topology.chains() ]
             raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
-        residue_id_to_index = [residue.id for residue in chain._residues]
         # location_prob : np.array, probability value for each residue location (uniform)
         location_prob = np.array([1.0/len(library) for i in range(len(library))])
         proposed_location = np.random.choice(range(len(library)), p=location_prob)
-        for residue_id, residue_one_letter in enumerate(library[proposed_location]):
+        for residue_index, residue_one_letter in enumerate(library[proposed_location]):
             # original_residue : simtk.openmm.app.topology.Residue
-            original_residue = chain._residues[residue_id_to_index.index(residue_id)]
+            original_residue = chain._residues[residue_index]
             residue_name = self._one_to_three_letter_code(residue_one_letter)
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
-            index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
+            index_to_new_residues[residue_index] = residue_name
             if residue_name == 'HIS':
                 his_state = ['HIE','HID']
                 his_prob = np.array([0.5 for i in range(len(his_state))])
                 his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-                index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
+                index_to_new_residues[residue_index] = his_state[his_choice]
 
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues, metadata
