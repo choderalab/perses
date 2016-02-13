@@ -460,6 +460,12 @@ class ExpandedEnsembleSampler(object):
         All known states.
     iteration : int
         Iterations completed.
+    naccepted : int
+        Number of accepted thermodynamic/chemical state changes.
+    nrejected : int
+        Number of rejected thermodynamic/chemical state changes.
+    number_of_state_visits : dict of state_key
+        Cumulative counts of visited states.
 
     References
     ----------
@@ -472,7 +478,7 @@ class ExpandedEnsembleSampler(object):
     >>> test = testsystems.AlanineDipeptideVacuum()
     >>> # Create a SystemGenerator and rebuild the System.
     >>> from perses.rjmc.topology_proposal import SystemGenerator
-    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : app.HBonds })
+    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None })
     >>> test.system = system_generator.build_system(test.topology)
     >>> # Create a sampler state.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
@@ -534,10 +540,37 @@ class ExpandedEnsembleSampler(object):
         self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'])
         from perses.rjmc.geometry import FFAllAngleGeometryEngine
         self.geometry_engine = FFAllAngleGeometryEngine({'data': 0})
+        self.naccepted = 0
+        self.nrejected = 0
+        self.number_of_state_visits = dict()
+        self.verbose = False
 
     @property
     def state_keys(self):
         return log_weights.keys()
+
+    def get_log_weight(self, state_key):
+        """
+        Get the log weight of the specified state.
+
+        Parameters
+        ----------
+        state_key : hashable object
+            The state key (e.g. chemical state key) to look up.
+
+        Returns
+        -------
+        log_weight : float
+            The log weight of the provided state key.
+
+        Note
+        ----
+        This adds the key to the self.log_weights dict.
+
+        """
+        if state_key not in self.log_weights:
+            self.log_weights[state_key] = 0.0
+        return self.log_weights[state_key]
 
     def update_positions(self):
         """
@@ -572,11 +605,13 @@ class ExpandedEnsembleSampler(object):
                 msg += 'ExpandedEnsembleSampler.update_sampler: toology_proposal.new_topology before ProposalEngine call cannot be built into a system'
                 raise Exception(msg)
 
+            # Determine state keys
+            old_state_key = self.state_key
+            new_state_key = topology_proposal.new_chemical_state_key
+
             # Determine log weight
-            state_key = topology_proposal.new_chemical_state_key
-            if state_key not in self.log_weights:
-                self.log_weights[state_key] = 0.0
-            log_weight = self.log_weights[state_key]
+            old_log_weight = self.get_log_weight(old_state_key)
+            new_log_weight = self.get_log_weight(new_state_key)
 
             # Alchemically eliminate atoms being removed.
             [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
@@ -594,12 +629,13 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
 
             # Compute change in eliminated potential contribution.
-            switch_logp = - (potential_insert - potential_delete) / kT
+            switch_logp = - self.sampler.thermodynamic_state.beta * (potential_insert - potential_delete)
 
             # Compute total log acceptance probability, including all components.
-            logp_accept = top_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + log_weight - current_log_weight
-            print("Proposal from '%12s' -> '%12s' : logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e log_weight %+10.4e current_log_weight %+10.4e]"
-                % (smiles, top_proposal.molecule_smiles, logp_accept, top_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, log_weight, current_log_weight))
+            logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
+            if self.verbose:
+                print("Proposal from '%12s' -> '%12s' : logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
+                    % (old_state_key, new_state_key, logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
 
             # Accept or reject.
             accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
@@ -616,7 +652,7 @@ class ExpandedEnsembleSampler(object):
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
 
         # Update statistics.
-        self.stats[self.state_key] += 1
+        self.update_statistics()
 
     def update(self):
         """
@@ -636,6 +672,14 @@ class ExpandedEnsembleSampler(object):
         """
         for iteration in range(niterations):
             self.update()
+
+    def update_statistics(self):
+        """
+        Update sampler statistics.
+        """
+        if self.state_key not in self.number_of_state_visits:
+            self.number_of_state_visits[self.state_key] = 0
+        self.number_of_state_visits[self.state_key] += 1
 
 ################################################################################
 # SAMS SAMPLER
@@ -667,7 +711,7 @@ class SAMSSampler(object):
     >>> test = testsystems.AlanineDipeptideVacuum()
     >>> # Create a SystemGenerator and rebuild the System.
     >>> from perses.rjmc.topology_proposal import SystemGenerator
-    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : app.HBonds })
+    >>> system_generator = SystemGenerator(['amber99sbildn.xml'], forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None })
     >>> test.system = system_generator.build_system(test.topology)
     >>> # Create a sampler state.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
@@ -686,7 +730,7 @@ class SAMSSampler(object):
     >>> sams_sampler.run()
 
     """
-    def __init__(self, sampler, logZ=None, update_method='default'):
+    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='default'):
         """
         Create a SAMS Sampler.
 
@@ -696,6 +740,8 @@ class SAMSSampler(object):
             The expanded ensemble sampler used to sample both configurations and discrete thermodynamic states.
         logZ : dict of key : float, optional, default=None
             If specified, the log partition functions for each state will be initialized to the specified dictionary.
+        log_target_probabilities : dict of key : float, optional, default=None
+            If specified, unnormalized target probabilities; default is all 0.
         update_method : str, optional, default='default'
             SAMS update algorithm
 
@@ -704,9 +750,13 @@ class SAMSSampler(object):
         # TODO: Make deep copies?
         self.sampler = sampler
         if logZ is not None:
-            self.logZ = self.logZ
+            self.logZ = logZ
         else:
             self.logZ = dict()
+        if log_target_probabilities is not None:
+            self.log_target_probabilities = log_target_probabilities
+        else:
+            self.log_target_probabilities = dict()
         self.update_method = update_method
 
         # Initialize.
@@ -714,7 +764,7 @@ class SAMSSampler(object):
 
     @property
     def state_keys(self):
-        return logZ.keys()
+        return self.logZ.keys()
 
     def update_sampler(self):
         """
@@ -726,17 +776,21 @@ class SAMSSampler(object):
         """
         Update the logZ estimates according to self.update_method.
         """
+        state_key = self.sampler.state_key
+
+        # Add state key to dictionaries if we haven't visited this state before.
+        if state_key not in self.logZ:
+            self.logZ[state_key] = 0.0
+        if state_key not in self.log_target_probabilities:
+            self.log_target_probabilities[state_key] = 0.0
+
+        # Update estimates of logZ.
         if self.update_method == 'default':
             # Based on Eq. 9 of Ref. [1]
             gamma = 1.0 / float(self.iteration+1)
-            self.logZ[self.sampler.current_state] += gamma / self.target_probability[state]
+            self.logZ[state_key] += gamma / np.exp(self.log_target_probabilities[state_key])
         else:
             raise Exception("SAMS update method '%s' unknown." % self.update_method)
-
-        # Shift values so logZ_min = 0
-        logZ_min = np.min(self.logZ.values())
-        for key in self.logZ:
-            self.logZ[key] -= logZ_min
 
     def update(self):
         """
