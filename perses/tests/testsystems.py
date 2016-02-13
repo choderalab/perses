@@ -11,6 +11,11 @@ Alanine dipeptide in various environments (vacuum, implicit, explicit):
 >>> system_generator = testsystem.system_generator['explicit']
 >>> sams_sampler = testsystem.sams_sampler['explicit']
 
+TODO
+----
+* Have all PersesTestSystem subclasses automatically subjected to a battery of tests.
+* Add short descriptions to each class through a class property.
+
 """
 
 __author__ = 'John D. Chodera'
@@ -137,7 +142,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         testsystems = dict()
         testsystems['explicit'] = AlanineDipeptideExplicit()
         testsystems['implicit'] = AlanineDipeptideImplicit()
-        testsystems['vacuum']    = AlanineDipeptideVacuum()
+        testsystems['vacuum']   = AlanineDipeptideVacuum()
 
         # Store topologies and positions.
         topologies = dict()
@@ -323,12 +328,27 @@ class AlkanesTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+def check_topologies(testsystem):
+    """
+    Check that all SystemGenerators can build systems for their corresponding Topology objects.
+    """
+    for environment in testsystem.environments:
+        try:
+            testsystem.system_generators[environment].build_system(testsystem.topologies[environment])
+        except Exception as e:
+            msg = str(e)
+            msg += '\n'
+            msg += "topology for environment '%' cannot be built into a system" % environment
+            raise Exception(msg)
+
 def test_AlanineDipeptideTestSystem():
     """
     Testing AlanineDipeptideTestSystem...
     """
     from perses.tests.testsystems import AlanineDipeptideTestSystem
     testsystem = AlanineDipeptideTestSystem()
+    # Check topologies
+    check_topologies(testsystem)
     # Build a system
     system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler
@@ -340,6 +360,10 @@ def test_AlkanesTestSystem():
     """
     from perses.tests.testsystems import AlkanesTestSystem
     testsystem = AlkanesTestSystem()
+
+    # Test topologies.
+    check_topologies(testsystem)
+
     # Build a system
     system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
     # Retrieve a SAMSSampler

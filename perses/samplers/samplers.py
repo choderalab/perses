@@ -550,9 +550,27 @@ class ExpandedEnsembleSampler(object):
         Sample the thermodynamic state.
         """
         if self.scheme == 'ncmc-geometry-ncmc':
+            # DEBUG: Check current topology can be built.
+            try:
+                self.proposal_engine._system_generator.build_system(self.topology)
+            except Exception as e:
+                msg = str(e)
+                msg += '\n'
+                msg += 'ExpandedEnsembleSampler.update_sampler: self.topology before ProposalEngine call cannot be built into a system'
+                raise Exception(msg)
+
             # Propose new chemical state.
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
+
+            # DEBUG: Check current topology can be built.
+            try:
+                self.proposal_engine._system_generator.build_system(topology_proposal.new_topology)
+            except Exception as e:
+                msg = str(e)
+                msg += '\n'
+                msg += 'ExpandedEnsembleSampler.update_sampler: toology_proposal.new_topology before ProposalEngine call cannot be built into a system'
+                raise Exception(msg)
 
             # Determine log weight
             state_key = topology_proposal.new_chemical_state_key
