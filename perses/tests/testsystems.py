@@ -142,17 +142,22 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
         # Create peptide in solvent.
         from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
-        testsystems = dict()
-        testsystems['explicit'] = AlanineDipeptideExplicit(constraints=None)
-        testsystems['implicit'] = AlanineDipeptideImplicit(constraints=None)
-        testsystems['vacuum']    = AlanineDipeptideVacuum(constraints=None)
-
-        # Store topologies and positions.
+        from pkg_resources import resource_filename
+        pdb_filename = resource_filename('openmmtools', 'data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
+        from simtk.openmm.app import PDBFile
         topologies = dict()
         positions = dict()
-        for environment in environments:
-            topologies[environment] = testsystems[environment].topology
-            positions[environment] = testsystems[environment].positions
+        pdbfile = PDBFile(pdb_filename)
+        topologies['vacuum'] = pdbfile.getTopology()
+        positions['vacuum'] = pdbfile.getPositions(asNumpy=True)
+        topologies['implicit'] = pdbfile.getTopology()
+        positions['implicit'] = pdbfile.getPositions(asNumpy=True)
+
+        # Create molecule in explicit solvent.
+        modeller = app.Modeller(topologies['vacuum'], positions['vacuum'])
+        modeller.addSolvent(system_generators['explicit'].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+        topologies['explicit'] = modeller.getTopology()
+        positions['explicit'] = modeller.getPositions()
 
         # Set up the proposal engines.
         from perses.rjmc.topology_proposal import PointMutationEngine
@@ -162,14 +167,19 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id='1', proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
+        # Generate systems
+        systems = dict()
+        for environment in environments:
+            systems[environment] = system_generators[environment].build_system(topologies[environment])
+
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
-        thermodynamic_states['explicit'] = ThermodynamicState(system=testsystems['explicit'].system, temperature=temperature, pressure=pressure)
-        thermodynamic_states['implicit'] = ThermodynamicState(system=testsystems['implicit'].system, temperature=temperature)
-        thermodynamic_states['vacuum']   = ThermodynamicState(system=testsystems['vacuum'].system, temperature=temperature)
+        thermodynamic_states['explicit'] = ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
+        thermodynamic_states['implicit'] = ThermodynamicState(system=systems['implicit'], temperature=temperature)
+        thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
         # Create SAMS samplers
         chemical_state_key = 'ACE-ALA-NME' # TODO: Fix this to whatever they decide is the way to formulate PointMutationEngine chemical state keys
@@ -179,9 +189,9 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         sams_samplers = dict()
         for environment in environments:
             if environment == 'explicit':
-                sampler_state = SamplerState(system=testsystems[environment].system, positions=positions[environment], box_vectors=testsystems[environment].system.getDefaultPeriodicBoxVectors())
+                sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
-                sampler_state = SamplerState(system=testsystems[environment].system, positions=positions[environment])
+                sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment])
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
@@ -287,6 +297,7 @@ class AlkanesTestSystem(PersesTestSystem):
         for environment in environments:
             proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, topologies[environment], system_generators[environment])
 
+        # Generate systems
         systems = dict()
         for environment in environments:
             systems[environment] = system_generators[environment].build_system(topologies[environment])
@@ -331,17 +342,31 @@ class AlkanesTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+def show_topology(topology):
+    output = ""
+    for atom in topology.atoms():
+        output += "%8d %5s %5d %3s: bonds " % (atom.index, atom.name, atom.residue.index, atom.residue.name)
+        for bond in atom.residue.bonds():
+            if bond[0] == atom:
+                output += " %8d" % bond[1].index
+            if bond[1] == atom:
+                output += " %8d" % bond[0].index
+        output += '\n'
+    print(output)
+
 def check_topologies(testsystem):
     """
     Check that all SystemGenerators can build systems for their corresponding Topology objects.
     """
     for environment in testsystem.environments:
+        topology = testsystem.topologies[environment]
         try:
-            testsystem.system_generators[environment].build_system(testsystem.topologies[environment])
+            testsystem.system_generators[environment].build_system(topology)
         except Exception as e:
             msg = str(e)
             msg += '\n'
-            msg += "topology for environment '%' cannot be built into a system" % environment
+            msg += "topology for environment '%s' cannot be built into a system" % environment
+            show_topology(topology)
             raise Exception(msg)
 
 def test_AlanineDipeptideTestSystem():

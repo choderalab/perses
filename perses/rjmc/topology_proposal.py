@@ -669,6 +669,17 @@ class SystemGenerator(object):
         if use_antechamber:
             self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
+    def getForceField(self):
+        """
+        Return the associated ForceField object.
+
+        Returns
+        -------
+        forcefield : simtk.openmm.app.ForceField
+            The current ForceField object.
+        """
+        return self._forcefield
+
     def build_system(self, new_topology):
         """
         Build a system from the new_topology, adding templates
