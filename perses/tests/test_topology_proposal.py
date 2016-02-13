@@ -369,7 +369,6 @@ def test_limiting_allowed_residues():
         if chain.id != chain_id:
             to_delete.append(chain)
     modeller.delete(to_delete)
-    modeller.deleteWater()
     modeller.addHydrogens()
 
     ff_filename = "amber99sbildn.xml"
@@ -404,16 +403,17 @@ def test_run_peptide_library_engine():
         if chain.id != chain_id:
             to_delete.append(chain)
     modeller.delete(to_delete)
-    modeller.deleteWater()
     modeller.addHydrogens()
 
     ff_filename = "amber99sbildn.xml"
 
     ff = app.ForceField(ff_filename)
+    ff.loadFile("tip3p.xml")
+    modeller.addSolvent(ff)
     system = ff.createSystem(modeller.topology)
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
-    library = ['AVILMFYQP','RHKDESTNQ','STNQCFGPZ']
+    library = ['AVILMFYQP','RHKDESTNQ','STNQCFGPL']
 
     pl_top_library = topology_proposal.PeptideLibraryEngine(system_generator, library, chain_id)
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
