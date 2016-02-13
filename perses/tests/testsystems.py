@@ -345,7 +345,7 @@ class AlkanesTestSystem(PersesTestSystem):
 def show_topology(topology):
     output = ""
     for atom in topology.atoms():
-        output += "%8d %5s %5d %3s: bonds " % (atom.index, atom.name, atom.residue.index, atom.residue.name)
+        output += "%8d %5s %5s %3s: bonds " % (atom.index, atom.name, atom.residue.id, atom.residue.name)
         for bond in atom.residue.bonds():
             if bond[0] == atom:
                 output += " %8d" % bond[1].index
@@ -375,6 +375,7 @@ def test_AlanineDipeptideTestSystem():
     """
     from perses.tests.testsystems import AlanineDipeptideTestSystem
     testsystem = AlanineDipeptideTestSystem()
+    show_topology(testsystem.topologies['explicit'])
     # Check topologies
     check_topologies(testsystem)
     # Build a system
