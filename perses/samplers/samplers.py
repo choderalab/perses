@@ -593,8 +593,16 @@ class ExpandedEnsembleSampler(object):
                 raise Exception(msg)
 
             # Propose new chemical state.
-            [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
-            topology_proposal = self.proposal_engine.propose(system, topology)
+            try:
+                [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
+                topology_proposal = self.proposal_engine.propose(system, topology)
+            except Exception as e:
+                msg = str(e)
+                msg += "\n"
+                msg += "ExpandedEnsembleSampler.update_sampler failed during proposal_engine.propose() in iteration %d" % self.iteration
+                from perses.tests.utils import show_topology
+                show_topology(topology)
+                raise Exception(msg)
 
             # DEBUG: Check current topology can be built.
             try:
