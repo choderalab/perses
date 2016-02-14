@@ -8,6 +8,8 @@ import logging
 import numpy as np
 import copy
 from perses.rjmc import coordinate_tools
+import simtk.openmm as openmm
+
 
 
 
@@ -119,12 +121,18 @@ class FFGeometryEngine(GeometryEngine):
                     torsion_atom = torsion.atom1
 
                 #propose a bond and calculate its probability
+                #if it's not a bond, it's a constraint
                 bond = self._get_relevant_bond(atom, bond_atom)
-                r_proposed = self._propose_bond(bond, beta)
-                bond_k = bond.type.k
-                sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit))
-                logp_r = self._bond_logq(r_proposed, bond, beta) - logZ_r
+                if bond is not None:
+                    r_proposed = self._propose_bond(bond, beta)
+                    bond_k = bond.type.k
+                    sigma_r = units.sqrt(1/(beta*bond_k))
+                    logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit))
+                    logp_r = self._bond_logq(r_proposed, bond, beta) - logZ_r
+                else:
+                    constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
+                    r_proposed = constraint #set bond length to exactly constraint
+                    logp_r = 0.0
 
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
@@ -208,13 +216,19 @@ class FFGeometryEngine(GeometryEngine):
                 theta = internal_coordinates[1]*units.radian
                 phi = internal_coordinates[2]*units.radian
 
-                #propose a bond and calculate its probability
+                #propose a bond and calculate its probability, if it's a bond.
+                #Otherwise, it's a constraint.
                 bond = self._get_relevant_bond(atom, bond_atom)
-                bond_k = bond.type.k
-                sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit)) #need to eliminate unit to allow numpy log
-                logp_r = self._bond_logq(r, bond, beta) - logZ_r
-
+                if bond is not None:
+                    bond_k = bond.type.k
+                    sigma_r = units.sqrt(1/(beta*bond_k))
+                    logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit)) #need to eliminate unit to allow numpy log
+                    logp_r = self._bond_logq(r, bond, beta) - logZ_r
+                else:
+                    constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.old_system)
+                    if constraint is None:
+                        raise Exception("No Bond or constraint between atom %d and %d" % (atom.idx, bond_atom.idx))
+                    logp_r = 0.0
                 #propose an angle and calculate its probability
                 angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
                 angle_k = angle.type.k
@@ -230,26 +244,11 @@ class FFGeometryEngine(GeometryEngine):
                 old_unique_atoms.remove(atom)
         return logp
 
-    def _get_proposal_order(self, topology_for_proposal, reference_topology, new_to_old_atom_map):
-        """
-        Get the order of proposal for the atoms needing proposal. Also get a list of torsions
-        that could be used in each atom's proposal.
-
-        Parameters
-        ----------
-        topology_for_proposal
-        reference_topology
-        new_to_old_atom_map
-
-        Returns
-        -------
-        atoms_for_proposal : dict of {atom :
-
-        """
-
     def _get_relevant_bond(self, atom1, atom2):
         """
-        utility function to get the bond connecting atoms 1 and 2
+        utility function to get the bond connecting atoms 1 and 2.
+        Returns either a bond object or None
+        (since there is no constraint class)
 
         Arguments
         ---------
@@ -261,14 +260,49 @@ class FFGeometryEngine(GeometryEngine):
         Returns
         -------
         bond : bond object
-            Bond connecting the two atoms
+            Bond connecting the two atoms, if there is one. None if constrained or
+            no bond.
         """
         bonds_1 = set(atom1.bonds)
         bonds_2 = set(atom2.bonds)
         relevant_bond_set = bonds_1.intersection(bonds_2)
         relevant_bond = relevant_bond_set.pop()
+        if relevant_bond.type is None:
+            return None
         relevant_bond_with_units = self._add_bond_units(relevant_bond)
         return relevant_bond_with_units
+
+    def _get_bond_constraint(self, atom1, atom2, system):
+        """
+        Get the constraint parameters corresponding to the bond
+        between the given atoms
+
+        Parameters
+        ----------
+        atom1 : parmed.Atom object
+           the first atom of the constrained bond
+        atom2 : parmed.Atom object
+           the second atom of the constrained bond
+        system : openmm.System object
+           The system containing the constraint
+
+        Returns
+        -------
+        constraint : float, quantity nm
+            the parameters of the bond constraint
+        """
+        atom_indices = {atom1.idx, atom2.idx}
+        n_constraints = system.getNumConstraints()
+        constraint = None
+        for i in range(n_constraints):
+            constraint_parameters = system.getConstraintParameters(i)
+            constraint_atoms = set(constraint_parameters[:2])
+            if len(constraint_atoms.intersection(atom_indices))==2:
+                constraint = constraint_parameters[2]
+        return constraint
+
+
+
 
     def _get_relevant_angle(self, atom1, atom2, atom3):
         """
