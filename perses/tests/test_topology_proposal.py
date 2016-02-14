@@ -95,15 +95,8 @@ def test_small_molecule_proposals():
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        smiles_string = oechem.OEMolToSmiles(oemol)
-        old_smiles = proposal.molecule_smiles
-        assert smiles_string==old_smiles
+        assert oechem.OEMolToSmiles(oemol) == proposal.new_chemical_state_key
         proposal = new_proposal
-
-
-
-
-
 
 def load_pdbid_to_openmm(pdbid):
     """
@@ -120,7 +113,7 @@ def load_pdbid_to_openmm(pdbid):
         pdbx = app.PDBxFile(contents)
         topology = pdbx.topology
         positions = pdbx.positions
-    else:    
+    else:
         pdb = app.PDBFile(file)
         topology = pdb.topology
         positions = pdb.positions
@@ -172,8 +165,20 @@ def test_specify_allowed_mutants():
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
     pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants, chain_id, allowed_mutations=allowed_mutations)
-    pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
-
+    ntrials = 10
+    for trian in range(ntrials):
+        pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
+        # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
+        natoms_old = pm_top_proposal.old_system.getNumParticles()
+        natoms_new = pm_top_proposal.new_system.getNumParticles()
+        if not set(pm_top_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
+            msg = "Some old atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_old
+            msg += str(pm_top_proposal.new_to_old_atom_map.values())
+            raise Exception(msg)
+        if not set(pm_top_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
+            msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
+            msg += str(pm_top_proposal.new_to_old_atom_map.values())
+            raise Exception(msg)
 
 def test_run_point_mutation_propose():
     """
@@ -326,7 +331,7 @@ def test_mutate_from_every_amino_to_every_other():
                 assert residue.index in index_to_new_residues.keys()
                 assert index_to_new_residues[residue.index] == name
                 assert residue.name+'-'+str(residue.id)+'-'+name in metadata['mutations']
- 
+
             current_modeller, missing_atoms = pm_top_engine._delete_excess_atoms(current_modeller, residue_map)
             current_modeller = pm_top_engine._add_new_atoms(current_modeller, missing_atoms, residue_map)
             for res_pair in residue_map:
@@ -359,5 +364,3 @@ if __name__ == "__main__":
     test_mutate_from_every_amino_to_every_other()
     test_specify_allowed_mutants()
     test_small_molecule_proposals()
-
-

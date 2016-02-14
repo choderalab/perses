@@ -595,7 +595,7 @@ class ExpandedEnsembleSampler(object):
             # Propose new chemical state.
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
-            
+
             # DEBUG: Check current topology can be built.
             try:
                 self.proposal_engine._system_generator.build_system(topology_proposal.new_topology)
@@ -620,6 +620,9 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
 
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
+            print "old system has %d atoms; new system has %d atoms" % (topology_proposal.old_system.getNumParticles(), topology_proposal.new_system.getNumParticles())
+            print topology_proposal.new_to_old_atom_map
+            print topology_proposal.unique_new_atoms
             geometry_new_positions, geometry_logp  = self.geometry_engine.propose(topology_proposal, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
 
             # Alchemically introduce new atoms.

@@ -75,8 +75,10 @@ class TopologyProposal(object):
         Number of atoms in the new system
     natoms_old : int
         Number of atoms in the old system
-    chemical_state_key : str
-        The current chemical state
+    old_chemical_state_key : str
+        The previous chemical state key
+    new_chemical_state_key : str
+        The proposed chemical state key
     metadata : dict
         additional information of interest about the state
     """
