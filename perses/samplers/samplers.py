@@ -1,6 +1,12 @@
 """
 Samplers for perses automated molecular design.
 
+TODO
+----
+* Determine where `System` object should be stored: In `SamplerState` or in `Thermodynamic State`, or both, or neither?
+* Can we create a generalized, extensible `SamplerState` that also stores chemical/thermodynamic state information?
+* Can we create a generalized log biasing weight container class that gracefully handles new chemical states that have yet to be explored?
+
 """
 
 __author__ = 'John D. Chodera'

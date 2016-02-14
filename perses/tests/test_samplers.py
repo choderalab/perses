@@ -1,7 +1,9 @@
 """
 Samplers for perses automated molecular design.
 
-TODO: Refactor tests into a test class so that AlanineDipeptideSAMS test system only needs to be constructed once for a battery of tests.
+TODO:
+* Refactor tests into a test class so that AlanineDipeptideSAMS test system only needs to be constructed once for a battery of tests.
+* Generalize tests of samplers to iterate over all PersesTestSystem subclasses
 
 """
 
@@ -38,21 +40,22 @@ def test_alanine_dipeptide_samplers():
     from perses.tests.testsystems import AlanineDipeptideTestSystem
     testsystem = AlanineDipeptideTestSystem()
     # Test MCMCSampler samplers.
+    niterations = 5 # number of iterations to run
     for environment in testsystem.environments:
         mcmc_sampler = testsystem.mcmc_samplers[environment]
-        f = partial(mcmc_sampler.run)
+        f = partial(mcmc_sampler.run, niterations)
         f.description = "Testing MCMC sampler with alanine dipeptide '%s'" % environment
         yield f
     # Test ExpandedEnsembleSampler samplers.
     for environment in testsystem.environments:
         exen_sampler = testsystem.exen_samplers[environment]
-        f = partial(exen_sampler.run)
+        f = partial(exen_sampler.run, niterations)
         f.description = "Testing expanded ensemble sampler with alanine dipeptide '%s'" % environment
         yield f
     # Test SAMSSampler samplers.
     for environment in testsystem.environments:
         sams_sampler = testsystem.sams_samplers[environment]
-        f = partial(exen_sampler.run)
+        f = partial(exen_sampler.run, niterations)
         f.description = "Testing SAMS sampler with alanine dipeptide '%s'" % environment
         yield f
     # Test MultiTargetDesign sampler for implicit hydration free energy
@@ -61,7 +64,7 @@ def test_alanine_dipeptide_samplers():
     for environment in testsystem.environments:
         target_samplers = { testsystem.sams_samplers[environment] : 1.0, testsystem.sams_samplers['vacuum'] : -1.0 }
         designer = MultiTargetDesign(target_samplers)
-        f = partial(designer.run)
+        f = partial(designer.run, niterations)
         f.description = "Testing MultiTargetDesign sampler with alanine dipeptide mutation transfer free energy from vacuum -> %s" % environment
         yield f
 
@@ -73,21 +76,22 @@ def test_alkanes_samplers():
     from perses.tests.testsystems import AlkanesTestSystem
     testsystem = AlkanesTestSystem()
     # Test MCMCSampler samplers.
+    niterations = 5 # number of iterations to run
     for environment in testsystem.environments:
         mcmc_sampler = testsystem.mcmc_samplers[environment]
-        f = partial(mcmc_sampler.run)
+        f = partial(mcmc_sampler.run, niterations)
         f.description = "Testing MCMC sampler with alkanes '%s'" % environment
         yield f
     # Test ExpandedEnsembleSampler samplers.
     for environment in testsystem.environments:
         exen_sampler = testsystem.exen_samplers[environment]
-        f = partial(exen_sampler.run)
+        f = partial(exen_sampler.run, niterations)
         f.description = "Testing expanded ensemble sampler with alkanes '%s'" % environment
         yield f
     # Test SAMSSampler samplers.
     for environment in testsystem.environments:
         sams_sampler = testsystem.sams_samplers[environment]
-        f = partial(exen_sampler.run)
+        f = partial(exen_sampler.run, niterations)
         f.description = "Testing SAMS sampler with alkanes '%s'" % environment
         yield f
     # Test MultiTargetDesign sampler for implicit hydration free energy
@@ -96,6 +100,6 @@ def test_alkanes_samplers():
     for environment in testsystem.environments:
         target_samplers = { testsystem.sams_samplers[environment] : 1.0, testsystem.sams_samplers['vacuum'] : -1.0 }
         designer = MultiTargetDesign(target_samplers)
-        f = partial(designer.run)
+        f = partial(designer.run, niterations)
         f.description = "Testing MultiTargetDesign sampler with alkanes mutation transfer free energy from vacuum -> %s" % environment
         yield f
