@@ -495,7 +495,7 @@ class ExpandedEnsembleSampler(object):
     >>> exen_sampler.run()
 
     """
-    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=dict()):
+    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=dict(), platform=None):
         """
         Create an expanded ensemble sampler.
 
@@ -519,7 +519,13 @@ class ExpandedEnsembleSampler(object):
             Update scheme. One of ['ncmc-geometry-ncmc', 'geometry-ncmc-geometry', 'geometry-ncmc']
         options : dict, optional, default=dict()
             Options for initializing switching scheme, such as 'timestep', 'nsteps', 'functions' for NCMC
+        platform : simtk.openmm.Platform, optional, default=None
+            Platform to use for NCMC switching.  If `None`, default (fastest) platform is used.
+
         """
+        # DEBUG
+        platform = openmm.Platform.getPlatformByName('Reference')
+        
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
@@ -537,7 +543,7 @@ class ExpandedEnsembleSampler(object):
             if option_name not in options:
                 options[option_name] = None
         from perses.annihilation.ncmc_switching import NCMCEngine
-        self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'])
+        self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine
         self.geometry_engine = FFAllAngleGeometryEngine({'data': 0})
         self.naccepted = 0
@@ -641,7 +647,7 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
 
             # Compute change in eliminated potential contribution.
-            switch_logp = - self.sampler.thermodynamic_state.beta * (potential_insert - potential_delete)
+            switch_logp = - (potential_insert - potential_delete)
 
             # Compute total log acceptance probability, including all components.
             logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
@@ -906,11 +912,11 @@ class MultiTargetDesign(object):
 
         # Normalize
         log_sum = log_sum_exp(log_target_probabilities)
-        for key in log_target_probabiltiies:
+        for key in log_target_probabilities:
             log_target_probabilities[key] -= log_sum
 
         # Store.
-        self.log_target_probabilities = log_target_probabiltiies
+        self.log_target_probabilities = log_target_probabilities
 
     def update(self):
         """

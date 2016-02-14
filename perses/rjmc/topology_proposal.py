@@ -794,7 +794,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         smiles_new, _ = self._topology_to_smiles(new_topology)
         assert smiles_new == proposed_mol_smiles
 
-
         #map the atoms between the new and old molecule only:
         mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
 
