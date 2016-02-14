@@ -543,6 +543,8 @@ class FFGeometryEngine(GeometryEngine):
         Pick an eligible torsion uniformly
         """
         eligible_torsions = self._get_torsions(atoms_with_positions, atom_for_proposal)
+        if len(eligible_torsions) == 0:
+            raise Exception("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
         torsion_idx = np.random.randint(0, len(eligible_torsions))
         torsion_selected = eligible_torsions[torsion_idx]
         return torsion_selected, np.log(1.0/len(eligible_torsions))

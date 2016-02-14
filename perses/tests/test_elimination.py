@@ -124,7 +124,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
             raise Exception("Positions became NaN on NCMC insertion")
 
         # Compute probability of switching geometries.
-        logP_switch = - (potential_insert - potential_delete) / kT
+        logP_switch = - (potential_insert - potential_delete)
 
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
