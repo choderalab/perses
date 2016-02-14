@@ -320,11 +320,9 @@ class NCMCEngine(object):
         # Set initial context parameters.
         if direction == 'insert':
             for parameter_name in available_parameters:
-                print parameter_name, context.getParameter(parameter_name)
                 context.setParameter(parameter_name, 0)
         elif direction == 'delete':
             for parameter_name in available_parameters:
-                print parameter_name, context.getParameter(parameter_name)
                 context.setParameter(parameter_name, 1)
 
         # Compute initial potential of alchemical state.
