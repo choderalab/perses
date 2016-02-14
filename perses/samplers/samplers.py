@@ -605,6 +605,18 @@ class ExpandedEnsembleSampler(object):
                 msg += 'ExpandedEnsembleSampler.update_sampler: toology_proposal.new_topology before ProposalEngine call cannot be built into a system'
                 raise Exception(msg)
 
+            # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
+            natoms_old = topology_proposal.old_system.getNumParticles()
+            natoms_new = topology_proposal.new_system.getNumParticles()
+            if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
+                msg = "Some old atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_old
+                msg += str(topology_proposal.new_to_old_atom_map)
+                raise Exception(msg)
+            if not set(topology_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
+                msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
+                msg += str(topology_proposal.new_to_old_atom_map)
+                raise Exception(msg)
+
             # Determine state keys
             old_state_key = self.state_key
             new_state_key = topology_proposal.new_chemical_state_key
@@ -620,9 +632,6 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
 
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
-            print "old system has %d atoms; new system has %d atoms" % (topology_proposal.old_system.getNumParticles(), topology_proposal.new_system.getNumParticles())
-            print topology_proposal.new_to_old_atom_map
-            print topology_proposal.unique_new_atoms
             geometry_new_positions, geometry_logp  = self.geometry_engine.propose(topology_proposal, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
 
             # Alchemically introduce new atoms.

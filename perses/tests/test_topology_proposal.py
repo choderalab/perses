@@ -173,11 +173,11 @@ def test_specify_allowed_mutants():
         natoms_new = pm_top_proposal.new_system.getNumParticles()
         if not set(pm_top_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
             msg = "Some old atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_old
-            msg += str(pm_top_proposal.new_to_old_atom_map.values())
+            msg += str(pm_top_proposal.new_to_old_atom_map)
             raise Exception(msg)
         if not set(pm_top_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
             msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
-            msg += str(pm_top_proposal.new_to_old_atom_map.values())
+            msg += str(pm_top_proposal.new_to_old_atom_map)
             raise Exception(msg)
 
 def test_run_point_mutation_propose():

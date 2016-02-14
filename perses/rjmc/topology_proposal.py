@@ -302,7 +302,22 @@ class PointMutationEngine(PolymerProposalEngine):
         # new_system : simtk.openmm.System
         new_system = self._system_generator.build_system(new_topology)
 
-        return TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+        # Create TopologyProposal.
+        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+
+        # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
+        natoms_old = topology_proposal.old_system.getNumParticles()
+        natoms_new = topology_proposal.new_system.getNumParticles()
+        if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
+            msg = "Some old atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_old
+            msg += str(topology_proposal.new_to_old_atom_map)
+            raise Exception(msg)
+        if not set(topology_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
+            msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
+            msg += str(topology_proposal.new_to_old_atom_map)
+            raise Exception(msg)
+
+        return topology_proposal
 
     def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations):
         """
