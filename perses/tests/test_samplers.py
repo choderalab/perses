@@ -70,8 +70,8 @@ def test_alkanes_samplers():
     Test samplers on alkanes test system.
     """
     # Retrieve the test system.
-    from perses.tests.testsystems import AlanineDipeptideTestSystem
-    testsystem = AlanineDipeptideTestSystem()
+    from perses.tests.testsystems import AlkanesTestSystem
+    testsystem = AlkanesTestSystem()
     # Test MCMCSampler samplers.
     for environment in testsystem.environments:
         mcmc_sampler = testsystem.mcmc_samplers[environment]

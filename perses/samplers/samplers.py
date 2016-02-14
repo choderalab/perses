@@ -525,7 +525,7 @@ class ExpandedEnsembleSampler(object):
         """
         # DEBUG
         platform = openmm.Platform.getPlatformByName('Reference')
-        
+
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
@@ -656,7 +656,12 @@ class ExpandedEnsembleSampler(object):
                     % (old_state_key, new_state_key, logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
 
             # Accept or reject.
-            accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
+            try:
+                accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
+            except FloatingPointError as e:
+                msg = str(e)
+                msg += 'logp_accept = %.3f' % logp_accept
+                raise Exception(msg)
             if accept:
                 self.sampler.thermodynamic_state.system = topology_proposal.new_system
                 self.topology = topology_proposal.new_topology
