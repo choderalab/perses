@@ -523,9 +523,6 @@ class ExpandedEnsembleSampler(object):
             Platform to use for NCMC switching.  If `None`, default (fastest) platform is used.
 
         """
-        # DEBUG
-        platform = openmm.Platform.getPlatformByName('Reference')
-
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
