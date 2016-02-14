@@ -257,14 +257,14 @@ class PointMutationEngine(PolymerProposalEngine):
         if metadata == None:
             metadata = dict()
         # old_chemical_state_key : str
-        old_chemical_state_key = self.compute_state_key(current_topology)
+        old_chemical_state_key = self.compute_state_key(old_topology)
 
         # chain_id : str
         chain_id = self._chain_id
         # save old indeces for mapping -- could just directly save positions instead
         # modeller : simtk.openmm.app.Modeller
-        current_positions = np.zeros((current_topology.getNumAtoms(), 3))
-        modeller = app.Modeller(current_topology, current_positions)
+        current_positions = np.zeros((old_topology.getNumAtoms(), 3))
+        modeller = app.Modeller(old_topology, current_positions)
         # atom : simtk.openmm.app.topology.Atom
         for atom in modeller.topology.atoms():
             # atom.old_index : int
