@@ -75,8 +75,10 @@ class TopologyProposal(object):
         Number of atoms in the new system
     natoms_old : int
         Number of atoms in the old system
-    chemical_state_key : str
-        The current chemical state
+    old_chemical_state_key : str
+        The previous chemical state key
+    new_chemical_state_key : str
+        The proposed chemical state key
     metadata : dict
         additional information of interest about the state
     """
@@ -255,14 +257,14 @@ class PointMutationEngine(PolymerProposalEngine):
         if metadata == None:
             metadata = dict()
         # old_chemical_state_key : str
-        old_chemical_state_key = self.compute_state_key(current_topology)
+        old_chemical_state_key = self.compute_state_key(old_topology)
 
         # chain_id : str
         chain_id = self._chain_id
         # save old indeces for mapping -- could just directly save positions instead
         # modeller : simtk.openmm.app.Modeller
-        current_positions = np.zeros((current_topology.getNumAtoms(), 3))
-        modeller = app.Modeller(current_topology, current_positions)
+        current_positions = np.zeros((old_topology.getNumAtoms(), 3))
+        modeller = app.Modeller(old_topology, current_positions)
         # atom : simtk.openmm.app.topology.Atom
         for atom in modeller.topology.atoms():
             # atom.old_index : int
@@ -300,7 +302,22 @@ class PointMutationEngine(PolymerProposalEngine):
         # new_system : simtk.openmm.System
         new_system = self._system_generator.build_system(new_topology)
 
-        return TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+        # Create TopologyProposal.
+        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+
+        # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
+        natoms_old = topology_proposal.old_system.getNumParticles()
+        natoms_new = topology_proposal.new_system.getNumParticles()
+        if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
+            msg = "Some old atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_old
+            msg += str(topology_proposal.new_to_old_atom_map)
+            raise Exception(msg)
+        if not set(topology_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
+            msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
+            msg += str(topology_proposal.new_to_old_atom_map)
+            raise Exception(msg)
+
+        return topology_proposal
 
     def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations):
         """
@@ -658,13 +675,27 @@ class SystemGenerator(object):
         Allows specification of various aspects of system creation.
     metadata : dict, optional
         Metadata associated with the SystemGenerator.
+    use_antechamber : bool, optional, default=True
+        If True, will add the GAFF residue template generator.
     """
 
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
-        self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+        if use_antechamber:
+            self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    def getForceField(self):
+        """
+        Return the associated ForceField object.
+
+        Returns
+        -------
+        forcefield : simtk.openmm.app.ForceField
+            The current ForceField object.
+        """
+        return self._forcefield
 
     def build_system(self, new_topology):
         """
@@ -676,13 +707,27 @@ class SystemGenerator(object):
         new_topology : simtk.openmm.app.Topology object
             The topology of the system
 
-
         Returns
         -------
         new_system : openmm.System
             A system object generated from the topology
         """
-        system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
+        try:
+            system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
+        except Exception as e:
+            from simtk import unit
+            nparticles = sum([1 for atom in new_topology.atoms()])
+            positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.angstroms)
+            # Write PDB file of failed topology
+            from simtk.openmm.app import PDBFile
+            outfile = open('BuildSystem-failure.pdb', 'w')
+            pdbfile = PDBFile.writeFile(new_topology, positions, outfile)
+            outfile.close()
+            msg = str(e)
+            msg += "\n"
+            msg += "PDB file written as 'BuildSystem-failure.pdb'"
+            raise Exception(msg)
+
         return system
 
     @property
@@ -748,7 +793,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         new_system = self._system_generator.build_system(new_topology)
         smiles_new, _ = self._topology_to_smiles(new_topology)
         assert smiles_new == proposed_mol_smiles
-
 
         #map the atoms between the new and old molecule only:
         mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
