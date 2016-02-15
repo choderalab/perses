@@ -788,7 +788,7 @@ class PeptideLibraryEngine(PolymerProposalEngine):
             'V' : 'VAL',
             'W' : 'TRP',
             'Y' : 'TYR'
-        }  
+        }
         return three_letter_code[residue_one_letter]
 
 class SystemGenerator(object):
@@ -1040,6 +1040,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                     newAtoms[atom] = newAtom
         for bond in mol_topology.bonds():
             new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        # Copy periodic box vectors.
+        if current_topology._periodicBoxVectors != None:
+            new_topology._periodicBoxVectors = copy.deepcopy(current_topology._periodicBoxVectors)
 
         return new_topology, mol_start_index
 
