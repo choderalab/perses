@@ -243,6 +243,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         SAMSSampler objects for environments
     designer : MultiTargetDesign sampler
         Example MultiTargetDesign sampler for explicit solvent hydration free energies
+    molecules : list
+        Molecules in library. Currently only SMILES format is supported.
 
     Examples
     --------
@@ -257,6 +259,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     def __init__(self):
         super(SmallMoleculeLibraryTestSystem, self).__init__()
+        molecules = self.molecules # Currently only SMILES is supported
         environments = ['explicit', 'vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -281,8 +284,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         # Create molecule in vacuum.
         from perses.tests.utils import createOEMolFromSMILES, extractPositionsFromOEMOL
-        smiles = 'CC' # current sampler state
-        molecule = createOEMolFromSMILES("CC")
+        smiles = molecules[0] # current sampler state
+        molecule = createOEMolFromSMILES(smiles)
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMOL(molecule)
 
@@ -297,7 +300,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         proposal_metadata = { }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(self.molecules, topologies[environment], system_generators[environment])
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, topologies[environment], system_generators[environment])
 
         # Generate systems
         systems = dict()
@@ -348,7 +351,7 @@ class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
     """
     Library of small alkanes in various solvent environments.
     """
-    molecules = ['C', 'CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
+    molecules = ['CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
     def __init__(self):
         super(AlkanesTestSystem, self).__init__()
 
