@@ -527,23 +527,35 @@ class PointMutationEngine(PolymerProposalEngine):
     Arguments
     --------
     system_generator : SystemGenerator
-    max_point_mutants : int
-    proposal_metadata : dict -- OPTIONAL
-        Contains information necessary to initialize proposal engine
     chain_id : str
         id of the chain to mutate
         (using the first chain with the id, if there are multiple)
+    proposal_metadata : dict -- OPTIONAL
+        Contains information necessary to initialize proposal engine
+    max_point_mutants : int -- OPTIONAL
+        default = None
+    residues_allowed_to_mutate : list(str) -- OPTIONAL
+        default = None
     allowed_mutations : list(list(tuple)) -- OPTIONAL
         default = None
         ('residue id to mutate','desired mutant residue name (3-letter code)')
+        Example:
+            Desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q
+            allowed_mutations = [
+                [('99','ALA')],
+                [('99','ALA'),('102','GLN')]
+            ]
     """
 
-    def __init__(self, system_generator, max_point_mutants, chain_id, proposal_metadata=None, allowed_mutations=None):
+    def __init__(self, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None):
         super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata)
         self._max_point_mutants = max_point_mutants
         self._ff = system_generator.forcefield
         self._templates = self._ff._templates
+        self._residues_allowed_to_mutate = residues_allowed_to_mutate
         self._allowed_mutations = allowed_mutations
+        if max_point_mutants == None and allowed_mutations == None:
+            raise Exception("Must specify either max_point_mutants or allowed_mutations.")
 
     def _choose_mutant(self, modeller, metadata):
         chain_id = self._chain_id
@@ -624,20 +636,25 @@ class PointMutationEngine(PolymerProposalEngine):
         chain_found = False
         for chain in modeller.topology.chains():
             if chain.id == chain_id:
-                # num_residues : int
-                num_residues = len(chain._residues)
+                if self._residues_allowed_to_mutate is None:
+                    # num_residues : int
+                    num_residues = len(chain._residues)
+                    chain_residues = chain._residues
                 chain_found = True
                 break
         if not chain_found:
             chains = [ chain.id for chain in modeller.topology.chains() ]
             raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
+        if self._residues_allowed_to_mutate is not None:
+            num_residues = len(self._residues_allowed_to_mutate)
+            chain_residues = self._mutable_residues(chain)
         # location_prob : np.array, probability value for each residue location (uniform)
         location_prob = np.array([1.0/num_residues for i in range(num_residues)])
         for i in range(self._max_point_mutants):
             # proposed_location : int, index of chosen entry in location_prob
             proposed_location = np.random.choice(range(num_residues), p=location_prob)
             # original_residue : simtk.openmm.app.topology.Residue
-            original_residue = chain._residues[proposed_location]
+            original_residue = chain_residues[proposed_location]
             # amino_prob : np.array, probability value for each amino acid option (uniform, must choose different from current)
             amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
             amino_prob[aminos.index(original_residue.name)] = 0.0
@@ -651,6 +668,10 @@ class PointMutationEngine(PolymerProposalEngine):
                 his_choice = np.random.choice(range(len(his_state)),p=his_prob)
                 index_to_new_residues[proposed_location] = his_state[his_choice]
         return index_to_new_residues
+
+    def _mutable_residues(self, chain):
+        chain_residues = [residue for residue in chain._residues if residue.id in self._residues_allowed_to_mutate]
+        return chain_residues
 
     def _save_mutations(self, modeller, index_to_new_residues):
         """
