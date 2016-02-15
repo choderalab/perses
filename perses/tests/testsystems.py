@@ -216,7 +216,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
-class AlkanesTestSystem(PersesTestSystem):
+class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     Create a consistent set of samplers useful for testing SmallMoleculeProposalEngine on alkanes in various solvents.
     This is useful for testing a variety of components.
@@ -256,7 +256,7 @@ class AlkanesTestSystem(PersesTestSystem):
 
     """
     def __init__(self):
-        super(AlkanesTestSystem, self).__init__()
+        super(SmallMoleculeLibraryTestSystem, self).__init__()
         environments = ['explicit', 'vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -296,9 +296,8 @@ class AlkanesTestSystem(PersesTestSystem):
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
         proposal_metadata = { }
         proposal_engines = dict()
-        molecules = ['C', 'CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, topologies[environment], system_generators[environment])
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(self.molecules, topologies[environment], system_generators[environment])
 
         # Generate systems
         systems = dict()
@@ -345,6 +344,34 @@ class AlkanesTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
+    """
+    Library of small alkanes in various solvent environments.
+    """
+    molecules = ['C', 'CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
+    def __init__(self):
+        super(AlkanesTestSystem, self).__init__()
+
+class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
+    """
+    Library of clinical kinase inhibitors in various solvent environments.
+    """
+    def __init__(self):
+        # Read SMILES from CSV file of clinical kinase inhibitors.
+        from pkg_resources import resource_filename
+        smiles_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.csv')
+        import csv
+        molecules = list()
+        with open(smiles_filename, 'rb') as csvfile:
+            csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
+            for row in csvreader:
+                name = row[0]
+                smiles = row[1]
+                molecules.append(smiles)
+        self.molecules = molecules
+        # Intialize
+        super(KinaseInhibitorsTestSystem, self).__init__()
+
 def check_topologies(testsystem):
     """
     Check that all SystemGenerators can build systems for their corresponding Topology objects.
@@ -380,6 +407,21 @@ def test_AlkanesTestSystem():
     """
     from perses.tests.testsystems import AlkanesTestSystem
     testsystem = AlkanesTestSystem()
+
+    # Test topologies.
+    check_topologies(testsystem)
+
+    # Build a system
+    system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    # Retrieve a SAMSSampler
+    sams_sampler = testsystem.sams_samplers['explicit']
+
+def test_KinaseInhibitorsTestSystem():
+    """
+    Testing KinaseInhibitorsTestSystem...
+    """
+    from perses.tests.testsystems import KinaseInhibitorsTestSystem
+    testsystem = KinaseInhibitorsTestSystem()
 
     # Test topologies.
     check_topologies(testsystem)
