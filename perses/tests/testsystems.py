@@ -300,7 +300,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         proposal_metadata = { }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, topologies[environment], system_generators[environment])
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment])
 
         # Generate systems
         systems = dict()
