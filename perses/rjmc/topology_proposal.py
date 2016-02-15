@@ -788,7 +788,7 @@ class PeptideLibraryEngine(PolymerProposalEngine):
             'V' : 'VAL',
             'W' : 'TRP',
             'Y' : 'TYR'
-        }  
+        }
         return three_letter_code[residue_one_letter]
 
 class SystemGenerator(object):
@@ -921,7 +921,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         new_topology, new_mol_start_index = self._build_new_topology(current_topology, proposed_mol)
         new_system = self._system_generator.build_system(new_topology)
         smiles_new, _ = self._topology_to_smiles(new_topology)
-        assert smiles_new == proposed_mol_smiles
+        if (smiles_new != proposed_mol_smiles):
+            raise Exception("smiles_new (%s) != proposed_mol_smiles (%s)" % (smiles_new, proposed_mol_smiles))
 
         #map the atoms between the new and old molecule only:
         mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
@@ -1040,6 +1041,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                     newAtoms[atom] = newAtom
         for bond in mol_topology.bonds():
             new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        # Copy periodic box vectors.
+        if current_topology._periodicBoxVectors != None:
+            new_topology._periodicBoxVectors = copy.deepcopy(current_topology._periodicBoxVectors)
 
         return new_topology, mol_start_index
 

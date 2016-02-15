@@ -216,7 +216,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
-class AlkanesTestSystem(PersesTestSystem):
+class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     Create a consistent set of samplers useful for testing SmallMoleculeProposalEngine on alkanes in various solvents.
     This is useful for testing a variety of components.
@@ -243,6 +243,8 @@ class AlkanesTestSystem(PersesTestSystem):
         SAMSSampler objects for environments
     designer : MultiTargetDesign sampler
         Example MultiTargetDesign sampler for explicit solvent hydration free energies
+    molecules : list
+        Molecules in library. Currently only SMILES format is supported.
 
     Examples
     --------
@@ -256,7 +258,8 @@ class AlkanesTestSystem(PersesTestSystem):
 
     """
     def __init__(self):
-        super(AlkanesTestSystem, self).__init__()
+        super(SmallMoleculeLibraryTestSystem, self).__init__()
+        molecules = self.molecules # Currently only SMILES is supported
         environments = ['explicit', 'vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -281,8 +284,8 @@ class AlkanesTestSystem(PersesTestSystem):
 
         # Create molecule in vacuum.
         from perses.tests.utils import createOEMolFromSMILES, extractPositionsFromOEMOL
-        smiles = 'CC' # current sampler state
-        molecule = createOEMolFromSMILES("CC")
+        smiles = molecules[0] # current sampler state
+        molecule = createOEMolFromSMILES(smiles)
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMOL(molecule)
 
@@ -296,9 +299,8 @@ class AlkanesTestSystem(PersesTestSystem):
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
         proposal_metadata = { }
         proposal_engines = dict()
-        molecules = ['C', 'CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, topologies[environment], system_generators[environment])
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment])
 
         # Generate systems
         systems = dict()
@@ -345,6 +347,58 @@ class AlkanesTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
+    """
+    Library of small alkanes in various solvent environments.
+    """
+    molecules = ['CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
+    def __init__(self):
+        super(AlkanesTestSystem, self).__init__()
+
+class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
+    """
+    Library of clinical kinase inhibitors in various solvent environments.
+    """
+    def __init__(self):
+        # Read SMILES from CSV file of clinical kinase inhibitors.
+        from pkg_resources import resource_filename
+        smiles_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.csv')
+        import csv
+        molecules = list()
+        with open(smiles_filename, 'rb') as csvfile:
+            csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
+            for row in csvreader:
+                name = row[0]
+                smiles = row[1]
+                molecules.append(smiles)
+        self.molecules = molecules
+        # Intialize
+        super(KinaseInhibitorsTestSystem, self).__init__()
+
+class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
+    """
+    Library of T4 lysozyme L99A inhibitors in various solvent environments.
+    """
+    molecules = list()
+
+    def read_smiles(self, filename):
+        import csv
+        with open(filename, 'rb') as csvfile:
+            csvreader = csv.reader(csvfile, delimiter='\t', quotechar='"')
+            for row in csvreader:
+                name = row[0]
+                smiles = row[1]
+                reference = row[2]
+                self.molecules.append(smiles)
+
+    def __init__(self):
+        # Read SMILES from CSV file of clinical kinase inhibitors.
+        from pkg_resources import resource_filename
+        self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
+        self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
+        # Intialize
+        super(T4LysozymeInhibitorsTestSystem, self).__init__()
+
 def check_topologies(testsystem):
     """
     Check that all SystemGenerators can build systems for their corresponding Topology objects.
@@ -361,30 +415,21 @@ def check_topologies(testsystem):
             show_topology(topology)
             raise Exception(msg)
 
-def test_AlanineDipeptideTestSystem():
-    """
-    Testing AlanineDipeptideTestSystem...
-    """
-    from perses.tests.testsystems import AlanineDipeptideTestSystem
-    testsystem = AlanineDipeptideTestSystem()
+def checktestsystem(testsystem_class):
+    # Instantiate test system.
+    testsystem = testsystem_class()
     # Check topologies
     check_topologies(testsystem)
-    # Build a system
-    system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
-    # Retrieve a SAMSSampler
-    sams_sampler = testsystem.sams_samplers['implicit']
 
-def test_AlkanesTestSystem():
+def test_testsystems():
     """
-    Testing AlkanesTestSystem...
+    Test instantiation of all test systems.
     """
-    from perses.tests.testsystems import AlkanesTestSystem
-    testsystem = AlkanesTestSystem()
-
-    # Test topologies.
-    check_topologies(testsystem)
-
-    # Build a system
-    system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
-    # Retrieve a SAMSSampler
-    sams_sampler = testsystem.sams_samplers['explicit']
+    testsystem_names = ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
+    niterations = 5 # number of iterations to run
+    for testsystem_name in testsystem_names:
+        import perses.tests.testsystems
+        testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
+        f = partial(checktestsystem, testsystem_class)
+        f.description = "Testing %s" % (testsystem_name)
+        yield f
