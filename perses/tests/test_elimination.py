@@ -154,7 +154,6 @@ def test_alchemical_elimination_mutation():
     """
 
     ff_filename = "amber99sbildn.xml"
-    max_point_mutants = 1
     proposal_metadata = {'ffxmls':[ff_filename]}
 
     # Create peptide.
@@ -172,7 +171,7 @@ def test_alchemical_elimination_mutation():
 
     # Create a topology proposal fro mutating ALA -> GLY
     from perses.rjmc.topology_proposal import PointMutationEngine
-    proposal_engine = PointMutationEngine(system_generator, max_point_mutants, chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+    proposal_engine = PointMutationEngine(system_generator, chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
     topology_proposal = proposal_engine.propose(system, topology)
 
     # Modify atom mapping to get a null transformation.
