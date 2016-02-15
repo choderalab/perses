@@ -885,7 +885,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL', proposal_metadata=None):
-        self._smiles_list = list_of_smiles
+        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
         self._n_molecules = len(list_of_smiles)
         self._residue_name = residue_name
         self._generated_systems = dict()
