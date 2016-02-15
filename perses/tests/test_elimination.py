@@ -94,7 +94,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
             raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
 
     nequil = 5 # number of equilibration iterations
-    niterations = 25 # number of round-trip switching trials
+    niterations = 20 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     logP_switch_n = np.zeros([niterations], np.float64)
@@ -124,7 +124,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
             raise Exception("Positions became NaN on NCMC insertion")
 
         # Compute probability of switching geometries.
-        logP_switch = - (potential_insert - potential_delete) / kT
+        logP_switch = - (potential_insert - potential_delete)
 
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
@@ -192,7 +192,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
     Test NCMCAlchemicalIntegrator
 
     """
-    molecule_names = ['ethane', 'pentane', 'benzene', 'phenol', 'biphenyl', 'imatinib']
+    molecule_names = ['pentane', 'biphenyl', 'imatinib']
     for molecule_name in molecule_names:
         from perses.tests.utils import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
@@ -247,7 +247,7 @@ def test_ncmc_engine_molecule():
         topology_proposal = TopologyProposal(
             new_topology=topology, new_system=system, old_topology=topology, old_system=system,
             old_chemical_state_key='', new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
-        for ncmc_nsteps in [0, 1, 2, 50]:
+        for ncmc_nsteps in [0, 1, 50]:
             f = partial(check_alchemical_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
@@ -267,7 +267,7 @@ def test_alchemical_elimination_peptide():
         new_system=testsystem.system, new_topology=testsystem.topology,
         logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
 
-    for ncmc_nsteps in [0, 1, 2, 50]:
+    for ncmc_nsteps in [0, 1, 50]:
         f = partial(check_alchemical_null_elimination, topology_proposal, testsystem.positions, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f

@@ -39,6 +39,18 @@ beta = 1.0/kT
 
 # TODO: Move some of these utility routines to openmoltools.
 
+def show_topology(topology):
+    output = ""
+    for atom in topology.atoms():
+        output += "%8d %5s %5s %3s: bonds " % (atom.index, atom.name, atom.residue.id, atom.residue.name)
+        for bond in atom.residue.bonds():
+            if bond[0] == atom:
+                output += " %8d" % bond[1].index
+            if bond[1] == atom:
+                output += " %8d" % bond[0].index
+        output += '\n'
+    print(output)
+    
 def extractPositionsFromOEMOL(molecule):
     positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
     coords = molecule.GetCoords()
@@ -69,6 +81,47 @@ def createOEMolFromIUPAC(iupac_name='bosutinib'):
     omega(mol)
 
     return mol
+
+def createOEMolFromSMILES(smiles='CC', title='MOL'):
+    """
+    Generate an oemol with a geometry
+    """
+    from openeye import oechem, oeiupac, oeomega
+
+    # Create molecule
+    mol = oechem.OEMol()
+    oechem.OESmilesToMol(mol, smiles)
+
+    # Set title.
+    mol.SetTitle(title)
+
+    # Assign aromaticity and hydrogens.
+    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
+    oechem.OEAddExplicitHydrogens(mol)
+
+    # Create atom names.
+    oechem.OETriposAtomNames(mol)
+
+    # Assign geometry
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega.SetIncludeInput(False)
+    omega.SetStrictStereo(True)
+    omega(mol)
+
+    return mol
+
+def oemol_to_omm_ff(oemol, molecule_name):
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
+    system = system_generator.build_system(topology)
+    positions = extractPositionsFromOEMOL(oemol)
+    return system, positions, topology
+
+
 
 def generate_gaff_xml():
     """

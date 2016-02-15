@@ -66,6 +66,10 @@ class ThermodynamicState(object):
     >>> (system, positions) = system_container.system, system_container.positions
     >>> state = ThermodynamicState(system=system, temperature=298.0*units.kelvin)
 
+    Get the inverse temperature
+    
+    >>> beta = state.beta
+
     Specify an NPT state at 298 K and 1 atm pressure.
 
     >>> state = ThermodynamicState(system=system, temperature=298.0*units.kelvin, pressure=1.0*units.atmospheres)
@@ -298,6 +302,10 @@ class ThermodynamicState(object):
             self._cleanup_context()
 
         return reduced_potential
+
+    @property
+    def beta(self):
+        return (1.0 / (kB * self.temperature))
 
     def reduced_potential_multiple(self, coordinates_list, box_vectors_list=None, platform=None):
         """Compute the reduced potential for the given sets of coordinates in this thermodynamic state.

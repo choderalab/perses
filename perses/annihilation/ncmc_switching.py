@@ -16,6 +16,10 @@ default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
 default_timestep = 1.0 * unit.femtoseconds
 
+class NaNException(Exception):
+    def __init__(self, *args, **kwargs):
+        super(NaNException,self).__init__(*args,**kwargs)
+
 class NCMCEngine(object):
     """
     NCMC switching engine
@@ -75,14 +79,23 @@ class NCMCEngine(object):
         self.constraint_tolerance = constraint_tolerance
         self.platform = platform
 
-    def _getAvailableParameters(self, system):
+    @property
+    def beta(self):
+        kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+        kT = kB * self.temperature
+        beta = 1.0 / kT
+        return beta
+
+    def _getAvailableParameters(self, system, prefix='lambda'):
         """
-        Return a list of available context parameters defined in the system
+        Return a list of available alchemical context parameters defined in the system
 
         Parameters
         ----------
         system : simtk.openmm.System
             The system for which available context parameters are to be determined
+        prefix : str, optional, default='lambda'
+            Prefix required for parameters to be returned.
 
         Returns
         -------
@@ -95,7 +108,9 @@ class NCMCEngine(object):
             force = system.getForce(force_index)
             if hasattr(force, 'getNumGlobalParameters'):
                 for parameter_index in range(force.getNumGlobalParameters()):
-                    parameters.append(force.getGlobalParameterName(parameter_index))
+                    parameter_name = force.getGlobalParameterName(parameter_index)
+                    if parameter_name[0:(len(prefix)+1)] == (prefix + '_'):
+                        parameters.append(parameter_name)
         return parameters
 
     def _computeAlchemicalCorrection(self, unmodified_system, alchemical_system, initial_positions, final_positions, direction='insert'):
@@ -167,15 +182,11 @@ class NCMCEngine(object):
             return potential
 
         # Compute correction from transforming real system to/from alchemical system
-        kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
-        kT = kB * self.temperature
-        beta = 1.0 / kT
-
         if direction == 'delete':
             alchemical_potential_correction = computePotentialEnergy(alchemical_system, initial_positions) - computePotentialEnergy(unmodified_system, initial_positions)
         elif direction == 'insert':
             alchemical_potential_correction = computePotentialEnergy(unmodified_system, final_positions) - computePotentialEnergy(alchemical_system, final_positions)
-        logP_alchemical_correction = -beta * alchemical_potential_correction
+        logP_alchemical_correction = -self.beta * alchemical_potential_correction
 
         return logP_alchemical_correction
 
@@ -260,6 +271,32 @@ class NCMCEngine(object):
         # Create alchemical system.
         [unmodified_system, alchemical_system] = self.make_alchemical_system(topology_proposal, direction=direction)
 
+        # DEBUG: Compute initial potential of unmodified system.
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        if self.platform is not None:
+            context = openmm.Context(unmodified_system, integrator, self.platform)
+        else:
+            context = openmm.Context(unmodified_system, integrator)
+        context.setPositions(initial_positions)
+        context.applyConstraints(integrator.getConstraintTolerance())
+        unmodified_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        del context, integrator
+        if np.isnan(unmodified_potential):
+            raise NaNException("Initial potential of unmodified system is NaN")
+
+        # DEBUG: Compute initial potential of alchemical system without changing alchemical lambda.
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        if self.platform is not None:
+            context = openmm.Context(alchemical_system, integrator, self.platform)
+        else:
+            context = openmm.Context(alchemical_system, integrator)
+        context.setPositions(initial_positions)
+        context.applyConstraints(integrator.getConstraintTolerance())
+        alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        del context, integrator
+        if np.isnan(alchemical_potential):
+            raise NaNException("Initial potential of alchemical system is NaN")
+
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
         functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
@@ -279,18 +316,43 @@ class NCMCEngine(object):
         # Set velocities to temperature and apply velocity constraints.
         context.setVelocitiesToTemperature(self.temperature)
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
-        # Store initial potential if 'insert'
+
+        # Set initial context parameters.
         if direction == 'insert':
             for parameter_name in available_parameters:
                 context.setParameter(parameter_name, 0)
-            potential = context.getState(getEnergy=True).getPotentialEnergy()
-        # Only take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
-        integrator.step(1)
-        # Store final potential if 'insert'
-        if direction == 'delete':
+        elif direction == 'delete':
+            for parameter_name in available_parameters:
+                context.setParameter(parameter_name, 1)
+
+        # Compute initial potential of alchemical state.
+        initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        if np.isnan(initial_potential):
+            raise NaNException("Initial potential of 'insert' operation is NaN (unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda)" % (unmodified_potential, alchemical_potential))
+
+        # Take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
+        try:
+            integrator.step(1)
+        except Exception as e:
+            # Trap NaNs as a special exception (allowing us to reject later, if desired)
+            if e.msg == "Particle coordinate is nan":
+                raise NaNException(str(e))
+            else:
+                raise e
+
+        # Set final context parameters.
+        if direction == 'insert':
+            for parameter_name in available_parameters:
+                context.setParameter(parameter_name, 1)
+        elif direction == 'delete':
             for parameter_name in available_parameters:
                 context.setParameter(parameter_name, 0)
-            potential = context.getState(getEnergy=True).getPotentialEnergy()
+
+        # Compute final potential of alchemical state.
+        final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        if np.isnan(final_potential):
+            raise NaNException("Final potential of 'delete' operation is NaN")
+
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         logP_NCMC = integrator.getLogAcceptanceProbability()
@@ -307,6 +369,12 @@ class NCMCEngine(object):
 
         # Clean up alchemical system.
         del alchemical_system
+
+        # Select whether to return initial or final potential.
+        if direction == 'insert':
+            potential = initial_potential
+        elif direction == 'delete':
+            potential = final_potential
 
         # Return
         return [final_positions, logP, potential]
