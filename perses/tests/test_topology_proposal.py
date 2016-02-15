@@ -209,7 +209,7 @@ def test_run_point_mutation_propose():
 
 def test_mutate_from_every_amino_to_every_other():
     """
-    Make sure mutations are successfuly between every possible pair of before-and-after residues
+    Make sure mutations are successful between every possible pair of before-and-after residues
     Mutate Ecoli F-ATPase alpha subunit to all 20 amino acids (test going FROM all possibilities)
     Mutate each residue to all 19 alternatives
     """
