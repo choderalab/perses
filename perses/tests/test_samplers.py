@@ -36,7 +36,7 @@ def test_samplers():
     """
     Test samplers on multiple test systems.
     """
-    testsystem_names = ['KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
+    testsystem_names = ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
     niterations = 5 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
