@@ -539,6 +539,12 @@ class PointMutationEngine(PolymerProposalEngine):
     allowed_mutations : list(list(tuple)) -- OPTIONAL
         default = None
         ('residue id to mutate','desired mutant residue name (3-letter code)')
+        Example:
+            Desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q
+            allowed_mutations = [
+                [('99','ALA')],
+                [('99','ALA'),('102','GLN')]
+            ]
     """
 
     def __init__(self, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None):

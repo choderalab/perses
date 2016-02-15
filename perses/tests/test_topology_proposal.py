@@ -143,6 +143,8 @@ def _guessFileFormat(file, filename):
 def test_specify_allowed_mutants():
     """
     Make sure proposals can be made using optional argument allowed_mutations
+
+    This test has three possible insulin systems: wild type, Q5E, and Q5N/Y14F
     """
     import perses.rjmc.topology_proposal as topology_proposal
 
@@ -159,6 +161,7 @@ def test_specify_allowed_mutants():
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
     chain_id = 'A'
+
     allowed_mutations = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
