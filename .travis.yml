@@ -36,7 +36,7 @@ script:
   - conda remove --yes parmed parmed-dev && conda install --yes parmed-dev
   - conda remove --yes openmm openmm-dev && conda install --yes openmm-dev
   # Run tests
-  - cd devtools && nosetests --processes=-1 --process-timeout=1800 $PACKAGENAME --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
+  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
 env:
   matrix:
     - python=2.7  CONDA_PY=27 OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"

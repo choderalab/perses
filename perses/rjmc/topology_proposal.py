@@ -885,7 +885,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL', proposal_metadata=None):
-        self._smiles_list = list_of_smiles
+        list_of_smiles = list(set(list_of_smiles))
+        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
         self._n_molecules = len(list_of_smiles)
         self._residue_name = residue_name
         self._generated_systems = dict()
@@ -939,6 +940,25 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
                                                  new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
         return proposal
+
+    def _canonicalize_smiles(self, smiles):
+        """
+        Convert a SMILES string into canonical isomeric smiles
+
+        Parameters
+        ----------
+        smiles : str
+            Any valid SMILES for a molecule
+
+        Returns
+        -------
+        iso_can_smiles : str
+            OpenEye isomeric canonical smiles corresponding to the input
+        """
+        mol = oechem.OEMol()
+        oechem.OESmilesToMol(mol, smiles)
+        iso_can_smiles = oechem.OECreateIsoSmiString(mol)
+        return iso_can_smiles
 
     def _topology_to_smiles(self, topology):
         """
