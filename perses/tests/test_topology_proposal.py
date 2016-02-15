@@ -81,7 +81,7 @@ def test_small_molecule_proposals():
     gaff_xml_filename = get_data_filename('data/gaff.xml')
     stats_dict = {smiles : 0 for smiles in list_of_smiles}
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, app.Topology(), system_generator)
+    proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, system_generator)
     initial_molecule = generate_initial_molecule('CCC')
     initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
     proposal = proposal_engine.propose(initial_system, initial_topology)
@@ -143,6 +143,8 @@ def _guessFileFormat(file, filename):
 def test_specify_allowed_mutants():
     """
     Make sure proposals can be made using optional argument allowed_mutations
+
+    This test has three possible insulin systems: wild type, Q5E, and Q5N/Y14F
     """
     import perses.rjmc.topology_proposal as topology_proposal
 
@@ -155,16 +157,17 @@ def test_specify_allowed_mutants():
     modeller.delete([chain])
 
     ff_filename = "amber99sbildn.xml"
-    max_point_mutants = 1
 
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
     chain_id = 'A'
+
     allowed_mutations = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants, chain_id, allowed_mutations=allowed_mutations)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, allowed_mutations=allowed_mutations)
+
     ntrials = 10
     for trian in range(ntrials):
         pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
@@ -203,13 +206,13 @@ def test_run_point_mutation_propose():
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants, chain_id)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants)
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
 
 
 def test_mutate_from_every_amino_to_every_other():
     """
-    Make sure mutations are successfuly between every possible pair of before-and-after residues
+    Make sure mutations are successful between every possible pair of before-and-after residues
     Mutate Ecoli F-ATPase alpha subunit to all 20 amino acids (test going FROM all possibilities)
     Mutate each residue to all 19 alternatives
     """
@@ -236,7 +239,7 @@ def test_mutate_from_every_amino_to_every_other():
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, max_point_mutants, chain_id)
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants)
 
     current_system = system
     current_topology = modeller.topology
@@ -357,10 +360,78 @@ def test_mutate_from_every_amino_to_every_other():
             pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
         assert matching_amino_found == 1
 
+def test_limiting_allowed_residues():
+    """
+    Test example system with certain mutations allowed to mutate
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
 
+    failed_mutants = 0
+
+    pdbid = "1G3F"
+    topology, positions = load_pdbid_to_openmm(pdbid)
+    modeller = app.Modeller(topology, positions)
+
+    chain_id = 'B'
+    to_delete = list()
+    for chain in modeller.topology.chains():
+        if chain.id != chain_id:
+            to_delete.append(chain)
+    modeller.delete(to_delete)
+    modeller.addHydrogens()
+
+    ff_filename = "amber99sbildn.xml"
+
+    ff = app.ForceField(ff_filename)
+    system = ff.createSystem(modeller.topology)
+
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
+
+    max_point_mutants = 1
+    residues_allowed_to_mutate = ['903','904','905']
+
+    pl_top_library = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residues_allowed_to_mutate)
+    pl_top_proposal = pl_top_library.propose(system, modeller.topology)
+
+
+def test_run_peptide_library_engine():
+    """
+    Test example system with peptide and library
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
+
+    failed_mutants = 0
+
+    pdbid = "1G3F"
+    topology, positions = load_pdbid_to_openmm(pdbid)
+    modeller = app.Modeller(topology, positions)
+
+    chain_id = 'B'
+    to_delete = list()
+    for chain in modeller.topology.chains():
+        if chain.id != chain_id:
+            to_delete.append(chain)
+    modeller.delete(to_delete)
+    modeller.addHydrogens()
+
+    ff_filename = "amber99sbildn.xml"
+
+    ff = app.ForceField(ff_filename)
+    ff.loadFile("tip3p.xml")
+    modeller.addSolvent(ff)
+    system = ff.createSystem(modeller.topology)
+
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    library = ['AVILMFYQP','RHKDESTNQ','STNQCFGPL']
+
+    pl_top_library = topology_proposal.PeptideLibraryEngine(system_generator, library, chain_id)
+    pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
     test_run_point_mutation_propose()
     test_mutate_from_every_amino_to_every_other()
     test_specify_allowed_mutants()
+    test_limiting_allowed_residues()
+    test_run_peptide_library_engine()
     test_small_molecule_proposals()
+
