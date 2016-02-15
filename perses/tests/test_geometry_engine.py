@@ -67,7 +67,7 @@ def oemol_to_openmm_system(oemol, molecule_name):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
     gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename], forcefield_kwargs={'constraints' : app.HBonds})
     topology = forcefield_generators.generateTopologyFromOEMol(oemol)
     system = system_generator.build_system(topology)
     positions = extractPositionsFromOEMOL(oemol)
@@ -133,8 +133,8 @@ def test_run_geometry_engine():
     molecule2 = generate_initial_molecule(molecule_name_2)
     new_to_old_atom_mapping = align_molecules(molecule1, molecule2)
 
-    sys1, pos1, top1 = oemol_to_openmm_system_amber(molecule1, molecule_name_1)
-    sys2, pos2, top2 = oemol_to_openmm_system_amber(molecule2, molecule_name_2)
+    sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
+    sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
@@ -152,7 +152,7 @@ def test_run_geometry_engine():
     state = context.getState(getEnergy=True)
     print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
-    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal)
+    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
     app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
     test_pdb_file.close()
     context.setPositions(new_positions)
@@ -298,7 +298,7 @@ def test_logp_reverse():
     import perses.rjmc.topology_proposal as topology_proposal
 
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
-                                                                    logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+                                                                    logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, new_chemical_state_key="CCC", old_chemical_state_key="CC", metadata={'test':0.0})
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
 
@@ -306,7 +306,7 @@ def test_logp_reverse():
     #reverse the atom map:
     old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping.items()}
     sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top1, new_system=sys1, old_topology=top2, old_system=sys2,
-                                                                      logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, metadata={'test':0.0})
+                                                                      logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, new_chemical_state_key="CC", old_chemical_state_key="CCCC", metadata={'test':0.0})
     logp_reverse = geometry_engine.logp_reverse(sm_reverse_proposal, pos1, new_positions, beta)
     print(logp_proposal)
     print(logp_reverse)
@@ -375,7 +375,7 @@ def test_angle():
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    #test_run_geometry_engine()
+    test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
