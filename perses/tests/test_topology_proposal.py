@@ -357,10 +357,41 @@ def test_mutate_from_every_amino_to_every_other():
             pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
         assert matching_amino_found == 1
 
+def test_run_peptide_library_engine():
+    """
+    Test example system with peptide and library
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
 
+    failed_mutants = 0
+
+    pdbid = "1G3F"
+    topology, positions = load_pdbid_to_openmm(pdbid)
+    modeller = app.Modeller(topology, positions)
+
+    chain_id = 'B'
+    to_delete = list()
+    for chain in modeller.topology.chains():
+        if chain.id != chain_id:
+            to_delete.append(chain)
+    modeller.delete(to_delete)
+    modeller.deleteWater()
+    modeller.addHydrogens()
+
+    ff_filename = "amber99sbildn.xml"
+
+    ff = app.ForceField(ff_filename)
+    system = ff.createSystem(modeller.topology)
+
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    library = ['AVILMFYQP','RHKDESTNQ','STNQCFGPZ']
+
+    pl_top_library = topology_proposal.PeptideLibraryEngine(system_generator, library, chain_id)
+    pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
     test_run_point_mutation_propose()
     test_mutate_from_every_amino_to_every_other()
     test_specify_allowed_mutants()
+    test_run_peptide_library_engine()
     test_small_molecule_proposals()
