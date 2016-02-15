@@ -369,6 +369,8 @@ class MCMCSampler(object):
         The current positions.
     iteration : int
         Iterations completed.
+    verbose : bool
+        If True, verbose output is printed
 
     References
     ----------
@@ -409,16 +411,22 @@ class MCMCSampler(object):
         # For GHMC integrator
         self.collision_rate = 5.0 / unit.picoseconds
         self.timestep = 1.0 * unit.femtoseconds
-        self.nsteps = 50 # number of steps per update
+        self.nsteps = 500 # number of steps per update
+        self.verbose = True
 
     def update(self):
         """
         Update the sampler with one step of sampling.
         """
+        if self.verbose:
+            print("." * 80)
+            print("MCMC sampler iteration %d" % self.iteration)
+
         from openmmtools.integrators import GHMCIntegrator
         integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
         context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
+        if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
         integrator.step(self.nsteps)
         self.sampler_state = SamplerState.createFromContext(context)
         del context, integrator
@@ -431,6 +439,9 @@ class MCMCSampler(object):
 
         # Increment iteration count
         self.iteration += 1
+
+        if self.verbose:
+            print("." * 80)
 
     def run(self, niterations=1):
         """
@@ -472,6 +483,8 @@ class ExpandedEnsembleSampler(object):
         Number of rejected thermodynamic/chemical state changes.
     number_of_state_visits : dict of state_key
         Cumulative counts of visited states.
+    verbose : bool
+        If True, verbose output is printed.
 
     References
     ----------
@@ -587,11 +600,13 @@ class ExpandedEnsembleSampler(object):
         """
         self.sampler.update()
 
-    def update_sampler(self):
+    def update_state(self):
         """
         Sample the thermodynamic state.
         """
         if self.scheme == 'ncmc-geometry-ncmc':
+            if self.verbose: print("Updating chemical state with ncmc-geometry-ncmc scheme...")
+
             # DEBUG: Check current topology can be built.
             try:
                 self.proposal_engine._system_generator.build_system(self.topology)
@@ -602,10 +617,12 @@ class ExpandedEnsembleSampler(object):
                 raise Exception(msg)
 
             # Propose new chemical state.
+            if self.verbose: print("Proposing new topology...")
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
 
             # DEBUG: Check current topology can be built.
+            if self.verbose: print("Generating new system...")
             try:
                 self.proposal_engine._system_generator.build_system(topology_proposal.new_topology)
             except Exception as e:
@@ -634,15 +651,18 @@ class ExpandedEnsembleSampler(object):
             old_log_weight = self.get_log_weight(old_state_key)
             new_log_weight = self.get_log_weight(new_state_key)
 
+            if self.verbose: print("Performing NCMC annihilation")
             # Alchemically eliminate atoms being removed.
             [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_old_positions)):
                 raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
 
+            if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
             geometry_new_positions, geometry_logp  = self.geometry_engine.propose(topology_proposal, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
 
+            if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.
             [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
             # Check that positions are not NaN
@@ -671,8 +691,10 @@ class ExpandedEnsembleSampler(object):
                 self.sampler.positions = ncmc_new_positions
                 self.state_key = topology_proposal.new_chemical_state_key
                 self.naccepted += 1
+                if self.verbose: print("%s -> %s proposal accepted (logp_accept = %12.3f)" % (old_state_key, new_state_key, logp_accept))
             else:
                 self.nrejected += 1
+                if self.verbose: print("%s -> %s proposal rejected (logp_accept = %12.3f)" % (old_state_key, new_state_key, logp_accept))
 
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
@@ -684,8 +706,14 @@ class ExpandedEnsembleSampler(object):
         """
         Update the sampler with one step of sampling.
         """
-        self.update_sampler()
+        if self.verbose:
+            print("-" * 80)
+            print("Expanded Ensemble sampler iteration %8d" % self.iteration)
+        self.update_positions()
+        self.update_state()
         self.iteration += 1
+        if self.verbose:
+            print("-" * 80)
 
     def run(self, niterations=1):
         """
@@ -725,6 +753,8 @@ class SAMSSampler(object):
         Update method.  One of ['default']
     iteration : int
         Iterations completed.
+    verbose : bool
+        If True, verbose debug output is printed.
 
     References
     ----------
@@ -787,6 +817,7 @@ class SAMSSampler(object):
 
         # Initialize.
         self.iteration = 0
+        self.verbose = False
 
     @property
     def state_keys(self):
@@ -822,9 +853,14 @@ class SAMSSampler(object):
         """
         Update the sampler with one step of sampling.
         """
+        if self.verbose:
+            print("=" * 80)
+            print("SAMS sampler iteration %5d" % self.iteration)
         self.update_sampler()
         self.update_logZ_estimates()
         self.iteration += 1
+        if self.verbose:
+            print("=" * 80)
 
     def run(self, niterations=1):
         """
@@ -855,6 +891,8 @@ class MultiTargetDesign(object):
         samplers.keys() are the samplers, and samplers[key]
     log_target_probabilities : dict of hashable object : float
         log_target_probabilities[key] is the computed log objective function (target probability) for chemical state `key`
+    verbose : bool
+        If True, verbose output is printed.
 
     """
     def __init__(self, target_samplers):
@@ -890,6 +928,7 @@ class MultiTargetDesign(object):
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
+        self.verbose = False
 
     @property
     def state_keys(self):
@@ -926,12 +965,20 @@ class MultiTargetDesign(object):
         # Store.
         self.log_target_probabilities = log_target_probabilities
 
+        if self.verbose:
+            print("log_target_probabilities = %s" % str(self.log_target_probabilities))
+
     def update(self):
         """
         Run one iteration of the sampler.
         """
+        if self.verbose:
+            print("*" * 80)
+            print("MultiTargetDesign sampler iteration %8d" % self.iteration)
         self.update_samplers()
         self.update_target_probabilities()
+        if self.verbose:
+            print("*" * 80)
 
     def run(self, niterations=1):
         """
