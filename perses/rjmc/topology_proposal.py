@@ -855,18 +855,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     ----------
     list_of_smiles : list of string
         list of smiles that will be sampled
-    receptor_topology : app.Topology object
-        topology of the receptor
     system_generator : SystemGenerator object
         SystemGenerator initialized with the appropriate forcefields
+    residue_name : str
+        The name that will be used for small molecule residues in the topology
     proposal_metadata : dict
         metadata for the proposal engine
     """
 
-    def __init__(self, list_of_smiles, receptor_topology, system_generator, proposal_metadata=None):
-        self._receptor_topology = receptor_topology
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', proposal_metadata=None):
         self._smiles_list = list_of_smiles
         self._n_molecules = len(list_of_smiles)
+        self._residue_name = residue_name
         self._generated_systems = dict()
         self._generated_topologies = dict()
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata)
@@ -897,7 +897,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
                                                                                 current_mol_smiles)
 
-        new_topology, new_mol_start_index = self._build_new_topology(proposed_mol)
+        new_topology, new_mol_start_index = self._build_new_topology(current_topology, proposed_mol)
         new_system = self._system_generator.build_system(new_topology)
         smiles_new, _ = self._topology_to_smiles(new_topology)
         assert smiles_new == proposed_mol_smiles
@@ -918,7 +918,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                                                  new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
         return proposal
 
-    def _topology_to_smiles(self, topology, molecule_name="MOL"):
+    def _topology_to_smiles(self, topology):
         """
         Get the smiles string corresponding to a specific residue in an
         OpenMM Topology
@@ -927,8 +927,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         ----------
         topology : app.Topology
             The topology containing the molecule of interest
-        molecule_name : string, optional
-            The name of the residue. Default MOL
 
         Returns
         -------
@@ -937,7 +935,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oemol : oechem.OEMol object
             molecule
         """
-
+        molecule_name = self._residue_name
         matching_molecules = [res for res in topology.residues() if res.name==molecule_name]
         if len(matching_molecules) != 1:
             raise ValueError("More than one residue with the same name!")
@@ -946,7 +944,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         smiles_string = oechem.OECreateIsoSmiString(oemol)
         return smiles_string, oemol
 
-    def compute_state_key(self, topology, molecule_name="MOL"):
+    def compute_state_key(self, topology):
         """
         Given a topology, come up with a state key string.
         For this class, the state key is an isomeric canonical SMILES.
@@ -955,8 +953,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         ----------
         topology : app.Topology object
             The topology object in question.
-        molecule_name : str, optional
-            The name of the molecule residue in the topology, default MOL
 
         Returns
         -------
@@ -964,10 +960,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             isomeric canonical SMILES
 
         """
-        chemical_state_key, _ = self._topology_to_smiles(topology,molecule_name=molecule_name)
+        chemical_state_key, _ = self._topology_to_smiles(topology)
         return chemical_state_key
 
-    def _find_mol_start_index(self, topology, resname='MOL'):
+    def _find_mol_start_index(self, topology):
         """
         Find the starting index of the molecule in the topology.
         Throws an exception if resname is not present.
@@ -976,14 +972,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         ----------
         topology : app.Topology object
             The topology containing the molecule
-        resname : string, optional
-            The name of the molecule. Default MOL.
 
         Returns
         -------
         mol_start_idx : int
             start index of the molecule
         """
+        resname = self._residue_name
         mol_residues = [res for res in topology.residues() if res.name==resname]
         if len(mol_residues)!=1:
             raise ValueError("There can only be one residue with a specific name in the topology.")
@@ -992,13 +987,15 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_idx = atoms[0].index
         return mol_start_idx
 
-    def _build_new_topology(self, oemol_proposed):
+    def _build_new_topology(self, current_topology, oemol_proposed):
         """
         Construct a new topology
         Parameters
         ----------
         oemol_proposed : oechem.OEMol object
             the proposed OEMol object
+        current_topology : app.Topology object
+            The current topology with an appropriately named small molecule residue
 
         Returns
         -------
@@ -1008,7 +1005,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             The first index of the small molecule
         """
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
-        new_topology = copy.deepcopy(self._receptor_topology)
+
         mol_start_index = 0
         newAtoms = {}
         for chain in mol_topology.chains():
@@ -1024,6 +1021,34 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
 
         return new_topology, mol_start_index
+
+    def _remove_small_molecule(self, topology):
+        """
+        This method removes the small molecule parts of a topology from
+        a protein+small molecule complex based on the name of the
+        small molecule residue
+
+        Parameters
+        ----------
+        topology : app.Topology
+            Topology with the appropriate residue name.
+
+        Returns
+        -------
+        receptor_topology : app.Topology
+            Topology without small molecule
+        """
+        receptor_topology = app.Topology()
+        newAtoms = {}
+        for chain in topology.chains():
+            newChain = receptor_topology.addChain(chain.id)
+            for residue in chain.residues():
+                if residue.name != self._residue_name:
+                    newResidue = receptor_topology.addResidue(residue.name, newChain, residue.id)
+                    for atom in residue.atoms():
+                        newAtom = receptor_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                        newAtoms[atom] = newAtom
+        for bond in topology.bonds():
 
 
     def _smiles_to_oemol(self, smiles_string):
