@@ -940,6 +940,25 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                                                  new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
         return proposal
 
+    def _canonicalize_smiles(self, smiles):
+        """
+        Convert a SMILES string into canonical isomeric smiles
+
+        Parameters
+        ----------
+        smiles : str
+            Any valid SMILES for a molecule
+
+        Returns
+        -------
+        iso_can_smiles : str
+            OpenEye isomeric canonical smiles corresponding to the input
+        """
+        mol = oechem.OEMol()
+        oechem.OESmilesToMol(mol, smiles)
+        iso_can_smiles = oechem.OECreateIsoSmiString(mol)
+        return iso_can_smiles
+
     def _topology_to_smiles(self, topology):
         """
         Get the smiles string corresponding to a specific residue in an
