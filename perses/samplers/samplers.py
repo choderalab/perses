@@ -603,7 +603,6 @@ class ExpandedEnsembleSampler(object):
 
             # Propose new chemical state.
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
-            print "topology before: %s" % topology._periodicBoxVectors # DEBUG
             topology_proposal = self.proposal_engine.propose(system, topology)
 
             # DEBUG: Check current topology can be built.
