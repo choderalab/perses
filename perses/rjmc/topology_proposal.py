@@ -1049,6 +1049,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                         newAtom = receptor_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
                         newAtoms[atom] = newAtom
         for bond in topology.bonds():
+            if bond[0].residue.name==self._residue_name or bond[1].residue.name==self._residue_name:
+                continue
             receptor_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
         return receptor_topology
 
