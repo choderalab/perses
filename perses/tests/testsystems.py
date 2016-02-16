@@ -193,13 +193,18 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment])
+            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+            mcmc_samplers[environment].verbose = True
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+            exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment].verbose = True
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['implicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
         designer = MultiTargetDesign(target_samplers)
+        designer.verbose = True
 
         # DEBUG
         environments = ['vacuum', 'implicit']
@@ -327,8 +332,12 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment])
+            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+            mcmc_samplers[environment].verbose = True
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+            exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment].verbose = True
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
