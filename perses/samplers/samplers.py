@@ -620,6 +620,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("Proposing new topology...")
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
+            if self.verbose: print("Proposed transformation from %s to %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
 
             # DEBUG: Check current topology can be built.
             if self.verbose: print("Generating new system...")
