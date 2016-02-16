@@ -935,6 +935,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         adjusted_atom_map = {}
         for (key, value) in mol_atom_map.items():
             adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
+        n_new_receptor_atoms = len(list(new_topology.atoms())) - new_mol_start_index
+        for i in range(n_new_receptor_atoms):
+            adjusted_atom_map[i] = i
+
 
         #Create the TopologyProposal and return it
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
@@ -1173,8 +1177,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         Returns
         -------
-        proposed_idx : int
-             The index of the proposed oemol
+        proposed_mol_smiles : str
+             The SMILES of the proposed molecule
         mol : oechem.OEMol
             The next molecule to simulate
         logp : float
