@@ -940,6 +940,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for i in range(current_mol_start_index):
             adjusted_atom_map[i] = i
 
+        if current_mol_start_index!=new_mol_start_index:
+            raise Exception("Receptor topology has changed during Small molecule topology proposal. Probably a problem with this class.")
 
         #Create the TopologyProposal and return it
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
