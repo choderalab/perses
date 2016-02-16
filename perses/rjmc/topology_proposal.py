@@ -913,7 +913,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
 
-        current_mol_start_index = self._find_mol_start_index(current_topology)
+        current_receptor_topology = self._remove_small_molecule(current_topology)
+        current_mol_start_index = len(list(current_receptor_topology.atoms()))
 
         #choose the next molecule to simulate:
         proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
@@ -935,8 +936,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         adjusted_atom_map = {}
         for (key, value) in mol_atom_map.items():
             adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
-        n_new_receptor_atoms = len(list(new_topology.atoms())) - new_mol_start_index
-        for i in range(n_new_receptor_atoms):
+
+        for i in range(current_mol_start_index):
             adjusted_atom_map[i] = i
 
 
@@ -1052,7 +1053,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = self._remove_small_molecule(current_topology)
-        mol_start_index = 0
+        mol_start_index = len(list(new_topology.atoms()))
         newAtoms = {}
         for chain in mol_topology.chains():
             newChain = new_topology.addChain(chain.id)
@@ -1060,8 +1061,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 newResidue = new_topology.addResidue(residue.name, newChain, residue.id)
                 for atom in residue.atoms():
                     newAtom = new_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                    if atom.index == 0:
-                        mol_start_index = newAtom.index
                     newAtoms[atom] = newAtom
         for bond in mol_topology.bonds():
             new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
