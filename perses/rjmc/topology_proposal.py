@@ -914,13 +914,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
 
         current_receptor_topology = self._remove_small_molecule(current_topology)
-        current_mol_start_index = len(list(current_receptor_topology.atoms()))
+        mol_start_index = len(list(current_receptor_topology.atoms()))
 
         #choose the next molecule to simulate:
         proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
                                                                                 current_mol_smiles)
 
-        new_topology, new_mol_start_index = self._build_new_topology(current_topology, proposed_mol)
+        new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
         new_system = self._system_generator.build_system(new_topology)
         smiles_new, _ = self._topology_to_smiles(new_topology)
         if (smiles_new != proposed_mol_smiles):
@@ -935,13 +935,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #adjust the atom map for the presence of the receptor:
         adjusted_atom_map = {}
         for (key, value) in mol_atom_map.items():
-            adjusted_atom_map[key+new_mol_start_index] = value + current_mol_start_index
+            adjusted_atom_map[key+mol_start_index] = value + mol_start_index
 
-        for i in range(current_mol_start_index):
+        #all atoms until the molecule starts are the same
+        for i in range(mol_start_index):
             adjusted_atom_map[i] = i
 
-        if current_mol_start_index!=new_mol_start_index:
-            raise Exception("Receptor topology has changed during Small molecule topology proposal. Probably a problem with this class.")
 
         #Create the TopologyProposal and return it
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
@@ -1036,15 +1035,15 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_idx = atoms[0].index
         return mol_start_idx
 
-    def _build_new_topology(self, current_topology, oemol_proposed):
+    def _build_new_topology(self, current_receptor_topology, oemol_proposed):
         """
         Construct a new topology
         Parameters
         ----------
         oemol_proposed : oechem.OEMol object
             the proposed OEMol object
-        current_topology : app.Topology object
-            The current topology with an appropriately named small molecule residue
+        current_receptor_topology : app.Topology object
+            The current topology without the small molecule
 
         Returns
         -------
@@ -1054,8 +1053,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             The first index of the small molecule
         """
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
-        new_topology = self._remove_small_molecule(current_topology)
-        mol_start_index = len(list(new_topology.atoms()))
+        new_topology = copy.deepcopy(current_receptor_topology)
         newAtoms = {}
         for chain in mol_topology.chains():
             newChain = new_topology.addChain(chain.id)
@@ -1067,10 +1065,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for bond in mol_topology.bonds():
             new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
         # Copy periodic box vectors.
-        if current_topology._periodicBoxVectors != None:
-            new_topology._periodicBoxVectors = copy.deepcopy(current_topology._periodicBoxVectors)
+        if current_receptor_topology._periodicBoxVectors != None:
+            new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
 
-        return new_topology, mol_start_index
+        return new_topology
 
     def _remove_small_molecule(self, topology):
         """
@@ -1102,6 +1100,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             if bond[0].residue.name==self._residue_name or bond[1].residue.name==self._residue_name:
                 continue
             receptor_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        if topology._periodicBoxVectors != None:
+            receptor_topology._periodicBoxVectors = copy.deepcopy(topology._periodicBoxVectors)
         return receptor_topology
 
 
