@@ -374,7 +374,7 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         smiles_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.csv')
         import csv
         molecules = list()
-        with open(smiles_filename, 'rb') as csvfile:
+        with open(smiles_filename, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
             for row in csvreader:
                 name = row[0]
@@ -392,7 +392,7 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
 
     def read_smiles(self, filename):
         import csv
-        with open(filename, 'rb') as csvfile:
+        with open(filename, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter='\t', quotechar='"')
             for row in csvreader:
                 name = row[0]
