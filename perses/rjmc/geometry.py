@@ -201,6 +201,7 @@ class FFGeometryEngine(GeometryEngine):
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
                 r = internal_coordinates[0]*atom_coords.unit
                 theta = internal_coordinates[1]*units.radian
+                phi = internal_coordinates[2]*units.radian
 
             bond = self._get_relevant_bond(atom, bond_atom)
             if bond is not None:
@@ -226,11 +227,11 @@ class FFGeometryEngine(GeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi_proposed, logp_phi = self._propose_torsion(atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
-                xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r_proposed, theta_proposed, phi_proposed)
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=5000)
+                xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
-                logp_phi = self._torsion_logp(atom, atom_coords, torsion, old_atoms_with_positions, old_coordinates, beta)
+                logp_phi = self._torsion_logp(context, torsion, old_positions, phi, beta, n_divisions=5000)
 
             #accumulate logp
             logp_proposal += logp_proposal + logp_r + logp_theta +logp_phi + np.log(detJ)
