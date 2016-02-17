@@ -778,10 +778,128 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         phi = phis[phi_idx]
         return phi, logp
 
+class GeometrySystemGenerator(object):
+    """
+    This is an internal utility class that generates OpenMM systems
+    with only valence terms and special parameters to assist in
+    geometry proposals.
+    """
+    _HarmonicBondForceEnergy = "step(growth_idx - {})*(K/2)*(r-r0)^2"
+    _HarmonicAngleForceEnergy = "step(growth_idx - {})*(K/2)*(theta-theta0)^2;"
+    _PeriodicTorsionForceEnergy = "step(growth_idx - {})*k*(1+cos(periodicity*theta-phase))"
+
+    def __init__(self, topology_proposal):
+        self._topology_proposal = topology_proposal
+
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, force_names=None, force_parameters=None):
+        """
+        Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
+        for each integer above 0, an additional atom is made interacting, with order determined by growth_index
+        Parameters
+        ----------
+        reference_system : simtk.openmm.System object
+            The system containing the relevant forces and particles
+        growth_indices : list of int
+            The order in which the atom indices will be proposed
+        parameter_name : str
+            The name of the global context parameter
+        force_names : list of str
+            A list of the names of forces that will be included in this system
+        force_parameters : dict
+            Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
+        Returns
+        -------
+        growth_system : simtk.openmm.System object
+            System with the appropriate modifications
+        """
+        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
+        growth_system = openmm.System()
+        #create the forces:
+        modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(parameter_name))
+        modified_bond_force.addPerBondParameter("r0")
+        modified_bond_force.addPerBondParameter("K")
+        modified_bond_force.addPerBondParameter("growth_idx")
+        modified_bond_force.addGlobalParameter(parameter_name, 0)
+
+        modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(parameter_name))
+        modified_angle_force.addPerAngleParameter("theta0")
+        modified_angle_force.addPerAngleParameter("K")
+        modified_angle_force.addPerAngleParameter("growth_idx")
+        modified_angle_force.addGlobalParameter(parameter_name, 0)
+
+        modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(parameter_name))
+        modified_torsion_force.addPerTorsionParameter("periodicity")
+        modified_torsion_force.addPerTorsionParameter("phase")
+        modified_torsion_force.addPerTorsionParameter("k")
+        modified_torsion_force.addPerTorsionParameter("growth_idx")
+        modified_angle_force.addGlobalParameter(parameter_name, 0)
+
+        growth_system.addForce(modified_bond_force)
+        growth_system.addForce(modified_angle_force)
+        growth_system.addForce(modified_torsion_force)
+
+        #copy the particles over
+        for i in range(reference_system.getNumParticles()):
+            growth_system.addParticle(reference_system.getParticleMass(i))
+
+        #copy each bond, adding the per-particle parameter as well
+        reference_bond_force = reference_forces['HarmonicBondForce']
+        for bond in range(reference_bond_force.getNumBonds()):
+            bond_parameters = reference_bond_force.getBondParameters(bond)
+            growth_idx = self._calculate_growth_idx(bond_parameters[:2], growth_indices)
+            modified_bond_force.addBond(bond_parameters[0], bond_parameters[1], [bond_parameters[2], bond_parameters[3], growth_idx])
+
+        #copy each angle, adding the per particle parameter as well
+        reference_angle_force = reference_forces['HarmonicAngleForce']
+        for angle in range(reference_angle_force.getNumAngles()):
+            angle_parameters = reference_angle_force.getAngleParameters(angle)
+            growth_idx = self._calculate_growth_idx(angle_parameters[:3], growth_indices)
+            modified_angle_force.addAngle(angle_parameters[0], angle_parameters[1], angle_parameters[2], [angle_parameters[3], angle_parameters[4], growth_idx])
+
+        #copy each torsion, adding the per particle parameter as well
+        reference_torsion_force = reference_forces['PeriodicTorsionForce']
+        for torsion in range(reference_torsion_force.getNumTorsions()):
+            torsion_parameters = reference_torsion_force.getTorsionParameters(torsion)
+            growth_idx = self._calculate_growth_idx(torsion_parameters[:4], growth_indices)
+            modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
+
+        return growth_system
+
+
+    def _calculate_growth_idx(self, particle_indices, growth_indices):
+        """
+        Utility function to calculate the growth index of a particular force.
+        For each particle index, it will check to see if it is in growth_indices.
+        If not, 0 is added to an array, if yes, the index in growth_indices is added.
+        Finally, the method returns the max of the accumulated array
+        Parameters
+        ----------
+        particle_indices : list of int
+            The indices of particles involved in this force
+        growth_indices : list of int
+            The ordered list of indices for atom position proposals
+        Returns
+        -------
+        growth_idx : int
+            The growth_idx parameter
+        """
+        particle_indices_set = set(particle_indices)
+        growth_indices_set = set(growth_indices)
+        new_atoms_in_force = particle_indices_set.intersection(growth_indices_set)
+        if len(new_atoms_in_force) == 0:
+            return 0
+        new_atom_growth_order = [growth_indices.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
+        return max(new_atom_growth_order)
+
 class ProposalOrderTools(object):
     """
     This is an internal utility class for determining the order of atomic position proposals.
     It encapsulates funcionality needed by the geometry engine.
+
+    Parameters
+    ----------
+    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+        The topology proposal containing the relevant move.
     """
 
     def __init__(self, topology_proposal):
