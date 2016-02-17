@@ -371,6 +371,29 @@ class MybTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+def minimize(testsystem):
+    """
+    Minimize all structures in test system.
+
+    Parameters
+    ----------
+    testystem : PersesTestSystem
+        The testsystem to minimize.
+        
+    """
+    for environment in testsystem.environments:
+        print("Minimizing '%s'..." % environment)
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context = openmm.Context(systems[environment], integrator)
+        context.setPositions(positions[environment])
+        print ("Initial energy is %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
+        TOL = 1.0
+        MAX_STEPS = 50
+        openmm.LocalEnergyMinimizer.minimize(context, TOL, MAX_STEPS)
+        print ("Final energy is   %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
+        positions[environment] = context.getState(getPositions=True).getPositions(asNumpy=True)
+        del context, integrator
+
 class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     Create a consistent set of samplers useful for testing SmallMoleculeProposalEngine on alkanes in various solvents.
@@ -601,5 +624,9 @@ if __name__ == '__main__':
     # Test Myb system
     testsystem = MybTestSystem()
     testsystem.exen_samplers['vacuum-complex'].pdbfile = open('myb-complex.pdb', 'w')
+    testsystem.exen_samplers['vacuum-complex'].options={'nsteps':0}
+    testsystem.exen_samplers['vacuum-peptide'].options={'nsteps':0}
+    testsystem.mcmc_samplers['vacuum-complex'].nsteps = 50
+    testsystem.mcmc_samplers['vacuum-peptide'].nsteps = 50
     testsystem.designer.verbose = True
     testsystem.designer.run(niterations=100)
