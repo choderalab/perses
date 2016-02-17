@@ -111,14 +111,9 @@ class FFGeometryEngine(GeometryEngine):
             for atom in atoms_for_proposal:
                 torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
 
-                if torsion.atom1 == atom:
-                    bond_atom = torsion.atom2
-                    angle_atom = torsion.atom3
-                    torsion_atom = torsion.atom4
-                else:
-                    bond_atom = torsion.atom3
-                    angle_atom = torsion.atom2
-                    torsion_atom = torsion.atom1
+                bond_atom = torsion.atom2
+                angle_atom = torsion.atom3
+                torsion_atom = torsion.atom4
 
                 #propose a bond and calculate its probability
                 #if it's not a bond, it's a constraint
@@ -197,14 +192,11 @@ class FFGeometryEngine(GeometryEngine):
             atoms_for_proposal = self._atoms_eligible_for_proposal(old_unique_atoms, old_structure, old_atoms_with_positions)
             for atom in atoms_for_proposal:
                 torsion, logp_choice = self._choose_torsion(old_atoms_with_positions, atom)
-                if torsion.atom1 == atom:
-                    bond_atom = torsion.atom2
-                    angle_atom = torsion.atom3
-                    torsion_atom = torsion.atom4
-                else:
-                    bond_atom = torsion.atom3
-                    angle_atom = torsion.atom2
-                    torsion_atom = torsion.atom1
+
+                bond_atom = torsion.atom2
+                angle_atom = torsion.atom3
+                torsion_atom = torsion.atom4
+
                 #get the internal coordinate representation
                 #we want to see the probability of old_atom where all other coordinates are new_atom
                 atom_coords = old_coordinates[atom.idx]
@@ -584,7 +576,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         Pick an eligible torsion uniformly
         """
-        eligible_torsions = self._get_topological_torsions(atoms_with_positions, new_atom)
+        eligible_torsions = self._get_topological_torsions(atoms_with_positions, atom_for_proposal)
         if len(eligible_torsions) == 0:
             raise Exception("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
         torsion_idx = np.random.randint(0, len(eligible_torsions))
@@ -783,3 +775,89 @@ class FFAllAngleGeometryEngine(FFGeometryEngine):
         logp = logp[phi_idx]
         phi = phis[phi_idx]
         return phi, logp
+
+class ProposalOrderTools(object):
+    """
+    This is an internal utility class for determining the order of atomic position proposals.
+    It encapsulates funcionality needed by the geometry engine.
+    """
+
+    def __init__(self, topology_proposal):
+        self._topology_proposal = topology_proposal
+
+    def determine_proposal_order(self, direction='forward'):
+        """
+        Determine the proposal order of this system pair.
+        This includes the choice of a torsion. As such, a logp is returned.
+
+        Parameters
+        ----------
+        direction : str, optional
+            whether to determine the forward or reverse proposal order
+
+        Returns
+        -------
+        atoms_torsions : dict
+            parmed.Atom : parmed.Dihedral
+        """
+        logp_torsion_choice = 0.0
+        if direction=='forward':
+            structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
+            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
+        elif direction=='reverse':
+            structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
+            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
+        else:
+            raise ValueError("direction parameter must be either forward or reverse.")
+
+        while(len(new_atoms))>0:
+            eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
+            for atom in eligible_atoms:
+                continue
+
+    def _atoms_eligible_for_proposal(self, new_atoms, atoms_with_positions):
+        """
+        Get the set of atoms currently eligible for proposal
+
+        Parameters
+        ----------
+        new_atoms : list of parmed.Atom
+            the new atoms that need positions
+        atoms_with_positions : list of parmed.Atom
+            the atoms with positions
+        """
+        eligible_atoms = []
+        for atom in new_atoms:
+            #get array of booleans to see if a bond partner has a position
+            has_bonded_position = [a in atoms_with_positions for a in atom.bond_partners]
+            #if at least one does, then the atom is ready to be proposed.
+            if np.sum(has_bonded_position) > 0:
+                eligible_atoms.append(atom)
+        return eligible_atoms
+
+    def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
+        """
+        Get a torsion from the set of possible topological torsions.
+
+        Parameters
+        ----------
+        atoms_with_positions : list of parmed.Atom
+            list of the atoms that already have positions
+        atom_for_proposal : parmed.Atom
+            atom that is being proposed now
+
+        Returns
+        -------
+        torsion_selected, logp_torsion_choice : parmed.Dihedral, float
+            The torsion that was selected, along with the logp of the choice.
+
+        """
+        eligible_torsions = self._get_topological_torsions(atoms_with_positions, atom_for_proposal)
+        if len(eligible_torsions) == 0:
+            raise Exception("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
+        torsion_idx = np.random.randint(0, len(eligible_torsions))
+        torsion_selected = eligible_torsions[torsion_idx]
+        return torsion_selected, np.log(1.0/len(eligible_torsions))
+
