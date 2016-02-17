@@ -598,6 +598,132 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__()
 
+class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
+    """
+    Create a consistent set of samplers useful for testing SmallMoleculeProposalEngine on alkanes with a valence-only forcefield.
+
+    Properties
+    ----------
+    environments : list of str
+        Available environments: ['vacuum']
+    topologies : dict of simtk.openmm.app.Topology
+        Initial system Topology objects; topologies[environment] is the topology for `environment`
+    positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
+        Initial positions corresponding to initial Topology objects
+    system_generators : dict of SystemGenerator objects
+        SystemGenerator objects for environments
+    proposal_engines : dict of ProposalEngine
+        Proposal engines
+    themodynamic_states : dict of thermodynamic_states
+        Themodynamic states for each environment
+    mcmc_samplers : dict of MCMCSampler objects
+        MCMCSampler objects for environments
+    exen_samplers : dict of ExpandedEnsembleSampler objects
+        ExpandedEnsembleSampler objects for environments
+    sams_samplers : dict of SAMSSampler objects
+        SAMSSampler objects for environments
+    designer : MultiTargetDesign sampler
+        Example MultiTargetDesign sampler for explicit solvent hydration free energies
+    molecules : list
+        Molecules in library. Currently only SMILES format is supported.
+
+    Examples
+    --------
+
+    >>> from perses.tests.testsystems import ValenceSmallMoleculeLibraryTestSystem
+    >>> testsystem = ValenceSmallMoleculeLibraryTestSystem()
+    # Build a system
+    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    # Retrieve a SAMSSampler
+    >>> sams_sampler = testsystem.sams_samplers['vacuum']
+
+    """
+    def __init__(self):
+        super(ValenceSmallMoleculeLibraryTestSystem, self).__init__()
+        molecules = ['C', 'CC', 'CCC','CCCC', 'CCCCC']
+        environments = ['vacuum']
+
+        # Create a system generator for our desired forcefields.
+        from perses.rjmc.topology_proposal import SystemGenerator
+        system_generators = dict()
+        from pkg_resources import resource_filename
+        gaff_xml_filename = resource_filename('perses', 'data/gaff-valence-only.xml')
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None })
+
+        #
+        # Create topologies and positions
+        #
+        topologies = dict()
+        positions = dict()
+
+        from openmoltools import forcefield_generators
+        forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+        forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+        # Create molecule in vacuum.
+        from perses.tests.utils import createOEMolFromSMILES, extractPositionsFromOEMOL
+        smiles = molecules[0] # current sampler state
+        molecule = createOEMolFromSMILES(smiles)
+        topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
+        positions['vacuum'] = extractPositionsFromOEMOL(molecule)
+
+        # Set up the proposal engines.
+        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+        proposal_metadata = { }
+        proposal_engines = dict()
+        for environment in environments:
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment])
+
+        # Generate systems
+        systems = dict()
+        for environment in environments:
+            systems[environment] = system_generators[environment].build_system(topologies[environment])
+
+        # Define thermodynamic state of interest.
+        from perses.samplers.thermodynamics import ThermodynamicState
+        thermodynamic_states = dict()
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+        thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
+
+        # Create SAMS samplers
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+        sams_samplers = dict()
+        for environment in environments:
+            chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
+            if environment == 'explicit':
+                sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+            else:
+                sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
+            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+            mcmc_samplers[environment].verbose = True
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':50})
+            exen_samplers[environment].verbose = True
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment].verbose = True
+
+        # Create test MultiTargetDesign sampler.
+        from perses.samplers.samplers import MultiTargetDesign
+        target_samplers = { sams_samplers['vacuum'] : 1.0, sams_samplers['vacuum'] : -1.0 }
+        designer = MultiTargetDesign(target_samplers)
+
+        # Store things.
+        self.molecules = molecules
+        self.environments = environments
+        self.topologies = topologies
+        self.positions = positions
+        self.system_generators = system_generators
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+        self.sams_samplers = sams_samplers
+        self.designer = designer
+
 def check_topologies(testsystem):
     """
     Check that all SystemGenerators can build systems for their corresponding Topology objects.
