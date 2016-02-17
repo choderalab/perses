@@ -70,3 +70,9 @@ def test_samplers():
             f = partial(designer.run, niterations)
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
+
+
+if __name__=="__main__":
+    for t in test_samplers():
+        print(t.description)
+        t()
