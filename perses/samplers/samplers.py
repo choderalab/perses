@@ -896,7 +896,7 @@ class MultiTargetDesign(object):
         If True, verbose output is printed.
 
     """
-    def __init__(self, target_samplers):
+    def __init__(self, target_samplers, verbose=False):
         """
         Initialize a multi-objective design sampler with the specified target sampler powers.
 
@@ -929,7 +929,7 @@ class MultiTargetDesign(object):
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
-        self.verbose = False
+        self.verbose = verbose
 
     @property
     def state_keys(self):
