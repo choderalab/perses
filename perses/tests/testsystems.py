@@ -600,5 +600,6 @@ def test_testsystems():
 if __name__ == '__main__':
     # Test Myb system
     testsystem = MybTestSystem()
+    testsystem.exen_samplers['vacuum-complex'].pdbfile = open('myb-complex.pdb', 'w')
     testsystem.designer.verbose = True
     testsystem.designer.run(niterations=100)

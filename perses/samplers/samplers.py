@@ -566,6 +566,7 @@ class ExpandedEnsembleSampler(object):
         self.nrejected = 0
         self.number_of_state_visits = dict()
         self.verbose = False
+        self.pdbfile = None # if not None, write PDB file
 
     @property
     def state_keys(self):
@@ -715,6 +716,10 @@ class ExpandedEnsembleSampler(object):
         self.iteration += 1
         if self.verbose:
             print("-" * 80)
+
+        if self.pdbfile is not None:
+            from simtk.openmm.app import PDBFile
+            PDBFile.writeModel(self.topology, self.sampler.positions, self.pdbfile, self.iteration)
 
     def run(self, niterations=1):
         """
