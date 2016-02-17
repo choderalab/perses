@@ -335,7 +335,7 @@ class NCMCEngine(object):
             integrator.step(1)
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
-            if e.msg == "Particle coordinate is nan":
+            if str(e) == "Particle coordinate is nan":
                 raise NaNException(str(e))
             else:
                 raise e

@@ -50,7 +50,7 @@ def show_topology(topology):
                 output += " %8d" % bond[0].index
         output += '\n'
     print(output)
-    
+
 def extractPositionsFromOEMOL(molecule):
     positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
     coords = molecule.GetCoords()
@@ -218,3 +218,225 @@ def createSystemFromIUPAC(iupac_name):
     positions = extractPositionsFromOEMOL(molecule)
 
     return (molecule, system, positions, topology)
+
+def get_atoms_with_undefined_stereocenters(molecule, verbose=False):
+    """
+    Return list of atoms with undefined stereocenters.
+
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol
+        The molecule to check.
+    verbose : bool, optional, default=False
+        If True, will print verbose output about undefined stereocenters.
+
+    TODO
+    ----
+    Add handling of chiral bonds:
+    https://docs.eyesopen.com/toolkits/python/oechemtk/glossary.html#term-canonical-isomeric-smiles
+
+    Returns
+    -------
+    atoms : list of openeye.oechem.OEAtom
+        List of atoms with undefined stereochemistry.
+
+    """
+    from openeye.oechem import OEAtomStereo_Undefined, OEAtomStereo_Tetrahedral
+    undefined_stereocenters = list()
+    for atom in molecule.GetAtoms():
+        chiral = atom.IsChiral()
+        stereo = OEAtomStereo_Undefined
+        if atom.HasStereoSpecified(OEAtomStereo_Tetrahedral):
+            v = list()
+            for nbr in atom.GetAtoms():
+                v.append(nbr)
+            stereo = atom.GetStereo(v, OEAtomStereo_Tetrahedral)
+
+        if chiral and (stereo == OEAtomStereo_Undefined):
+            undefined_stereocenters.append(atom)
+            if verbose:
+                print("Atom %d (%s) of molecule '%s' has undefined stereochemistry (chiral=%s, stereo=%s)." % (atom.GetIdx(), atom.GetName(), molecule.GetTitle(), str(chiral), str(stereo)))
+
+    return undefined_stereocenters
+
+def has_undefined_stereocenters(molecule, verbose=False):
+    """
+    Check if given molecule has undefined stereocenters.
+
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol
+        The molecule to check.
+    verbose : bool, optional, default=False
+        If True, will print verbose output about undefined stereocenters.
+
+    TODO
+    ----
+    Add handling of chiral bonds:
+    https://docs.eyesopen.com/toolkits/python/oechemtk/glossary.html#term-canonical-isomeric-smiles
+
+    Returns
+    -------
+    result : bool
+        True if molecule has undefined stereocenters.
+
+    Examples
+    --------
+    Enumerate undefined stereocenters
+    >>> smiles = "[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]"
+    >>> from openeye.oechem import OEGraphMol, OESmilesToMol
+    >>> molecule = OEGraphMol()
+    >>> OESmilesToMol(molecule, smiles)
+    >>> print has_undefined_stereocenters(smiles)
+    True
+
+    """
+    atoms = get_atoms_with_undefined_stereocenters(molecule, verbose=verbose)
+    if len(atoms) > 0:
+        return True
+
+    return False
+
+def enumerate_undefined_stereocenters(molecule, verbose=False):
+    """
+    Check if given molecule has undefined stereocenters.
+
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol
+        The molecule whose stereocenters are to be expanded.
+    verbose : bool, optional, default=False
+        If True, will print verbose output about undefined stereocenters.
+
+    Returns
+    -------
+    molecules : list of OEMol
+        The molecules with fully defined stereocenters.
+
+    TODO
+    ----
+    Add handling of chiral bonds:
+    https://docs.eyesopen.com/toolkits/python/oechemtk/glossary.html#term-canonical-isomeric-smiles
+
+    Examples
+    --------
+    Enumerate undefined stereocenters
+    >>> smiles = "[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]"
+    >>> from openeye.oechem import OEGraphMol, OESmilesToMol
+    >>> molecule = OEGraphMol()
+    >>> OESmilesToMol(molecule, smiles)
+    >>> molecules = enumerate_undefined_stereocenters(smiles)
+    >>> len(molecules)
+    2
+
+    """
+    from openeye.oechem import OEAtomStereo_RightHanded, OEAtomStereo_LeftHanded, OEAtomStereo_Tetrahedral
+    from itertools import product
+
+    molecules = list()
+    atoms = get_atoms_with_undefined_stereocenters(molecule, verbose=verbose)
+    for stereocenters in product([OEAtomStereo_RightHanded, OEAtomStereo_LeftHanded], repeat=len(atoms)):
+        for (index,atom) in enumerate(atoms):
+            neighbors = list()
+            for neighbor in atom.GetAtoms():
+                neighbors.append(neighbor)
+            atom.SetStereo(neighbors, OEAtomStereo_Tetrahedral, stereocenters[index])
+        molecules.append(molecule.CreateCopy())
+
+    return molecules
+
+def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
+    """
+    Sanitize set of SMILES strings by ensuring all are canonical isomeric SMILES.
+    Duplicates are also removed.
+
+    Parameters
+    ----------
+    smiles_list : iterable of str
+        The set of SMILES strings to sanitize.
+    mode : str, optional, default='drop'
+        When a SMILES string that does not correspond to canonical isomeric SMILES is found, select the action to be performed.
+        'exception' : raise an `Exception`
+        'drop' : drop the SMILES string
+        'expand' : expand all stereocenters into multiple molecules
+    verbose : bool, optional, default=False
+        If True, print verbose output.
+
+    Returns
+    -------
+    sanitized_smiles_list : list of str
+         Sanitized list of canonical isomeric SMILES strings.
+
+    Examples
+    --------
+
+    Sanitize a simple list.
+    >>> smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
+
+    Throw an exception if undefined stereochemistry is present.
+    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='exception')
+    Traceback (most recent call last):
+      ...
+    Exception: Molecule '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]' has undefined stereocenters
+
+    Drop molecules iwth undefined stereochemistry.
+    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
+    >>> len(sanitized_smiles_list)
+    2
+
+    Expand molecules iwth undefined stereochemistry.
+    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='expand')
+    >>> len(sanitized_smiles_list)
+    4
+
+    """
+    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
+    sanitized_smiles_set = set()
+    for smiles in smiles_list:
+        molecule = OEGraphMol()
+        OESmilesToMol(molecule, smiles)
+
+        if verbose:
+            molecule.SetTitle(smiles)
+            oechem.OETriposAtomNames(molecule)
+
+        if has_undefined_stereocenters(molecule, verbose=verbose):
+            if mode == 'drop':
+                continue
+            elif mode == 'exception':
+                raise Exception("Molecule '%s' has undefined stereocenters" % smiles)
+            elif mode == 'expand':
+                molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
+                for molecule in molecules:
+                    isosmiles = OECreateIsoSmiString(molecule)
+                    sanitized_smiles_set.add(isosmiles)
+        else:
+            # Convert to OpenEye's canonical isomeric SMILES.
+            isosmiles = OECreateIsoSmiString(molecule)
+            sanitized_smiles_set.add(isosmiles)
+
+    sanitized_smiles_list = list(sanitized_smiles_set)
+    return sanitized_smiles_list
+
+def test_sanitizeSMILES():
+    """
+    Test SMILES sanitization.
+    """
+    smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
+
+    sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
+    if len(sanitized_smiles_list) != 2:
+        raise Exception("Molecules with undefined stereochemistry are not being properly dropped (size=%d)." % len(sanitized_smiles_list))
+
+    sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='expand')
+    if len(sanitized_smiles_list) != 4:
+        raise Exception("Molecules with undefined stereochemistry are not being properly expanded (size=%d)." % len(sanitized_smiles_list))
+
+    # Check that all molecules can be round-tripped.
+    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
+    for smiles in sanitized_smiles_list:
+        molecule = OEGraphMol()
+        OESmilesToMol(molecule, smiles)
+        isosmiles = OECreateIsoSmiString(molecule)
+        if (smiles != isosmiles):
+            raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))

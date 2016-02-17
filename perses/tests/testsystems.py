@@ -33,6 +33,7 @@ from functools import partial
 from pkg_resources import resource_filename
 from openeye import oechem
 from openmmtools import testsystems
+from perses.tests.utils import sanitizeSMILES
 
 ################################################################################
 # CONSTANTS
@@ -264,7 +265,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     def __init__(self):
         super(SmallMoleculeLibraryTestSystem, self).__init__()
-        molecules = self.molecules # Currently only SMILES is supported
+        # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
+        molecules = sanitizeSMILES(self.molecules)
         environments = ['explicit', 'vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -345,6 +347,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         designer = MultiTargetDesign(target_samplers)
 
         # Store things.
+        self.molecules = molecules
         self.environments = environments
         self.topologies = topologies
         self.positions = positions
@@ -360,8 +363,8 @@ class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
     """
     Library of small alkanes in various solvent environments.
     """
-    molecules = ['CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
     def __init__(self):
+        self.molecules = ['CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
         super(AlkanesTestSystem, self).__init__()
 
 class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
@@ -388,23 +391,25 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
     """
     Library of T4 lysozyme L99A inhibitors in various solvent environments.
     """
-    molecules = list()
-
     def read_smiles(self, filename):
         import csv
+        molecules = list()
         with open(filename, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter='\t', quotechar='"')
             for row in csvreader:
                 name = row[0]
                 smiles = row[1]
                 reference = row[2]
-                self.molecules.append(smiles)
+                molecules.append(smiles)
+        return molecules
 
     def __init__(self):
         # Read SMILES from CSV file of clinical kinase inhibitors.
         from pkg_resources import resource_filename
-        self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
-        self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
+        molecules = list()
+        molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
+        molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
+        self.molecules = molecules
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__()
 
