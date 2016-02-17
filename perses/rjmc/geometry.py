@@ -522,9 +522,11 @@ class FFGeometryEngine(GeometryEngine):
         -------
         xyzs : np.ndarray, in nm
             The cartesian coordinates of each
-
+        phis : np.ndarray, in radians
+            The torsions angles at which a potential will be calculated
         """
-        positions = positions.in_units_of(units.nanometers)
+        positions_copy = copy.deepcopy(positions)
+        positions_copy = positions_copy.in_units_of(units.nanometers)
         r = r.in_units_of(units.nanometers)
         theta = theta.in_units_of(units.radians)
         bond_atom = torsion.atom2
@@ -533,10 +535,10 @@ class FFGeometryEngine(GeometryEngine):
         phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
         xyzs = units.Quantity(np.zeros([len(phis), 3]), unit=units.nanometers)
         for i, phi in enumerate(phis):
-            xyzs[i], _ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, theta, phi)
-        return xyzs
+            xyzs[i], _ = self._internal_to_cartesian(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], r, theta, phi)
+        return xyzs, phis
 
-    def _torsion_logp_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=5000):
+    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=5000):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -561,10 +563,12 @@ class FFGeometryEngine(GeometryEngine):
         -------
         logp_torsions : np.ndarray of float
             normalized probability of each of n_divisions of torsion
+        phis : np.ndarray, in radians
+            The torsions angles at which a potential was calculated
         """
         logq = np.zeros(n_divisions)
         atom_idx = torsion.atom1.idx
-        xyzs = self._torsion_scan(torsion, positions, r, theta, n_divisions)
+        xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
         for i, xyz in enumerate(xyzs):
             positions[atom_idx] = xyz
             growth_context.setPositions(positions)
@@ -574,11 +578,41 @@ class FFGeometryEngine(GeometryEngine):
         q = np.exp(logq)
         Z = np.sum(q)
         logp_torsions = logq - np.log(Z)
-        return logp_torsions
+        return logp_torsions, phis
 
+    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=5000):
+        """
+        Propose a torsion using OpenMM
 
-    def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
-        pass
+        Parameters
+        ----------
+        growth_context : openmm.Context
+            Context containing the modified system and
+        torsion : parmed.Dihedral
+            parmed Dihedral containing relevant atoms
+        positions : [n,3] np.ndarray in nm
+            positions of the atoms in the system
+        r : float in nm
+            bond length
+        theta : float in radians
+            bond angle
+        beta : float
+            inverse temperature
+        n_divisions : int, optional
+            number of divisions for the torsion scan
+
+        Returns
+        -------
+        phi : float in radians
+            The proposed torsion
+        logp : float
+            The log probability of the proposal.
+        """
+        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=5000)
+        phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
+        logp = logp_torsions[phi_idx]
+        phi = phis[phi_idx]
+        return phi, logp
 
 class FFAllAngleGeometryEngine(FFGeometryEngine):
     """
