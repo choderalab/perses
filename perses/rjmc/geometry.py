@@ -411,6 +411,51 @@ class FFGeometryEngine(GeometryEngine):
         eligible_torsions_with_units = [self._add_torsion_units(torsion) for torsion in eligible_torsions]
         return eligible_torsions_with_units
 
+
+    def _get_topological_torsions(self, atoms_with_positions, new_atom, new_topology):
+        """
+        Get the topological torsions involving new_atom. This includes
+        torsions which don't have any parameters assigned to them.
+
+        Parameters
+        ----------
+        atoms_with_positions : list
+            list of atoms with a valid position
+        new_atom : parmed.Atom object
+            Atom object for the new atom
+
+        Returns
+        -------
+        torsions : list of parmed.Dihedral objects with no "type"
+            list of topological torsions including only atoms with positions
+        """
+        topological_torsions = []
+        angles = new_atom.angles
+        for angle in angles:
+            if angle.atom1 is new_atom:
+                if angle.atom2 in atoms_with_positions and angle.atom3 in atoms_with_positions:
+                    bonds_to_angle = angle.atom3.bonds
+                    for bond in bonds_to_angle:
+                        bonded_atoms = [bond.atom1, bond.atom2]
+                        if bonded_atoms in atoms_with_positions:
+                            bond_atom = angle.atom2
+                            angle_atom = angle.atom3
+                            torsion_atom = bond.atom1 if bond.atom2==angle.atom3 else bond.atom2
+                            dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
+                            topological_torsions.append(dihedral)
+            elif angle.atom3 is new_atom:
+                if angle.atom1 in atoms_with_positions and angle.atom2 in atoms_with_positions:
+                    bonds_to_angle = angle.atom1.bonds
+                    for bond in bonds_to_angle:
+                        bonded_atoms = [bond.atom1, bond.atom2]
+                        if bonded_atoms in atoms_with_positions:
+                            bond_atom = angle.atom2
+                            angle_atom = angle.atom3
+                            torsion_atom = bond.atom1 if bond.atom2==angle.atom3 else bond.atom2
+                            dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
+                            topological_torsions.append(dihedral)
+        return topological_torsions
+
     def _get_valid_angles(self, atoms_with_positions, new_atom):
         """
         Get the angles that involve other atoms with valid positions
