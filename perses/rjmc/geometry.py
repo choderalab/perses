@@ -95,6 +95,8 @@ class FFGeometryEngine(GeometryEngine):
             The log probability of the forward-only proposal
         """
         logp_proposal = 0.0
+        x = ProposalOrderTools(top_proposal)
+        a = x.determine_proposal_order()
         structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
         new_atoms = [structure.atoms[idx] for idx in top_proposal.unique_new_atoms]
         atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
@@ -889,13 +891,16 @@ class ProposalOrderTools(object):
         """
         topological_torsions = []
         angles = new_atom.angles
+        atoms_with_positions = set(atoms_with_positions)
         for angle in angles:
             if angle.atom1 is new_atom:
                 if angle.atom2 in atoms_with_positions and angle.atom3 in atoms_with_positions:
                     bonds_to_angle = angle.atom3.bonds
                     for bond in bonds_to_angle:
-                        bonded_atoms = [bond.atom1, bond.atom2]
-                        if bonded_atoms in atoms_with_positions:
+                        bonded_atoms = {bond.atom1, bond.atom2}
+                        if angle.atom2 in bonded_atoms:
+                            continue
+                        if bonded_atoms.issubset(atoms_with_positions):
                             bond_atom = angle.atom2
                             angle_atom = angle.atom3
                             torsion_atom = bond.atom1 if bond.atom2==angle.atom3 else bond.atom2
@@ -905,11 +910,13 @@ class ProposalOrderTools(object):
                 if angle.atom1 in atoms_with_positions and angle.atom2 in atoms_with_positions:
                     bonds_to_angle = angle.atom1.bonds
                     for bond in bonds_to_angle:
-                        bonded_atoms = [bond.atom1, bond.atom2]
-                        if bonded_atoms in atoms_with_positions:
+                        bonded_atoms = {bond.atom1, bond.atom2}
+                        if angle.atom2 in bonded_atoms:
+                            continue
+                        if bonded_atoms.issubset(atoms_with_positions):
                             bond_atom = angle.atom2
-                            angle_atom = angle.atom3
-                            torsion_atom = bond.atom1 if bond.atom2==angle.atom3 else bond.atom2
+                            angle_atom = angle.atom1
+                            torsion_atom = bond.atom1 if bond.atom2==angle.atom1 else bond.atom2
                             dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
                             topological_torsions.append(dihedral)
         return topological_torsions
