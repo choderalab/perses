@@ -45,8 +45,11 @@ env:
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.rjmc perses.tests.test_topology_proposal perses.tests.test_geometry_engine" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.bias" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.annihilation perses.tests.test_ncmc_integrator perses.tests.test_elimination" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    #- python=3.4  CONDA_PY=34 OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    #- python=3.5  CONDA_PY=35 OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.testsystems perses.tests.utils" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.samplers perses.tests.test_samplers" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.rjmc perses.tests.test_topology_proposal perses.tests.test_geometry_engine" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.bias" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.annihilation perses.tests.test_ncmc_integrator perses.tests.test_elimination" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
 
   global:
     - ORGNAME="omnia"
