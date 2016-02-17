@@ -799,8 +799,11 @@ class ProposalOrderTools(object):
         -------
         atoms_torsions : dict
             parmed.Atom : parmed.Dihedral
+        logp_torsion_choice : float
+            log probability of the chosen torsions
         """
         logp_torsion_choice = 0.0
+        atoms_torsions = {}
         if direction=='forward':
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
             new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
@@ -815,7 +818,14 @@ class ProposalOrderTools(object):
         while(len(new_atoms))>0:
             eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
             for atom in eligible_atoms:
-                continue
+                chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
+                atoms_torsions[atom] = chosen_torsion
+                logp_torsion_choice += logp_choice
+                new_atoms.remove(atom)
+                atoms_with_positions.append(atom)
+        return atoms_torsions, logp_choice
+
+
 
     def _atoms_eligible_for_proposal(self, new_atoms, atoms_with_positions):
         """
@@ -861,3 +871,45 @@ class ProposalOrderTools(object):
         torsion_selected = eligible_torsions[torsion_idx]
         return torsion_selected, np.log(1.0/len(eligible_torsions))
 
+    def _get_topological_torsions(self, atoms_with_positions, new_atom):
+        """
+        Get the topological torsions involving new_atom. This includes
+        torsions which don't have any parameters assigned to them.
+
+        Parameters
+        ----------
+        atoms_with_positions : list
+            list of atoms with a valid position
+        new_atom : parmed.Atom object
+            Atom object for the new atom
+        Returns
+        -------
+        torsions : list of parmed.Dihedral objects with no "type"
+            list of topological torsions including only atoms with positions
+        """
+        topological_torsions = []
+        angles = new_atom.angles
+        for angle in angles:
+            if angle.atom1 is new_atom:
+                if angle.atom2 in atoms_with_positions and angle.atom3 in atoms_with_positions:
+                    bonds_to_angle = angle.atom3.bonds
+                    for bond in bonds_to_angle:
+                        bonded_atoms = [bond.atom1, bond.atom2]
+                        if bonded_atoms in atoms_with_positions:
+                            bond_atom = angle.atom2
+                            angle_atom = angle.atom3
+                            torsion_atom = bond.atom1 if bond.atom2==angle.atom3 else bond.atom2
+                            dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
+                            topological_torsions.append(dihedral)
+            elif angle.atom3 is new_atom:
+                if angle.atom1 in atoms_with_positions and angle.atom2 in atoms_with_positions:
+                    bonds_to_angle = angle.atom1.bonds
+                    for bond in bonds_to_angle:
+                        bonded_atoms = [bond.atom1, bond.atom2]
+                        if bonded_atoms in atoms_with_positions:
+                            bond_atom = angle.atom2
+                            angle_atom = angle.atom3
+                            torsion_atom = bond.atom1 if bond.atom2==angle.atom3 else bond.atom2
+                            dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
+                            topological_torsions.append(dihedral)
+        return topological_torsions
