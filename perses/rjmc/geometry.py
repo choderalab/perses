@@ -9,8 +9,7 @@ import numpy as np
 import copy
 from perses.rjmc import coordinate_tools
 import simtk.openmm as openmm
-
-
+import collections
 
 
 class GeometryEngine(object):
@@ -179,10 +178,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
-        platform = openmm.Platform.getPlatformByName('CPU')
+        platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-        growth_parameter_value = 0
+        growth_parameter_value = 1
         #now for the main loop:
         for atom, torsion in atom_proposal_order.items():
 
@@ -220,17 +219,17 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             if direction=='forward':
                 theta = self._propose_angle(angle, beta)
             angle_k = angle.type.k
-            sigma_theta = units.sqrt(1/(beta*angle_k))
-            logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit))
+            sigma_theta = units.sqrt(1/(beta*angle_k)).value_in_unit(units.radians)
+            logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta))
             logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=5000)
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=500)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
-                logp_phi = self._torsion_logp(context, torsion, old_positions, phi, beta, n_divisions=5000)
+                logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=500)
 
             #accumulate logp
             logp_proposal += logp_proposal + logp_r + logp_theta +logp_phi + np.log(detJ)
@@ -290,6 +289,54 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             return None
         relevant_bond_with_units = self._add_bond_units(relevant_bond)
         return relevant_bond_with_units
+
+    def _get_internal_from_omm(self, atom_coords, bond_coords, angle_coords, torsion_coords):
+        import copy
+        #master system, will be used for all three
+        sys = openmm.System()
+        platform = openmm.Platform.getPlatformByName("Reference")
+        for i in range(4):
+            sys.addParticle(1.0*units.amu)
+
+        #first, the bond length:
+        bond_sys = openmm.System()
+        bond_sys.addParticle(1.0*units.amu)
+        bond_sys.addParticle(1.0*units.amu)
+        bond_force = openmm.CustomBondForce("r")
+        bond_force.addBond(0, 1, [])
+        bond_sys.addForce(bond_force)
+        bond_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+        bond_context = openmm.Context(bond_sys, bond_integrator, platform)
+        bond_context.setPositions([atom_coords, bond_coords])
+        bond_state = bond_context.getState(getEnergy=True)
+        r = bond_state.getPotentialEnergy()
+        del bond_sys, bond_context, bond_integrator
+
+        #now, the angle:
+        angle_sys = copy.deepcopy(sys)
+        angle_force = openmm.CustomAngleForce("theta")
+        angle_force.addAngle(0,1,2,[])
+        angle_sys.addForce(angle_force)
+        angle_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+        angle_context = openmm.Context(angle_sys, angle_integrator, platform)
+        angle_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
+        angle_state = angle_context.getState(getEnergy=True)
+        theta = angle_state.getPotentialEnergy()
+        del angle_sys, angle_context, angle_integrator
+
+        #finally, the torsion:
+        torsion_sys = copy.deepcopy(sys)
+        torsion_force = openmm.CustomTorsionForce("theta")
+        torsion_force.addTorsion(0,1,2,3,[])
+        torsion_sys.addForce(torsion_force)
+        torsion_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+        torsion_context = openmm.Context(torsion_sys, torsion_integrator, platform)
+        torsion_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
+        torsion_state = torsion_context.getState(getEnergy=True)
+        phi = torsion_state.getPotentialEnergy()
+        del torsion_sys, torsion_context, torsion_integrator
+
+        return r, theta, phi
 
     def _get_bond_constraint(self, atom1, atom2, system):
         """
@@ -573,7 +620,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             positions[atom_idx] = xyz
             growth_context.setPositions(positions)
             state = growth_context.getState(getEnergy=True)
-            logq[i] = -beta*state.getPotentialEnergy()
+            logq_i = -beta*state.getPotentialEnergy()
+            if np.isnan(logq_i):
+                raise Exception("logq was NaN!")
+            logq[i] = logq_i
         logq -= max(logq)
         q = np.exp(logq)
         Z = np.sum(q)
@@ -614,7 +664,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phi = phis[phi_idx]
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion, positions, phi, beta, n_divisions=500):
+    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=500):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -626,6 +676,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             parmed Dihedral containing relevant atoms
         positions : [n,3] np.ndarray in nm
             positions of the atoms in the system
+        r : float in nm
+            Bond length
+        theta : float in radians
+            Bond angle
         phi : float, in radians
             The torsion angle
         beta : float
@@ -649,9 +703,9 @@ class GeometrySystemGenerator(object):
     with only valence terms and special parameters to assist in
     geometry proposals.
     """
-    _HarmonicBondForceEnergy = "step(growth_idx - {})*(K/2)*(r-r0)^2"
-    _HarmonicAngleForceEnergy = "step(growth_idx - {})*(K/2)*(theta-theta0)^2;"
-    _PeriodicTorsionForceEnergy = "step(growth_idx - {})*k*(1+cos(periodicity*theta-phase))"
+    _HarmonicBondForceEnergy = "step({} - growth_idx)*(K/2)*(r-r0)^2"
+    _HarmonicAngleForceEnergy = "step({} - growth_idx)*(K/2)*(theta-theta0)^2;"
+    _PeriodicTorsionForceEnergy = "step({} - growth_idx)*k*(1+cos(periodicity*theta-phase))"
 
     def __init__(self):
         pass
@@ -748,12 +802,13 @@ class GeometrySystemGenerator(object):
         growth_idx : int
             The growth_idx parameter
         """
+        growth_indices_list = [atom.idx for atom in list(growth_indices)]
         particle_indices_set = set(particle_indices)
-        growth_indices_set = set(growth_indices)
+        growth_indices_set = set(growth_indices_list)
         new_atoms_in_force = particle_indices_set.intersection(growth_indices_set)
         if len(new_atoms_in_force) == 0:
             return 0
-        new_atom_growth_order = [growth_indices.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
+        new_atom_growth_order = [growth_indices_list.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
 
 class ProposalOrderTools(object):
@@ -788,7 +843,7 @@ class ProposalOrderTools(object):
             log probability of the chosen torsions
         """
         logp_torsion_choice = 0.0
-        atoms_torsions = {}
+        atoms_torsions = collections.OrderedDict()
         if direction=='forward':
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
             new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
