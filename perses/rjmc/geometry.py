@@ -599,7 +599,7 @@ class FFGeometryEngine(GeometryEngine):
         beta : float
             inverse temperature
         n_divisions : int, optional
-            number of divisions for the torsion scan
+            number of divisions for the torsion scan. default 5000
 
         Returns
         -------
@@ -613,6 +613,35 @@ class FFGeometryEngine(GeometryEngine):
         logp = logp_torsions[phi_idx]
         phi = phis[phi_idx]
         return phi, logp
+
+    def _torsion_logp(self, growth_context, torsion, positions, phi, beta, n_divisions=5000):
+        """
+        Calculate the logp of a torsion using OpenMM
+
+        Parameters
+        ----------
+        growth_context : openmm.Context
+            Context containing the modified system and
+        torsion : parmed.Dihedral
+            parmed Dihedral containing relevant atoms
+        positions : [n,3] np.ndarray in nm
+            positions of the atoms in the system
+        phi : float, in radians
+            The torsion angle
+        beta : float
+            inverse temperature
+        n_divisions : int, optional
+            number of divisions for logp calculation. default 5000.
+
+        Returns
+        -------
+        torsion_logp : float
+            the logp of this torsion
+        """
+        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=5000)
+        phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-phi))
+        torsion_logp = logp_torsions[phi_idx]
+        return torsion_logp
 
 class FFAllAngleGeometryEngine(FFGeometryEngine):
     """
