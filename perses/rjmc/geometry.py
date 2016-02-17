@@ -394,39 +394,6 @@ class FFGeometryEngine(GeometryEngine):
         torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
         return torsion
 
-    def _get_torsions(self, atoms_with_positions, new_atom):
-        """
-        Get the torsions that the new atom_index participates in, where all other
-        atoms in the torsion have positions.
-
-        Arguments
-        ---------
-        atoms_with_positions : list
-            list of atoms with valid positions
-        atom_index : parmed atom object
-           parmed atom object
-
-        Returns
-        ------
-        torsions : list of parmed.Dihedral objects
-            list of the torsions meeting the criteria
-        """
-        torsions = new_atom.dihedrals
-        eligible_torsions = []
-        for torsion in torsions:
-            if torsion.improper:
-                continue
-            if torsion.atom1 == new_atom:
-                torsion_partners = [torsion.atom2, torsion.atom3, torsion.atom4]
-            elif torsion.atom4 == new_atom:
-                torsion_partners = [torsion.atom1, torsion.atom2, torsion.atom3]
-            else:
-                continue
-            if set(atoms_with_positions).issuperset(set(torsion_partners)):
-                eligible_torsions.append(torsion)
-        eligible_torsions_with_units = [self._add_torsion_units(torsion) for torsion in eligible_torsions]
-        return eligible_torsions_with_units
-
     def _rotation_matrix(self, axis, angle):
         """
         This method produces a rotation matrix given an axis and an angle.
@@ -537,7 +504,77 @@ class FFGeometryEngine(GeometryEngine):
         theta = sigma_theta*np.random.random() + theta0
         return theta
 
-    def _torsion_logp(self, growth_context, atom_idx, positions, r, theta):
+    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=5000):
+        """
+        Rotate the atom about the
+        Parameters
+        ----------
+        torsion : parmed.Dihedral
+            parmed Dihedral containing relevant atoms
+        positions : [n,3] np.ndarray in nm
+            positions of the atoms in the system
+        r : float in nm
+            bond length
+        theta : float in radians
+            bond angle
+
+        Returns
+        -------
+        xyzs : np.ndarray, in nm
+            The cartesian coordinates of each
+
+        """
+        positions = positions.in_units_of(units.nanometers)
+        r = r.in_units_of(units.nanometers)
+        theta = theta.in_units_of(units.radians)
+        bond_atom = torsion.atom2
+        angle_atom = torsion.atom3
+        torsion_atom = torsion.atom4
+        phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
+        xyzs = units.Quantity(np.zeros([len(phis), 3]), unit=units.nanometers)
+        for i, phi in enumerate(phis):
+            xyzs[i], _ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, theta, phi)
+        return xyzs
+
+    def _torsion_logp_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=5000):
+        """
+        Calculate the torsion logp pmf using OpenMM
+
+        Parameters
+        ----------
+        growth_context : openmm.Context
+            Context containing the modified system and
+        torsion : parmed.Dihedral
+            parmed Dihedral containing relevant atoms
+        positions : [n,3] np.ndarray in nm
+            positions of the atoms in the system
+        r : float in nm
+            bond length
+        theta : float in radians
+            bond angle
+        beta : float
+            inverse temperature
+        n_divisions : int, optional
+            number of divisions for the torsion scan
+
+        Returns
+        -------
+        logp_torsions : np.ndarray of float
+            normalized probability of each of n_divisions of torsion
+        """
+        logq = np.zeros(n_divisions)
+        atom_idx = torsion.atom1.idx
+        xyzs = self._torsion_scan(torsion, positions, r, theta, n_divisions)
+        for i, xyz in enumerate(xyzs):
+            positions[atom_idx] = xyz
+            growth_context.setPositions(positions)
+            state = growth_context.getState(getEnergy=True)
+            logq[i] = -beta*state.getPotentialEnergy()
+        logq -= max(logq)
+        q = np.exp(logq)
+        Z = np.sum(q)
+        logp_torsions = logq - np.log(Z)
+        return logp_torsions
 
 
     def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
