@@ -413,6 +413,7 @@ class MCMCSampler(object):
         self.timestep = 1.0 * unit.femtoseconds
         self.nsteps = 500 # number of steps per update
         self.verbose = True
+        self.integrator_name = 'Langevin'
 
     def update(self):
         """
@@ -422,13 +423,29 @@ class MCMCSampler(object):
             print("." * 80)
             print("MCMC sampler iteration %d" % self.iteration)
 
-        from openmmtools.integrators import GHMCIntegrator
-        integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
+        if self.integrator_name == 'GHMC':
+            from openmmtools.integrators import GHMCIntegrator
+            integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
+        elif self.integrator_name == 'Langevin':
+            from simtk.openmm import LangevinIntegrator
+            integrator = LangevinIntegrator(self.thermodynamic_state.temperature, self.collision_rate, self.timestep)
+        else:
+            raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
+
         context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
         if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
         integrator.step(self.nsteps)
         self.sampler_state = SamplerState.createFromContext(context)
+
+        if self.integrator_name == 'GHMC':
+            naccept = integrator.getGlobalVariableByName('naccept')
+            fraction_accepted = float(naccept) / float(self.nsteps)
+            if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
+
+        final_energy = context.getState(getEnergy=True).getPotentialEnergy() / kT
+        if self.verbose: print('Final energy is %12.3f kT' % (final_energy))
+
         del context, integrator
 
         # TODO: We currently are forced to update the default box vectors in System because we don't propagate them elsewhere in the code
@@ -566,6 +583,7 @@ class ExpandedEnsembleSampler(object):
         self.nrejected = 0
         self.number_of_state_visits = dict()
         self.verbose = False
+        self.pdbfile = None # if not None, write PDB file
 
     @property
     def state_keys(self):
@@ -689,7 +707,7 @@ class ExpandedEnsembleSampler(object):
             if accept:
                 self.sampler.thermodynamic_state.system = topology_proposal.new_system
                 self.topology = topology_proposal.new_topology
-                self.sampler.positions = ncmc_new_positions
+                self.sampler.sampler_state.positions = ncmc_new_positions
                 self.state_key = topology_proposal.new_chemical_state_key
                 self.naccepted += 1
                 if self.verbose: print("%s -> %s proposal accepted (logp_accept = %12.3f)" % (old_state_key, new_state_key, logp_accept))
@@ -715,6 +733,11 @@ class ExpandedEnsembleSampler(object):
         self.iteration += 1
         if self.verbose:
             print("-" * 80)
+
+        if self.pdbfile is not None:
+            print("Writing frame...")
+            from simtk.openmm.app import PDBFile
+            PDBFile.writeModel(self.topology, self.sampler.sampler_state.positions, self.pdbfile, self.iteration)
 
     def run(self, niterations=1):
         """
@@ -896,7 +919,7 @@ class MultiTargetDesign(object):
         If True, verbose output is printed.
 
     """
-    def __init__(self, target_samplers):
+    def __init__(self, target_samplers, verbose=False):
         """
         Initialize a multi-objective design sampler with the specified target sampler powers.
 
@@ -929,7 +952,8 @@ class MultiTargetDesign(object):
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
-        self.verbose = False
+        self.verbose = verbose
+        self.iteration = 0
 
     @property
     def state_keys(self):
@@ -978,6 +1002,7 @@ class MultiTargetDesign(object):
             print("MultiTargetDesign sampler iteration %8d" % self.iteration)
         self.update_samplers()
         self.update_target_probabilities()
+        self.iteration += 1
         if self.verbose:
             print("*" * 80)
 
