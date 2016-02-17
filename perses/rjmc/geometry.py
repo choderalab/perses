@@ -94,54 +94,7 @@ class FFGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
-        #determine the atom proposal order
-        proposal_order_tool = ProposalOrderTools(top_proposal)
-        atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
-        structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
-        logp_proposal = logp_choice
-
-        #find and copy known positions
-        atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
-        new_positions = self._copy_positions(atoms_with_positions, top_proposal, current_positions)
-
-        for atom, torsion in atom_proposal_order.items():
-            bond_atom = torsion.atom2
-            angle_atom = torsion.atom3
-            torsion_atom = torsion.atom4
-
-            #propose a bond and calculate its probability
-            #if it's not a bond, it's a constraint
-            bond = self._get_relevant_bond(atom, bond_atom)
-            if bond is not None:
-                r_proposed = self._propose_bond(bond, beta)
-                bond_k = bond.type.k
-                sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit))
-                logp_r = self._bond_logq(r_proposed, bond, beta) - logZ_r
-            else:
-                constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
-                r_proposed = constraint #set bond length to exactly constraint
-                logp_r = 0.0
-
-            #propose an angle and calculate its probability
-            angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-            theta_proposed = self._propose_angle(angle, beta)
-            angle_k = angle.type.k
-            sigma_theta = units.sqrt(1/(beta*angle_k))
-            logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit))
-            logp_theta = self._angle_logq(theta_proposed, angle, beta) - logZ_theta
-
-            #propose a torsion angle and calcualate its probability
-            phi_proposed, logp_phi = self._propose_torsion(atom, r_proposed, theta_proposed, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
-
-            #convert to cartesian
-            xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r_proposed, theta_proposed, phi_proposed)
-
-            #add new position to array of new positions
-            new_positions[atom.idx] = xyz
-            #accumulate logp
-            logp_proposal = logp_proposal + logp_r + logp_theta +logp_phi + np.log(detJ)
-
+        logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
         return new_positions, logp_proposal
 
 
@@ -165,70 +118,10 @@ class FFGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal for the given transformation
         """
-        logp = 0.0
-        old_structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-        old_atoms_with_positions = [old_structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-        old_unique_atoms = [old_structure.atoms[idx] for idx in top_proposal.unique_old_atoms]
-        old_coordinates = old_coordinates.in_units_of(units.nanometers)
-        new_coordinates = new_coordinates.in_units_of(units.nanometers)
+        logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
+        return logp_proposal
 
-        #copy common atomic positions
-        for atom in old_structure.atoms:
-            if atom.idx in old_atoms_with_positions:
-                corresponding_new_index = top_proposal.old_to_new_atom_map[atom.idx]
-                old_coordinates[atom.idx] = new_coordinates[corresponding_new_index]
-
-
-        #maintain a running list of the atoms still needing logp
-        while(len(old_unique_atoms)>0):
-            atoms_for_proposal = self._atoms_eligible_for_proposal(old_unique_atoms, old_structure, old_atoms_with_positions)
-            for atom in atoms_for_proposal:
-                torsion, logp_choice = self._choose_torsion(old_atoms_with_positions, atom)
-
-                bond_atom = torsion.atom2
-                angle_atom = torsion.atom3
-                torsion_atom = torsion.atom4
-
-                #get the internal coordinate representation
-                #we want to see the probability of old_atom where all other coordinates are new_atom
-                atom_coords = old_coordinates[atom.idx]
-                bond_coords = old_coordinates[bond_atom.idx]
-                angle_coords = old_coordinates[angle_atom.idx]
-                torsion_coords = old_coordinates[torsion_atom.idx]
-                internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
-                r = internal_coordinates[0]*atom_coords.unit
-                theta = internal_coordinates[1]*units.radian
-                phi = internal_coordinates[2]*units.radian
-
-                #propose a bond and calculate its probability, if it's a bond.
-                #Otherwise, it's a constraint.
-                bond = self._get_relevant_bond(atom, bond_atom)
-                if bond is not None:
-                    bond_k = bond.type.k
-                    sigma_r = units.sqrt(1/(beta*bond_k))
-                    logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit)) #need to eliminate unit to allow numpy log
-                    logp_r = self._bond_logq(r, bond, beta) - logZ_r
-                else:
-                    constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.old_system)
-                    if constraint is None:
-                        raise Exception("No Bond or constraint between atom %d and %d" % (atom.idx, bond_atom.idx))
-                    logp_r = 0.0
-                #propose an angle and calculate its probability
-                angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-                angle_k = angle.type.k
-                sigma_theta = units.sqrt(1/(beta*angle_k))
-                logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta/sigma_theta.unit)) #need to eliminate unit to allow numpy log
-                logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
-
-                #calculate torsion probability
-                logp_phi = self._torsion_logp(atom, atom_coords, torsion, old_atoms_with_positions, old_coordinates, beta)
-                logp = logp + logp_choice + logp_r + logp_theta + logp_phi + np.log(detJ)
-
-                old_atoms_with_positions.append(atom)
-                old_unique_atoms.remove(atom)
-        return logp
-
-    def _logp_propose(self, top_proposal, new_positions, old_positions, beta, direction='forward'):
+    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
         to reduce code duplication. Whether it proposes or just calculates a logp is based on
@@ -240,12 +133,14 @@ class FFGeometryEngine(GeometryEngine):
         ----------
         top_proposal : topology_proposal.TopologyProposal object
             topology proposal containing the relevant information
-        new_positions : np.ndarray [n,3] in nm
-            The new coordinates, if any. For proposal this is none
         old_positions : np.ndarray [n,3] in nm
             The old coordinates.
         beta : float
             Inverse temperature
+        new_positions : np.ndarray [n,3] in nm, optional for forward
+            The new coordinates, if any. For proposal this is none
+        direction : str
+            Whether to make a proposal (forward) or just calculate logp (reverse)
 
         Returns
         -------
@@ -342,8 +237,6 @@ class FFGeometryEngine(GeometryEngine):
             growth_parameter_value += 1
 
         return logp_proposal, new_positions
-
-
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
         """
