@@ -68,10 +68,9 @@ class GeometryEngine(object):
         """
         return 0.0
 
-class FFGeometryEngine(GeometryEngine):
+class FFAllAngleGeometryEngine(GeometryEngine):
     """
-    This class is a base class for GeometryEngines which rely on forcefield information for
-    making matching proposals
+    This is an implementation of GeometryEngine which uses all valence terms and OpenMM
     """
     def __init__(self, metadata=None):
         self._metadata = metadata
@@ -643,150 +642,6 @@ class FFGeometryEngine(GeometryEngine):
         phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-phi))
         torsion_logp = logp_torsions[phi_idx]
         return torsion_logp
-
-class FFAllAngleGeometryEngine(FFGeometryEngine):
-    """
-    This is a forcefield-based geometry engine that takes all relevant angles
-    and torsions into account when proposing a given torsion. it overrides the torsion_proposal
-    and torsion_p methods of the base.
-    """
-
-    def _torsion_and_angle_logq(self, xyz, atom, positions, involved_angles, involved_torsions, beta):
-        """
-        Calculate the potential resulting from torsions and angles
-        at a given cartesian coordinate
-        """
-        logq_angles = 0.0
-        logq_torsions= 0.0
-        if type(xyz) != units.Quantity:
-            xyz = units.Quantity(xyz, units.nanometers)
-        for angle in involved_angles:
-            atom_position = xyz if angle.atom1 == atom else positions[angle.atom1.idx]
-            bond_atom_position = xyz if angle.atom2 == atom else positions[angle.atom2.idx]
-            angle_atom_position = xyz if angle.atom3 == atom else positions[angle.atom3.idx]
-            theta = self._calculate_angle(atom_position, bond_atom_position, angle_atom_position)
-            logq_i = self._angle_logq(theta*units.radians, angle, beta)
-            if np.isnan(logq_i):
-                raise Exception("Angle logq is nan")
-            logq_angles+=logq_i
-        for torsion in involved_torsions:
-            atom_position = xyz if torsion.atom1 == atom else positions[torsion.atom1.idx]
-            bond_atom_position = xyz if torsion.atom2 == atom else positions[torsion.atom2.idx]
-            angle_atom_position = xyz if torsion.atom3 == atom else positions[torsion.atom3.idx]
-            torsion_atom_position = xyz if torsion.atom4 == atom else positions[torsion.atom4.idx]
-            internal_coordinates, _ = self._cartesian_to_internal(atom_position, bond_atom_position, angle_atom_position, torsion_atom_position)
-            phi = internal_coordinates[2]*units.radians
-            logq_i = self._torsion_logq(torsion, phi, beta)
-            if np.isnan(logq_i):
-                raise Exception("Torsion logq is nan")
-            logq_torsions+=logq_i
-
-        return logq_angles+logq_torsions
-
-
-    def _normalize_torsion_proposal(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=5000):
-        """
-        Calculates the array of normalized proposal probabilities for this torsion
-
-        Arguments
-        ---------
-        atom : parmed atom object
-            Atom whose position is being proposed
-        structure : parmed structure
-            structure of the molecule undergoing a geometry proposal
-        torsion : parmed dihedral
-            Parmed object containing the dihedral in question
-        atoms_with_positions : list
-            List of atoms with positions
-        Returns
-        -------
-        p : np.array of float
-            normalized torsion probabilities
-        Z : float
-            torsion normalizing constant, estimated using deterministic integration
-        """
-
-        involved_angles = self._get_valid_angles(atoms_with_positions, atom)
-        involved_torsions = self._get_torsions(atoms_with_positions, atom)
-
-        #get an array of [0,2pi)
-        phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
-        xyzs = np.zeros([len(phis), 3])
-
-        #rotate atom about torsion angle, calculating an xyz for each
-        for i, phi in enumerate(phis):
-            xyzs[i], _ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, theta, phi)
-
-        #set up arrays for energies from angles and torsions
-        logq = np.zeros(n_divisions)
-        for i, xyz in enumerate(xyzs):
-            logq_i = self._torsion_and_angle_logq(xyz, atom, positions, involved_angles, involved_torsions, beta)
-            if np.isnan(logq_i):
-                raise Exception("logq_i was NaN")
-            logq[i]+=logq_i
-        logq -= max(logq)
-
-        #exponentiate to get the unnormalized probability
-        q = np.exp(logq)
-
-        #estimate the normalizing constant
-        Z = np.sum(q)
-
-        #get the normalized probabilities for torsions
-        logp = logq - np.log(Z)
-
-        return logp, Z, q, phis
-
-    def _calculate_angle(self, atom_position, bond_atom_position, angle_atom_position):
-        """
-        Calculate the angle theta between 3 atoms 1-2-3
-        """
-        a = bond_atom_position - atom_position
-        b = angle_atom_position - bond_atom_position
-        a_u = a / np.linalg.norm(a)
-        b_u = b / np.linalg.norm(b)
-        cos_theta = np.dot(-a_u, b_u)
-        if cos_theta > 1.0:
-            cos_theta = 1.0
-        elif cos_theta < -1.0:
-            cos_theta = -1.0
-        theta = np.arccos(cos_theta)
-        return theta
-
-    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
-        """
-        Calculate the log-probability of a given torsion. This is calculated via a distribution
-        that includes angle and other torsion potentials.
-        """
-        if torsion.atom1 == atom:
-            bond_atom = torsion.atom2
-            angle_atom = torsion.atom3
-            torsion_atom = torsion.atom4
-        else:
-            bond_atom = torsion.atom3
-            angle_atom = torsion.atom2
-            torsion_atom = torsion.atom1
-        internal_coordinates, _ = self._cartesian_to_internal(xyz, positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx])
-        r = internal_coordinates[0]*units.nanometers
-        theta = internal_coordinates[1]*units.radians
-        phi = internal_coordinates[2]*units.radians
-        logp, Z, q, phis = self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=50)
-        #find the phi that's closest to the internal_coordinate phi:
-        phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-phi))
-        return logp[phi_idx]
-
-    def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
-        """
-        Propose a torsion angle, including energetic contributions from other torsions and angles
-        """
-        #first, let's get the normalizing constant of this distribution
-        logp, Z, q, phis= self._normalize_torsion_proposal(atom, r, theta, bond_atom, angle_atom, torsion_atom, atoms_with_positions, positions, beta, n_divisions=50)
-        #choose from the set of possible torsion angles
-        phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp))
-        logp = logp[phi_idx]
-        phi = phis[phi_idx]
-        return phi, logp
-
 
 class GeometrySystemGenerator(object):
     """
