@@ -252,9 +252,11 @@ class FFGeometryEngine(GeometryEngine):
         logp_proposal : float
             the logp of the proposal
         new_positions : [n,3] np.ndarray
-            The new positions, if direction='forward'
+            The new positions (same as input if direction='reverse')
         """
         proposal_order_tool = ProposalOrderTools(top_proposal)
+        growth_system_generator = GeometrySystemGenerator()
+        growth_parameter_name = 'growth_stage'
         if direction=="forward":
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
@@ -263,6 +265,8 @@ class FFGeometryEngine(GeometryEngine):
             #find and copy known positions
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
+
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name)
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
@@ -277,12 +281,18 @@ class FFGeometryEngine(GeometryEngine):
                 if atom.idx in atoms_with_positions:
                     corresponding_new_index = top_proposal.old_to_new_atom_map[atom.idx]
                     old_positions[atom.idx] = new_positions[corresponding_new_index]
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
+        platform = openmm.Platform.getPlatformByName('CPU')
+        integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+        context = openmm.Context(growth_system, integrator, platform)
+        growth_parameter_value = 0
         #now for the main loop:
         for atom, torsion in atom_proposal_order.items():
 
+            context.setParameter(growth_parameter_name, growth_parameter_value)
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
@@ -296,7 +306,6 @@ class FFGeometryEngine(GeometryEngine):
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
                 r = internal_coordinates[0]*atom_coords.unit
                 theta = internal_coordinates[1]*units.radian
-                phi = internal_coordinates[2]*units.radian
 
             bond = self._get_relevant_bond(atom, bond_atom)
             if bond is not None:
@@ -325,8 +334,14 @@ class FFGeometryEngine(GeometryEngine):
                 phi_proposed, logp_phi = self._propose_torsion(atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, new_positions, beta)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r_proposed, theta_proposed, phi_proposed)
                 new_positions[atom.idx] = xyz
+            else:
+                logp_phi = self._torsion_logp(atom, atom_coords, torsion, old_atoms_with_positions, old_coordinates, beta)
+
             #accumulate logp
-            logp_proposal = logp_proposal + logp_r + logp_theta +logp_phi + np.log(detJ)
+            logp_proposal += logp_proposal + logp_r + logp_theta +logp_phi + np.log(detJ)
+            growth_parameter_value += 1
+
+        return logp_proposal, new_positions
 
 
 
@@ -519,42 +534,6 @@ class FFGeometryEngine(GeometryEngine):
         eligible_torsions_with_units = [self._add_torsion_units(torsion) for torsion in eligible_torsions]
         return eligible_torsions_with_units
 
-
-    def _get_valid_angles(self, atoms_with_positions, new_atom):
-        """
-        Get the angles that involve other atoms with valid positions
-
-        Arguments
-        ---------
-        structure : parmed.Structure
-            Structure object containing topology and parameters for the system
-        atoms_with_positions : list
-            list of atoms with valid positions
-        atom_index : int
-            Index of the new atom of interest
-
-        Returns
-        -------
-        angles : list of parmed.Angle objects
-            list of the angles meeting the criteria
-        """
-        atoms_with_positions = set(atoms_with_positions)
-        eligible_angles = []
-        angles = new_atom.angles
-        for angle in angles:
-            #check to make sure both other two atoms in angle also have positions
-            if angle.atom1 == new_atom:
-                if atoms_with_positions.issuperset(set([angle.atom2, angle.atom3])):
-                    eligible_angles.append(angle)
-            elif angle.atom2 == new_atom:
-                if atoms_with_positions.issuperset(set([angle.atom1, angle.atom3])):
-                    eligible_angles.append(angle)
-            else:
-                if atoms_with_positions.issuperset(set([angle.atom1, angle.atom2])):
-                    eligible_angles.append(angle)
-        eligible_angles_with_units = [self._add_angle_units(angle) for angle in eligible_angles]
-        return eligible_angles_with_units
-
     def _rotation_matrix(self, axis, angle):
         """
         This method produces a rotation matrix given an axis and an angle.
@@ -665,19 +644,8 @@ class FFGeometryEngine(GeometryEngine):
         theta = sigma_theta*np.random.random() + theta0
         return theta
 
-    def _torsion_logq(self, torsion, phi, beta):
-        """
-        Calculate the log-unnormalized probability
-        of the torsion
-        """
-        gamma = torsion.type.phase
-        V = torsion.type.phi_k
-        n = torsion.type.per
-        logq = -beta*(V/2.0)*(1+units.cos(n*phi-gamma))
-        return logq
+    def _torsion_logp(self, growth_context, atom_idx, positions, r, theta):
 
-    def _torsion_logp(self, atom, xyz, torsion, atoms_with_positions, positions, beta):
-        pass
 
     def _propose_torsion(self, atom, r, theta, bond_atom, angle_atom, torsion_atom, torsion, atoms_with_positions, positions, beta):
         pass
