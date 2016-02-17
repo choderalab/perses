@@ -347,6 +347,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         designer = MultiTargetDesign(target_samplers)
 
         # Store things.
+        self.molecules = molecules
         self.environments = environments
         self.topologies = topologies
         self.positions = positions
