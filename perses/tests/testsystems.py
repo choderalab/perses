@@ -309,11 +309,15 @@ class MybTestSystem(PersesTestSystem):
             positions['explicit' + '-' + component] = modeller.getPositions()
 
         # Set up the proposal engines.
+        allowed_mutations = list()
+        for residue in topologies['peptide'].residues():
+            for resname in ['ALA', 'LEU', 'VAL']:
+                allowed_mutations.append([(residue.id, resname)])
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id='B', proposal_metadata=proposal_metadata)
+            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id='B', proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
         # Generate systems
         systems = dict()
@@ -597,4 +601,4 @@ if __name__ == '__main__':
     # Test Myb system
     testsystem = MybTestSystem()
     testsystem.designer.verbose = True
-    testsystem.designer.run()
+    testsystem.designer.run(niterations=100)
