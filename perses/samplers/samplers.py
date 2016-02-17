@@ -930,6 +930,7 @@ class MultiTargetDesign(object):
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
         self.verbose = verbose
+        self.iteration = 0
 
     @property
     def state_keys(self):
@@ -978,6 +979,7 @@ class MultiTargetDesign(object):
             print("MultiTargetDesign sampler iteration %8d" % self.iteration)
         self.update_samplers()
         self.update_target_probabilities()
+        self.iteration += 1
         if self.verbose:
             print("*" * 80)
 
