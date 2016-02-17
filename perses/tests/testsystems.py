@@ -219,6 +219,17 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+def load_via_pdbfixer(filename=None, pdbid=None):
+    from pdbfixer import PDBFixer
+    fixer = PDBFixer(filename=filename, pdbid=pdbid)
+    fixer.findMissingResidues()
+    fixer.findNonstandardResidues()
+    fixer.replaceNonstandardResidues()
+    fixer.findMissingAtoms()
+    fixer.addMissingAtoms()
+    fixer.addMissingHydrogens(7.0)
+    return [fixer.topology, fixer.positions]
+
 class MybTestSystem(PersesTestSystem):
     """
     Create a consistent set of SAMS samplers useful for testing PointMutationEngine on Myb:peptide interaction in various solvents.
@@ -283,12 +294,14 @@ class MybTestSystem(PersesTestSystem):
         # Create peptide in solvent.
         from pkg_resources import resource_filename
         pdb_filename = resource_filename('perses', 'data/1sb0.pdb')
+        import pdbfixer
         from simtk.openmm.app import PDBFile, Modeller
         topologies = dict()
         positions = dict()
-        pdbfile = PDBFile(pdb_filename)
-        topologies['complex'] = pdbfile.getTopology()
-        positions['complex'] = pdbfile.getPositions(asNumpy=True)
+        #pdbfile = PDBFile(pdb_filename)
+        [fixer_topology, fixer_positions] = load_via_pdbfixer(pdb_filename)
+        topologies['complex'] = fixer_topology
+        positions['complex'] = fixer_positions
         modeller = Modeller(topologies['complex'], positions['complex'])
         chains_to_delete = [ chain for chain in modeller.getTopology().chains() if chain.id == 'A' ] # remove chain A
         modeller.delete(chains_to_delete)
@@ -310,9 +323,9 @@ class MybTestSystem(PersesTestSystem):
 
         # Set up the proposal engines.
         allowed_mutations = list()
-        for residue in topologies['peptide'].residues():
-            for resname in ['ALA', 'LEU', 'VAL']:
-                allowed_mutations.append([(residue.id, resname)])
+        for resid in ['91', '99', '103', '105']:
+            for resname in ['ALA', 'LEU', 'VAL', 'PHE', 'CYS', 'THR', 'TRP', 'TYR', 'GLU', 'ASP', 'LYS', 'ARG', 'ASN']:
+                allowed_mutations.append([(resid, resname)])
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
@@ -379,7 +392,7 @@ def minimize(testsystem):
     ----------
     testystem : PersesTestSystem
         The testsystem to minimize.
-        
+
     """
     for environment in testsystem.environments:
         print("Minimizing '%s'..." % environment)
@@ -623,10 +636,14 @@ def test_testsystems():
 if __name__ == '__main__':
     # Test Myb system
     testsystem = MybTestSystem()
-    testsystem.exen_samplers['vacuum-complex'].pdbfile = open('myb-complex.pdb', 'w')
-    testsystem.exen_samplers['vacuum-complex'].options={'nsteps':0}
-    testsystem.exen_samplers['vacuum-peptide'].options={'nsteps':0}
-    testsystem.mcmc_samplers['vacuum-complex'].nsteps = 50
-    testsystem.mcmc_samplers['vacuum-peptide'].nsteps = 50
+    solvent = 'implicit'
+    testsystem.exen_samplers[solvent + '-peptide'].pdbfile = open('myb-vacuum.pdb', 'w')
+    testsystem.exen_samplers[solvent + '-complex'].pdbfile = open('myb-complex.pdb', 'w')
+    testsystem.exen_samplers[solvent + '-complex'].options={'nsteps':0}
+    testsystem.exen_samplers[solvent + '-peptide'].options={'nsteps':0}
+    testsystem.mcmc_samplers[solvent + '-complex'].nsteps = 500
+    testsystem.mcmc_samplers[solvent + '-peptide'].nsteps = 500
     testsystem.designer.verbose = True
     testsystem.designer.run(niterations=100)
+    #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
+    #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
