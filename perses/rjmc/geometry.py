@@ -412,7 +412,7 @@ class FFGeometryEngine(GeometryEngine):
         return eligible_torsions_with_units
 
 
-    def _get_topological_torsions(self, atoms_with_positions, new_atom, new_topology):
+    def _get_topological_torsions(self, atoms_with_positions, new_atom):
         """
         Get the topological torsions involving new_atom. This includes
         torsions which don't have any parameters assigned to them.
@@ -423,7 +423,6 @@ class FFGeometryEngine(GeometryEngine):
             list of atoms with a valid position
         new_atom : parmed.Atom object
             Atom object for the new atom
-
         Returns
         -------
         torsions : list of parmed.Dihedral objects with no "type"
@@ -529,7 +528,6 @@ class FFGeometryEngine(GeometryEngine):
 
         return internal_coords, internal_coords[0]**2*np.sin(internal_coords[1])
 
-
     def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
         """
         Calculate the cartesian coordinates given the internal, as well as abs(detJ)
@@ -543,7 +541,6 @@ class FFGeometryEngine(GeometryEngine):
         xyz = coordinate_tools._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         xyz = units.Quantity(xyz, unit=units.nanometers)
         return xyz, r**2*np.sin(theta)
-
 
     def _bond_logq(self, r, bond, beta):
         """
@@ -587,7 +584,7 @@ class FFGeometryEngine(GeometryEngine):
         """
         Pick an eligible torsion uniformly
         """
-        eligible_torsions = self._get_torsions(atoms_with_positions, atom_for_proposal)
+        eligible_torsions = self._get_topological_torsions(atoms_with_positions, new_atom)
         if len(eligible_torsions) == 0:
             raise Exception("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
         torsion_idx = np.random.randint(0, len(eligible_torsions))
