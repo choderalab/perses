@@ -443,7 +443,7 @@ class MCMCSampler(object):
             fraction_accepted = float(naccept) / float(self.nsteps)
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
 
-        final_energy = context.getState(getEnergy=True).getPotentialEnergy() / kT
+        final_energy = context.getState(getEnergy=True).getPotentialEnergy() * self.thermodynamic_state.beta
         if self.verbose: print('Final energy is %12.3f kT' % (final_energy))
 
         del context, integrator
