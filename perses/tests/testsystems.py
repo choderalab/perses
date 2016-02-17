@@ -265,7 +265,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     def __init__(self):
         super(SmallMoleculeLibraryTestSystem, self).__init__()
-        molecules = self.molecules # Currently only SMILES is supported
+        # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
+        molecules = sanitizeSMILES(self.molecules)
         environments = ['explicit', 'vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -362,7 +363,7 @@ class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
     Library of small alkanes in various solvent environments.
     """
     def __init__(self):
-        self.molecules = sanitizeSMILES(['CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC'])
+        self.molecules = ['CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
         super(AlkanesTestSystem, self).__init__()
 
 class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
@@ -381,7 +382,7 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
                 name = row[0]
                 smiles = row[1]
                 molecules.append(smiles)
-        self.molecules = sanitizeSMILES(molecules)
+        self.molecules = molecules
         # Intialize
         super(KinaseInhibitorsTestSystem, self).__init__()
 
@@ -407,8 +408,7 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules = list()
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
-        # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
-        self.molecules = sanitizeSMILES(molecules)
+        self.molecules = molecules
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__()
 
