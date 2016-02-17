@@ -280,7 +280,13 @@ class SamplerState(object):
                 context.setPeriodicBoxVectors(self.box_vectors[0,:], self.box_vectors[1,:], self.box_vectors[2,:])
 
         # Set positions.
-        context.setPositions(self.positions)
+        try:
+            context.setPositions(self.positions)
+        except Exception as e:
+            msg = str(e) + '\n'
+            msg += "System has %d particles\n" % self.system.getNumParticles()
+            msg += "Positions has %d particles\n" % len(self.positions)
+            raise Exception(msg)
 
         # Set velocities, if specified.
         if (self.velocities is not None):
@@ -330,6 +336,7 @@ class SamplerState(object):
 
         # Retrieve data.
         sampler_state = SamplerState.createFromContext(context)
+        sampler_state.velocities = None # erase velocities since we may change dimensionality
         self.positions = sampler_state.positions
         self.potential_energy = sampler_state.potential_energy
         self.total_energy = sampler_state.total_energy
@@ -437,6 +444,7 @@ class MCMCSampler(object):
         if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
         integrator.step(self.nsteps)
         self.sampler_state = SamplerState.createFromContext(context)
+        self.sampler_state.velocities = None # erase velocities since we may change dimensionality
 
         if self.integrator_name == 'GHMC':
             naccept = integrator.getGlobalVariableByName('naccept')
@@ -453,6 +461,7 @@ class MCMCSampler(object):
         # should generalize SamplerState to include additional dynamical variables (like chemical state key?)
         if self.sampler_state.box_vectors is not None:
             self.thermodynamic_state.system.setDefaultPeriodicBoxVectors(*self.sampler_state.box_vectors)
+            self.sampler_state.system.setDefaultPeriodicBoxVectors(*self.sampler_state.box_vectors)
 
         # Increment iteration count
         self.iteration += 1
@@ -638,7 +647,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("Proposing new topology...")
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
-            if self.verbose: print("Proposed transformation from %s to %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
+            if self.verbose: print("Proposed transformation: %s => %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
 
             # DEBUG: Check current topology can be built.
             if self.verbose: print("Generating new system...")
@@ -694,8 +703,8 @@ class ExpandedEnsembleSampler(object):
             # Compute total log acceptance probability, including all components.
             logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
             if self.verbose:
-                print("Proposal from '%12s' -> '%12s' : logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
-                    % (old_state_key, new_state_key, logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
+                print("logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
+                    % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
 
             # Accept or reject.
             try:
@@ -706,14 +715,15 @@ class ExpandedEnsembleSampler(object):
                 raise Exception(msg)
             if accept:
                 self.sampler.thermodynamic_state.system = topology_proposal.new_system
+                self.sampler.sampler_state.system = topology_proposal.new_system
                 self.topology = topology_proposal.new_topology
                 self.sampler.sampler_state.positions = ncmc_new_positions
                 self.state_key = topology_proposal.new_chemical_state_key
                 self.naccepted += 1
-                if self.verbose: print("%s -> %s proposal accepted (logp_accept = %12.3f)" % (old_state_key, new_state_key, logp_accept))
+                if self.verbose: print("    accepted")
             else:
                 self.nrejected += 1
-                if self.verbose: print("%s -> %s proposal rejected (logp_accept = %12.3f)" % (old_state_key, new_state_key, logp_accept))
+                if self.verbose: print("    rejected")
 
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
