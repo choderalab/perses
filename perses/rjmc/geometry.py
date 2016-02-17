@@ -538,7 +538,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             xyzs[i], _ = self._internal_to_cartesian(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], r, theta, phi)
         return xyzs, phis
 
-    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=5000):
+    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=500):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -599,7 +599,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         beta : float
             inverse temperature
         n_divisions : int, optional
-            number of divisions for the torsion scan. default 5000
+            number of divisions for the torsion scan. default 500
 
         Returns
         -------
@@ -608,13 +608,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal.
         """
-        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=5000)
+        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
         logp = logp_torsions[phi_idx]
         phi = phis[phi_idx]
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion, positions, phi, beta, n_divisions=5000):
+    def _torsion_logp(self, growth_context, torsion, positions, phi, beta, n_divisions=500):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -638,7 +638,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         torsion_logp : float
             the logp of this torsion
         """
-        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=5000)
+        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-phi))
         torsion_logp = logp_torsions[phi_idx]
         return torsion_logp
@@ -697,7 +697,7 @@ class GeometrySystemGenerator(object):
         modified_torsion_force.addPerTorsionParameter("phase")
         modified_torsion_force.addPerTorsionParameter("k")
         modified_torsion_force.addPerTorsionParameter("growth_idx")
-        modified_angle_force.addGlobalParameter(parameter_name, 0)
+        modified_torsion_force.addGlobalParameter(parameter_name, 0)
 
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
