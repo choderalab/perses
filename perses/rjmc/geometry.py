@@ -623,7 +623,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             state = growth_context.getState(getEnergy=True)
             logq_i = -beta*state.getPotentialEnergy()
             logq[i] = logq_i
-        logq[np.isnan(logq)] = np.inf
+        if np.sum(np.isnan(logq)) == n_divisions:
+            raise Exception("All %d torsion energies in torsion PMF are NaN." % n_divisions)
+        logq[np.isnan(logq)] = -np.inf
         logq -= max(logq)
         q = np.exp(logq)
         Z = np.sum(q)
