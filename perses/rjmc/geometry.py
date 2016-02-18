@@ -621,9 +621,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             growth_context.setPositions(positions)
             state = growth_context.getState(getEnergy=True)
             logq_i = -beta*state.getPotentialEnergy()
-            if np.isnan(logq_i):
-                raise Exception("logq was NaN!")
             logq[i] = logq_i
+        logq[np.isnan(logq)] = np.inf
         logq -= max(logq)
         q = np.exp(logq)
         Z = np.sum(q)
