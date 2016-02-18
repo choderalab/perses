@@ -433,15 +433,16 @@ class MCMCSampler(object):
         if self.integrator_name == 'GHMC':
             from openmmtools.integrators import GHMCIntegrator
             integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
+            if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
         elif self.integrator_name == 'Langevin':
             from simtk.openmm import LangevinIntegrator
             integrator = LangevinIntegrator(self.thermodynamic_state.temperature, self.collision_rate, self.timestep)
+            if self.verbose: print("Taking %d steps of Langevin dynamics..." % self.nsteps)        
         else:
             raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
 
         context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
-        if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
         integrator.step(self.nsteps)
         self.sampler_state = SamplerState.createFromContext(context)
         self.sampler_state.velocities = None # erase velocities since we may change dimensionality

@@ -368,7 +368,7 @@ class MybTestSystem(PersesTestSystem):
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
-        target_samplers = { sams_samplers['vacuum-complex'] : 1.0, sams_samplers['vacuum-peptide'] : -1.0 }
+        target_samplers = { sams_samplers['implicit-complex'] : 1.0, sams_samplers['implicit-peptide'] : -1.0 }
         designer = MultiTargetDesign(target_samplers)
         designer.verbose = True
 
@@ -769,7 +769,8 @@ if __name__ == '__main__':
     testsystem.exen_samplers[solvent + '-peptide'].options={'nsteps':0}
     testsystem.mcmc_samplers[solvent + '-complex'].nsteps = 500
     testsystem.mcmc_samplers[solvent + '-peptide'].nsteps = 500
-    testsystem.designer.verbose = True
-    testsystem.designer.run(niterations=100)
+    testsystem.sams_samplers[solvent + '-complex'].run(niterations=100)
+    #testsystem.designer.verbose = True
+    #testsystem.designer.run(niterations=500)
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
     #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
