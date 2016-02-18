@@ -688,7 +688,10 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
-            geometry_new_positions, geometry_logp  = self.geometry_engine.propose(topology_proposal, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_old_positions = ncmc_old_positions
+            geometry_new_positions, geometry_logp_propose  = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_logp = geometry_logp_reverse - geometry_logp_propose
 
             if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.

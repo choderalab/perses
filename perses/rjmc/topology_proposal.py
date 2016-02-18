@@ -1160,7 +1160,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map, 1.0/len(matches)
 
-    def _propose_molecule(self, system, topology, molecule_smiles):
+    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=True):
         """
         Simple method that randomly chooses a molecule unformly.
         Symmetric proposal, so logp is 0. Override with a mixin.
@@ -1175,6 +1175,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             The current positions of the system
         molecule_smiles : string
             The current molecule smiles
+        exclude_self : bool, optional, default=True
+            If True, exclude self-transitions
 
         Returns
         -------
@@ -1185,6 +1187,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         logp : float
             The log probability of the choice
         """
-        proposed_smiles = np.random.choice(self._smiles_list)
+        success = False
+        while(not success):
+            proposed_smiles = np.random.choice(self._smiles_list)
+            success = True
+            if exclude_self and (proposed_smiles == molecule_smiles):
+                success = False
         proposed_mol = self._smiles_to_oemol(proposed_smiles)
         return proposed_smiles, proposed_mol, 0.0
