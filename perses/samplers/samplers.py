@@ -892,6 +892,9 @@ class SAMSSampler(object):
         else:
             raise Exception("SAMS update method '%s' unknown." % self.update_method)
 
+        # Update log weights for sampler.
+        self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }
+
     def update(self):
         """
         Update the sampler with one step of sampling.

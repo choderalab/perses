@@ -46,15 +46,16 @@ def test_valence():
         # Instantiate test system.
         testsystem = testsystem_class()
         # Test ExpandedEnsembleSampler samplers.
-        for environment in testsystem.environments:
-            exen_sampler = testsystem.exen_samplers[environment]
-            f = partial(exen_sampler.run, niterations)
-            f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
-            yield f
+        #for environment in testsystem.environments:
+        #    exen_sampler = testsystem.exen_samplers[environment]
+        #    f = partial(exen_sampler.run, niterations)
+        #    f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
+        #    yield f
         # Test SAMSSampler samplers.
         for environment in testsystem.environments:
             sams_sampler = testsystem.sams_samplers[environment]
-            f = partial(exen_sampler.run, niterations)
+            testsystem.exen_samplers[environment].pdbfile = open('sams.pdb', 'w') # DEBUG
+            f = partial(sams_sampler.run, niterations)
             f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
             yield f
         # Test MultiTargetDesign sampler for implicit hydration free energy
@@ -93,7 +94,7 @@ def test_samplers():
         # Test SAMSSampler samplers.
         for environment in testsystem.environments:
             sams_sampler = testsystem.sams_samplers[environment]
-            f = partial(exen_sampler.run, niterations)
+            f = partial(sams_sampler.run, niterations)
             f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
             yield f
         # Test MultiTargetDesign sampler for implicit hydration free energy

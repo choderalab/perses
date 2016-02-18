@@ -228,15 +228,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=500)
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=360)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
-                logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=500)
+                logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=360)
 
             #accumulate logp
             if direction == 'reverse':
-                print('%12.3f %12.3f %12.3f %12.3f : %12.3f' % (logp_r, logp_theta, logp_phi, np.log(detJ), logp_proposal))
+                print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
@@ -559,7 +559,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         theta = sigma_theta*np.random.randn() + theta0
         return theta
 
-    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=5000):
+    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=360):
         """
         Rotate the atom about the
         Parameters
@@ -593,7 +593,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             xyzs[i], _ = self._internal_to_cartesian(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], r, theta, phi)
         return xyzs, phis
 
-    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=500):
+    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -640,7 +640,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_torsions = logq - np.log(Z)
         return logp_torsions, phis
 
-    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=5000):
+    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
         Propose a torsion using OpenMM
 
@@ -659,7 +659,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         beta : float
             inverse temperature
         n_divisions : int, optional
-            number of divisions for the torsion scan. default 500
+            number of divisions for the torsion scan. default 360
 
         Returns
         -------
@@ -674,7 +674,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phi = phis[phi_idx]
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=500):
+    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -695,7 +695,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         beta : float
             inverse temperature
         n_divisions : int, optional
-            number of divisions for logp calculation. default 5000.
+            number of divisions for logp calculation. default 360.
 
         Returns
         -------
