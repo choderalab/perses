@@ -156,7 +156,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             logp_proposal = logp_choice
 
             #find and copy known positions
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
+            #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
 
             growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name)
@@ -207,7 +208,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     r = self._propose_bond(bond, beta)
                 bond_k = bond.type.k
                 sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*sigma_r/sigma_r.unit))
+                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
                 logp_r = self._bond_logq(r, bond, beta) - logZ_r
             else:
                 constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
@@ -219,8 +220,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             if direction=='forward':
                 theta = self._propose_angle(angle, beta)
             angle_k = angle.type.k
-            sigma_theta = units.sqrt(1/(beta*angle_k)).value_in_unit(units.radians)
-            logZ_theta = np.log((np.sqrt(2*np.pi)*sigma_theta))
+            sigma_theta = units.sqrt(1/(beta*angle_k))
+            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta/units.radians))) # CHECK DOMAIN AND UNITS
             logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
 
             #propose a torsion angle and calcualate its probability
@@ -232,7 +233,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=500)
 
             #accumulate logp
-            logp_proposal += logp_proposal + logp_r + logp_theta +logp_phi + np.log(detJ)
+            logp_proposal += logp_proposal + logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
         return logp_proposal, new_positions
@@ -538,7 +539,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         r0 = bond.type.req
         k = bond.type.k
         sigma_r = units.sqrt(1.0/(beta*k))
-        r = sigma_r*np.random.random() + r0
+        r = sigma_r*np.random.randn() + r0
         return r
 
     def _propose_angle(self, angle, beta):
@@ -548,7 +549,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         theta0 = angle.type.theteq
         k = angle.type.k
         sigma_theta = units.sqrt(1.0/(beta*k))
-        theta = sigma_theta*np.random.random() + theta0
+        theta = sigma_theta*np.random.randn() + theta0
         return theta
 
     def _torsion_scan(self, torsion, positions, r, theta, n_divisions=5000):
@@ -846,7 +847,8 @@ class ProposalOrderTools(object):
         if direction=='forward':
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
             new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
+            #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
         elif direction=='reverse':
             structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
             new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
