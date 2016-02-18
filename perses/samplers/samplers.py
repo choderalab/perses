@@ -433,15 +433,16 @@ class MCMCSampler(object):
         if self.integrator_name == 'GHMC':
             from openmmtools.integrators import GHMCIntegrator
             integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
+            if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
         elif self.integrator_name == 'Langevin':
             from simtk.openmm import LangevinIntegrator
             integrator = LangevinIntegrator(self.thermodynamic_state.temperature, self.collision_rate, self.timestep)
+            if self.verbose: print("Taking %d steps of Langevin dynamics..." % self.nsteps)        
         else:
             raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
 
         context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
-        if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
         integrator.step(self.nsteps)
         self.sampler_state = SamplerState.createFromContext(context)
         self.sampler_state.velocities = None # erase velocities since we may change dimensionality
@@ -688,7 +689,10 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
-            geometry_new_positions, geometry_logp  = self.geometry_engine.propose(topology_proposal, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_old_positions = ncmc_old_positions
+            geometry_new_positions, geometry_logp_propose  = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_logp = geometry_logp_reverse - geometry_logp_propose
 
             if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.
@@ -698,7 +702,13 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
 
             # Compute change in eliminated potential contribution.
+            print('potential after deletion   : %12.3f kT' % potential_delete)
+            print('potential before insertion : %12.3f kT' % potential_insert)
             switch_logp = - (potential_insert - potential_delete)
+            print('---------------------------------------------------------')
+            print('switch_logp                : %12.3f' % switch_logp)
+            print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
+            print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
 
             # Compute total log acceptance probability, including all components.
             logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
@@ -882,6 +892,9 @@ class SAMSSampler(object):
             self.logZ[state_key] += gamma / np.exp(self.log_target_probabilities[state_key])
         else:
             raise Exception("SAMS update method '%s' unknown." % self.update_method)
+
+        # Update log weights for sampler.
+        self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }
 
     def update(self):
         """
