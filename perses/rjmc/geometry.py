@@ -854,8 +854,11 @@ class ProposalOrderTools(object):
         else:
             raise ValueError("direction parameter must be either forward or reverse.")
 
+        logp_choice = 0
         while(len(new_atoms))>0:
             eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
+            if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
+                raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
             for atom in eligible_atoms:
                 chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
                 atoms_torsions[atom] = chosen_torsion

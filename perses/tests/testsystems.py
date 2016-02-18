@@ -640,7 +640,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     def __init__(self):
         super(ValenceSmallMoleculeLibraryTestSystem, self).__init__()
-        molecules = ['C', 'CC', 'CCC','CCCC', 'CCCCC']
+        molecules = ['CC', 'CCC','CCCC', 'CCCCC']
         environments = ['vacuum']
 
         # Create a system generator for our desired forcefields.
