@@ -191,6 +191,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
 
+            if atom != torsion.atom1:
+                raise Exception('atom != torsion.atom1')
+
             #get internal coordinates if direction is reverse
             if direction=='reverse':
                 atom_coords = old_positions[atom.idx]
@@ -233,6 +236,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=500)
 
             #accumulate logp
+            print('%12.3f %12.3f %12.3f %12.3f' % (logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_proposal + logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
@@ -256,6 +260,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             Array for new positions with known positions filled in
         """
         new_positions = units.Quantity(np.zeros([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
+        # Workaround for CustomAngleForce NaNs: Create random non-zero positions for new atoms.
+        new_positions = units.Quantity(np.random.random([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
+
         current_positions = current_positions.in_units_of(units.nanometers)
         #copy positions
         for atom in atoms_with_positions:
@@ -614,11 +621,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phis : np.ndarray, in radians
             The torsions angles at which a potential was calculated
         """
+        # DEBUG
+        growth_context.setParameter('growth_stage', 0)
         logq = np.zeros(n_divisions)
         atom_idx = torsion.atom1.idx
         xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
         for i, xyz in enumerate(xyzs):
-            positions[atom_idx] = xyz
+            positions[atom_idx,:] = xyz
             growth_context.setPositions(positions)
             state = growth_context.getState(getEnergy=True)
             logq_i = -beta*state.getPotentialEnergy()
@@ -662,7 +671,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
-        logp = logp_torsions[phi_idx]
+        logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         phi = phis[phi_idx]
         return phi, logp
 
@@ -696,7 +705,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-phi))
-        torsion_logp = logp_torsions[phi_idx]
+        torsion_logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         return torsion_logp
 
 class GeometrySystemGenerator(object):
