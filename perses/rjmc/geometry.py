@@ -153,10 +153,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if direction=="forward":
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
-            logp_proposal = logp_choice
 
             #find and copy known positions
-            #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(top_proposal.n_atoms_new) if atom_idx not in top_proposal.unique_new_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
 
@@ -166,18 +164,19 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-            logp_proposal = logp_choice
 
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-
             #copy common atomic positions
             for atom in structure.atoms:
                 if atom.idx in atoms_with_positions:
                     corresponding_new_index = top_proposal.old_to_new_atom_map[atom.idx]
                     old_positions[atom.idx] = new_positions[corresponding_new_index]
+
             growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
+
+        logp_proposal = logp_choice
 
         platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
@@ -231,13 +230,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             if direction=='forward':
                 phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=500)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
-                [r_true, theta_true, phi_true] = self._get_internal_from_omm(xyz, new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx])
                 new_positions[atom.idx] = xyz
             else:
                 logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=500)
 
             #accumulate logp
-            #print('%12.3f %12.3f %12.3f %12.3f : %12.3f' % (logp_r, logp_theta, logp_phi, np.log(detJ), logp_proposal))
+            if direction == 'reverse':
+                print('%12.3f %12.3f %12.3f %12.3f : %12.3f' % (logp_r, logp_theta, logp_phi, np.log(detJ), logp_proposal))
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
@@ -704,7 +703,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             the logp of this torsion
         """
         logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
-        phi_idx, phi = min(enumerate(phis), key=lambda x: abs(x[1]-phi))
+        phi_idx = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
         torsion_logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         return torsion_logp
 

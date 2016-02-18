@@ -705,9 +705,9 @@ class ExpandedEnsembleSampler(object):
             print('potential before insertion : %12.3f kT' % potential_insert)
             switch_logp = - (potential_insert - potential_delete)
             print('---------------------------------------------------------')
-            print('switch_logp                : %12.3f kT' % switch_logp)
-            print('geometry_logp_propose      : %12.3f kT' % geometry_logp_propose)
-            print('geometry_logp_reverse      : %12.3f kT' % geometry_logp_reverse)
+            print('switch_logp                : %12.3f' % switch_logp)
+            print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
+            print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
 
             # Compute total log acceptance probability, including all components.
             logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
