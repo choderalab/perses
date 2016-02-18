@@ -1187,6 +1187,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         logp : float
             The log probability of the choice
         """
+        if len(self._smiles_list) == 1:
+            raise Exception("There is only one molecule in self._smiles_list (%s)" % str(self._smiles_list))
+
         success = False
         while(not success):
             proposed_smiles = np.random.choice(self._smiles_list)

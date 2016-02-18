@@ -759,8 +759,10 @@ def test_testsystems():
         f.description = "Testing %s" % (testsystem_name)
         yield f
 
-if __name__ == '__main__':
-    # Test Myb system
+def run_myb():
+    """
+    Run myb test system.
+    """
     testsystem = MybTestSystem()
     solvent = 'implicit'
     testsystem.exen_samplers[solvent + '-peptide'].pdbfile = open('myb-vacuum.pdb', 'w')
@@ -774,3 +776,17 @@ if __name__ == '__main__':
     #testsystem.designer.run(niterations=500)
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
     #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
+
+def run_kinase_inhibitors():
+    """
+    Run kinase inhibitors test system.
+    """
+    testsystem = KinaseInhibitorsTestSystem()
+    environment = 'vacuum'
+    testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
+    testsystem.exen_samplers[environment].options={'nsteps':0}
+    testsystem.mcmc_samplers[environment].nsteps = 2500
+    testsystem.sams_samplers[environment].run(niterations=1000)
+
+if __name__ == '__main__':
+    run_kinase_inhibitors()
