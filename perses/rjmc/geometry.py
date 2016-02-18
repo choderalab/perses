@@ -236,7 +236,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=500)
 
             #accumulate logp
-            print('%12.3f %12.3f %12.3f %12.3f' % (logp_r, logp_theta, logp_phi, np.log(detJ)))
+            #print('%12.3f %12.3f %12.3f %12.3f' % (logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_proposal + logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
@@ -714,9 +714,9 @@ class GeometrySystemGenerator(object):
     with only valence terms and special parameters to assist in
     geometry proposals.
     """
-    _HarmonicBondForceEnergy = "step({} - growth_idx)*(K/2)*(r-r0)^2"
-    _HarmonicAngleForceEnergy = "step({} - growth_idx)*(K/2)*(theta-theta0)^2;"
-    _PeriodicTorsionForceEnergy = "step({} - growth_idx)*k*(1+cos(periodicity*theta-phase))"
+    _HarmonicBondForceEnergy = "select(step({} - growth_idx), (K/2)*(r-r0)^2, 0);"
+    _HarmonicAngleForceEnergy = "select(step({} - growth_idx), (K/2)*(theta-theta0)^2, 0);"
+    _PeriodicTorsionForceEnergy = "select(step({} - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self):
         pass
