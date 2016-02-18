@@ -124,8 +124,9 @@ def test_run_geometry_engine():
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
     """
-    molecule_name_1 = 'pentane'
-    molecule_name_2 = '2-methylpentane'
+    import copy
+    molecule_name_1 = 'ethane'
+    molecule_name_2 = 'propane'
     #molecule_name_1 = 'benzene'
     #molecule_name_2 = 'biphenyl'
 
@@ -143,9 +144,11 @@ def test_run_geometry_engine():
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    test_pdb_file = open("output.pdb", 'w')
+    test_pdb_file = open("propane_1.pdb", 'w')
 
-
+    valence_system = copy.deepcopy(sys2)
+    valence_system.removeForce(3)
+    valence_system.removeForce(3)
     integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
     context = openmm.Context(sys2, integrator)
     context.setPositions(pos2)
@@ -158,6 +161,13 @@ def test_run_geometry_engine():
     context.setPositions(new_positions)
     state2 = context.getState(getEnergy=True)
     print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
+
+    valence_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    valence_ctx = openmm.Context(valence_system, valence_integrator, platform)
+    valence_ctx.setPositions(new_positions)
+    vstate = valence_ctx.getState(getEnergy=True)
+    print("Valence energy after proposal is %s " % str(vstate.getPotentialEnergy()))
 
 def test_existing_coordinates():
     """
@@ -305,9 +315,9 @@ def test_logp_reverse():
     #now pretend that the new coordinates are the old, and calculate logp again
     #reverse the atom map:
     old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping.items()}
-    sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top1, new_system=sys1, old_topology=top2, old_system=sys2,
-                                                                      logp_proposal=0.0, new_to_old_atom_map=old_to_new_atom_mapping, new_chemical_state_key="CC", old_chemical_state_key="CCCC", metadata={'test':0.0})
-    logp_reverse = geometry_engine.logp_reverse(sm_reverse_proposal, pos1, new_positions, beta)
+    sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
+                                                                      logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, new_chemical_state_key="CC", old_chemical_state_key="CCCC", metadata={'test':0.0})
+    logp_reverse = geometry_engine.logp_reverse(sm_reverse_proposal, new_positions, pos1, beta)
     print(logp_proposal)
     print(logp_reverse)
     print(logp_reverse-logp_proposal)
@@ -370,7 +380,6 @@ def test_angle():
     r, theta, phi = _get_internal_from_omm(example_coordinates[0], example_coordinates[1], example_coordinates[2], example_coordinates[3])
     theta_g = geometry_engine._calculate_angle(example_coordinates[0], example_coordinates[1], example_coordinates[2])
     assert abs(theta / theta.unit - theta_g) < 1.0e-12
-
 
 
 if __name__=="__main__":
