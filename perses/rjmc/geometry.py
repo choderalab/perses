@@ -236,8 +236,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=500)
 
             #accumulate logp
-            #print('%12.3f %12.3f %12.3f %12.3f' % (logp_r, logp_theta, logp_phi, np.log(detJ)))
-            logp_proposal += logp_proposal + logp_r + logp_theta + logp_phi + np.log(detJ)
+            #print('%12.3f %12.3f %12.3f %12.3f : %12.3f' % (logp_r, logp_theta, logp_phi, np.log(detJ), logp_proposal))
+            logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
         return logp_proposal, new_positions
