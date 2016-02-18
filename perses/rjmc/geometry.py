@@ -231,6 +231,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             if direction=='forward':
                 phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=500)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
+                [r_true, theta_true, phi_true] = self._get_internal_from_omm(xyz, new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx])
                 new_positions[atom.idx] = xyz
             else:
                 logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=500)
@@ -587,7 +588,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         bond_atom = torsion.atom2
         angle_atom = torsion.atom3
         torsion_atom = torsion.atom4
-        phis = units.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=units.radians)
+        phis = units.Quantity(np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions), unit=units.radians) # changed to [-pi,+pi) to make it easier to compare with openmm-derived torsions]
         xyzs = units.Quantity(np.zeros([len(phis), 3]), unit=units.nanometers)
         for i, phi in enumerate(phis):
             xyzs[i], _ = self._internal_to_cartesian(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], r, theta, phi)
@@ -621,8 +622,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phis : np.ndarray, in radians
             The torsions angles at which a potential was calculated
         """
-        # DEBUG
-        growth_context.setParameter('growth_stage', 0)
         logq = np.zeros(n_divisions)
         atom_idx = torsion.atom1.idx
         xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
@@ -632,6 +631,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             state = growth_context.getState(getEnergy=True)
             logq_i = -beta*state.getPotentialEnergy()
             logq[i] = logq_i
+
         if np.sum(np.isnan(logq)) == n_divisions:
             raise Exception("All %d torsion energies in torsion PMF are NaN." % n_divisions)
         logq[np.isnan(logq)] = -np.inf

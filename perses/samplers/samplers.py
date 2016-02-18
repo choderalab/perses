@@ -701,6 +701,8 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
 
             # Compute change in eliminated potential contribution.
+            print('potential after deletion   : %12.3f kT' % potential_delete)
+            print('potential before insertion : %12.3f kT' % potential_insert)
             switch_logp = - (potential_insert - potential_delete)
 
             # Compute total log acceptance probability, including all components.
