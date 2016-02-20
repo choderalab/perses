@@ -167,7 +167,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-            print("atoms with positions")
             growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
