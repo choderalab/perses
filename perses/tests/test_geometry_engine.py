@@ -67,7 +67,7 @@ def oemol_to_openmm_system(oemol, molecule_name):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
     gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename], forcefield_kwargs={'constraints' : app.HBonds})
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename], forcefield_kwargs={'constraints' : None})
     topology = forcefield_generators.generateTopologyFromOEMol(oemol)
     system = system_generator.build_system(topology)
     positions = extractPositionsFromOEMOL(oemol)
@@ -292,8 +292,8 @@ def test_logp_reverse():
     Make sure logp_reverse and logp_forward are consistent
     """
     np.seterr(all='raise')
-    molecule_name_1 = 'ethane'
-    molecule_name_2 = 'propane'
+    molecule_name_1 = 'propane'
+    molecule_name_2 = 'ethane'
     #molecule_name_1 = 'benzene'
     #molecule_name_2 = 'biphenyl'
 
@@ -303,6 +303,9 @@ def test_logp_reverse():
 
     sys1, pos1, top1 = oemol_to_openmm_system(molecule1, molecule_name_1)
     sys2, pos2, top2 = oemol_to_openmm_system(molecule2, molecule_name_2)
+    test_pdb_file = open("reverse_test1.pdb", 'w')
+    app.PDBFile.writeFile(top1, pos1, file=test_pdb_file)
+    test_pdb_file.close()
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
@@ -312,12 +315,7 @@ def test_logp_reverse():
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
 
-    #now pretend that the new coordinates are the old, and calculate logp again
-    #reverse the atom map:
-    old_to_new_atom_mapping = {value : key for key, value in new_to_old_atom_mapping.items()}
-    sm_reverse_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
-                                                                      logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, new_chemical_state_key="CC", old_chemical_state_key="CCCC", metadata={'test':0.0})
-    logp_reverse = geometry_engine.logp_reverse(sm_reverse_proposal, new_positions, pos1, beta)
+    logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, pos2, pos1, beta)
     print(logp_proposal)
     print(logp_reverse)
     print(logp_reverse-logp_proposal)
@@ -372,7 +370,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    test_run_geometry_engine()
+    #test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
