@@ -857,6 +857,10 @@ class SystemGenerator(object):
             msg += "PDB file written as 'BuildSystem-failure.pdb'"
             raise Exception(msg)
 
+        # DEBUG: See if any torsions have duplicate atoms.
+        from perses.tests.utils import check_system
+        check_system(system)
+
         return system
 
     @property

@@ -440,3 +440,28 @@ def test_sanitizeSMILES():
         isosmiles = OECreateIsoSmiString(molecule)
         if (smiles != isosmiles):
             raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
+
+
+def check_system(system):
+    """
+    Check OpenMM System object for pathologies, like duplicate atoms in torsions.
+
+    Parameters
+    ----------
+    system : simtk.openmm.System
+
+    """
+    forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+    force = forces['PeriodicTorsionForce']
+    for index in range(force.getNumTorsions()):
+        [i, j, k, l, periodicity, phase, barrier] = force.getTorsionParameters(index)
+        if len(set([i,j,k,l])) < 4:
+            # TODO: Serialize system.xml on exceptions.
+            msg  = 'Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d\n' % (index,i,j,k,l)
+            msg += 'Serialzed system to system.xml for inspection.\n'
+            from simtk.openmm import XmlSerializer
+            serialized_system = XmlSerializer.serialize(system)
+            outfile = open('system.xml', 'w')
+            outfile.write(serialized_system)
+            outfile.close()
+            raise Exception(msg)

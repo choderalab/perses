@@ -849,14 +849,8 @@ class ProposalOrderTools(object):
             log probability of the chosen torsions
         """
         # DEBUG: See if any torsions have duplicate atoms.
-        system = self._topology_proposal.new_system
-        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-        force = forces['PeriodicTorsionForce']
-        for index in range(force.getNumTorsions()):
-            [i, j, k, l, periodicity, phase, barrier] = force.getTorsionParameters(index)
-            if len(set([i,j,k,l])) < 4:
-                # TODO: Serialize systen.xml
-                raise Exception('Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d' % (index,i,j,k,l))
+        from perses.tests.utils import check_system
+        check_system(self._topology_proposal.new_system)
 
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
