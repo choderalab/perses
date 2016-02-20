@@ -92,6 +92,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
+        current_positions = current_positions.in_units_of(units.nanometers)
         logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
         return new_positions, logp_proposal
 
@@ -116,6 +117,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal for the given transformation
         """
+        new_coordinates = new_coordinates.in_units_of(units.nanometers)
+        old_coordinates = old_coordinates.in_units_of(units.nanometers)
         logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
         return logp_proposal
 
@@ -164,14 +167,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            #copy common atomic positions
-            for atom in structure.atoms:
-                if atom.idx in atoms_with_positions:
-                    corresponding_new_index = top_proposal.old_to_new_atom_map[atom.idx]
-                    old_positions[atom.idx] = new_positions[corresponding_new_index]
-
             growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -232,7 +227,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
-                logp_phi = self._torsion_logp(context, torsion, old_positions, r, theta, phi, beta, n_divisions=360)
+                old_positions_for_torsion = copy.deepcopy(old_positions)
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=360)
 
             #accumulate logp
             if direction == 'reverse':
