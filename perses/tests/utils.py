@@ -406,9 +406,12 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
             elif mode == 'exception':
                 raise Exception("Molecule '%s' has undefined stereocenters" % smiles)
             elif mode == 'expand':
+                print('Expanding stereochemistry:')
+                print('original: %s', molecule)
                 molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
                 for molecule in molecules:
                     isosmiles = OECreateIsoSmiString(molecule)
+                    print('expanded: %s', isosmiles)
                     sanitized_smiles_set.add(isosmiles)
         else:
             # Convert to OpenEye's canonical isomeric SMILES.
@@ -441,6 +444,69 @@ def test_sanitizeSMILES():
         if (smiles != isosmiles):
             raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
 
+def compute_potential(system, positions, platform=None):
+    """
+    Compute potential energy, raising an exception if it is not finite.
+
+    Parameters
+    ----------
+    system : simtk.openmm.System
+        The system object to check.
+    positions : simtk.unit.Quantity of size (natoms,3) with units compatible with nanometers
+        The positions to check.
+    platform : simtk.openmm.Platform, optional, default=none
+        If specified, this platform will be used.
+
+    """
+    integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+    if platform is not None:
+        context = openmm.Context(system, integrator, platform)
+    else:
+        context = openmm.Context(system, integrator)
+    context.setPositions(positions)
+    context.applyConstraints(integrator.getConstraintTolerance())
+    potential = context.getState(getEnergy=True).getPotentialEnergy()
+    del context, integrator
+    if np.isnan(potential / unit.kilocalories_per_mole):
+        raise NaNException("Potential energy is NaN")
+    return potential
+
+def compute_potential_components(context):
+    """
+    Compute potential energy, raising an exception if it is not finite.
+
+    Parameters
+    ----------
+    context : simtk.openmm.Context
+        The context from which to extract, System, parameters, and positions.
+
+    """
+    # Make a deep copy of the system.
+    import copy
+    system = context.getSystem()
+    system = copy.deepcopy(system)
+    # Get positions.
+    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    # Get Parameters
+    parameters = context.getParameters()
+    # Segregate forces.
+    for index in range(system.getNumForces()):
+        force = system.getForce(index)
+        force.setForceGroup(index)
+    # Create new Context.
+    integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+    platform = openmm.Platform.getPlatformByName('Reference')
+    context = openmm.Context(system, integrator, platform)
+    context.setPositions(positions)
+    energy_components = list()
+    for index in range(system.getNumForces()):
+        force = system.getForce(index)
+        forcename = force.__class__.__name__
+        groups = 1<<index
+        potential = context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
+        energy_components.append((forcename, potential))
+    del context, integrator
+    return energy_components
 
 def check_system(system):
     """
