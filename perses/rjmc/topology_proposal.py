@@ -935,8 +935,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
         new_system = self._system_generator.build_system(new_topology)
         smiles_new, _ = self._topology_to_smiles(new_topology)
-        if (smiles_new != proposed_mol_smiles):
-            raise Exception("smiles_new (%s) != proposed_mol_smiles (%s)" % (smiles_new, proposed_mol_smiles))
 
         #map the atoms between the new and old molecule only:
         mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
