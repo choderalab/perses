@@ -268,6 +268,18 @@ class NCMCEngine(object):
         if direction not in ['insert', 'delete']:
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
+
+        if self.nsteps == 0:
+            # Special case of instantaneous insertion/deletion.
+            logP = 0.0
+            final_positions = copy.deepcopy(initial_positions)
+            from perses.tests.utils import compute_potential
+            if direction == 'delete':
+                potential = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+            elif direction == 'insert':
+                potential = self.beta * compute_potential(topology_proposal.new_system, initial_positions, platform=self.platform)
+            return [final_positions, logP, potential]
+
         # Create alchemical system.
         [unmodified_system, alchemical_system] = self.make_alchemical_system(topology_proposal, direction=direction)
 
@@ -334,7 +346,7 @@ class NCMCEngine(object):
         final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
         if np.isnan(final_potential):
             raise NaNException("Final potential of 'delete' operation is NaN")
-        print "initial potential before '%s' : %f kT" % (direction, final_potential)
+        print "final potential before '%s' : %f kT" % (direction, final_potential)
         print "final potential components: %s" % str(compute_potential_components(context)) # DEBUG
 
         # Store final positions and log acceptance probability.

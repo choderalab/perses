@@ -788,5 +788,16 @@ def run_kinase_inhibitors():
     testsystem.mcmc_samplers[environment].nsteps = 2500
     testsystem.sams_samplers[environment].run(niterations=1000)
 
+def run_valence_system():
+    """
+    Run valence molecules test system.
+    """
+    testsystem = ValenceSmallMoleculeLibraryTestSystem()
+    environment = 'vacuum'
+    testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
+    testsystem.exen_samplers[environment].options={'nsteps':0}
+    testsystem.mcmc_samplers[environment].nsteps = 2500
+    testsystem.sams_samplers[environment].run(niterations=1000)
+
 if __name__ == '__main__':
-    run_kinase_inhibitors()
+    run_valence_system()

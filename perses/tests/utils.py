@@ -402,16 +402,19 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
 
         if has_undefined_stereocenters(molecule, verbose=verbose):
             if mode == 'drop':
+                if verbose:
+                    print("Dropping '%s' due to undefined stereocenters." % smiles)
                 continue
             elif mode == 'exception':
                 raise Exception("Molecule '%s' has undefined stereocenters" % smiles)
             elif mode == 'expand':
-                print('Expanding stereochemistry:')
-                print('original: %s', molecule)
+                if verbose:
+                    print('Expanding stereochemistry:')
+                    print('original: %s', smiles)
                 molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
                 for molecule in molecules:
                     isosmiles = OECreateIsoSmiString(molecule)
-                    print('expanded: %s', isosmiles)
+                    if verbose: print('expanded: %s', isosmiles)
                     sanitized_smiles_set.add(isosmiles)
         else:
             # Convert to OpenEye's canonical isomeric SMILES.

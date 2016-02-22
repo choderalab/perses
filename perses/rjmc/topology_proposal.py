@@ -924,6 +924,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
                                                                                 current_mol_smiles)
 
+        # DEBUG
+        print('proposed SMILES string: %s' % proposed_mol_smiles)
+        from openmoltools.openeye import molecule_to_mol2, generate_conformers
+        moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=True)
+        molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
+        moltemp = generate_conformers(proposed_mol, max_confs=1, strictStereo=True)
+        molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
+
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
         new_system = self._system_generator.build_system(new_topology)
         smiles_new, _ = self._topology_to_smiles(new_topology)
