@@ -437,7 +437,7 @@ class MCMCSampler(object):
         elif self.integrator_name == 'Langevin':
             from simtk.openmm import LangevinIntegrator
             integrator = LangevinIntegrator(self.thermodynamic_state.temperature, self.collision_rate, self.timestep)
-            if self.verbose: print("Taking %d steps of Langevin dynamics..." % self.nsteps)        
+            if self.verbose: print("Taking %d steps of Langevin dynamics..." % self.nsteps)
         else:
             raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
 
@@ -702,8 +702,8 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
 
             # Compute change in eliminated potential contribution.
-            print('potential after deletion   : %12.3f kT' % potential_delete)
-            print('potential before insertion : %12.3f kT' % potential_insert)
+            print('potential before geometry  : %12.3f kT' % potential_delete)
+            print('potential after geometry   : %12.3f kT' % potential_insert)
             switch_logp = - (potential_insert - potential_delete)
             print('---------------------------------------------------------')
             print('switch_logp                : %12.3f' % switch_logp)

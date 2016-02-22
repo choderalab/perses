@@ -268,34 +268,25 @@ class NCMCEngine(object):
         if direction not in ['insert', 'delete']:
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
+
+        if self.nsteps == 0:
+            # Special case of instantaneous insertion/deletion.
+            logP = 0.0
+            final_positions = copy.deepcopy(initial_positions)
+            from perses.tests.utils import compute_potential
+            if direction == 'delete':
+                potential = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+            elif direction == 'insert':
+                potential = self.beta * compute_potential(topology_proposal.new_system, initial_positions, platform=self.platform)
+            return [final_positions, logP, potential]
+
         # Create alchemical system.
         [unmodified_system, alchemical_system] = self.make_alchemical_system(topology_proposal, direction=direction)
 
-        # DEBUG: Compute initial potential of unmodified system.
-        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        if self.platform is not None:
-            context = openmm.Context(unmodified_system, integrator, self.platform)
-        else:
-            context = openmm.Context(unmodified_system, integrator)
-        context.setPositions(initial_positions)
-        context.applyConstraints(integrator.getConstraintTolerance())
-        unmodified_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        del context, integrator
-        if np.isnan(unmodified_potential):
-            raise NaNException("Initial potential of unmodified system is NaN")
-
-        # DEBUG: Compute initial potential of alchemical system without changing alchemical lambda.
-        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        if self.platform is not None:
-            context = openmm.Context(alchemical_system, integrator, self.platform)
-        else:
-            context = openmm.Context(alchemical_system, integrator)
-        context.setPositions(initial_positions)
-        context.applyConstraints(integrator.getConstraintTolerance())
-        alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        del context, integrator
-        if np.isnan(alchemical_potential):
-            raise NaNException("Initial potential of alchemical system is NaN")
+        # DEBUG: Compute initial potential of unmodified system and alchemical system to make sure finite.
+        from perses.tests.utils import compute_potential
+        compute_potential(unmodified_system, initial_positions, platform=self.platform)
+        compute_potential(alchemical_system, initial_positions, platform=self.platform)
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
@@ -329,6 +320,9 @@ class NCMCEngine(object):
         initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
         if np.isnan(initial_potential):
             raise NaNException("Initial potential of 'insert' operation is NaN (unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda)" % (unmodified_potential, alchemical_potential))
+        from perses.tests.utils import compute_potential_components
+        print "initial potential before '%s' : %f kT" % (direction, initial_potential)
+        print "initial potential components:   %s" % str(compute_potential_components(context)) # DEBUG
 
         # Take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
         try:
@@ -352,6 +346,8 @@ class NCMCEngine(object):
         final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
         if np.isnan(final_potential):
             raise NaNException("Final potential of 'delete' operation is NaN")
+        print "final potential before '%s' : %f kT" % (direction, final_potential)
+        print "final potential components: %s" % str(compute_potential_components(context)) # DEBUG
 
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)

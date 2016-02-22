@@ -402,13 +402,19 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
 
         if has_undefined_stereocenters(molecule, verbose=verbose):
             if mode == 'drop':
+                if verbose:
+                    print("Dropping '%s' due to undefined stereocenters." % smiles)
                 continue
             elif mode == 'exception':
                 raise Exception("Molecule '%s' has undefined stereocenters" % smiles)
             elif mode == 'expand':
+                if verbose:
+                    print('Expanding stereochemistry:')
+                    print('original: %s', smiles)
                 molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
                 for molecule in molecules:
                     isosmiles = OECreateIsoSmiString(molecule)
+                    if verbose: print('expanded: %s', isosmiles)
                     sanitized_smiles_set.add(isosmiles)
         else:
             # Convert to OpenEye's canonical isomeric SMILES.
@@ -440,3 +446,91 @@ def test_sanitizeSMILES():
         isosmiles = OECreateIsoSmiString(molecule)
         if (smiles != isosmiles):
             raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
+
+def compute_potential(system, positions, platform=None):
+    """
+    Compute potential energy, raising an exception if it is not finite.
+
+    Parameters
+    ----------
+    system : simtk.openmm.System
+        The system object to check.
+    positions : simtk.unit.Quantity of size (natoms,3) with units compatible with nanometers
+        The positions to check.
+    platform : simtk.openmm.Platform, optional, default=none
+        If specified, this platform will be used.
+
+    """
+    integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+    if platform is not None:
+        context = openmm.Context(system, integrator, platform)
+    else:
+        context = openmm.Context(system, integrator)
+    context.setPositions(positions)
+    context.applyConstraints(integrator.getConstraintTolerance())
+    potential = context.getState(getEnergy=True).getPotentialEnergy()
+    del context, integrator
+    if np.isnan(potential / unit.kilocalories_per_mole):
+        raise NaNException("Potential energy is NaN")
+    return potential
+
+def compute_potential_components(context):
+    """
+    Compute potential energy, raising an exception if it is not finite.
+
+    Parameters
+    ----------
+    context : simtk.openmm.Context
+        The context from which to extract, System, parameters, and positions.
+
+    """
+    # Make a deep copy of the system.
+    import copy
+    system = context.getSystem()
+    system = copy.deepcopy(system)
+    # Get positions.
+    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    # Get Parameters
+    parameters = context.getParameters()
+    # Segregate forces.
+    for index in range(system.getNumForces()):
+        force = system.getForce(index)
+        force.setForceGroup(index)
+    # Create new Context.
+    integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+    platform = openmm.Platform.getPlatformByName('Reference')
+    context = openmm.Context(system, integrator, platform)
+    context.setPositions(positions)
+    energy_components = list()
+    for index in range(system.getNumForces()):
+        force = system.getForce(index)
+        forcename = force.__class__.__name__
+        groups = 1<<index
+        potential = context.getState(getEnergy=True, groups=groups).getPotentialEnergy()
+        energy_components.append((forcename, potential))
+    del context, integrator
+    return energy_components
+
+def check_system(system):
+    """
+    Check OpenMM System object for pathologies, like duplicate atoms in torsions.
+
+    Parameters
+    ----------
+    system : simtk.openmm.System
+
+    """
+    forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+    force = forces['PeriodicTorsionForce']
+    for index in range(force.getNumTorsions()):
+        [i, j, k, l, periodicity, phase, barrier] = force.getTorsionParameters(index)
+        if len(set([i,j,k,l])) < 4:
+            # TODO: Serialize system.xml on exceptions.
+            msg  = 'Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d\n' % (index,i,j,k,l)
+            msg += 'Serialzed system to system.xml for inspection.\n'
+            from simtk.openmm import XmlSerializer
+            serialized_system = XmlSerializer.serialize(system)
+            outfile = open('system.xml', 'w')
+            outfile.write(serialized_system)
+            outfile.close()
+            raise Exception(msg)
