@@ -895,6 +895,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._residue_name = residue_name
         self._generated_systems = dict()
         self._generated_topologies = dict()
+        self._matches = dict()
+        self._probabability_matrix = self._calculate_probability_matrix(self._smiles_list)
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata)
 
     def propose(self, current_system, current_topology, current_metadata=None):
@@ -937,10 +939,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         smiles_new, _ = self._topology_to_smiles(new_topology)
 
         #map the atoms between the new and old molecule only:
-        mol_atom_map, alignment_logp = self._get_mol_atom_map(current_mol, proposed_mol)
+        _, mol_atom_map = self._get_mol_atom_matches(current_mol, proposed_mol)
 
         #adjust the log proposal for the alignment:
-        total_logp = alignment_logp + logp_proposal
+        total_logp = logp_proposal
 
         #adjust the atom map for the presence of the receptor:
         adjusted_atom_map = {}
@@ -1135,7 +1137,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         omega(mol)
         return mol
 
-    def _get_mol_atom_map(self, current_molecule, proposed_molecule):
+    def _get_mol_atom_matches(self, current_molecule, proposed_molecule):
         """
         Given two molecules, returns the mapping of atoms between them.
 
@@ -1148,10 +1150,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         Returns
         -------
-        new_to_old_atom_map : dict
-            Dictionary of {new_idx : old_idx} format.
-        logp_alignment : float
-            logp of the molecule alignment if there is more than one
+        matches : list of match
+            list of the matches between the molecules
         """
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
@@ -1168,7 +1168,28 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
             new_to_old_atom_map[new_index] = old_index
-        return new_to_old_atom_map, 1.0/len(matches)
+        return matches, new_to_old_atom_map
+
+    def _get_mol_atom_map(self, current_molecule, proposed_molecule):
+        """
+        Get an atom map for the current molecule to the proposed molecule.
+
+        Parameters
+        ----------
+        current_molecule : OEMol
+            String of the current molecule smiles
+        proposed_molecule : OEMol
+            String of the proposed molecule smiles
+
+        Returns
+        -------
+        molecule_atom_map : dict
+            dict containing new_idx : old_idx entries
+        """
+        _, new_to_old_atom_map = self._get_mol_atom_matches(current_molecule, proposed_molecule)
+
+        return new_to_old_atom_map
+
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=True):
         """
@@ -1197,14 +1218,41 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         logp : float
             The log probability of the choice
         """
-        if len(self._smiles_list) == 1:
-            raise Exception("There is only one molecule in self._smiles_list (%s)" % str(self._smiles_list))
-
-        success = False
-        while(not success):
-            proposed_smiles = np.random.choice(self._smiles_list)
-            success = True
-            if exclude_self and (proposed_smiles == molecule_smiles):
-                success = False
+        current_smiles_idx = self._smiles_list.index(molecule_smiles)
+        molecule_probabilities = self._probabability_matrix[current_smiles_idx, :]
+        proposed_smiles = np.random.choice(self._smiles_list, p=molecule_probabilities)
         proposed_mol = self._smiles_to_oemol(proposed_smiles)
         return proposed_smiles, proposed_mol, 0.0
+
+    def _calculate_probability_matrix(self, molecule_smiles_list):
+        """
+        Calculate the matrix of probabilities of choosing A | B
+        based on normalized MCSS overlap
+        Parameters
+        ----------
+        molecule_smiles_list : list of str
+            list of molecules to be potentially selected
+
+        Returns
+        -------
+        probability_matrix : [n, n] np.ndarray
+            matrix of probabilities of proposal from row to column
+        """
+        n_smiles = len(molecule_smiles_list)
+        probability_matrix = np.zeros([n_smiles, n_smiles])
+        for i in range(n_smiles):
+            for j in range(i):
+                current_mol = oechem.OEMol()
+                proposed_mol = oechem.OEMol()
+                oechem.OESmilesToMol(current_mol, molecule_smiles_list[i])
+                oechem.OESmilesToMol(proposed_mol, molecule_smiles_list[j])
+                matches, _ = self._get_mol_atom_matches(current_mol, proposed_mol)
+                n_atoms_matching = max([len(list(match.GetAtoms())) for match in matches])
+                probability_matrix[i, j] = n_atoms_matching
+                probability_matrix[j, i] = n_atoms_matching
+        #normalize the rows:
+        for i in range(n_smiles):
+            row_sum = np.sum(probability_matrix[i, :])
+            probability_matrix[i, :] /= row_sum
+        return probability_matrix
+
