@@ -920,7 +920,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
 
         current_receptor_topology = self._remove_small_molecule(current_topology)
-        mol_start_index = len(list(current_receptor_topology.atoms()))
+        old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
 
         #choose the next molecule to simulate:
         proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
@@ -935,6 +935,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
 
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
+        new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
         new_system = self._system_generator.build_system(new_topology)
         smiles_new, _ = self._topology_to_smiles(new_topology)
 
@@ -947,12 +948,15 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #adjust the atom map for the presence of the receptor:
         adjusted_atom_map = {}
         for (key, value) in mol_atom_map.items():
-            adjusted_atom_map[key+mol_start_index] = value + mol_start_index
+            adjusted_atom_map[key+new_mol_start_index] = value + old_mol_start_index
 
         #all atoms until the molecule starts are the same
-        for i in range(mol_start_index):
-            adjusted_atom_map[i] = i
-
+        for i in range(new_mol_start_index):
+            if i > old_mol_start_index:
+                old_idx = i + len_old_mol
+            else:
+                old_idx = i
+            adjusted_atom_map[i] = old_idx
 
         #Create the TopologyProposal and return it
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
@@ -1037,6 +1041,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         -------
         mol_start_idx : int
             start index of the molecule
+        mol_length : int
+            the number of atoms in the molecule
         """
         resname = self._residue_name
         mol_residues = [res for res in topology.residues() if res.name==resname]
@@ -1045,7 +1051,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_residue = mol_residues[0]
         atoms = list(mol_residue.atoms())
         mol_start_idx = atoms[0].index
-        return mol_start_idx
+        return mol_start_idx, len(list(atoms))
 
     def _build_new_topology(self, current_receptor_topology, oemol_proposed):
         """

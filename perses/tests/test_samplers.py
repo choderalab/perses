@@ -111,4 +111,5 @@ def test_samplers():
 if __name__=="__main__":
     for t in test_samplers():
         print(t.description)
-        t()
+        if(t.description) == "Testing expanded ensemble sampler with T4LysozymeInhibitorsTestSystem 'explicit'":
+            t()
