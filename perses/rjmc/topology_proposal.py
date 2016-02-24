@@ -953,7 +953,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #all atoms until the molecule starts are the same
         old_mol_offset = len_old_mol
         for i in range(new_mol_start_index):
-            if i > old_mol_start_index - 1:
+            if i >= old_mol_start_index:
                 old_idx = i + old_mol_offset
             else:
                 old_idx = i
