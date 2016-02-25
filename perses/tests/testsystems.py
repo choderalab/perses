@@ -769,9 +769,9 @@ def run_myb():
     testsystem.exen_samplers[solvent + '-complex'].pdbfile = open('myb-complex.pdb', 'w')
     testsystem.exen_samplers[solvent + '-complex'].options={'nsteps':0}
     testsystem.exen_samplers[solvent + '-peptide'].options={'nsteps':0}
-    testsystem.mcmc_samplers[solvent + '-complex'].nsteps = 500
-    testsystem.mcmc_samplers[solvent + '-peptide'].nsteps = 500
-    testsystem.sams_samplers[solvent + '-complex'].run(niterations=100)
+    testsystem.mcmc_samplers[solvent + '-complex'].nsteps = 50
+    testsystem.mcmc_samplers[solvent + '-peptide'].nsteps = 50
+    testsystem.sams_samplers[solvent + '-complex'].run(niterations=5)
     #testsystem.designer.verbose = True
     #testsystem.designer.run(niterations=500)
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
@@ -785,8 +785,8 @@ def run_kinase_inhibitors():
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
     testsystem.exen_samplers[environment].options={'nsteps':0}
-    testsystem.mcmc_samplers[environment].nsteps = 2500
-    testsystem.sams_samplers[environment].run(niterations=1000)
+    testsystem.mcmc_samplers[environment].nsteps = 50
+    testsystem.sams_samplers[environment].run(niterations=5)
 
 def run_valence_system():
     """
@@ -796,8 +796,8 @@ def run_valence_system():
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
     testsystem.exen_samplers[environment].options={'nsteps':0}
-    testsystem.mcmc_samplers[environment].nsteps = 2500
-    testsystem.sams_samplers[environment].run(niterations=1000)
+    testsystem.mcmc_samplers[environment].nsteps = 50
+    testsystem.sams_samplers[environment].run(niterations=5)
 
 if __name__ == '__main__':
     run_valence_system()
