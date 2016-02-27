@@ -39,7 +39,7 @@ def test_valence():
     # TODO: Test that proper statistics (equal sampling, zero free energy differences) are obtained.
 
     testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem']
-    niterations = 5 # number of iterations to run
+    niterations = 2 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
@@ -73,7 +73,7 @@ def test_samplers():
     Test samplers on multiple test systems.
     """
     testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
-    niterations = 5 # number of iterations to run
+    niterations = 2 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
