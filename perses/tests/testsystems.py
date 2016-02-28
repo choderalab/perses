@@ -973,6 +973,7 @@ def run_abl_imatinib():
     for environment in testsystem.environments:
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].options={'nsteps':0}
+        testsystem.exen_samplers[environment].accept_everything = True # accept everything that doesn't lead to NaN for testing
         testsystem.mcmc_samplers[environment].nsteps = 50
         testsystem.sams_samplers[environment].run(niterations=5)
     #testsystem.designer.verbose = True

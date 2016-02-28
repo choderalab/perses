@@ -594,6 +594,7 @@ class ExpandedEnsembleSampler(object):
         self.number_of_state_visits = dict()
         self.verbose = False
         self.pdbfile = None # if not None, write PDB file
+        self.accept_everything = False # if True, will accept anything that doesn't lead to NaNs
 
     @property
     def state_keys(self):
@@ -722,8 +723,9 @@ class ExpandedEnsembleSampler(object):
                 print('logp_accept = NaN')
             else:
                 accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
-                # DEBUG
-                accept = True
+                if accept_everything:
+                    print('accept_everything option is turned on; accepting')
+                    accept = True
 
             if accept:
                 self.sampler.thermodynamic_state.system = topology_proposal.new_system
