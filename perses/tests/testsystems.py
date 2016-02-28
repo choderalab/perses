@@ -211,6 +211,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         self.environments = environments
         self.topologies = topologies
         self.positions = positions
+        self.systems = systems
         self.system_generators = system_generators
         self.proposal_engines = proposal_engines
         self.thermodynamic_states = thermodynamic_states
@@ -376,6 +377,7 @@ class MybTestSystem(PersesTestSystem):
         self.environments = environments
         self.topologies = topologies
         self.positions = positions
+        self.systems = systems
         self.system_generators = system_generators
         self.proposal_engines = proposal_engines
         self.thermodynamic_states = thermodynamic_states
@@ -383,29 +385,6 @@ class MybTestSystem(PersesTestSystem):
         self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
         self.designer = designer
-
-def minimize(testsystem):
-    """
-    Minimize all structures in test system.
-
-    Parameters
-    ----------
-    testystem : PersesTestSystem
-        The testsystem to minimize.
-
-    """
-    for environment in testsystem.environments:
-        print("Minimizing '%s'..." % environment)
-        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context = openmm.Context(systems[environment], integrator)
-        context.setPositions(positions[environment])
-        print ("Initial energy is %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
-        TOL = 1.0
-        MAX_STEPS = 50
-        openmm.LocalEnergyMinimizer.minimize(context, TOL, MAX_STEPS)
-        print ("Final energy is   %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
-        positions[environment] = context.getState(getPositions=True).getPositions(asNumpy=True)
-        del context, integrator
 
 class AblImatinibTestSystem(PersesTestSystem):
     """
@@ -449,7 +428,7 @@ class AblImatinibTestSystem(PersesTestSystem):
         super(AblImatinibTestSystem, self).__init__()
         #solvents = ['vacuum', 'implicit', 'explicit']
         solvents = ['vacuum', 'explicit']
-        components = ['inhibitor', 'receptor', 'complex']
+        components = ['receptor', 'complex']
         padding = 9.0*unit.angstrom
         explicit_solvent_model = 'tip3p'
         setup_path = 'data/abl-imatinib'
@@ -459,7 +438,6 @@ class AblImatinibTestSystem(PersesTestSystem):
             for component in components:
                 environment = solvent + '-' + component
                 environments.append(environment)
-
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -514,8 +492,10 @@ class AblImatinibTestSystem(PersesTestSystem):
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
-        for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id='B', proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+        for solvent in solvents:
+            for component in ['complex', 'receptor']:
+                environment = solvent + '-' + component
+                proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id='B', proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
         # Generate systems
         systems = dict()
@@ -561,9 +541,12 @@ class AblImatinibTestSystem(PersesTestSystem):
         designer.verbose = True
 
         # Store things.
+        self.components = components
+        self.solvents = solvents
         self.environments = environments
         self.topologies = topologies
         self.positions = positions
+        self.systems = systems
         self.system_generators = system_generators
         self.proposal_engines = proposal_engines
         self.thermodynamic_states = thermodynamic_states
@@ -585,14 +568,14 @@ def minimize(testsystem):
     for environment in testsystem.environments:
         print("Minimizing '%s'..." % environment)
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context = openmm.Context(systems[environment], integrator)
-        context.setPositions(positions[environment])
+        context = openmm.Context(testsystem.systems[environment], integrator)
+        context.setPositions(testsystem.positions[environment])
         print ("Initial energy is %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
         TOL = 1.0
         MAX_STEPS = 50
         openmm.LocalEnergyMinimizer.minimize(context, TOL, MAX_STEPS)
         print ("Final energy is   %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
-        positions[environment] = context.getState(getPositions=True).getPositions(asNumpy=True)
+        testsystem.positions[environment] = context.getState(getPositions=True).getPositions(asNumpy=True)
         del context, integrator
 
 class SmallMoleculeLibraryTestSystem(PersesTestSystem):
@@ -970,6 +953,7 @@ def run_abl_imatinib():
     Run myb test system.
     """
     testsystem = AblImatinibTestSystem()
+    minimize(testsystem)
     for environment in testsystem.environments:
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].options={'nsteps':0}
