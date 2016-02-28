@@ -717,12 +717,14 @@ class ExpandedEnsembleSampler(object):
                     % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
 
             # Accept or reject.
-            try:
+            if np.isnan(logp_accept):
+                accept = False
+                print('logp_accept = NaN')
+            else:
                 accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
-            except FloatingPointError as e:
-                msg = str(e)
-                msg += 'logp_accept = %.3f' % logp_accept
-                raise Exception(msg)
+                # DEBUG
+                accept = True
+
             if accept:
                 self.sampler.thermodynamic_state.system = topology_proposal.new_system
                 self.sampler.sampler_state.system = topology_proposal.new_system

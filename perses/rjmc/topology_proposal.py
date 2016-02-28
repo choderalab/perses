@@ -858,8 +858,8 @@ class SystemGenerator(object):
             raise Exception(msg)
 
         # DEBUG: See if any torsions have duplicate atoms.
-        from perses.tests.utils import check_system
-        check_system(system)
+        #from perses.tests.utils import check_system
+        #check_system(system)
 
         return system
 
@@ -1262,4 +1262,3 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             row_sum = np.sum(probability_matrix[i, :])
             probability_matrix[i, :] /= row_sum
         return probability_matrix
-

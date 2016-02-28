@@ -263,9 +263,9 @@ class MybTestSystem(PersesTestSystem):
     >>> from perses.tests.testsystems import MybTestSystem
     >>> testsystem = MybTestSystem()
     # Build a system
-    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    >>> system = testsystem.system_generators['vacuum-peptide'].build_system(testsystem.topologies['vacuum-peptide'])
     # Retrieve a SAMSSampler
-    >>> sams_sampler = testsystem.sams_samplers['implicit']
+    >>> sams_sampler = testsystem.sams_samplers['implicit-peptide']
 
     """
     def __init__(self):
@@ -369,6 +369,194 @@ class MybTestSystem(PersesTestSystem):
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['implicit-complex'] : 1.0, sams_samplers['implicit-peptide'] : -1.0 }
+        designer = MultiTargetDesign(target_samplers)
+        designer.verbose = True
+
+        # Store things.
+        self.environments = environments
+        self.topologies = topologies
+        self.positions = positions
+        self.system_generators = system_generators
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+        self.sams_samplers = sams_samplers
+        self.designer = designer
+
+def minimize(testsystem):
+    """
+    Minimize all structures in test system.
+
+    Parameters
+    ----------
+    testystem : PersesTestSystem
+        The testsystem to minimize.
+
+    """
+    for environment in testsystem.environments:
+        print("Minimizing '%s'..." % environment)
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context = openmm.Context(systems[environment], integrator)
+        context.setPositions(positions[environment])
+        print ("Initial energy is %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
+        TOL = 1.0
+        MAX_STEPS = 50
+        openmm.LocalEnergyMinimizer.minimize(context, TOL, MAX_STEPS)
+        print ("Final energy is   %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
+        positions[environment] = context.getState(getPositions=True).getPositions(asNumpy=True)
+        del context, integrator
+
+class AblImatinibTestSystem(PersesTestSystem):
+    """
+    Create a consistent set of SAMS samplers useful for testing PointMutationEngine on Abl:imatinib.
+
+    Properties
+    ----------
+    environments : list of str
+        Available environments: ['vacuum', 'explicit', 'implicit']
+    topologies : dict of simtk.openmm.app.Topology
+        Initial system Topology objects; topologies[environment] is the topology for `environment`
+    positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
+        Initial positions corresponding to initial Topology objects
+    system_generators : dict of SystemGenerator objects
+        SystemGenerator objects for environments
+    proposal_engines : dict of ProposalEngine
+        Proposal engines
+    themodynamic_states : dict of thermodynamic_states
+        Themodynamic states for each environment
+    mcmc_samplers : dict of MCMCSampler objects
+        MCMCSampler objects for environments
+    exen_samplers : dict of ExpandedEnsembleSampler objects
+        ExpandedEnsembleSampler objects for environments
+    sams_samplers : dict of SAMSSampler objects
+        SAMSSampler objects for environments
+    designer : MultiTargetDesign sampler
+        Example MultiTargetDesign sampler for implicit solvent hydration free energies
+
+    Examples
+    --------
+
+    >>> from perses.tests.testsystems import MybTestSystem
+    >>> testsystem = AblImatinibTestSystem()
+    # Build a system
+    >>> system = testsystem.system_generators['vacuum-inhibitor'].build_system(testsystem.topologies['vacuum-inhibitor'])
+    # Retrieve a SAMSSampler
+    >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
+
+    """
+    def __init__(self):
+        super(AblImatinibTestSystem, self).__init__()
+        #solvents = ['vacuum', 'implicit', 'explicit']
+        solvents = ['vacuum', 'explicit']
+        components = ['inhibitor', 'receptor', 'complex']
+        padding = 9.0*unit.angstrom
+        explicit_solvent_model = 'tip3p'
+        setup_path = 'data/abl-imatinib'
+
+        environments = list()
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                environments.append(environment)
+
+
+        # Create a system generator for our desired forcefields.
+        from perses.rjmc.topology_proposal import SystemGenerator
+        from pkg_resources import resource_filename
+        gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        system_generators = dict()
+        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=True)
+        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
+            use_antechamber=True)
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=True)
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                system_generators[environment] = system_generators[solvent]
+
+        from simtk.openmm.app import PDBFile, Modeller
+        topologies = dict()
+        positions = dict()
+        # Set up systems.
+        for component in components:
+            # Read from PDB file.
+            pdb_filename = resource_filename('perses', os.path.join(setup_path, '%s.pdb' % component))
+            pdbfile = PDBFile(pdb_filename)
+            topologies[component] = pdbfile.topology
+            positions[component] = pdbfile.positions
+
+        # Create all environments.
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                if solvent == 'explicit':
+                    # Create MODELLER object.
+                    modeller = app.Modeller(topologies[component], positions[component])
+                    modeller.addSolvent(system_generators[solvent].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+                    topologies[environment] = modeller.getTopology()
+                    positions[environment] = modeller.getPositions()
+                else:
+                    environment = solvent + '-' + component
+                    topologies[environment] = topologies[component]
+                    positions[environment] = positions[component]
+
+        # Set up the proposal engines.
+        allowed_mutations = list()
+        for resid in ['22', '37', '52', '55', '65', '81', '125', '128', '147', '148']:
+            for resname in ['ALA', 'CYS', 'ASP', 'GLU', 'PHE', 'HIS', 'ILE', 'LYS', 'LEU', 'MET', 'ASN', 'PRO', 'GLN', 'ARG', 'SER', 'THR', 'VAL', 'TRP', 'TYR']:
+                allowed_mutations.append([(resid, resname)])
+        from perses.rjmc.topology_proposal import PointMutationEngine
+        proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
+        proposal_engines = dict()
+        for environment in environments:
+            proposal_engines[environment] = PointMutationEngine(system_generators[environment], max_point_mutants=1, chain_id='B', proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+
+        # Generate systems
+        systems = dict()
+        for environment in environments:
+            systems[environment] = system_generators[environment].build_system(topologies[environment])
+
+        # Define thermodynamic state of interest.
+        from perses.samplers.thermodynamics import ThermodynamicState
+        thermodynamic_states = dict()
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
+                thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature)
+                thermodynamic_states[environment]   = ThermodynamicState(system=systems[environment], temperature=temperature)
+
+        # Create SAMS samplers
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+        sams_samplers = dict()
+        for environment in environments:
+            chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
+            if environment[0:8] == 'explicit':
+                sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+            else:
+                sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
+            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+            mcmc_samplers[environment].verbose = True
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+            exen_samplers[environment].verbose = True
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment].verbose = True
+
+        # Create test MultiTargetDesign sampler.
+        # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
+        from perses.samplers.samplers import MultiTargetDesign
+        target_samplers = { sams_samplers['vacuum-complex'] : 1.0, sams_samplers['vacuum-receptor'] : -1.0 }
         designer = MultiTargetDesign(target_samplers)
         designer.verbose = True
 
@@ -777,6 +965,21 @@ def run_myb():
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
     #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
 
+def run_abl_imatinib():
+    """
+    Run myb test system.
+    """
+    testsystem = AblImatinibTestSystem()
+    for environment in testsystem.environments:
+        testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].options={'nsteps':0}
+        testsystem.mcmc_samplers[environment].nsteps = 50
+        testsystem.sams_samplers[environment].run(niterations=5)
+    #testsystem.designer.verbose = True
+    #testsystem.designer.run(niterations=500)
+    #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
+    #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
+
 def run_kinase_inhibitors():
     """
     Run kinase inhibitors test system.
@@ -800,4 +1003,6 @@ def run_valence_system():
     testsystem.sams_samplers[environment].run(niterations=5)
 
 if __name__ == '__main__':
-    run_valence_system()
+    #run_valence_system()
+    #run_kinase_inhibitors()
+    run_abl_imatinib()
