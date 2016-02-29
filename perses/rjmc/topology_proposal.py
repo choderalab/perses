@@ -221,6 +221,9 @@ class PolymerProposalEngine(ProposalEngine):
         # old_topology : simtk.openmm.app.Topology
         old_topology = copy.deepcopy(current_topology)
 
+        # new_topology : simtk.openmm.app.Topology
+        new_topology = copy.deepcopy(current_topology)
+
         # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
         atom_map = dict()
         # metadata : dict, key = 'chain_id' , value : str
@@ -234,8 +237,8 @@ class PolymerProposalEngine(ProposalEngine):
         chain_id = self._chain_id
         # save old indeces for mapping -- could just directly save positions instead
         # modeller : simtk.openmm.app.Modeller
-        current_positions = np.zeros((old_topology.getNumAtoms(), 3))
-        modeller = app.Modeller(old_topology, current_positions)
+        current_positions = np.zeros((new_topology.getNumAtoms(), 3))
+        modeller = app.Modeller(new_topology, current_positions)
         # atom : simtk.openmm.app.topology.Atom
         for atom in modeller.topology.atoms():
             # atom.old_index : int
