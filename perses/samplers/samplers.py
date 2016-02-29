@@ -411,8 +411,8 @@ class MCMCSampler(object):
         """
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
-        self.thermodynamic_state = thermodynamic_state
-        self.sampler_state = sampler_state
+        self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
+        self.sampler_state = copy.deepcopy(sampler_state)
         # Initialize
         self.iteration = 0
         # For GHMC integrator
@@ -430,6 +430,7 @@ class MCMCSampler(object):
             print("." * 80)
             print("MCMC sampler iteration %d" % self.iteration)
 
+        # Create an integrator
         if self.integrator_name == 'GHMC':
             from openmmtools.integrators import GHMCIntegrator
             integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
@@ -441,19 +442,36 @@ class MCMCSampler(object):
         else:
             raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
 
+        # Create a Context
         context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
-        integrator.step(self.nsteps)
-        self.sampler_state = SamplerState.createFromContext(context)
-        self.sampler_state.velocities = None # erase velocities since we may change dimensionality
 
+        if self.verbose:
+            # DEBUG ENERGIES
+            state = context.getState(getEnergy=True,getForces=True)
+            kT = kB * self.thermodynamic_state.temperature
+            print("potential  = %.3f kT" % (state.getPotentialEnergy() / kT))
+            print("kinetic    = %.3f kT" % (state.getKineticEnergy() / kT))
+            force_unit = (kT / unit.angstrom)
+            force_norm = np.sqrt(np.mean( (state.getForces(asNumpy=True) / force_unit)**2 ))
+            print("force norm = %.3f kT/A/dof" % force_norm)
+
+        # Integrate to update sample
+        integrator.step(self.nsteps)
+
+        # Recover sampler state from Context
+        self.sampler_state = SamplerState.createFromContext(context)
+        self.sampler_state.velocities = None # erase velocities since we may change dimensionality next
+
+        # Report statistics.
         if self.integrator_name == 'GHMC':
             naccept = integrator.getGlobalVariableByName('naccept')
             fraction_accepted = float(naccept) / float(self.nsteps)
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
 
-        final_energy = context.getState(getEnergy=True).getPotentialEnergy() * self.thermodynamic_state.beta
-        if self.verbose: print('Final energy is %12.3f kT' % (final_energy))
+        if self.verbose:
+            final_energy = context.getState(getEnergy=True).getPotentialEnergy() * self.thermodynamic_state.beta
+            print('Final energy is %12.3f kT' % (final_energy))
 
         del context, integrator
 
@@ -594,6 +612,8 @@ class ExpandedEnsembleSampler(object):
         self.number_of_state_visits = dict()
         self.verbose = False
         self.pdbfile = None # if not None, write PDB file
+        self.accept_everything = False # if True, will accept anything that doesn't lead to NaNs
+
 
     @property
     def state_keys(self):
@@ -632,6 +652,15 @@ class ExpandedEnsembleSampler(object):
         """
         Sample the thermodynamic state.
         """
+        # Check that system and topology have same number of atoms.
+        old_system = self.sampler.sampler_state.system
+        old_topology = self.topology
+        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'ExpandedEnsembleSampler: topology has %d atoms, while system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
+
         if self.scheme == 'ncmc-geometry-ncmc':
             if self.verbose: print("Updating chemical state with ncmc-geometry-ncmc scheme...")
 
@@ -717,12 +746,15 @@ class ExpandedEnsembleSampler(object):
                     % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
 
             # Accept or reject.
-            try:
+            if np.isnan(logp_accept):
+                accept = False
+                print('logp_accept = NaN')
+            else:
                 accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
-            except FloatingPointError as e:
-                msg = str(e)
-                msg += 'logp_accept = %.3f' % logp_accept
-                raise Exception(msg)
+                if self.accept_everything:
+                    print('accept_everything option is turned on; accepting')
+                    accept = True
+
             if accept:
                 self.sampler.thermodynamic_state.system = topology_proposal.new_system
                 self.sampler.sampler_state.system = topology_proposal.new_system

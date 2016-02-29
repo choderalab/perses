@@ -225,6 +225,10 @@ class NCMCEngine(object):
         else:
             raise Exception("direction must be one of ['delete', 'insert']; found '%s' instead" % direction)
 
+        # DEBUG
+        print('alchemical atoms:')
+        print(alchemical_atoms)
+
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
         alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
@@ -268,8 +272,7 @@ class NCMCEngine(object):
         if direction not in ['insert', 'delete']:
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
-
-        if self.nsteps == 0:
+        if (self.nsteps == 0):
             # Special case of instantaneous insertion/deletion.
             logP = 0.0
             final_positions = copy.deepcopy(initial_positions)
@@ -285,8 +288,8 @@ class NCMCEngine(object):
 
         # DEBUG: Compute initial potential of unmodified system and alchemical system to make sure finite.
         from perses.tests.utils import compute_potential
-        compute_potential(unmodified_system, initial_positions, platform=self.platform)
-        compute_potential(alchemical_system, initial_positions, platform=self.platform)
+        print compute_potential(unmodified_system, initial_positions, platform=self.platform)
+        print compute_potential(alchemical_system, initial_positions, platform=self.platform)
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
@@ -348,6 +351,7 @@ class NCMCEngine(object):
             raise NaNException("Final potential of 'delete' operation is NaN")
         print("final potential before '%s' : %f kT" % (direction, final_potential))
         print("final potential components: %s" % str(compute_potential_components(context))) # DEBUG
+        print('')
 
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)

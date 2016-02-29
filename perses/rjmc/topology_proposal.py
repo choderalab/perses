@@ -224,6 +224,14 @@ class PolymerProposalEngine(ProposalEngine):
         # new_topology : simtk.openmm.app.Topology
         new_topology = copy.deepcopy(current_topology)
 
+        # Check that old_topology and old_system have same number of atoms.
+        old_system = current_system
+        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
+
         # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
         atom_map = dict()
         # metadata : dict, key = 'chain_id' , value : str
@@ -273,7 +281,21 @@ class PolymerProposalEngine(ProposalEngine):
         # Create TopologyProposal.
         topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
 
-        # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
+        # Check that old_topology and old_system have same number of atoms.
+        old_system = current_system
+        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
+
+        # Check that new_topology and new_system have same number of atoms.
+        new_topology_natoms = sum([1 for atom in new_topology.atoms()]) # number of topology atoms
+        new_system_natoms = new_system.getNumParticles()
+        if new_topology_natoms != new_system_natoms:
+            msg = 'PolymerProposalEngine: new_topology has %d atoms, while new_system has %d atoms' % (new_topology_natoms, new_system_natoms)
+            raise Exception(msg)
+                    # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
         natoms_old = topology_proposal.old_system.getNumParticles()
         natoms_new = topology_proposal.new_system.getNumParticles()
         if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
@@ -615,6 +637,10 @@ class PointMutationEngine(PolymerProposalEngine):
                 his_choice = np.random.choice(range(len(his_state)),p=his_prob)
                 index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
 
+        # DEBUG
+        print('Proposed mutation:')
+        print(allowed_mutations[proposed_location])
+
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues
 
@@ -861,8 +887,8 @@ class SystemGenerator(object):
             raise Exception(msg)
 
         # DEBUG: See if any torsions have duplicate atoms.
-        from perses.tests.utils import check_system
-        check_system(system)
+        #from perses.tests.utils import check_system
+        #check_system(system)
 
         return system
 
@@ -1265,4 +1291,3 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             row_sum = np.sum(probability_matrix[i, :])
             probability_matrix[i, :] /= row_sum
         return probability_matrix
-
