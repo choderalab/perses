@@ -411,8 +411,8 @@ class MCMCSampler(object):
         """
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
-        self.thermodynamic_state = thermodynamic_state
-        self.sampler_state = sampler_state
+        self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
+        self.sampler_state = copy.deepcopy(sampler_state)
         # Initialize
         self.iteration = 0
         # For GHMC integrator
