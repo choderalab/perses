@@ -270,7 +270,13 @@ class PolymerProposalEngine(ProposalEngine):
         # Create TopologyProposal.
         topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
 
-        # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
+        # Check that new_topology and new_system have same number of atoms.
+        new_topology_natoms = sum([1 for atom in new_topology.atoms()]) # number of topology atoms
+        new_system_natoms = new_system.getNumParticles()
+        if new_topology_natoms != new_system_natoms:
+            msg = 'PolymerProposalEngine: new_topology has %d atoms, while new_system has %d atoms' % (new_topology_natoms, new_system_natoms)
+            raise Exception(msg)
+                    # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
         natoms_old = topology_proposal.old_system.getNumParticles()
         natoms_new = topology_proposal.new_system.getNumParticles()
         if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):

@@ -72,8 +72,13 @@ def test_samplers():
     """
     Test samplers on multiple test systems.
     """
-    testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
-    niterations = 2 # number of iterations to run
+    testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem', 'AblImatinibTestSystem']
+    niterations = 5 # number of iterations to run
+
+    # If TESTSYSTEMS environment variable is specified, test those systems.
+    if 'TESTSYSTEMS' in os.environ:
+        testsystem_names = os.environ['TESTSYSTEMS'].split(' ')
+
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)

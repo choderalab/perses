@@ -430,6 +430,7 @@ class MCMCSampler(object):
             print("." * 80)
             print("MCMC sampler iteration %d" % self.iteration)
 
+        # Create an integrator
         if self.integrator_name == 'GHMC':
             from openmmtools.integrators import GHMCIntegrator
             integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
@@ -441,19 +442,36 @@ class MCMCSampler(object):
         else:
             raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
 
+        # Create a Context
         context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
-        integrator.step(self.nsteps)
-        self.sampler_state = SamplerState.createFromContext(context)
-        self.sampler_state.velocities = None # erase velocities since we may change dimensionality
 
+        if self.verbose:
+            # DEBUG ENERGIES
+            state = context.getState(getEnergy=True,getForces=True)
+            kT = kB * self.thermodynamic_state.temperature
+            print("potential  = %.3f kT" % (state.getPotentialEnergy() / kT))
+            print("kinetic    = %.3f kT" % (state.getKineticEnergy() / kT))
+            force_unit = (kT / unit.angstrom)
+            force_norm = np.sqrt(np.sum( (state.getForces(asNumpy=True) / force_unit)**2 ))
+            print("force norm = %.3f kT/A" % force_norm)
+
+        # Integrate to update sample
+        integrator.step(self.nsteps)
+
+        # Recover sampler state from Context
+        self.sampler_state = SamplerState.createFromContext(context)
+        self.sampler_state.velocities = None # erase velocities since we may change dimensionality next
+
+        # Report statistics.
         if self.integrator_name == 'GHMC':
             naccept = integrator.getGlobalVariableByName('naccept')
             fraction_accepted = float(naccept) / float(self.nsteps)
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
 
-        final_energy = context.getState(getEnergy=True).getPotentialEnergy() * self.thermodynamic_state.beta
-        if self.verbose: print('Final energy is %12.3f kT' % (final_energy))
+        if self.verbose:
+            final_energy = context.getState(getEnergy=True).getPotentialEnergy() * self.thermodynamic_state.beta
+            print('Final energy is %12.3f kT' % (final_energy))
 
         del context, integrator
 
@@ -723,7 +741,7 @@ class ExpandedEnsembleSampler(object):
                 print('logp_accept = NaN')
             else:
                 accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
-                if accept_everything:
+                if self.accept_everything:
                     print('accept_everything option is turned on; accepting')
                     accept = True
 
