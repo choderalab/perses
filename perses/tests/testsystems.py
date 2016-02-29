@@ -427,6 +427,7 @@ class AblImatinibTestSystem(PersesTestSystem):
     def __init__(self):
         super(AblImatinibTestSystem, self).__init__()
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
+        solvents = ['vacuum'] # DEBUG
         components = ['receptor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
         padding = 9.0*unit.angstrom
         explicit_solvent_model = 'tip3p'
@@ -965,12 +966,13 @@ def run_abl_imatinib():
     for environment in ['vacuum-complex']:
         print environment
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].options={'nsteps':0}
+        testsystem.exen_samplers[environment].options={'nsteps':5000, 'timestep' : 0.75 * unit.femtoseconds}
         testsystem.exen_samplers[environment].accept_everything = True # accept everything that doesn't lead to NaN for testing
-        testsystem.mcmc_samplers[environment].nsteps = 50
-        testsystem.mcmc_samplers[environment].run(niterations=5)
-        testsystem.exen_samplers[environment].run(niterations=5)
-        testsystem.sams_samplers[environment].run(niterations=5)
+        testsystem.mcmc_samplers[environment].nsteps = 5000
+        testsystem.mcmc_samplers[environment].timestep = 0.75 * unit.femtoseconds
+        #testsystem.mcmc_samplers[environment].run(niterations=5)
+        testsystem.exen_samplers[environment].run(niterations=100)
+        #testsystem.sams_samplers[environment].run(niterations=5)
 
     #testsystem.designer.verbose = True
     #testsystem.designer.run(niterations=500)

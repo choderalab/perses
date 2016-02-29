@@ -637,6 +637,10 @@ class PointMutationEngine(PolymerProposalEngine):
                 his_choice = np.random.choice(range(len(his_state)),p=his_prob)
                 index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
 
+        # DEBUG
+        print('Proposed mutation:')
+        print(allowed_mutations[proposed_location])
+
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues
 

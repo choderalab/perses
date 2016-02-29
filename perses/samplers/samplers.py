@@ -614,14 +614,6 @@ class ExpandedEnsembleSampler(object):
         self.pdbfile = None # if not None, write PDB file
         self.accept_everything = False # if True, will accept anything that doesn't lead to NaNs
 
-        # DEBUG
-        old_system = sampler.sampler_state.system
-        old_topology = topology
-        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
-        old_system_natoms = old_system.getNumParticles()
-        if old_topology_natoms != old_system_natoms:
-            msg = 'ExpandedEnsembleSampler: topology has %d atoms, while system has %d atoms' % (old_topology_natoms, old_system_natoms)
-            raise Exception(msg)
 
     @property
     def state_keys(self):
@@ -660,6 +652,15 @@ class ExpandedEnsembleSampler(object):
         """
         Sample the thermodynamic state.
         """
+        # Check that system and topology have same number of atoms.
+        old_system = self.sampler.sampler_state.system
+        old_topology = self.topology
+        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'ExpandedEnsembleSampler: topology has %d atoms, while system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
+
         if self.scheme == 'ncmc-geometry-ncmc':
             if self.verbose: print("Updating chemical state with ncmc-geometry-ncmc scheme...")
 

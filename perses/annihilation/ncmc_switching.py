@@ -225,6 +225,10 @@ class NCMCEngine(object):
         else:
             raise Exception("direction must be one of ['delete', 'insert']; found '%s' instead" % direction)
 
+        # DEBUG
+        print('alchemical atoms:')
+        print(alchemical_atoms)
+
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
         alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
