@@ -453,8 +453,8 @@ class MCMCSampler(object):
             print("potential  = %.3f kT" % (state.getPotentialEnergy() / kT))
             print("kinetic    = %.3f kT" % (state.getKineticEnergy() / kT))
             force_unit = (kT / unit.angstrom)
-            force_norm = np.sqrt(np.sum( (state.getForces(asNumpy=True) / force_unit)**2 ))
-            print("force norm = %.3f kT/A" % force_norm)
+            force_norm = np.sqrt(np.mean( (state.getForces(asNumpy=True) / force_unit)**2 ))
+            print("force norm = %.3f kT/A/dof" % force_norm)
 
         # Integrate to update sample
         integrator.step(self.nsteps)
@@ -613,6 +613,15 @@ class ExpandedEnsembleSampler(object):
         self.verbose = False
         self.pdbfile = None # if not None, write PDB file
         self.accept_everything = False # if True, will accept anything that doesn't lead to NaNs
+
+        # DEBUG
+        old_system = sampler.sampler_state.system
+        old_topology = topology
+        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'ExpandedEnsembleSampler: topology has %d atoms, while system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
 
     @property
     def state_keys(self):

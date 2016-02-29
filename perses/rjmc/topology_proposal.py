@@ -221,6 +221,14 @@ class PolymerProposalEngine(ProposalEngine):
         # old_topology : simtk.openmm.app.Topology
         old_topology = copy.deepcopy(current_topology)
 
+        # Check that old_topology and old_system have same number of atoms.
+        old_system = current_system
+        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
+
         # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
         atom_map = dict()
         # metadata : dict, key = 'chain_id' , value : str
@@ -269,6 +277,14 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Create TopologyProposal.
         topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+
+        # Check that old_topology and old_system have same number of atoms.
+        old_system = current_system
+        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_system_natoms = old_system.getNumParticles()
+        if old_topology_natoms != old_system_natoms:
+            msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
+            raise Exception(msg)
 
         # Check that new_topology and new_system have same number of atoms.
         new_topology_natoms = sum([1 for atom in new_topology.atoms()]) # number of topology atoms

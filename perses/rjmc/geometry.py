@@ -848,10 +848,6 @@ class ProposalOrderTools(object):
         logp_torsion_choice : float
             log probability of the chosen torsions
         """
-        # DEBUG: See if any torsions have duplicate atoms.
-        from perses.tests.utils import check_system
-        check_system(self._topology_proposal.new_system)
-
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
         if direction=='forward':
