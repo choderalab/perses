@@ -987,9 +987,10 @@ def run_kinase_inhibitors():
     testsystem = KinaseInhibitorsTestSystem()
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
+    testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
     testsystem.exen_samplers[environment].options={'nsteps':0}
     testsystem.mcmc_samplers[environment].nsteps = 50
-    testsystem.sams_samplers[environment].run(niterations=5)
+    testsystem.sams_samplers[environment].run(niterations=100)
 
 def run_valence_system():
     """
@@ -1004,5 +1005,5 @@ def run_valence_system():
 
 if __name__ == '__main__':
     #run_valence_system()
-    #run_kinase_inhibitors()
-    run_abl_imatinib()
+    run_kinase_inhibitors()
+    #run_abl_imatinib()
