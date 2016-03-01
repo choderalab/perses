@@ -501,6 +501,8 @@ def compute_potential_components(context):
     platform = openmm.Platform.getPlatformByName('Reference')
     context = openmm.Context(system, integrator, platform)
     context.setPositions(positions)
+    for (parameter, value) in parameters.items():
+        context.setParameter(parameter, value)
     energy_components = list()
     for index in range(system.getNumForces()):
         force = system.getForce(index)
