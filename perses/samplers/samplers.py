@@ -612,6 +612,7 @@ class ExpandedEnsembleSampler(object):
         self.number_of_state_visits = dict()
         self.verbose = False
         self.pdbfile = None # if not None, write PDB file
+        self.geometry_pdbfile = None # if not None, write PDB file of geometry proposals
         self.accept_everything = False # if True, will accept anything that doesn't lead to NaNs
 
 
@@ -723,6 +724,12 @@ class ExpandedEnsembleSampler(object):
             geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
             geometry_logp = geometry_logp_reverse - geometry_logp_propose
 
+            if self.geometry_pdbfile is not None:
+                print("Writing proposed geometry...")
+                from simtk.openmm.app import PDBFile
+                PDBFile.writeModel(topology_proposal.new_topology, geometry_new_positions, self.geometry_pdbfile, self.iteration)
+                self.geometry_pdbfile.flush()
+
             if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.
             [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
@@ -790,6 +797,7 @@ class ExpandedEnsembleSampler(object):
             print("Writing frame...")
             from simtk.openmm.app import PDBFile
             PDBFile.writeModel(self.topology, self.sampler.sampler_state.positions, self.pdbfile, self.iteration)
+            self.pdbfile.flush()
 
     def run(self, niterations=1):
         """

@@ -966,9 +966,10 @@ def run_abl_imatinib():
     for environment in ['vacuum-complex']:
         print environment
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].options={'nsteps':5000, 'timestep' : 1.0 * unit.femtoseconds}
+        testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].options={'nsteps':20000, 'timestep' : 1.0 * unit.femtoseconds}
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        testsystem.mcmc_samplers[environment].nsteps = 5000
+        testsystem.mcmc_samplers[environment].nsteps = 20000
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
         #testsystem.mcmc_samplers[environment].run(niterations=5)
         testsystem.exen_samplers[environment].run(niterations=100)
@@ -986,9 +987,10 @@ def run_kinase_inhibitors():
     testsystem = KinaseInhibitorsTestSystem()
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
+    testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
     testsystem.exen_samplers[environment].options={'nsteps':0}
     testsystem.mcmc_samplers[environment].nsteps = 50
-    testsystem.sams_samplers[environment].run(niterations=5)
+    testsystem.sams_samplers[environment].run(niterations=100)
 
 def run_valence_system():
     """
@@ -1003,5 +1005,5 @@ def run_valence_system():
 
 if __name__ == '__main__':
     #run_valence_system()
-    #run_kinase_inhibitors()
-    run_abl_imatinib()
+    run_kinase_inhibitors()
+    #run_abl_imatinib()
