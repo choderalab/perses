@@ -716,7 +716,7 @@ class GeometrySystemGenerator(object):
     def __init__(self):
         pass
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, force_names=None, force_parameters=None):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -728,6 +728,8 @@ class GeometrySystemGenerator(object):
             The order in which the atom indices will be proposed
         parameter_name : str
             The name of the global context parameter
+        add_extra_torsions : bool, optional
+            Whether to add additional torsions to keep rings flat. Default true.
         force_names : list of str
             A list of the names of forces that will be included in this system
         force_parameters : dict
@@ -737,6 +739,8 @@ class GeometrySystemGenerator(object):
         growth_system : simtk.openmm.System object
             System with the appropriate modifications
         """
+        if add_extra_torsions:
+            pass
         reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
         growth_system = openmm.System()
         #create the forces:
@@ -790,6 +794,43 @@ class GeometrySystemGenerator(object):
 
         return growth_system
 
+    def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
+        """
+        Determine which atoms need an extra torsion. First figure out which residue is
+        covered by the new atoms, then determine the rotatable bonds. Finally, construct
+        the residue in omega and measure the appropriate torsions, and generate relevant parameters.
+        ONLY ONE RESIDUE SHOULD BE CHANGING!
+
+        Parameters
+        ----------
+        torsion_force : openmm.CustomTorsionForce object
+            the new/old torsion force if forward/backward
+        reference_topology : openmm.app.Topology object
+            the new/old topology if forward/backward
+        growth_indices : list of int
+            The list of new atoms and the order in which they will be added.
+
+        Returns
+        -------
+        torsion_force : openmm.CustomTorsionForce
+            The torsion force with extra torsions added appropriately.
+        """
+        import simtk.openmm.app as app
+        import openmoltools.forcefield_generators as forcefield_generators
+        reference_topology = app.Topology()
+        atoms = list(reference_topology.atoms())
+
+        #get residue from first atom
+        residue = atoms[growth_indices[0]].residue
+        oemol = forcefield_generators.generateOEMolFromTopologyResidue(residue)
+        non_rotor_bonds = []
+
+        #get the bonds that cannot be rotated:
+        for bond in oemol.GetBonds():
+            if not bond.IsRotor():
+                non_rotor_bonds.append(bond)
+
+
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
         """
@@ -830,9 +871,8 @@ class ProposalOrderTools(object):
         Whether to add additional torsions to keep rings flat. Default true.
     """
 
-    def __init__(self, topology_proposal, add_extra_torsions=True):
+    def __init__(self, topology_proposal):
         self._topology_proposal = topology_proposal
-        self._add_extra_torsions = add_extra_torsions
 
     def determine_proposal_order(self, direction='forward'):
         """
@@ -865,6 +905,7 @@ class ProposalOrderTools(object):
         else:
             raise ValueError("direction parameter must be either forward or reverse.")
 
+
         logp_choice = 0
         while(len(new_atoms))>0:
             eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
@@ -877,7 +918,6 @@ class ProposalOrderTools(object):
                 new_atoms.remove(atom)
                 atoms_with_positions.append(atom)
         return atoms_torsions, logp_choice
-
 
 
     def _atoms_eligible_for_proposal(self, new_atoms, atoms_with_positions):
