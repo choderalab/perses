@@ -826,10 +826,13 @@ class ProposalOrderTools(object):
     ----------
     topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
         The topology proposal containing the relevant move.
+    add_extra_torsions : bool, optional
+        Whether to add additional torsions to keep rings flat. Default true.
     """
 
-    def __init__(self, topology_proposal):
+    def __init__(self, topology_proposal, add_extra_torsions=True):
         self._topology_proposal = topology_proposal
+        self._add_extra_torsions = add_extra_torsions
 
     def determine_proposal_order(self, direction='forward'):
         """
