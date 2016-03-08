@@ -161,13 +161,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
 
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology)
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -716,7 +716,7 @@ class GeometrySystemGenerator(object):
     def __init__(self):
         pass
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, force_names=None, force_parameters=None):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -739,8 +739,6 @@ class GeometrySystemGenerator(object):
         growth_system : simtk.openmm.System object
             System with the appropriate modifications
         """
-        if add_extra_torsions:
-            pass
         reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
         growth_system = openmm.System()
         #create the forces:
@@ -792,6 +790,11 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx(torsion_parameters[:4], growth_indices)
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
+        if add_extra_torsions:
+            if reference_topology==None:
+                raise ValueError("Need to specify topology in order to add extra torsions.")
+            self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
+
         return growth_system
 
     def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
@@ -839,7 +842,22 @@ class GeometrySystemGenerator(object):
         relevant_torsion_list = list(oechem.OEGetTorsions(oemol, oechem.OEIsRotor(False)))
 
 
-        #now, for each torsion, extract the set of indices and
+        #now, for each torsion, extract the set of indices and the angle
+        torsions_to_add = []
+        periodicity = 1
+        k = 10.0*units.kilojoule_per_mole
+        for torsion in relevant_torsion_list:
+            angle = torsion.radians*units.radian
+            #make sure to get the atom index that corresponds to the topology
+            atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
+            torsions_to_add.append({'angle': angle, 'atom_indices' : atom_indices})
+            phase = np.pi*units.radians+angle
+            growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
+            torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
+
+        return torsion_force
+
+
 
 
 
