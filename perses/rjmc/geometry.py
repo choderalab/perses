@@ -176,6 +176,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
+        debug = True
+        if debug:
+            context.setPositions(self._metadata['reference_positions'])
+            context.setParameter(growth_parameter_name, len(atom_proposal_order.keys()))
+            state = context.getState(getEnergy=True)
+            print("The potential of the valence terms is %s" % str(state.getPotentialEnergy()))
         growth_parameter_value = 1
         #now for the main loop:
         for atom, torsion in atom_proposal_order.items():
@@ -842,22 +848,17 @@ class GeometrySystemGenerator(object):
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 30.0*units.kilojoule_per_mole
+        k = 10.0*units.kilojoule_per_mole
         for torsion in relevant_torsion_list:
             angle = torsion.radians*units.radian
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
-            phase = np.pi*units.radians+angle
+            phase = (np.pi)*units.radians+angle
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
-            torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
+            #print("Adding torsion with atoms %s and growth index %d" %(str(atom_indices), growth_idx))
+            torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, 0])
 
         return torsion_force
-
-
-
-
-
-
 
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
