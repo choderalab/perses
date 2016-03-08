@@ -125,8 +125,8 @@ def test_run_geometry_engine():
     without exceptions. Convert n-pentane to 2-methylpentane
     """
     import copy
-    molecule_name_1 = 'ethane'
-    molecule_name_2 = 'propane'
+    molecule_name_1 = 'erlotinib'
+    molecule_name_2 = 'imatinib'
     #molecule_name_1 = 'benzene'
     #molecule_name_2 = 'biphenyl'
 
@@ -144,7 +144,7 @@ def test_run_geometry_engine():
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    test_pdb_file = open("propane_1.pdb", 'w')
+    test_pdb_file = open("imatinib_with_30kJ.pdb", 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
@@ -292,8 +292,8 @@ def test_logp_reverse():
     Make sure logp_reverse and logp_forward are consistent
     """
     np.seterr(all='raise')
-    molecule_name_1 = 'propane'
-    molecule_name_2 = 'ethane'
+    molecule_name_1 = 'erlotinib'
+    molecule_name_2 = 'imatinib'
     #molecule_name_1 = 'benzene'
     #molecule_name_2 = 'biphenyl'
 

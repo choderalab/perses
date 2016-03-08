@@ -820,9 +820,9 @@ class GeometrySystemGenerator(object):
         """
         import openmoltools.forcefield_generators as forcefield_generators
         atoms = list(reference_topology.atoms())
-        growth_indices = [atom.idx for atom in growth_indices]
+        growth_indices = list(growth_indices)
         #get residue from first atom
-        residue = atoms[growth_indices[0]].residue
+        residue = atoms[growth_indices[0].idx].residue
         try:
             oemol = forcefield_generators.generateOEMolFromTopologyResidue(residue)
         except Exception as e:
@@ -841,15 +841,13 @@ class GeometrySystemGenerator(object):
 
 
         #now, for each torsion, extract the set of indices and the angle
-        torsions_to_add = []
         periodicity = 1
-        k = 10.0*units.kilojoule_per_mole
+        k = 30.0*units.kilojoule_per_mole
         for torsion in relevant_torsion_list:
             angle = torsion.radians*units.radian
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
-            torsions_to_add.append({'angle': angle, 'atom_indices' : atom_indices})
-            phase = np.pi*units.radians+angle
+            phase = np.pi*units.radians-angle
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
 
