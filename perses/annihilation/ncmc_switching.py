@@ -1,8 +1,8 @@
+from __future__ import print_function
 import numpy as np
 import copy
 import logging
 from simtk import openmm, unit
-from __future__ import print_function
 
 default_functions = {
     'lambda_sterics' : 'lambda',
