@@ -847,7 +847,7 @@ class GeometrySystemGenerator(object):
             angle = torsion.radians*units.radian
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
-            phase = np.pi*units.radians-angle
+            phase = np.pi*units.radians+angle
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
 
