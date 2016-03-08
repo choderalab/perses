@@ -828,10 +828,6 @@ class GeometrySystemGenerator(object):
             print("Could not generate an oemol from the residue.")
             print(e)
 
-        non_rotor_bonds = []
-
-
-
         #get the omega geometry of the molecule:
         import openeye.oeomega as oeomega
         import openeye.oechem as oechem
@@ -839,7 +835,7 @@ class GeometrySystemGenerator(object):
         omega.SetMaxConfs(1)
         omega(oemol)
 
-        #get the list of torsions in the molecule that are relevant
+        #get the list of torsions in the molecule that are not about a rotatable bond
         relevant_torsion_list = list(oechem.OEGetTorsions(oemol, oechem.OEIsRotor(False)))
 
 
