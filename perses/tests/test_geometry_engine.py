@@ -370,9 +370,9 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    #test_run_geometry_engine()
+    test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
     #test_angle()
-    test_logp_reverse()
+    #test_logp_reverse()

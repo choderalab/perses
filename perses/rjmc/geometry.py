@@ -818,9 +818,7 @@ class GeometrySystemGenerator(object):
         torsion_force : openmm.CustomTorsionForce
             The torsion force with extra torsions added appropriately.
         """
-        import simtk.openmm.app as app
         import openmoltools.forcefield_generators as forcefield_generators
-        reference_topology = app.Topology()
         atoms = list(reference_topology.atoms())
 
         #get residue from first atom
