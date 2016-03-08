@@ -820,7 +820,7 @@ class GeometrySystemGenerator(object):
         """
         import openmoltools.forcefield_generators as forcefield_generators
         atoms = list(reference_topology.atoms())
-
+        growth_indices = [atom.idx for atom in growth_indices]
         #get residue from first atom
         residue = atoms[growth_indices[0]].residue
         try:
