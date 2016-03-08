@@ -830,10 +830,7 @@ class GeometrySystemGenerator(object):
 
         non_rotor_bonds = []
 
-        #get the bonds that cannot be rotated:
-        for bond in oemol.GetBonds():
-            if not bond.IsRotor():
-                non_rotor_bonds.append(bond)
+
 
         #get the omega geometry of the molecule:
         import openeye.oeomega as oeomega
@@ -843,14 +840,10 @@ class GeometrySystemGenerator(object):
         omega(oemol)
 
         #get the list of torsions in the molecule that are relevant
-        torsion_list = list(oechem.OEGetTorsions(oemol))
-        relevant_torsion_list = []
-        for bond in non_rotor_bonds:
-            atom1 = bond.GetBgn()
-            atom2 = bond.GetEnd()
-            for torsion in torsion_list:
-                if torsion.b==atom1 or torsion.b==atom2 and torsion.c==atom1 or torsion.c==atom2:
-                    relevant_torsion_list.append(torsion)
+        relevant_torsion_list = list(oechem.OEGetTorsions(oemol, oechem.OEIsRotor(False)))
+
+
+        #now, for each torsion, extract the set of indices and
 
 
 
