@@ -122,6 +122,23 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
         return logp_proposal
 
+    def write_partial_pdb(self, pdbfile, topology, positions, atoms_with_positions, model_index):
+        """
+        Write the subset of the molecule for which positions are defined.
+
+        """
+        from simtk.openmm.app import Modeller
+        modeller = Modeller(topology, positions)
+        atom_indices_with_positions = [ atom.idx for atom in atoms_with_positions ]
+        atoms_to_delete = [ atom for atom in modeller.topology.atoms() if (atom.index not in atom_indices_with_positions) ]
+        modeller.delete(atoms_to_delete)
+
+        pdbfile.write('MODEL %5d\n' % model_index)
+        from simtk.openmm.app import PDBFile
+        PDBFile.writeFile(modeller.topology, modeller.positions, file=pdbfile)
+        pdbfile.flush()
+        pdbfile.write('ENDMDL\n')
+
     def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
@@ -172,6 +189,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         logp_proposal = logp_choice
+
+        # DEBUG: Write growth stages
+        if direction == 'forward':
+            pdbfile = open("geometry-proposal-stages.pdb", 'w')
+            self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, 0)
 
         platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
@@ -235,6 +257,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
+
+            # DEBUG: Write PDB file for placed atoms
+            if direction=='forward':
+                atoms_with_positions.append(atom)
+                self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, growth_parameter_value)
 
         return logp_proposal, new_positions
 
