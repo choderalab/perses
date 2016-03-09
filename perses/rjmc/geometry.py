@@ -185,6 +185,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
             growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -192,14 +193,24 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_proposal = logp_choice
 
         # DEBUG: Write growth stages
+        from simtk.openmm.app import PDBFile
         if direction == 'forward':
-            pdbfile = open("geometry-proposal-stages.pdb", 'w')
+            pdbfile = open('geometry-proposal-%s-initial.pdb' % direction, 'w')
+            PDBFile.writeFile(top_proposal.old_topology, old_positions, file=pdbfile)
+            pdbfile.close()
+            pdbfile = open("geometry-proposal-%s-stages.pdb" % direction, 'w')
             self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, 0)
+        else:
+            pdbfile = open('geometry-proposal-%s-initial.pdb' % direction, 'w')
+            PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
+            pdbfile.close()
+            pdbfile = open("geometry-proposal-%s-stages.pdb" % direction, 'w')
+            self.write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
 
         platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-        debug = True
+        debug = False
         if debug:
             context.setPositions(self._metadata['reference_positions'])
             context.setParameter(growth_parameter_name, len(atom_proposal_order.keys()))
@@ -266,9 +277,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             growth_parameter_value += 1
 
             # DEBUG: Write PDB file for placed atoms
+            atoms_with_positions.append(atom)
             if direction=='forward':
-                atoms_with_positions.append(atom)
                 self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, growth_parameter_value)
+            else:
+                self.write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, growth_parameter_value)
 
         return logp_proposal, new_positions
 

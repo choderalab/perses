@@ -156,6 +156,8 @@ def test_run_geometry_engine():
     print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
+    geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
+
     app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
     test_pdb_file.close()
     context.setPositions(new_positions)
