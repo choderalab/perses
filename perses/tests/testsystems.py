@@ -1,3 +1,4 @@
+from __future__ import print_function
 """
 Test systems for perses automated design.
 
@@ -23,7 +24,6 @@ __author__ = 'John D. Chodera'
 ################################################################################
 # IMPORTS
 ################################################################################
-
 from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
@@ -964,7 +964,7 @@ def run_abl_imatinib():
     testsystem = AblImatinibTestSystem()
     #for environment in testsystem.environments:
     for environment in ['vacuum-complex']:
-        print environment
+        print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].options={'nsteps':20000, 'timestep' : 1.0 * unit.femtoseconds}
