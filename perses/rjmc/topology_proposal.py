@@ -1191,7 +1191,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
         atomexpr = oechem.OEExprOpts_AtomicNumber
-        bondexpr = 0
+        bondexpr = oechem.OEExprOpts_BondOrder
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True

@@ -106,7 +106,7 @@ def align_molecules(mol1, mol2):
     """
     mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
     atomexpr = oechem.OEExprOpts_AtomicNumber
-    bondexpr = 0
+    bondexpr = oechem.OEExprOpts_BondOrder
     mcs.Init(mol1, atomexpr, bondexpr)
     mcs.SetMCSFunc(oechem.OEMCSMaxAtomsCompleteCycles())
     unique = True
@@ -144,7 +144,7 @@ def test_run_geometry_engine():
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true', 'reference_positions':pos2})
-    test_pdb_file = open("nilotinib_from_erlotinib.pdb", 'w')
+    test_pdb_file = open("nilotinib_from_erlotinib2.pdb", 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
