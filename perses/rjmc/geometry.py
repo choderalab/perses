@@ -10,6 +10,7 @@ import copy
 from perses.rjmc import coordinate_tools
 import simtk.openmm as openmm
 import collections
+import openeye.oechem as oechem
 
 
 class GeometryEngine(object):
@@ -122,6 +123,23 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
         return logp_proposal
 
+    def write_partial_pdb(self, pdbfile, topology, positions, atoms_with_positions, model_index):
+        """
+        Write the subset of the molecule for which positions are defined.
+
+        """
+        from simtk.openmm.app import Modeller
+        modeller = Modeller(topology, positions)
+        atom_indices_with_positions = [ atom.idx for atom in atoms_with_positions ]
+        atoms_to_delete = [ atom for atom in modeller.topology.atoms() if (atom.index not in atom_indices_with_positions) ]
+        modeller.delete(atoms_to_delete)
+
+        pdbfile.write('MODEL %5d\n' % model_index)
+        from simtk.openmm.app import PDBFile
+        PDBFile.writeFile(modeller.topology, modeller.positions, file=pdbfile)
+        pdbfile.flush()
+        pdbfile.write('ENDMDL\n')
+
     def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
@@ -161,21 +179,32 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
 
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology)
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         logp_proposal = logp_choice
 
+        # DEBUG: Write growth stages
+        if direction == 'forward':
+            pdbfile = open("geometry-proposal-stages.pdb", 'w')
+            self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, 0)
+
         platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
+        debug = True
+        if debug:
+            context.setPositions(self._metadata['reference_positions'])
+            context.setParameter(growth_parameter_name, len(atom_proposal_order.keys()))
+            state = context.getState(getEnergy=True)
+            print("The potential of the valence terms is %s" % str(state.getPotentialEnergy()))
         growth_parameter_value = 1
         #now for the main loop:
         for atom, torsion in atom_proposal_order.items():
@@ -235,6 +264,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
+
+            # DEBUG: Write PDB file for placed atoms
+            if direction=='forward':
+                atoms_with_positions.append(atom)
+                self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, growth_parameter_value)
 
         return logp_proposal, new_positions
 
@@ -716,7 +750,7 @@ class GeometrySystemGenerator(object):
     def __init__(self):
         pass
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, force_names=None, force_parameters=None):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -728,6 +762,8 @@ class GeometrySystemGenerator(object):
             The order in which the atom indices will be proposed
         parameter_name : str
             The name of the global context parameter
+        add_extra_torsions : bool, optional
+            Whether to add additional torsions to keep rings flat. Default true.
         force_names : list of str
             A list of the names of forces that will be included in this system
         force_parameters : dict
@@ -788,7 +824,95 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx(torsion_parameters[:4], growth_indices)
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
+        if add_extra_torsions:
+            if reference_topology==None:
+                raise ValueError("Need to specify topology in order to add extra torsions.")
+            self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
+
         return growth_system
+
+    def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
+        """
+        Determine which atoms need an extra torsion. First figure out which residue is
+        covered by the new atoms, then determine the rotatable bonds. Finally, construct
+        the residue in omega and measure the appropriate torsions, and generate relevant parameters.
+        ONLY ONE RESIDUE SHOULD BE CHANGING!
+
+        Parameters
+        ----------
+        torsion_force : openmm.CustomTorsionForce object
+            the new/old torsion force if forward/backward
+        reference_topology : openmm.app.Topology object
+            the new/old topology if forward/backward
+        growth_indices : list of int
+            The list of new atoms and the order in which they will be added.
+
+        Returns
+        -------
+        torsion_force : openmm.CustomTorsionForce
+            The torsion force with extra torsions added appropriately.
+        """
+        import openmoltools.forcefield_generators as forcefield_generators
+        atoms = list(reference_topology.atoms())
+        growth_indices = list(growth_indices)
+        #get residue from first atom
+        residue = atoms[growth_indices[0].idx].residue
+        try:
+            oemol = forcefield_generators.generateOEMolFromTopologyResidue(residue)
+        except Exception as e:
+            print("Could not generate an oemol from the residue.")
+            print(e)
+
+        #get the omega geometry of the molecule:
+        import openeye.oeomega as oeomega
+        import openeye.oechem as oechem
+        omega = oeomega.OEOmega()
+        omega.SetMaxConfs(1)
+        omega(oemol)
+
+        #get the list of torsions in the molecule that are not about a rotatable bond
+        rotor = oechem.OEIsRotor()
+        torsion_predicate = oechem.OENotBond(rotor)
+        non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
+        relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+
+
+        #now, for each torsion, extract the set of indices and the angle
+        periodicity = 1
+        k = 10.0*units.kilojoule_per_mole
+        print([atom.name for atom in growth_indices])
+        for torsion in relevant_torsion_list:
+            angle = torsion.radians*units.radian
+            #make sure to get the atom index that corresponds to the topology
+            atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
+            phase = (np.pi)*units.radians+angle
+            growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
+            atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
+            print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
+            torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, 0])
+
+        return torsion_force
+
+    def _select_torsions_without_h(self, torsion_list):
+        """
+        Return only torsions that do not contain hydrogen
+
+        Parameters
+        ----------
+        torsion_list : list of oechem.OETorsion
+
+        Returns
+        -------
+        heavy_torsions : list of oechem.OETorsion
+        """
+
+
+        heavy_torsions = []
+        for torsion in torsion_list:
+            is_h_present = torsion.a.IsHydrogen() + torsion.b.IsHydrogen() + torsion.c.IsHydrogen() + torsion.d.IsHydrogen()
+            if not is_h_present:
+                heavy_torsions.append(torsion)
+        return heavy_torsions
 
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
@@ -817,6 +941,19 @@ class GeometrySystemGenerator(object):
         new_atom_growth_order = [growth_indices_list.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
 
+class PredHBond(oechem.OEUnaryBondPred):
+    """
+    Example elaborating usage on:
+    https://docs.eyesopen.com/toolkits/python/oechemtk/predicates.html#section-predicates-match
+    """
+    def __call__(self, bond):
+        atom1 = bond.GetBgn()
+        atom2 = bond.GetEnd()
+        if atom1.IsHydrogen() or atom2.IsHydrogen():
+            return True
+        else:
+            return False
+
 class ProposalOrderTools(object):
     """
     This is an internal utility class for determining the order of atomic position proposals.
@@ -826,6 +963,8 @@ class ProposalOrderTools(object):
     ----------
     topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
         The topology proposal containing the relevant move.
+    add_extra_torsions : bool, optional
+        Whether to add additional torsions to keep rings flat. Default true.
     """
 
     def __init__(self, topology_proposal):
@@ -862,6 +1001,7 @@ class ProposalOrderTools(object):
         else:
             raise ValueError("direction parameter must be either forward or reverse.")
 
+
         logp_choice = 0
         while(len(new_atoms))>0:
             eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
@@ -874,7 +1014,6 @@ class ProposalOrderTools(object):
                 new_atoms.remove(atom)
                 atoms_with_positions.append(atom)
         return atoms_torsions, logp_choice
-
 
 
     def _atoms_eligible_for_proposal(self, new_atoms, atoms_with_positions):

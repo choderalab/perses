@@ -1,8 +1,8 @@
+from __future__ import print_function
 import numpy as np
 import copy
 import logging
 from simtk import openmm, unit
-
 
 default_functions = {
     'lambda_sterics' : 'lambda',
@@ -288,8 +288,8 @@ class NCMCEngine(object):
 
         # DEBUG: Compute initial potential of unmodified system and alchemical system to make sure finite.
         from perses.tests.utils import compute_potential
-        print compute_potential(unmodified_system, initial_positions, platform=self.platform)
-        print compute_potential(alchemical_system, initial_positions, platform=self.platform)
+        print(compute_potential(unmodified_system, initial_positions, platform=self.platform))
+        print(compute_potential(alchemical_system, initial_positions, platform=self.platform))
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
