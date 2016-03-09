@@ -10,6 +10,7 @@ import copy
 from perses.rjmc import coordinate_tools
 import simtk.openmm as openmm
 import collections
+import openeye.oechem as oechem
 
 
 class GeometryEngine(object):
@@ -843,22 +844,48 @@ class GeometrySystemGenerator(object):
         omega(oemol)
 
         #get the list of torsions in the molecule that are not about a rotatable bond
-        relevant_torsion_list = list(oechem.OEGetTorsions(oemol, oechem.OEIsRotor(False)))
+        rotor = oechem.OEIsRotor()
+        torsion_predicate = oechem.OENotBond(rotor)
+        non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
+        relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
 
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
         k = 10.0*units.kilojoule_per_mole
+        print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
             angle = torsion.radians*units.radian
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
             phase = (np.pi)*units.radians+angle
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
-            #print("Adding torsion with atoms %s and growth index %d" %(str(atom_indices), growth_idx))
+            atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
+            print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
             torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, 0])
 
         return torsion_force
+
+    def _select_torsions_without_h(self, torsion_list):
+        """
+        Return only torsions that do not contain hydrogen
+
+        Parameters
+        ----------
+        torsion_list : list of oechem.OETorsion
+
+        Returns
+        -------
+        heavy_torsions : list of oechem.OETorsion
+        """
+
+
+        heavy_torsions = []
+        for torsion in torsion_list:
+            is_h_present = torsion.a.IsHydrogen() + torsion.b.IsHydrogen() + torsion.c.IsHydrogen() + torsion.d.IsHydrogen()
+            if not is_h_present:
+                heavy_torsions.append(torsion)
+        return heavy_torsions
 
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
@@ -886,6 +913,19 @@ class GeometrySystemGenerator(object):
             return 0
         new_atom_growth_order = [growth_indices_list.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
+
+class PredHBond(oechem.OEUnaryBondPred):
+    """
+    Example elaborating usage on:
+    https://docs.eyesopen.com/toolkits/python/oechemtk/predicates.html#section-predicates-match
+    """
+    def __call__(self, bond):
+        atom1 = bond.GetBgn()
+        atom2 = bond.GetEnd()
+        if atom1.IsHydrogen() or atom2.IsHydrogen():
+            return True
+        else:
+            return False
 
 class ProposalOrderTools(object):
     """

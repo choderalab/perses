@@ -125,10 +125,10 @@ def test_run_geometry_engine():
     without exceptions. Convert n-pentane to 2-methylpentane
     """
     import copy
-    #molecule_name_1 = 'erlotinib'
-    #molecule_name_2 = 'imatinib'
-    molecule_name_1 = 'benzene'
-    molecule_name_2 = 'biphenyl'
+    molecule_name_1 = 'erlotinib'
+    molecule_name_2 = 'nilotinib'
+    #molecule_name_1 = 'benzene'
+    #molecule_name_2 = 'biphenyl'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -144,7 +144,7 @@ def test_run_geometry_engine():
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true', 'reference_positions':pos2})
-    test_pdb_file = open("biphenyltake11.pdb", 'w')
+    test_pdb_file = open("nilotinib_from_erlotinib.pdb", 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
@@ -370,7 +370,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    for i in range(10):
+    for i in range(1):
         test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
