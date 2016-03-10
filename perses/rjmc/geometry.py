@@ -200,12 +200,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-        debug = True
-        if debug:
-            context.setPositions(self._metadata['reference_positions'])
-            context.setParameter(growth_parameter_name, len(atom_proposal_order.keys()))
-            state = context.getState(getEnergy=True)
-            print("The potential of the valence terms is %s" % str(state.getPotentialEnergy()))
         growth_parameter_value = 1
         #now for the main loop:
         for atom, torsion in atom_proposal_order.items():
