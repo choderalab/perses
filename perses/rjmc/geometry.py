@@ -289,34 +289,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         oemol : openeye.oechem.OEMol
             an oemol representation of the residue with topology indices
         """
+        import openeye.oechem as oechem
         from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
         external_bonds = list(res.external_bonds())
-        new_atoms = {}
-        highest_index = 0
         if external_bonds:
-            new_topology = app.Topology()
-            new_chain = new_topology.addChain(0)
-            new_res = new_topology.addResidue("new_res", new_chain)
-            for atom in res.atoms():
-                new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
-                new_atom.index = atom.index
-                new_atoms[atom] = new_atom
-                highest_index = max(highest_index, atom.index)
-            for bond in res.internal_bonds():
-                new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
-            for bond in res.external_bonds():
-                highest_index += 1
-                new_atom = new_topology.addAtom("H", app.Element.getByAtomicNumber(1), new_res, 1)
-                new_atom.index = highest_index
-                if bond[0].residue == res:
-                    new_topology.addBond(new_atoms[bond[0]], new_atom)
-                else:
-                    new_topology.addBond(new_atoms[bond[1]], new_atom)
-            res_to_use = new_res
-        else:
-            res_to_use = res
-        oemol = generateOEMolFromTopologyResidue(res_to_use)
-        return oemol
+            for bond in external_bonds:
+                res.chain.topology._bonds.remove(bond)
+        mol = generateOEMolFromTopologyResidue(res, geometry=False)
+        oechem.OEAddExplicitHydrogens(mol)
+        return mol
 
 
 
