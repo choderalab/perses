@@ -11,6 +11,7 @@ from perses.rjmc import coordinate_tools
 import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
+import simtk.openmm.app as app
 
 
 class GeometryEngine(object):
@@ -271,6 +272,49 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, growth_parameter_value)
 
         return logp_proposal, new_positions
+
+    def _oemol_from_residue(self, res):
+        """
+        Get an OEMol from a residue, even if that residue
+        is polymeric. In the latter case, external bonds
+        are replaced by hydrogens.
+
+        Parameters
+        ----------
+        res : app.Residue
+            The residue in question
+
+        Returns
+        -------
+        oemol : openeye.oechem.OEMol
+            an oemol representation of the residue with topology indices
+        """
+        from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
+        external_bonds = list(res.external_bonds())
+        new_atoms = {}
+        if external_bonds:
+            new_topology = app.Topology()
+            new_chain = new_topology.addChain(0)
+            new_res = new_topology.addResidue(res.name, new_chain)
+            for atom in res.atoms():
+                new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
+                new_atom.index = atom.index
+                new_atoms[atom] = new_atom
+            for bond in res.internal_bonds():
+                new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
+            for bond in res.external_bonds():
+                new_atom = new_topology.addAtom("H", app.Element.getByAtomicNumber(1), new_res, 1)
+                if bond[0].residue == res:
+                    new_topology.addBond(new_atoms[bond[0]], new_atom)
+                else:
+                    new_topology.addBond(new_atoms[bond[1]], new_atom)
+            res_to_use = new_res
+        else:
+            res_to_use = res
+        oemol = generateOEMolFromTopologyResidue(res_to_use)
+        return oemol
+
+
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
         """
