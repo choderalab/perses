@@ -273,7 +273,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         return logp_proposal, new_positions
 
-    def _oemol_from_residue(self, res):
+    @staticmethod
+    def _oemol_from_residue(res):
         """
         Get an OEMol from a residue, even if that residue
         is polymeric. In the latter case, external bonds
@@ -887,7 +888,7 @@ class GeometrySystemGenerator(object):
         #get residue from first atom
         residue = atoms[growth_indices[0].idx].residue
         try:
-            oemol = forcefield_generators.generateOEMolFromTopologyResidue(residue)
+            oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
         except Exception as e:
             print("Could not generate an oemol from the residue.")
             print(e)
@@ -897,6 +898,7 @@ class GeometrySystemGenerator(object):
         import openeye.oechem as oechem
         omega = oeomega.OEOmega()
         omega.SetMaxConfs(1)
+        omega.SetStrictStereo(False) #TODO: fix stereochem
         omega(oemol)
 
         #get the list of torsions in the molecule that are not about a rotatable bond
