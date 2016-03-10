@@ -292,18 +292,22 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
         external_bonds = list(res.external_bonds())
         new_atoms = {}
+        highest_index = 0
         if external_bonds:
             new_topology = app.Topology()
             new_chain = new_topology.addChain(0)
-            new_res = new_topology.addResidue(res.name, new_chain)
+            new_res = new_topology.addResidue("new_res", new_chain)
             for atom in res.atoms():
                 new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
                 new_atom.index = atom.index
                 new_atoms[atom] = new_atom
+                highest_index = max(highest_index, atom.index)
             for bond in res.internal_bonds():
                 new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
             for bond in res.external_bonds():
+                highest_index += 1
                 new_atom = new_topology.addAtom("H", app.Element.getByAtomicNumber(1), new_res, 1)
+                new_atom.index = highest_index
                 if bond[0].residue == res:
                     new_topology.addBond(new_atoms[bond[0]], new_atom)
                 else:
