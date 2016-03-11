@@ -144,6 +144,9 @@ def test_run_geometry_engine():
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true', 'reference_positions':pos2})
+    # Turn on PDB file writing.
+    geometry_engine.write_proposal_pdb = True
+    geometry_engine.pdb_filename_prefix = 'geometry-proposal'
     test_pdb_file = open("nilotinib_from_erlotinib2.pdb", 'w')
 
     valence_system = copy.deepcopy(sys2)
