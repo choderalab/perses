@@ -74,6 +74,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
     """
     def __init__(self, metadata=None):
         self._metadata = metadata
+        self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
+        self.pdb_filename_prefix = None # PDB file prefix for writing sequential atom placements
+        self.nproposed = 0 # number of times self.propose() has been called
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -95,6 +98,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         current_positions = current_positions.in_units_of(units.nanometers)
         logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
+        self.nproposed += 1
         return new_positions, logp_proposal
 
 
@@ -123,7 +127,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
         return logp_proposal
 
-    def write_partial_pdb(self, pdbfile, topology, positions, atoms_with_positions, model_index):
+    def _write_partial_pdb(self, pdbfile, topology, positions, atoms_with_positions, model_index):
         """
         Write the subset of the molecule for which positions are defined.
 
@@ -185,21 +189,34 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
             growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         logp_proposal = logp_choice
 
-        # DEBUG: Write growth stages
-        if direction == 'forward':
-            pdbfile = open("geometry-proposal-stages.pdb", 'w')
-            self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, 0)
+        if self.write_proposal_pdb:
+            # DEBUG: Write growth stages
+            from simtk.openmm.app import PDBFile
+            prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
+            if direction == 'forward':
+                pdbfile = open('%s-initial.pdb' % prefix, 'w')
+                PDBFile.writeFile(top_proposal.old_topology, old_positions, file=pdbfile)
+                pdbfile.close()
+                pdbfile = open("%s-stages.pdb" % prefix, 'w')
+                self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, 0)
+            else:
+                pdbfile = open('%s-initial.pdb' % prefix, 'w')
+                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
+                pdbfile.close()
+                pdbfile = open("%s-stages.pdb" % prefix, 'w')
+                self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
 
         platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-        debug = True
+        debug = False
         if debug:
             context.setPositions(self._metadata['reference_positions'])
             context.setParameter(growth_parameter_name, len(atom_proposal_order.keys()))
@@ -266,9 +283,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             growth_parameter_value += 1
 
             # DEBUG: Write PDB file for placed atoms
-            if direction=='forward':
-                atoms_with_positions.append(atom)
-                self.write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, growth_parameter_value)
+            atoms_with_positions.append(atom)
+            if self.write_proposal_pdb:
+                if direction=='forward':
+                    self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, growth_parameter_value)
+                else:
+                    self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, growth_parameter_value)
+
+        if self.write_proposal_pdb:
+            pdbfile.close()
 
         return logp_proposal, new_positions
 
