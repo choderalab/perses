@@ -95,6 +95,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The log probability of the forward-only proposal
         """
         current_positions = current_positions.in_units_of(units.nanometers)
+        if not top_proposal.unique_new_atoms:
+            return current_positions, 0.0
         logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
         return new_positions, logp_proposal
 
@@ -119,6 +121,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal for the given transformation
         """
+        if not top_proposal.unique_old_atoms:
+            return 0.0
         new_coordinates = new_coordinates.in_units_of(units.nanometers)
         old_coordinates = old_coordinates.in_units_of(units.nanometers)
         logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
