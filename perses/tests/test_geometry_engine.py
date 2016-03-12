@@ -119,7 +119,7 @@ def align_molecules(mol1, mol2):
     return new_to_old_atom_mapping
 
 
-def test_run_geometry_engine():
+def test_run_geometry_engine(index=0):
     """
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
@@ -139,6 +139,7 @@ def test_run_geometry_engine():
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
+    from perses.tests.utils import compute_potential_components
 
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
@@ -147,18 +148,24 @@ def test_run_geometry_engine():
     # Turn on PDB file writing.
     geometry_engine.write_proposal_pdb = True
     geometry_engine.pdb_filename_prefix = 'geometry-proposal'
-    test_pdb_file = open("nilotinib_from_erlotinib2.pdb", 'w')
+    test_pdb_file = open("nilotinib_from_erlotinib_%d_3.pdb" % index, 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
     valence_system.removeForce(3)
     integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+    integrator_1 = openmm.VerletIntegrator(1*unit.femtoseconds)
+    ctx_1 = openmm.Context(sys1, integrator_1)
+    ctx_1.setPositions(pos1)
+    ctx_1.setVelocitiesToTemperature(300*unit.kelvin)
+    integrator_1.step(1000)
+    pos1_new = ctx_1.getState(getPositions=True).getPositions(asNumpy=True)
     context = openmm.Context(sys2, integrator)
     context.setPositions(pos2)
     state = context.getState(getEnergy=True)
     print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
-    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
+    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1_new, beta)
     geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
 
     app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
@@ -166,6 +173,7 @@ def test_run_geometry_engine():
     context.setPositions(new_positions)
     state2 = context.getState(getEnergy=True)
     print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
+    print(compute_potential_components(context))
 
     valence_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
     platform = openmm.Platform.getPlatformByName("Reference")
@@ -375,8 +383,8 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    for i in range(1):
-        test_run_geometry_engine()
+    for i in range(10):
+        test_run_geometry_engine(index=i)
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
