@@ -908,6 +908,10 @@ class GeometrySystemGenerator(object):
         torsion_force : openmm.CustomTorsionForce
             The torsion force with extra torsions added appropriately.
         """
+        # Do nothing if there are no atoms to grow.
+        if len(growth_indices) == 0:
+            return torsion_force
+
         import openmoltools.forcefield_generators as forcefield_generators
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
