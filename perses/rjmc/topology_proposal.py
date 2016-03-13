@@ -1190,8 +1190,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-        atomexpr = oechem.OEExprOpts_AtomicNumber
-        bondexpr = oechem.OEExprOpts_BondOrder
+        #atomexpr = oechem.OEExprOpts_AtomicNumber
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember 
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True

@@ -976,10 +976,17 @@ class GeometrySystemGenerator(object):
         k = 10.0*units.kilojoule_per_mole
         print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
-            angle = torsion.radians*units.radian
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
-            phase = (np.pi)*units.radians+angle
+            # Determine phase in [-pi,+pi) interval
+            #phase = (np.pi)*units.radians+angle
+            phase = torsion.radians + np.pi
+            while (phase >= np.pi):
+                phase -= 2*np.pi
+            while (phase < -np.pi):
+                phase += 2*np.pi
+            phase *= units.radian
+            print('PHASE>>>> ' + str(phase)) # DEBUG
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
             print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
