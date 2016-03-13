@@ -76,7 +76,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
     def __init__(self, metadata=None):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
-        self.pdb_filename_prefix = None # PDB file prefix for writing sequential atom placements
+        self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
         self.nproposed = 0 # number of times self.propose() has been called
 
     def propose(self, top_proposal, current_positions, beta):
