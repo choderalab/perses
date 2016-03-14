@@ -990,6 +990,7 @@ def run_kinase_inhibitors():
     testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
     testsystem.exen_samplers[environment].options={'nsteps':0}
     testsystem.mcmc_samplers[environment].nsteps = 50
+    testsystem.exen_samplers[environment].geometry_engine.write_proposal_pdb = True # write proposal PDBs
     testsystem.sams_samplers[environment].run(niterations=100)
 
 def run_valence_system():

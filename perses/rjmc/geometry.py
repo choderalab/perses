@@ -76,7 +76,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
     def __init__(self, metadata=None):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
-        self.pdb_filename_prefix = None # PDB file prefix for writing sequential atom placements
+        self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
         self.nproposed = 0 # number of times self.propose() has been called
 
     def propose(self, top_proposal, current_positions, beta):
@@ -297,6 +297,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         if self.write_proposal_pdb:
             pdbfile.close()
+
+            prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
+            if direction == 'forward':
+                pdbfile = open('%s-final.pdb' % prefix, 'w')
+                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
+                pdbfile.close()
 
         return logp_proposal, new_positions
 
@@ -976,10 +982,17 @@ class GeometrySystemGenerator(object):
         k = 10.0*units.kilojoule_per_mole
         print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
-            angle = torsion.radians*units.radian
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
-            phase = (np.pi)*units.radians+angle
+            # Determine phase in [-pi,+pi) interval
+            #phase = (np.pi)*units.radians+angle
+            phase = torsion.radians + np.pi
+            while (phase >= np.pi):
+                phase -= 2*np.pi
+            while (phase < -np.pi):
+                phase += 2*np.pi
+            phase *= units.radian
+            print('PHASE>>>> ' + str(phase)) # DEBUG
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
             print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
