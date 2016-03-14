@@ -133,19 +133,27 @@ def test_mutate_from_every_amino_to_every_other():
     """
     import perses.rjmc.topology_proposal as topology_proposal
     import perses.rjmc.geometry as geometry
+    from perses.tests.utils import compute_potential_components
+    from openmmtools import testsystems as ts
     geometry_engine = geometry.FFAllAngleGeometryEngine()
 
     aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
 
-    failed_mutants = 0
+    protein = False
 
-    pdbid = "2A7U"
-    topology, positions = load_pdbid_to_openmm(pdbid)
-    modeller = app.Modeller(topology, positions)
-    for chain in modeller.topology.chains():
-        pass
+    if protein:
+        pdbid = "2A7U"
+        topology, positions = load_pdbid_to_openmm(pdbid)
+        modeller = app.Modeller(topology, positions)
+        for chain in modeller.topology.chains():
+            pass
+        modeller.delete([chain])
 
-    modeller.delete([chain])
+    else:
+        alanine_test_system = ts.AlanineDipeptideImplicit()
+        topology = alanine_test_system.topology
+        positions = alanine_test_system.positions
+        modeller = app.Modeller(topology, positions)
 
     ff_filename = "amber99sbildn.xml"
     max_point_mutants = 1
@@ -185,7 +193,10 @@ def test_mutate_from_every_amino_to_every_other():
             num_residues = len(chain._residues)
             break
     for k, proposed_amino in enumerate(aminos):
-        proposed_location = k+1
+        if protein:
+            proposed_location = k+1
+        else:
+            proposed_location = 1
         index_to_new_residues = dict()
         atom_map = dict()
         original_residue = chain._residues[proposed_location]
@@ -220,6 +231,7 @@ def test_mutate_from_every_amino_to_every_other():
         context = openmm.Context(new_system, integrator, platform)
         context.setPositions(new_positions)
         state = context.getState(getEnergy=True)
+        print(compute_potential_components(context))
         potential = state.getPotentialEnergy()
         potential_without_units = potential / potential.unit
         print(str(potential))
