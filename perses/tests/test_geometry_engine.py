@@ -161,6 +161,17 @@ def test_mutate_from_every_amino_to_every_other():
     current_system = system
     current_topology = modeller.topology
     current_positions = modeller.positions
+    minimize_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    minimize_context = openmm.Context(current_system, minimize_integrator, platform)
+    minimize_context.setPositions(current_positions)
+    initial_state = minimize_context.getState(getEnergy=True)
+    initial_potential = initial_state.getPotentialEnergy()
+    openmm.LocalEnergyMinimizer.minimize(minimize_context)
+    final_state = minimize_context.getState(getEnergy=True)
+    final_potential = final_state.getPotentialEnergy()
+
+    print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
 
     old_topology = copy.deepcopy(current_topology)
 
@@ -178,6 +189,7 @@ def test_mutate_from_every_amino_to_every_other():
         index_to_new_residues = dict()
         atom_map = dict()
         original_residue = chain._residues[proposed_location]
+        print("Proposing %s from %s" % (proposed_amino, original_residue.name))
         if original_residue.name == proposed_amino:
             continue
         index_to_new_residues[proposed_location] = proposed_amino
@@ -190,7 +202,7 @@ def test_mutate_from_every_amino_to_every_other():
         residue_map = pm_top_engine._generate_residue_map(modeller, index_to_new_residues)
         modeller, missing_atoms = pm_top_engine._delete_excess_atoms(modeller, residue_map)
         modeller = pm_top_engine._add_new_atoms(modeller, missing_atoms, residue_map)
-        print("Proposing %s" % proposed_amino)
+
         for k, atom in enumerate(modeller.topology.atoms()):
             atom.index=k
             try:
