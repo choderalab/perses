@@ -724,10 +724,10 @@ class ExpandedEnsembleSampler(object):
 
             if self.geometry_pdbfile is not None:
                 print("Writing proposed geometry...")
-                self.geometry_pdbfile.write('MODEL %5d\n' % (self.iteration+1))
+                #self.geometry_pdbfile.write('MODEL     %4d\n' % (self.iteration+1)) # PyMOL doesn't render connectivity correctly this way
                 from simtk.openmm.app import PDBFile
                 PDBFile.writeFile(topology_proposal.new_topology, geometry_new_positions, file=self.geometry_pdbfile)
-                self.geometry_pdbfile.write('ENDMDL\n')
+                #self.geometry_pdbfile.write('ENDMDL\n')
                 self.geometry_pdbfile.flush()
 
             geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
