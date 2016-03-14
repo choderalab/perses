@@ -7,6 +7,7 @@ import openeye.oeiupac as oeiupac
 import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import simtk.unit as unit
+import logging
 import numpy as np
 import parmed
 import copy
@@ -18,6 +19,11 @@ except:
     from urllib2 import urlopen
     from cStringIO import StringIO
 import os
+try:
+    from subprocess import getoutput  # If python 3
+except ImportError:
+    from commands import getoutput  # If python 2
+
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
@@ -125,7 +131,8 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
-def test_mutate_from_every_amino_to_every_other():
+
+def test_mutate_from_ala_to_all():
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
     Mutate Ecoli F-ATPase alpha subunit to all 20 amino acids (test going FROM all possibilities)
@@ -139,104 +146,89 @@ def test_mutate_from_every_amino_to_every_other():
 
     aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
 
-    protein = False
-
-    if protein:
-        pdbid = "2A7U"
-        topology, positions = load_pdbid_to_openmm(pdbid)
-        modeller = app.Modeller(topology, positions)
-        for chain in modeller.topology.chains():
-            pass
-        modeller.delete([chain])
-
-    else:
-        alanine_test_system = ts.AlanineDipeptideImplicit()
-        topology = alanine_test_system.topology
-        positions = alanine_test_system.positions
+    for aa in aminos:
+        topology, positions = _get_capped_amino_acid(amino_acid=aa)
         modeller = app.Modeller(topology, positions)
 
-    ff_filename = "amber99sbildn.xml"
-    max_point_mutants = 1
+        ff_filename = "amber99sbildn.xml"
+        max_point_mutants = 1
 
-    ff = app.ForceField(ff_filename)
-    system = ff.createSystem(modeller.topology)
-    chain_id = 'A'
+        ff = app.ForceField(ff_filename)
+        system = ff.createSystem(modeller.topology)
+        chain_id = 'A'
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+        system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants)
+        pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants)
 
-    current_system = system
-    current_topology = modeller.topology
-    current_positions = modeller.positions
-    minimize_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-    platform = openmm.Platform.getPlatformByName("Reference")
-    minimize_context = openmm.Context(current_system, minimize_integrator, platform)
-    minimize_context.setPositions(current_positions)
-    initial_state = minimize_context.getState(getEnergy=True)
-    initial_potential = initial_state.getPotentialEnergy()
-    openmm.LocalEnergyMinimizer.minimize(minimize_context)
-    final_state = minimize_context.getState(getEnergy=True)
-    final_potential = final_state.getPotentialEnergy()
-
-    print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
-
-    old_topology = copy.deepcopy(current_topology)
-
-    metadata = dict()
-    for atom in modeller.topology.atoms():
-        atom.old_index = atom.index
-
-    for chain in modeller.topology.chains():
-        if chain.id == chain_id:
-            # num_residues : int
-            num_residues = len(chain._residues)
-            break
-    for k, proposed_amino in enumerate(aminos):
-        if protein:
-            proposed_location = k+1
-        else:
-            proposed_location = 1
-        index_to_new_residues = dict()
-        atom_map = dict()
-        original_residue = chain._residues[proposed_location]
-        print("Proposing %s from %s" % (proposed_amino, original_residue.name))
-        if original_residue.name == proposed_amino:
-            continue
-        index_to_new_residues[proposed_location] = proposed_amino
-        if proposed_amino == 'HIS':
-            his_state = ['HIE','HID']
-            his_prob = np.array([0.5 for i in range(len(his_state))])
-            his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-            index_to_new_residues[proposed_location] = his_state[his_choice]
-        metadata['mutations'] = pm_top_engine._save_mutations(modeller, index_to_new_residues)
-        residue_map = pm_top_engine._generate_residue_map(modeller, index_to_new_residues)
-        modeller, missing_atoms = pm_top_engine._delete_excess_atoms(modeller, residue_map)
-        modeller = pm_top_engine._add_new_atoms(modeller, missing_atoms, residue_map)
-
-        for k, atom in enumerate(modeller.topology.atoms()):
-            atom.index=k
-            try:
-                atom_map[atom.index] = atom.old_index
-            except AttributeError:
-                pass
-        new_topology = modeller.topology
-        new_system = pm_top_engine._ff.createSystem(new_topology)
-        pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=original_residue.name, new_chemical_state_key=proposed_amino, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
-        new_positions, logp = geometry_engine.propose(pm_top_proposal, current_positions, beta)
-        if np.isnan(logp):
-            raise Exception("NaN in the logp")
-        integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        current_system = system
+        current_topology = modeller.topology
+        current_positions = modeller.positions
+        minimize_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
         platform = openmm.Platform.getPlatformByName("Reference")
-        context = openmm.Context(new_system, integrator, platform)
-        context.setPositions(new_positions)
-        state = context.getState(getEnergy=True)
-        print(compute_potential_components(context))
-        potential = state.getPotentialEnergy()
-        potential_without_units = potential / potential.unit
-        print(str(potential))
-        if np.isnan(potential_without_units):
-            raise Exception("Energy after proposal is NaN")
+        minimize_context = openmm.Context(current_system, minimize_integrator, platform)
+        minimize_context.setPositions(current_positions)
+        initial_state = minimize_context.getState(getEnergy=True)
+        initial_potential = initial_state.getPotentialEnergy()
+        openmm.LocalEnergyMinimizer.minimize(minimize_context)
+        final_state = minimize_context.getState(getEnergy=True)
+        final_potential = final_state.getPotentialEnergy()
+
+        print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
+
+        old_topology = copy.deepcopy(current_topology)
+
+        metadata = dict()
+        for atom in modeller.topology.atoms():
+            atom.old_index = atom.index
+
+        for chain in modeller.topology.chains():
+            if chain.id == chain_id:
+                # num_residues : int
+                num_residues = len(chain._residues)
+                break
+        for k, proposed_amino in enumerate(aminos):
+            proposed_location = 1
+            index_to_new_residues = dict()
+            atom_map = dict()
+            original_residue = chain._residues[proposed_location]
+            print("Proposing %s from %s" % (proposed_amino, original_residue.name))
+            if original_residue.name == proposed_amino:
+                continue
+            index_to_new_residues[proposed_location] = proposed_amino
+            if proposed_amino == 'HIS':
+                his_state = ['HIE','HID']
+                his_prob = np.array([0.5 for i in range(len(his_state))])
+                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                index_to_new_residues[proposed_location] = his_state[his_choice]
+            metadata['mutations'] = pm_top_engine._save_mutations(modeller, index_to_new_residues)
+            residue_map = pm_top_engine._generate_residue_map(modeller, index_to_new_residues)
+            modeller, missing_atoms = pm_top_engine._delete_excess_atoms(modeller, residue_map)
+            modeller = pm_top_engine._add_new_atoms(modeller, missing_atoms, residue_map)
+
+            for k, atom in enumerate(modeller.topology.atoms()):
+                atom.index=k
+                try:
+                    atom_map[atom.index] = atom.old_index
+                except AttributeError:
+                    pass
+            new_topology = modeller.topology
+            new_system = pm_top_engine._ff.createSystem(new_topology)
+            pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=original_residue.name, new_chemical_state_key=proposed_amino, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
+            new_positions, logp = geometry_engine.propose(pm_top_proposal, current_positions, beta)
+            if np.isnan(logp):
+                raise Exception("NaN in the logp")
+            integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+            platform = openmm.Platform.getPlatformByName("Reference")
+            context = openmm.Context(new_system, integrator, platform)
+            context.setPositions(new_positions)
+            state = context.getState(getEnergy=True)
+            print(compute_potential_components(context))
+            potential = state.getPotentialEnergy()
+            potential_without_units = potential / potential.unit
+            print(str(potential))
+            if np.isnan(potential_without_units):
+                raise Exception("Energy after proposal is NaN")
 
 def load_pdbid_to_openmm(pdbid):
     """
@@ -494,6 +486,35 @@ def test_logp_reverse():
     print(logp_reverse)
     print(logp_reverse-logp_proposal)
 
+def _get_capped_amino_acid(amino_acid='ALA'):
+    import tempfile
+    tleapstr = """
+    source oldff/leaprc.ff99SBildn
+    system = sequence {{ ACE {amino_acid} NME }}
+    saveamberparm system {amino_acid}.prmtop {amino_acid}.inpcrd
+    """.format(amino_acid=amino_acid)
+    cwd = os.getcwd()
+    temp_dir = tempfile.mkdtemp()
+    os.chdir(temp_dir)
+    tleap_file = open('tleap_commands', 'w')
+    tleap_file.writelines(tleapstr)
+    tleap_file.close()
+    tleap_cmd_str = "tleap -f %s " % tleap_file.name
+
+    #call tleap, log output to logger
+    output = getoutput(tleap_cmd_str)
+    logging.debug(output)
+
+    prmtop = app.AmberPrmtopFile("{amino_acid}.prmtop".format(amino_acid=amino_acid))
+    inpcrd = app.AmberInpcrdFile("{amino_acid}.inpcrd".format(amino_acid=amino_acid))
+    topology = prmtop.topology
+    positions = inpcrd.positions
+
+    os.chdir(cwd)
+    os.rmdir(temp_dir)
+    return topology, positions
+
+
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     import copy
     #master system, will be used for all three
@@ -550,4 +571,4 @@ if __name__=="__main__":
     #test_try_random_itoc()
     #test_angle()
     #test_logp_reverse()
-    test_mutate_from_every_amino_to_every_other()
+    test_mutate_from_ala_to_all()
