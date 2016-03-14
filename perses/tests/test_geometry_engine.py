@@ -488,6 +488,7 @@ def test_logp_reverse():
 
 def _get_capped_amino_acid(amino_acid='ALA'):
     import tempfile
+    import shutil
     tleapstr = """
     source oldff/leaprc.ff99SBildn
     system = sequence {{ ACE {amino_acid} NME }}
@@ -511,7 +512,7 @@ def _get_capped_amino_acid(amino_acid='ALA'):
     positions = inpcrd.positions
 
     os.chdir(cwd)
-    os.rmdir(temp_dir)
+    shutil.rmtree(temp_dir)
     return topology, positions
 
 
