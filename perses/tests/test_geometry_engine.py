@@ -209,9 +209,10 @@ def test_mutate_from_every_amino_to_every_other():
         context.setPositions(new_positions)
         state = context.getState(getEnergy=True)
         potential = state.getPotentialEnergy()
+        potential_without_units = potential / potential.unit
         print(str(potential))
-        if potential > 1.0e7 * unit.kilojoule_per_mole:
-            raise Exception("Energy after proposal is anomalously high.")
+        if np.isnan(potential_without_units):
+            raise Exception("Energy after proposal is NaN")
 
 def load_pdbid_to_openmm(pdbid):
     """
