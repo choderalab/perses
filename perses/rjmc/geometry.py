@@ -298,6 +298,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if self.write_proposal_pdb:
             pdbfile.close()
 
+            prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
+            if direction == 'forward':
+                pdbfile = open('%s-final.pdb' % prefix, 'w')
+                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
+                pdbfile.close()
+
         return logp_proposal, new_positions
 
     @staticmethod

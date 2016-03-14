@@ -720,15 +720,18 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
             geometry_old_positions = ncmc_old_positions
-            geometry_new_positions, geometry_logp_propose  = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
-            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
-            geometry_logp = geometry_logp_reverse - geometry_logp_propose
+            geometry_new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
 
             if self.geometry_pdbfile is not None:
                 print("Writing proposed geometry...")
+                self.geometry_pdbfile.write('MODEL %5d\n' % (self.iteration+1))
                 from simtk.openmm.app import PDBFile
-                PDBFile.writeModel(topology_proposal.new_topology, geometry_new_positions, self.geometry_pdbfile, self.iteration)
+                PDBFile.writeFile(topology_proposal.new_topology, geometry_new_positions, file=self.geometry_pdbfile)
+                self.geometry_pdbfile.write('ENDMDL\n')
                 self.geometry_pdbfile.flush()
+
+            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_logp = geometry_logp_reverse - geometry_logp_propose
 
             if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.
