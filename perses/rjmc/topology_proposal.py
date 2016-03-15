@@ -636,7 +636,7 @@ class PointMutationEngine(PolymerProposalEngine):
                 his_prob = np.array([0.5 for i in range(len(his_state))])
                 his_choice = np.random.choice(range(len(his_state)),p=his_prob)
                 index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
-            # DEBUG        
+            # DEBUG
             print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
 
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
@@ -1190,8 +1190,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-        atomexpr = oechem.OEExprOpts_AtomicNumber
-        bondexpr = oechem.OEExprOpts_BondOrder
+        # Experimental tinkering with options for MCSS:
+        #atomexpr = oechem.OEExprOpts_AutomorphAtoms | oechem.OEExprOpts_EqCAliphaticONS | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqCHalogen | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCPSAcidRoot | oechem.OEExprOpts_EqNotAromatic
+        #bondexpr = oechem.OEExprOpts_AutomorphBonds | oechem.OEExprOpts_EqDoubleTriple
+        # This seems to work reasonably well:
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True

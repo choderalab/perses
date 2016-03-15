@@ -11,6 +11,7 @@ from perses.rjmc import coordinate_tools
 import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
+import simtk.openmm.app as app
 
 
 class GeometryEngine(object):
@@ -75,7 +76,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
     def __init__(self, metadata=None):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
-        self.pdb_filename_prefix = None # PDB file prefix for writing sequential atom placements
+        self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
         self.nproposed = 0 # number of times self.propose() has been called
 
     def propose(self, top_proposal, current_positions, beta):
@@ -97,6 +98,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The log probability of the forward-only proposal
         """
         current_positions = current_positions.in_units_of(units.nanometers)
+        if not top_proposal.unique_new_atoms:
+            return current_positions, 0.0
         logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
         self.nproposed += 1
         return new_positions, logp_proposal
@@ -122,6 +125,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal for the given transformation
         """
+        if not top_proposal.unique_old_atoms:
+            return 0.0
         new_coordinates = new_coordinates.in_units_of(units.nanometers)
         old_coordinates = old_coordinates.in_units_of(units.nanometers)
         logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
@@ -293,7 +298,74 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if self.write_proposal_pdb:
             pdbfile.close()
 
+            prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
+            if direction == 'forward':
+                pdbfile = open('%s-final.pdb' % prefix, 'w')
+                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
+                pdbfile.close()
+
         return logp_proposal, new_positions
+
+    @staticmethod
+    def _oemol_from_residue(res):
+        """
+        Get an OEMol from a residue, even if that residue
+        is polymeric. In the latter case, external bonds
+        are replaced by hydrogens.
+
+        Parameters
+        ----------
+        res : app.Residue
+            The residue in question
+
+        Returns
+        -------
+        oemol : openeye.oechem.OEMol
+            an oemol representation of the residue with topology indices
+        """
+        from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
+        external_bonds = list(res.external_bonds())
+        for bond in external_bonds:
+            print(bond)
+        new_atoms = {}
+        highest_index = 0
+        if external_bonds:
+            new_topology = app.Topology()
+            new_chain = new_topology.addChain(0)
+            new_res = new_topology.addResidue("new_res", new_chain)
+            for atom in res.atoms():
+                new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
+                new_atom.index = atom.index
+                new_atoms[atom] = new_atom
+                highest_index = max(highest_index, atom.index)
+            for bond in res.internal_bonds():
+                new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
+            for bond in res.external_bonds():
+                internal_atom = [atom for atom in bond if atom.residue==res][0]
+                print('internal atom')
+                print(internal_atom)
+                highest_index += 1
+                if internal_atom.name=='N':
+                    print('Adding H to N')
+                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, highest_index)
+                    new_atom.index = highest_index
+                    new_topology.addBond(new_atoms[internal_atom], new_atom)
+                if internal_atom.name=='C':
+                    print('Adding OH to C')
+                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, highest_index)
+                    new_atom.index = highest_index
+                    new_topology.addBond(new_atoms[internal_atom], new_atom)
+                    highest_index += 1
+                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, highest_index)
+                    new_hydrogen.index = highest_index
+                    new_topology.addBond(new_hydrogen, new_atom)
+            res_to_use = new_res
+            external_bonds = list(res_to_use.external_bonds())
+        else:
+            res_to_use = res
+        oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
+        oechem.OEAddExplicitHydrogens(oemol)
+        return oemol
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
         """
@@ -875,13 +947,17 @@ class GeometrySystemGenerator(object):
         torsion_force : openmm.CustomTorsionForce
             The torsion force with extra torsions added appropriately.
         """
+        # Do nothing if there are no atoms to grow.
+        if len(growth_indices) == 0:
+            return torsion_force
+
         import openmoltools.forcefield_generators as forcefield_generators
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
         #get residue from first atom
         residue = atoms[growth_indices[0].idx].residue
         try:
-            oemol = forcefield_generators.generateOEMolFromTopologyResidue(residue)
+            oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
         except Exception as e:
             print("Could not generate an oemol from the residue.")
             print(e)
@@ -891,6 +967,7 @@ class GeometrySystemGenerator(object):
         import openeye.oechem as oechem
         omega = oeomega.OEOmega()
         omega.SetMaxConfs(1)
+        omega.SetStrictStereo(False) #TODO: fix stereochem
         omega(oemol)
 
         #get the list of torsions in the molecule that are not about a rotatable bond
@@ -905,10 +982,17 @@ class GeometrySystemGenerator(object):
         k = 10.0*units.kilojoule_per_mole
         print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
-            angle = torsion.radians*units.radian
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
-            phase = (np.pi)*units.radians+angle
+            # Determine phase in [-pi,+pi) interval
+            #phase = (np.pi)*units.radians+angle
+            phase = torsion.radians + np.pi
+            while (phase >= np.pi):
+                phase -= 2*np.pi
+            while (phase < -np.pi):
+                phase += 2*np.pi
+            phase *= units.radian
+            print('PHASE>>>> ' + str(phase)) # DEBUG
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
             print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))

@@ -7,10 +7,23 @@ import openeye.oeiupac as oeiupac
 import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import simtk.unit as unit
+import logging
 import numpy as np
 import parmed
+import copy
 from pkg_resources import resource_filename
+try:
+    from urllib.request import urlopen
+    from io import StringIO
+except:
+    from urllib2 import urlopen
+    from cStringIO import StringIO
 import os
+try:
+    from subprocess import getoutput  # If python 3
+except ImportError:
+    from commands import getoutput  # If python 2
+
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
@@ -119,7 +132,147 @@ def align_molecules(mol1, mol2):
     return new_to_old_atom_mapping
 
 
-def test_run_geometry_engine():
+def test_mutate_from_ala_to_all():
+    """
+    Make sure mutations are successful between every possible pair of before-and-after residues
+    Mutate Ecoli F-ATPase alpha subunit to all 20 amino acids (test going FROM all possibilities)
+    Mutate each residue to all 19 alternatives
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
+    import perses.rjmc.geometry as geometry
+    from perses.tests.utils import compute_potential_components
+    from openmmtools import testsystems as ts
+    geometry_engine = geometry.FFAllAngleGeometryEngine()
+
+    aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
+
+    for aa in aminos:
+        topology, positions = _get_capped_amino_acid(amino_acid=aa)
+        modeller = app.Modeller(topology, positions)
+
+        ff_filename = "amber99sbildn.xml"
+        max_point_mutants = 1
+
+        ff = app.ForceField(ff_filename)
+        system = ff.createSystem(modeller.topology)
+        chain_id = 'A'
+
+        system_generator = topology_proposal.SystemGenerator([ff_filename])
+
+        pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants)
+
+        current_system = system
+        current_topology = modeller.topology
+        current_positions = modeller.positions
+        minimize_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        platform = openmm.Platform.getPlatformByName("Reference")
+        minimize_context = openmm.Context(current_system, minimize_integrator, platform)
+        minimize_context.setPositions(current_positions)
+        initial_state = minimize_context.getState(getEnergy=True)
+        initial_potential = initial_state.getPotentialEnergy()
+        openmm.LocalEnergyMinimizer.minimize(minimize_context)
+        final_state = minimize_context.getState(getEnergy=True)
+        final_potential = final_state.getPotentialEnergy()
+
+        print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
+
+        old_topology = copy.deepcopy(current_topology)
+
+        metadata = dict()
+        for atom in modeller.topology.atoms():
+            atom.old_index = atom.index
+
+        for chain in modeller.topology.chains():
+            if chain.id == chain_id:
+                # num_residues : int
+                num_residues = len(chain._residues)
+                break
+        for k, proposed_amino in enumerate(aminos):
+            proposed_location = 1
+            index_to_new_residues = dict()
+            atom_map = dict()
+            original_residue = chain._residues[proposed_location]
+            print("Proposing %s from %s" % (proposed_amino, original_residue.name))
+            if original_residue.name == proposed_amino:
+                continue
+            index_to_new_residues[proposed_location] = proposed_amino
+            if proposed_amino == 'HIS':
+                his_state = ['HIE','HID']
+                his_prob = np.array([0.5 for i in range(len(his_state))])
+                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                index_to_new_residues[proposed_location] = his_state[his_choice]
+            metadata['mutations'] = pm_top_engine._save_mutations(modeller, index_to_new_residues)
+            residue_map = pm_top_engine._generate_residue_map(modeller, index_to_new_residues)
+            modeller, missing_atoms = pm_top_engine._delete_excess_atoms(modeller, residue_map)
+            modeller = pm_top_engine._add_new_atoms(modeller, missing_atoms, residue_map)
+
+            for k, atom in enumerate(modeller.topology.atoms()):
+                atom.index=k
+                try:
+                    atom_map[atom.index] = atom.old_index
+                except AttributeError:
+                    pass
+            new_topology = modeller.topology
+            new_system = pm_top_engine._ff.createSystem(new_topology)
+            pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=original_residue.name, new_chemical_state_key=proposed_amino, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
+            new_positions, logp = geometry_engine.propose(pm_top_proposal, current_positions, beta)
+            if np.isnan(logp):
+                raise Exception("NaN in the logp")
+            integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+            platform = openmm.Platform.getPlatformByName("Reference")
+            context = openmm.Context(new_system, integrator, platform)
+            context.setPositions(new_positions)
+            state = context.getState(getEnergy=True)
+            print(compute_potential_components(context))
+            potential = state.getPotentialEnergy()
+            potential_without_units = potential / potential.unit
+            print(str(potential))
+            if np.isnan(potential_without_units):
+                raise Exception("Energy after proposal is NaN")
+
+def load_pdbid_to_openmm(pdbid):
+    """
+    create openmm topology without pdb file
+    lifted from pandegroup/pdbfixer
+    """
+    url = 'http://www.rcsb.org/pdb/files/%s.pdb' % pdbid
+    file = urlopen(url)
+    contents = file.read().decode('utf-8')
+    file.close()
+    file = StringIO(contents)
+
+    if _guessFileFormat(file, url) == 'pdbx':
+        pdbx = app.PDBxFile(contents)
+        topology = pdbx.topology
+        positions = pdbx.positions
+    else:
+        pdb = app.PDBFile(file)
+        topology = pdb.topology
+        positions = pdb.positions
+
+    return topology, positions
+
+def _guessFileFormat(file, filename):
+    """
+    Guess whether a file is PDB or PDBx/mmCIF based on its filename and contents.
+    authored by pandegroup
+    """
+    filename = filename.lower()
+    if '.pdbx' in filename or '.cif' in filename:
+        return 'pdbx'
+    if '.pdb' in filename:
+        return 'pdb'
+    for line in file:
+        if line.startswith('data_') or line.startswith('loop_'):
+            file.seek(0)
+            return 'pdbx'
+        if line.startswith('HEADER') or line.startswith('REMARK') or line.startswith('TITLE '):
+            file.seek(0)
+            return 'pdb'
+    file.seek(0)
+    return 'pdb'
+
+def test_run_geometry_engine(index=0):
     """
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
@@ -139,6 +292,7 @@ def test_run_geometry_engine():
 
     import perses.rjmc.geometry as geometry
     import perses.rjmc.topology_proposal as topology_proposal
+    from perses.tests.utils import compute_potential_components
 
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
@@ -147,18 +301,24 @@ def test_run_geometry_engine():
     # Turn on PDB file writing.
     geometry_engine.write_proposal_pdb = True
     geometry_engine.pdb_filename_prefix = 'geometry-proposal'
-    test_pdb_file = open("nilotinib_from_erlotinib2.pdb", 'w')
+    test_pdb_file = open("nilotinib_from_erlotinib_%d_3.pdb" % index, 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
     valence_system.removeForce(3)
     integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+    integrator_1 = openmm.VerletIntegrator(1*unit.femtoseconds)
+    ctx_1 = openmm.Context(sys1, integrator_1)
+    ctx_1.setPositions(pos1)
+    ctx_1.setVelocitiesToTemperature(300*unit.kelvin)
+    integrator_1.step(1000)
+    pos1_new = ctx_1.getState(getPositions=True).getPositions(asNumpy=True)
     context = openmm.Context(sys2, integrator)
     context.setPositions(pos2)
     state = context.getState(getEnergy=True)
     print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
 
-    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1, beta)
+    new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1_new, beta)
     geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
 
     app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
@@ -166,6 +326,7 @@ def test_run_geometry_engine():
     context.setPositions(new_positions)
     state2 = context.getState(getEnergy=True)
     print("Energy after proposal is: %s" %str(state2.getPotentialEnergy()))
+    print(compute_potential_components(context))
 
     valence_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
     platform = openmm.Platform.getPlatformByName("Reference")
@@ -325,6 +486,36 @@ def test_logp_reverse():
     print(logp_reverse)
     print(logp_reverse-logp_proposal)
 
+def _get_capped_amino_acid(amino_acid='ALA'):
+    import tempfile
+    import shutil
+    tleapstr = """
+    source oldff/leaprc.ff99SBildn
+    system = sequence {{ ACE {amino_acid} NME }}
+    saveamberparm system {amino_acid}.prmtop {amino_acid}.inpcrd
+    """.format(amino_acid=amino_acid)
+    cwd = os.getcwd()
+    temp_dir = tempfile.mkdtemp()
+    os.chdir(temp_dir)
+    tleap_file = open('tleap_commands', 'w')
+    tleap_file.writelines(tleapstr)
+    tleap_file.close()
+    tleap_cmd_str = "tleap -f %s " % tleap_file.name
+
+    #call tleap, log output to logger
+    output = getoutput(tleap_cmd_str)
+    logging.debug(output)
+
+    prmtop = app.AmberPrmtopFile("{amino_acid}.prmtop".format(amino_acid=amino_acid))
+    inpcrd = app.AmberInpcrdFile("{amino_acid}.inpcrd".format(amino_acid=amino_acid))
+    topology = prmtop.topology
+    positions = inpcrd.positions
+
+    os.chdir(cwd)
+    shutil.rmtree(temp_dir)
+    return topology, positions
+
+
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     import copy
     #master system, will be used for all three
@@ -375,10 +566,10 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    for i in range(1):
-        test_run_geometry_engine()
+    #test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
     #test_angle()
     #test_logp_reverse()
+    test_mutate_from_ala_to_all()
