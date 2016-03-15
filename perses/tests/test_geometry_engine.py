@@ -146,9 +146,8 @@ def test_mutate_from_all_to_all():
     from openmmtools import testsystems as ts
     geometry_engine = geometry.FFAllAngleGeometryEngine()
 
-    #aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
+    aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
 
-    aminos = ['TRP', 'TYR', 'PHE']
     for aa in aminos:
         topology, positions = _get_capped_amino_acid(amino_acid=aa)
         modeller = app.Modeller(topology, positions)

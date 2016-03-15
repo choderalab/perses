@@ -13,6 +13,7 @@ import openeye.oeomega as oeomega
 import tempfile
 from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
+from perses.rjmc.geometry import FFAllAngleGeometryEngine
 try:
     from StringIO import StringIO
 except ImportError:
@@ -243,7 +244,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # chain_id : str
         chain_id = self._chain_id
-        # save old indeces for mapping -- could just directly save positions instead
+        # save old indices for mapping -- could just directly save positions instead
         # modeller : simtk.openmm.app.Modeller
         current_positions = np.zeros((new_topology.getNumAtoms(), 3))
         modeller = app.Modeller(new_topology, current_positions)
@@ -265,12 +266,26 @@ class PolymerProposalEngine(ProposalEngine):
         # atoms with an old_index attribute should be mapped
         # k : int
         # atom : simtk.openmm.app.topology.Atom
+        modified_residues = dict()
+        old_residues = dict()
+        for map_entry in residue_map:
+            modified_residues[map_entry[0].index] = map_entry[0]
+        for residue in old_topology.residues():
+            if residue.index in index_to_new_residues.keys():
+                old_residues[residue.index] = residue
         for k, atom in enumerate(modeller.topology.atoms()):
             atom.index=k
+            if atom.residue in modified_residues:
+                continue
             try:
                 atom_map[atom.index] = atom.old_index
             except AttributeError:
                 pass
+        for index in index_to_new_residues.keys():
+            old_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(old_residues[index])
+            new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(modified_residues[index])
+            _ , local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res)
+            atom_map.update(local_atom_map)
         new_topology = modeller.topology
 
         # new_chemical_state_key : str
@@ -535,6 +550,41 @@ class PolymerProposalEngine(ProposalEngine):
 
         # add new bonds to the new residues
         return modeller
+
+    def _get_mol_atom_matches(self, current_molecule, proposed_molecule):
+        """
+        Given two molecules, returns the mapping of atoms between them.
+
+        Arguments
+        ---------
+        current_molecule : openeye.oechem.oemol object
+             The current molecule in the sampler
+        proposed_molecule : openeye.oechem.oemol object
+             The proposed new molecule
+
+        Returns
+        -------
+        matches : list of match
+            list of the matches between the molecules
+        """
+        oegraphmol_current = oechem.OEGraphMol(current_molecule)
+        oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
+        mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        mcs.Init(oegraphmol_current, atomexpr, bondexpr)
+        mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
+        unique = True
+        matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        match = np.random.choice(matches)
+        new_to_old_atom_map = {}
+        for matchpair in match.GetAtoms():
+            old_index = matchpair.pattern.GetData("topology_index")
+            new_index = matchpair.target.GetData("topology_index")
+            if old_index < 0 or new_index < 0:
+                continue
+            new_to_old_atom_map[new_index] = old_index
+        return matches, new_to_old_atom_map
 
 
     def compute_state_key(self, topology):
