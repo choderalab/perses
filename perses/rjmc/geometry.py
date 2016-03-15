@@ -347,17 +347,17 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 highest_index += 1
                 if internal_atom.name=='N':
                     print('Adding H to N')
-                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, highest_index)
-                    new_atom.index = highest_index
+                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, -1)
+                    new_atom.index = -1
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                 if internal_atom.name=='C':
                     print('Adding OH to C')
-                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, highest_index)
-                    new_atom.index = highest_index
+                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, -1)
+                    new_atom.index = -1
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                     highest_index += 1
-                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, highest_index)
-                    new_hydrogen.index = highest_index
+                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, -1)
+                    new_hydrogen.index = -1
                     new_topology.addBond(new_hydrogen, new_atom)
             res_to_use = new_res
             external_bonds = list(res_to_use.external_bonds())
@@ -1012,8 +1012,6 @@ class GeometrySystemGenerator(object):
         -------
         heavy_torsions : list of oechem.OETorsion
         """
-
-
         heavy_torsions = []
         for torsion in torsion_list:
             is_h_present = torsion.a.IsHydrogen() + torsion.b.IsHydrogen() + torsion.c.IsHydrogen() + torsion.d.IsHydrogen()

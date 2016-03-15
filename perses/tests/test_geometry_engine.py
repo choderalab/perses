@@ -59,6 +59,7 @@ def generate_molecule_from_smiles(smiles):
     oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
+    omega.SetStrictStereo(False)
     omega(mol)
     return mol
 
@@ -72,6 +73,7 @@ def generate_initial_molecule(iupac_name):
     oechem.OETriposAtomNames(mol)
     oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
+    omega.SetStrictStereo(False)
     omega.SetMaxConfs(1)
     omega(mol)
     return mol
@@ -118,8 +120,8 @@ def align_molecules(mol1, mol2):
     MCSS two OEmols. Return the mapping of new : old atoms
     """
     mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-    atomexpr = oechem.OEExprOpts_AtomicNumber
-    bondexpr = oechem.OEExprOpts_BondOrder
+    atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+    bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
     mcs.Init(mol1, atomexpr, bondexpr)
     mcs.SetMCSFunc(oechem.OEMCSMaxAtomsCompleteCycles())
     unique = True
@@ -132,7 +134,7 @@ def align_molecules(mol1, mol2):
     return new_to_old_atom_mapping
 
 
-def test_mutate_from_ala_to_all():
+def test_mutate_from_all_to_all():
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
     Mutate Ecoli F-ATPase alpha subunit to all 20 amino acids (test going FROM all possibilities)
@@ -144,8 +146,9 @@ def test_mutate_from_ala_to_all():
     from openmmtools import testsystems as ts
     geometry_engine = geometry.FFAllAngleGeometryEngine()
 
-    aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
+    #aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
 
+    aminos = ['TRP', 'TYR', 'PHE']
     for aa in aminos:
         topology, positions = _get_capped_amino_acid(amino_acid=aa)
         modeller = app.Modeller(topology, positions)
@@ -171,9 +174,9 @@ def test_mutate_from_ala_to_all():
         initial_state = minimize_context.getState(getEnergy=True)
         initial_potential = initial_state.getPotentialEnergy()
         openmm.LocalEnergyMinimizer.minimize(minimize_context)
-        final_state = minimize_context.getState(getEnergy=True)
+        final_state = minimize_context.getState(getEnergy=True, getPositions=True)
         final_potential = final_state.getPotentialEnergy()
-
+        current_positions = final_state.getPositions()
         print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
 
         old_topology = copy.deepcopy(current_topology)
@@ -278,8 +281,8 @@ def test_run_geometry_engine(index=0):
     without exceptions. Convert n-pentane to 2-methylpentane
     """
     import copy
-    molecule_name_1 = 'erlotinib'
-    molecule_name_2 = 'nilotinib'
+    molecule_name_1 = 'glycine'
+    molecule_name_2 = 'tryptophan'
     #molecule_name_1 = 'benzene'
     #molecule_name_2 = 'biphenyl'
 
@@ -301,7 +304,7 @@ def test_run_geometry_engine(index=0):
     # Turn on PDB file writing.
     geometry_engine.write_proposal_pdb = True
     geometry_engine.pdb_filename_prefix = 'geometry-proposal'
-    test_pdb_file = open("nilotinib_from_erlotinib_%d_3.pdb" % index, 'w')
+    test_pdb_file = open("glycine_to_tryptophan_%d_0.pdb" % index, 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
@@ -317,6 +320,7 @@ def test_run_geometry_engine(index=0):
     context.setPositions(pos2)
     state = context.getState(getEnergy=True)
     print("Energy before proposal is: %s" % str(state.getPotentialEnergy()))
+    openmm.LocalEnergyMinimizer.minimize(context)
 
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1_new, beta)
     geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
@@ -511,6 +515,16 @@ def _get_capped_amino_acid(amino_acid='ALA'):
     topology = prmtop.topology
     positions = inpcrd.positions
 
+    debug = False
+    if debug:
+        system = prmtop.createSystem()
+        integrator = openmm.VerletIntegrator(1)
+        context = openmm.Context(system, integrator)
+        context.setPositions(positions)
+        openmm.LocalEnergyMinimizer.minimize(context)
+        state = context.getState(getEnergy=True)
+        print("%s energy: %s" % (amino_acid, str(state.getPotentialEnergy())))
+
     os.chdir(cwd)
     shutil.rmtree(temp_dir)
     return topology, positions
@@ -564,6 +578,37 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
 
     return r, theta, phi
 
+def _tleap_all():
+    aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
+    for aa in aminos:
+        _get_capped_amino_acid(aa)
+
+def _oemol_from_residue(res):
+    """
+    Get an OEMol from a residue, even if that residue
+    is polymeric. In the latter case, external bonds
+    are replaced by hydrogens.
+
+    Parameters
+    ----------
+    res : app.Residue
+        The residue in question
+
+    Returns
+    -------
+    oemol : openeye.oechem.OEMol
+        an oemol representation of the residue with topology indices
+    """
+    import openeye.oechem as oechem
+    from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
+    external_bonds = list(res.external_bonds())
+    if external_bonds:
+        for bond in external_bonds:
+            res.chain.topology._bonds.remove(bond)
+    mol = generateOEMolFromTopologyResidue(res, geometry=False)
+    oechem.OEAddExplicitHydrogens(mol)
+    return mol
+
 if __name__=="__main__":
     #test_coordinate_conversion()
     #test_run_geometry_engine()
@@ -572,4 +617,5 @@ if __name__=="__main__":
     #test_try_random_itoc()
     #test_angle()
     #test_logp_reverse()
-    test_mutate_from_ala_to_all()
+    #_tleap_all()
+    test_mutate_from_all_to_all()
