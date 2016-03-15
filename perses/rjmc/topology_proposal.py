@@ -275,7 +275,7 @@ class PolymerProposalEngine(ProposalEngine):
                 old_residues[residue.index] = residue
         for k, atom in enumerate(modeller.topology.atoms()):
             atom.index=k
-            if atom.residue in modified_residues:
+            if atom.residue in modified_residues.values():
                 continue
             try:
                 atom_map[atom.index] = atom.old_index
