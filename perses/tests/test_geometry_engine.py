@@ -178,51 +178,15 @@ def test_mutate_from_all_to_all():
         current_positions = final_state.getPositions()
         print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
 
-        old_topology = copy.deepcopy(current_topology)
-
-        metadata = dict()
-        for atom in modeller.topology.atoms():
-            atom.old_index = atom.index
-
-        for chain in modeller.topology.chains():
-            if chain.id == chain_id:
-                # num_residues : int
-                num_residues = len(chain._residues)
-                break
         for k, proposed_amino in enumerate(aminos):
-            proposed_location = 1
-            index_to_new_residues = dict()
-            atom_map = dict()
-            original_residue = chain._residues[proposed_location]
-            print("Proposing %s from %s" % (proposed_amino, original_residue.name))
-            if original_residue.name == proposed_amino:
-                continue
-            index_to_new_residues[proposed_location] = proposed_amino
-            if proposed_amino == 'HIS':
-                his_state = ['HIE','HID']
-                his_prob = np.array([0.5 for i in range(len(his_state))])
-                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-                index_to_new_residues[proposed_location] = his_state[his_choice]
-            metadata['mutations'] = pm_top_engine._save_mutations(modeller, index_to_new_residues)
-            residue_map = pm_top_engine._generate_residue_map(modeller, index_to_new_residues)
-            modeller, missing_atoms = pm_top_engine._delete_excess_atoms(modeller, residue_map)
-            modeller = pm_top_engine._add_new_atoms(modeller, missing_atoms, residue_map)
-
-            for k, atom in enumerate(modeller.topology.atoms()):
-                atom.index=k
-                try:
-                    atom_map[atom.index] = atom.old_index
-                except AttributeError:
-                    pass
-            new_topology = modeller.topology
-            new_system = pm_top_engine._ff.createSystem(new_topology)
-            pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=original_residue.name, new_chemical_state_key=proposed_amino, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
+            pm_top_engine._allowed_mutations = [[('2',proposed_amino)]]
+            pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
             new_positions, logp = geometry_engine.propose(pm_top_proposal, current_positions, beta)
             if np.isnan(logp):
                 raise Exception("NaN in the logp")
             integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
             platform = openmm.Platform.getPlatformByName("Reference")
-            context = openmm.Context(new_system, integrator, platform)
+            context = openmm.Context(pm_top_proposal.new_system, integrator, platform)
             context.setPositions(new_positions)
             state = context.getState(getEnergy=True)
             print(compute_potential_components(context))
