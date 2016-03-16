@@ -273,7 +273,6 @@ def test_mutate_from_every_amino_to_every_other():
     current_system = new_system
     modeller = app.Modeller(new_topology, modeller.positions)
     current_topology = modeller.topology
-    current_positions = modeller.positions
 
     old_topology = copy.deepcopy(current_topology)
 
@@ -284,30 +283,33 @@ def test_mutate_from_every_amino_to_every_other():
             # num_residues : int
             num_residues = len(chain._residues)
             break
-    for proposed_location in range(num_residues):
-        if proposed_location == 0 or proposed_location == num_residues-1:
-            continue
+    for proposed_location in range(1, num_residues-1):
         print('Making mutations at residue %s' % proposed_location)
+        original_residue_name = chain._residues[proposed_location].name
         matching_amino_found = 0
         for proposed_amino in aminos:
-            index_to_new_residues = dict()
-            atom_map = dict()
-            original_residue = chain._residues[proposed_location]
-            if original_residue.name == proposed_amino or ((original_residue.name == 'HIE' or original_residue.name == 'HID') and proposed_amino == 'HIS'):
+            pm_top_engine._allowed_mutations = [[(str(proposed_location+1),proposed_amino)]]
+            new_topology = copy.deepcopy(current_topology)
+            old_system = current_system
+            old_topology_natoms = sum([1 for atom in old_topology.atoms()])
+            old_system_natoms = old_system.getNumParticles()
+            if old_topology_natoms != old_system_natoms:
+                msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
+                raise Exception(msg)
+            metadata = dict()
+
+            current_positions = np.zeros((new_topology.getNumAtoms(), 3))
+            modeller = app.Modeller(new_topology, current_positions)
+            for atom in modeller.topology.atoms():
+                atom.old_index = atom.index
+
+            index_to_new_residues, metadata = pm_top_engine._choose_mutant(modeller, metadata)
+            if len(index_to_new_residues) == 0:
                 matching_amino_found+=1
                 continue
-            print('Mutating %s to %s' % (original_residue.name, proposed_amino))
-            index_to_new_residues[proposed_location] = proposed_amino
-            if proposed_amino == 'HIS':
-                his_state = ['HIE','HID']
-                his_prob = np.array([0.5 for i in range(len(his_state))])
-                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-                index_to_new_residues[proposed_location] = his_state[his_choice]
+            print('Mutating %s to %s' % (original_residue_name, proposed_amino))
 
-            current_modeller = copy.deepcopy(modeller)
-
-            metadata['mutations'] = pm_top_engine._save_mutations(current_modeller, index_to_new_residues)
-            residue_map = pm_top_engine._generate_residue_map(current_modeller, index_to_new_residues)
+            residue_map = pm_top_engine._generate_residue_map(modeller, index_to_new_residues)
             for res_pair in residue_map:
                 residue = res_pair[0]
                 name = res_pair[1]
@@ -315,29 +317,22 @@ def test_mutate_from_every_amino_to_every_other():
                 assert index_to_new_residues[residue.index] == name
                 assert residue.name+'-'+str(residue.id)+'-'+name in metadata['mutations']
 
-            current_modeller, missing_atoms = pm_top_engine._delete_excess_atoms(current_modeller, residue_map)
-            current_modeller = pm_top_engine._add_new_atoms(current_modeller, missing_atoms, residue_map)
+            modeller, missing_atoms = pm_top_engine._delete_excess_atoms(modeller, residue_map)
+            modeller = pm_top_engine._add_new_atoms(modeller, missing_atoms, residue_map)
             for res_pair in residue_map:
                 residue = res_pair[0]
                 name = res_pair[1]
                 assert residue.name == name
 
-            for k, atom in enumerate(current_modeller.topology.atoms()):
-                atom.index=k
-                try:
-                    atom_map[atom.index] = atom.old_index
-                except AttributeError:
-                    pass
-            new_topology = current_modeller.topology
-
-            assert len(metadata['mutations']) <= max_point_mutants
-
+            atom_map = pm_top_engine._construct_atom_map(residue_map, old_topology, index_to_new_residues, modeller)
+            new_topology = modeller.topology
             templates = pm_top_engine._ff.getMatchingTemplates(new_topology)
             assert [templates[index].name == residue.name for index, (residue, name) in enumerate(residue_map)]
 
             new_chemical_state_key = pm_top_engine.compute_state_key(new_topology)
             new_system = pm_top_engine._system_generator.build_system(new_topology)
-            pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map, metadata=metadata)
+            pm_top_proposal = topology_proposal.TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+
         assert matching_amino_found == 1
 
 def test_limiting_allowed_residues():

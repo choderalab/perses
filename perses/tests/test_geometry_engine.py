@@ -182,11 +182,12 @@ def test_mutate_from_all_to_all():
             pm_top_engine._allowed_mutations = [[('2',proposed_amino)]]
             pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
             new_positions, logp = geometry_engine.propose(pm_top_proposal, current_positions, beta)
+            new_system = pm_top_proposal.new_system
             if np.isnan(logp):
                 raise Exception("NaN in the logp")
             integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
             platform = openmm.Platform.getPlatformByName("Reference")
-            context = openmm.Context(pm_top_proposal.new_system, integrator, platform)
+            context = openmm.Context(new_system, integrator, platform)
             context.setPositions(new_positions)
             state = context.getState(getEnergy=True)
             print(compute_potential_components(context))

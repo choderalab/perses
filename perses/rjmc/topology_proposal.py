@@ -233,8 +233,6 @@ class PolymerProposalEngine(ProposalEngine):
             msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
             raise Exception(msg)
 
-        # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
-        atom_map = dict()
         # metadata : dict, key = 'chain_id' , value : str
         metadata = current_metadata
         if metadata == None:
@@ -258,7 +256,8 @@ class PolymerProposalEngine(ProposalEngine):
             atom_map = dict()
             for atom in modeller.topology.atoms():
                 atom_map[atom.index] = atom.index
-            topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+            print('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
+            topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
             return topology_proposal
 
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
@@ -269,29 +268,7 @@ class PolymerProposalEngine(ProposalEngine):
         # modeller : simtk.openmm.app.Modeller new residue has all correct atoms for desired mutation
         modeller = self._add_new_atoms(modeller, missing_atoms, residue_map)
 
-        # atoms with an old_index attribute should be mapped
-        # k : int
-        # atom : simtk.openmm.app.topology.Atom
-        modified_residues = dict()
-        old_residues = dict()
-        for map_entry in residue_map:
-            modified_residues[map_entry[0].index] = map_entry[0]
-        for residue in old_topology.residues():
-            if residue.index in index_to_new_residues.keys():
-                old_residues[residue.index] = residue
-        for k, atom in enumerate(modeller.topology.atoms()):
-            atom.index=k
-            if atom.residue in modified_residues.values():
-                continue
-            try:
-                atom_map[atom.index] = atom.old_index
-            except AttributeError:
-                pass
-        for index in index_to_new_residues.keys():
-            old_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(old_residues[index])
-            new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(modified_residues[index])
-            _ , local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res)
-            atom_map.update(local_atom_map)
+        atom_map = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, modeller)
         new_topology = modeller.topology
 
         # new_chemical_state_key : str
@@ -300,10 +277,10 @@ class PolymerProposalEngine(ProposalEngine):
         new_system = self._system_generator.build_system(new_topology)
 
         # Create TopologyProposal.
-        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
 
         # Check that old_topology and old_system have same number of atoms.
-        old_system = current_system
+#        old_system = current_system
         old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
         old_system_natoms = old_system.getNumParticles()
         if old_topology_natoms != old_system_natoms:
@@ -556,6 +533,35 @@ class PolymerProposalEngine(ProposalEngine):
 
         # add new bonds to the new residues
         return modeller
+
+    def _construct_atom_map(self, residue_map, old_topology, index_to_new_residues, modeller):
+        # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
+        atom_map = dict()
+
+        # atoms with an old_index attribute should be mapped
+        # k : int
+        # atom : simtk.openmm.app.topology.Atom
+        modified_residues = dict()
+        old_residues = dict()
+        for map_entry in residue_map:
+            modified_residues[map_entry[0].index] = map_entry[0]
+        for residue in old_topology.residues():
+            if residue.index in index_to_new_residues.keys():
+                old_residues[residue.index] = residue
+        for k, atom in enumerate(modeller.topology.atoms()):
+            atom.index=k
+            if atom.residue in modified_residues.values():
+                continue
+            try:
+                atom_map[atom.index] = atom.old_index
+            except AttributeError:
+                pass
+        for index in index_to_new_residues.keys():
+            old_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(old_residues[index])
+            new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(modified_residues[index])
+            _ , local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res)
+            atom_map.update(local_atom_map)
+        return atom_map
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule):
         """
