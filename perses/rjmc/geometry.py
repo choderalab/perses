@@ -99,7 +99,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         current_positions = current_positions.in_units_of(units.nanometers)
         if not top_proposal.unique_new_atoms:
-            return current_positions, 0.0
+            structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
+            new_positions = self._copy_positions(atoms_with_positions, top_proposal, current_positions)
+            return new_positions, 0.0
         logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
         self.nproposed += 1
         return new_positions, logp_proposal
