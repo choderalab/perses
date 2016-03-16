@@ -183,6 +183,40 @@ def test_specify_allowed_mutants():
             msg += str(pm_top_proposal.new_to_old_atom_map)
             raise Exception(msg)
 
+def test_propose_self():
+    """
+    Propose a mutation to remain at WT in insulin    
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
+
+    pdbid = "2HIU"
+    topology, positions = load_pdbid_to_openmm(pdbid)
+    modeller = app.Modeller(topology, positions)
+    for chain in modeller.topology.chains():
+        pass
+
+    modeller.delete([chain])
+
+    ff_filename = "amber99sbildn.xml"
+
+    ff = app.ForceField(ff_filename)
+    system = ff.createSystem(modeller.topology)
+    chain_id = 'A'
+
+    for chain in modeller.topology.chains():
+        if chain.id == chain_id:
+            residues = chain._residues
+    mutant_res = np.random.choice(residues)
+    allowed_mutations = [[(mutant_res.id,mutant_res.name)]]
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
+
+    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, allowed_mutations=allowed_mutations)
+    print('Self mutation:')
+    pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
+    assert pm_top_proposal.old_topology == pm_top_proposal.new_topology
+    assert pm_top_proposal.old_system == pm_top_proposal.new_system
+    assert pm_top_proposal.old_chemical_state_key == pm_top_proposal.new_chemical_state_key
+
 def test_run_point_mutation_propose():
     """
     Propose a random mutation in insulin
@@ -406,6 +440,7 @@ if __name__ == "__main__":
     test_run_point_mutation_propose()
     test_mutate_from_every_amino_to_every_other()
     test_specify_allowed_mutants()
+    test_propose_self()
     test_limiting_allowed_residues()
     test_run_peptide_library_engine()
     test_small_molecule_proposals()
