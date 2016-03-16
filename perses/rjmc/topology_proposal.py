@@ -254,6 +254,12 @@ class PolymerProposalEngine(ProposalEngine):
             atom.old_index = atom.index
 
         index_to_new_residues, metadata = self._choose_mutant(modeller, metadata)
+        if len(index_to_new_residues) == 0:
+            atom_map = dict()
+            for atom in modeller.topology.atoms():
+                atom_map[atom.index] = atom.index
+            topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+            return topology_proposal
 
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
         residue_map = self._generate_residue_map(modeller, index_to_new_residues)
@@ -679,6 +685,8 @@ class PointMutationEngine(PolymerProposalEngine):
         for residue_id, residue_name in allowed_mutations[proposed_location]:
             # original_residue : simtk.openmm.app.topology.Residue
             original_residue = chain._residues[residue_id_to_index.index(residue_id)]
+            if original_residue.name == residue_name:
+                continue
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
             index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
             if residue_name == 'HIS':
@@ -832,6 +840,8 @@ class PeptideLibraryEngine(PolymerProposalEngine):
             # original_residue : simtk.openmm.app.topology.Residue
             original_residue = chain._residues[residue_index]
             residue_name = self._one_to_three_letter_code(residue_one_letter)
+            if original_residue.name == residue_name:
+                continue
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
             index_to_new_residues[residue_index] = residue_name
             if residue_name == 'HIS':
