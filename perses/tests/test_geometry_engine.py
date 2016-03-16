@@ -10,6 +10,7 @@ import simtk.unit as unit
 import logging
 import numpy as np
 import parmed
+from collections import namedtuple, OrderedDict
 import copy
 from pkg_resources import resource_filename
 try:
@@ -29,6 +30,8 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
+
+proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
 
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
@@ -78,7 +81,7 @@ def generate_initial_molecule(iupac_name):
     omega(mol)
     return mol
 
-def oemol_to_openmm_system(oemol, molecule_name):
+def oemol_to_openmm_system(oemol, molecule_name=None):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
     gaff_xml_filename = get_data_filename('data/gaff.xml')
@@ -196,6 +199,96 @@ def test_mutate_from_all_to_all():
             print(str(potential))
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
+
+def test_propose_lysozyme_ligands():
+    """
+    Try proposing geometries for all T4 ligands from all T4 ligands
+    """
+    from perses.tests.testsystems import T4LysozymeInhibitorsTestSystem
+    testsystem = T4LysozymeInhibitorsTestSystem()
+    smiles_list = testsystem.molecules
+    proposals = make_geometry_proposal_array(smiles_list)
+    run_proposals(proposals)
+
+
+def test_propose_kinase_inhibitors():
+    from perses.tests.testsystems import KinaseInhibitorsTestSystem
+    testsystem = KinaseInhibitorsTestSystem()
+    smiles_list = testsystem.molecules
+    proposals = make_geometry_proposal_array(smiles_list)
+    run_proposals(proposals)
+
+def run_proposals(proposal_list):
+    """
+    Run a list of geometry proposal namedtuples, checking if they render
+    NaN energies
+
+    Parameters
+    ----------
+    proposal_list : list of namedtuple
+
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
+    for proposal in proposal_list:
+        print("proposing")
+        top_proposal = proposal.topology_proposal
+        current_positions = proposal.current_positions
+        new_positions = geometry_engine.propose(top_proposal, current_positions, beta)
+        integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        platform = openmm.Platform.getPlatformByName("Reference")
+        context = openmm.Context(top_proposal.new_system, integrator, platform)
+        context.setPositions(new_positions)
+        state = context.getState(getEnergy=True)
+        potential = state.getPotentialEnergy()
+        if np.isnan(potential.value):
+            raise Exception("Potential is nan!")
+        del context, integrator
+
+def make_geometry_proposal_array(smiles_list):
+    """
+    Make an array of topology_proposals for each molecule to each other
+    in the smiles_list. Includes self-proposals so as to test that.
+
+    Parameters
+    ----------
+    smiles_list : list of str
+        list of smiles
+
+    Returns
+    -------
+    list of proposal_test namedtuple
+    """
+    topology_proposals = []
+    #make oemol array:
+    oemols = OrderedDict()
+    syspostop = OrderedDict()
+
+    for smiles in smiles_list:
+        oemols[smiles] = generate_molecule_from_smiles(smiles)
+    for smiles in oemols.keys():
+        syspostop[smiles] = oemol_to_openmm_system(oemols[smiles])
+
+    #get a list of all the smiles in the appropriate order
+    smiles_pairs = list()
+    for smiles1 in smiles_list:
+        for smiles2 in smiles_list:
+            smiles_pairs.append([smiles1, smiles2])
+
+    for pair in smiles_pairs:
+        smiles_1 = pair[0]
+        smiles_2 = pair[1]
+        new_to_old_atom_mapping = align_molecules(oemols[smiles_1], oemols[smiles_2])
+        sys1, pos1, top1 = syspostop[smiles_1]
+        sys2, pos2, top2 = syspostop[smiles_2]
+        import perses.rjmc.topology_proposal as topology_proposal
+        sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
+                                                                      old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+        sm_top_proposal._beta = beta
+        proposal_tuple = proposal_test(sm_top_proposal, pos1)
+        topology_proposals.append(proposal_tuple)
+    return topology_proposals
+
 
 def load_pdbid_to_openmm(pdbid):
     """
@@ -582,4 +675,5 @@ if __name__=="__main__":
     #test_angle()
     #test_logp_reverse()
     #_tleap_all()
-    test_mutate_from_all_to_all()
+    #test_mutate_from_all_to_all()
+    test_propose_kinase_inhibitors()
