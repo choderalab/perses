@@ -273,6 +273,8 @@ def make_geometry_proposal_array(smiles_list):
     smiles_pairs = list()
     for smiles1 in smiles_list:
         for smiles2 in smiles_list:
+            if smiles1==smiles2:
+                continue
             smiles_pairs.append([smiles1, smiles2])
 
     for pair in smiles_pairs:
