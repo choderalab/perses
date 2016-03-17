@@ -13,6 +13,7 @@ import openeye.oeomega as oeomega
 import tempfile
 from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
+from perses.rjmc.geometry import FFAllAngleGeometryEngine
 try:
     from StringIO import StringIO
 except ImportError:
@@ -232,8 +233,6 @@ class PolymerProposalEngine(ProposalEngine):
             msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
             raise Exception(msg)
 
-        # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
-        atom_map = dict()
         # metadata : dict, key = 'chain_id' , value : str
         metadata = current_metadata
         if metadata == None:
@@ -243,7 +242,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # chain_id : str
         chain_id = self._chain_id
-        # save old indeces for mapping -- could just directly save positions instead
+        # save old indices for mapping -- could just directly save positions instead
         # modeller : simtk.openmm.app.Modeller
         current_positions = np.zeros((new_topology.getNumAtoms(), 3))
         modeller = app.Modeller(new_topology, current_positions)
@@ -253,6 +252,13 @@ class PolymerProposalEngine(ProposalEngine):
             atom.old_index = atom.index
 
         index_to_new_residues, metadata = self._choose_mutant(modeller, metadata)
+        if len(index_to_new_residues) == 0:
+            atom_map = dict()
+            for atom in modeller.topology.atoms():
+                atom_map[atom.index] = atom.index
+            print('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
+            topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+            return topology_proposal
 
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
         residue_map = self._generate_residue_map(modeller, index_to_new_residues)
@@ -262,15 +268,7 @@ class PolymerProposalEngine(ProposalEngine):
         # modeller : simtk.openmm.app.Modeller new residue has all correct atoms for desired mutation
         modeller = self._add_new_atoms(modeller, missing_atoms, residue_map)
 
-        # atoms with an old_index attribute should be mapped
-        # k : int
-        # atom : simtk.openmm.app.topology.Atom
-        for k, atom in enumerate(modeller.topology.atoms()):
-            atom.index=k
-            try:
-                atom_map[atom.index] = atom.old_index
-            except AttributeError:
-                pass
+        atom_map = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, modeller)
         new_topology = modeller.topology
 
         # new_chemical_state_key : str
@@ -279,10 +277,10 @@ class PolymerProposalEngine(ProposalEngine):
         new_system = self._system_generator.build_system(new_topology)
 
         # Create TopologyProposal.
-        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=current_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
 
         # Check that old_topology and old_system have same number of atoms.
-        old_system = current_system
+#        old_system = current_system
         old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
         old_system_natoms = old_system.getNumParticles()
         if old_topology_natoms != old_system_natoms:
@@ -536,6 +534,113 @@ class PolymerProposalEngine(ProposalEngine):
         # add new bonds to the new residues
         return modeller
 
+    def _construct_atom_map(self, residue_map, old_topology, index_to_new_residues, modeller):
+        # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
+        atom_map = dict()
+
+        # atoms with an old_index attribute should be mapped
+        # k : int
+        # atom : simtk.openmm.app.topology.Atom
+        modified_residues = dict()
+        old_residues = dict()
+        for map_entry in residue_map:
+            modified_residues[map_entry[0].index] = map_entry[0]
+        for residue in old_topology.residues():
+            if residue.index in index_to_new_residues.keys():
+                old_residues[residue.index] = residue
+        for k, atom in enumerate(modeller.topology.atoms()):
+            atom.index=k
+            if atom.residue in modified_residues.values():
+                continue
+            try:
+                atom_map[atom.index] = atom.old_index
+            except AttributeError:
+                pass
+        for index in index_to_new_residues.keys():
+            old_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(old_residues[index])
+            new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(modified_residues[index])
+            _ , local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res)
+            found_old_ca = False
+            for atom in old_residues[index].atoms():
+                if atom.name=='CA':
+                    old_ca = atom
+                    found_old_ca = True
+                    break
+            assert found_old_ca
+            found_new_ca = False
+            for atom in modified_residues[index].atoms():
+                if atom.name=='CA':
+                    new_ca = atom
+                    found_new_ca = True
+                    break
+            assert found_new_ca
+            local_atom_map[new_ca.index] = old_ca.index
+
+            atom_map.update(local_atom_map)
+
+        return atom_map
+
+    def _get_mol_atom_matches(self, current_molecule, proposed_molecule):
+        """
+        Given two molecules, returns the mapping of atoms between them.
+
+        Arguments
+        ---------
+        current_molecule : openeye.oechem.oemol object
+             The current molecule in the sampler
+        proposed_molecule : openeye.oechem.oemol object
+             The proposed new molecule
+
+        Returns
+        -------
+        matches : list of match
+            list of the matches between the molecules
+        """
+        oegraphmol_current = oechem.OEGraphMol(current_molecule)
+        oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
+        mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
+
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        mcs.Init(oegraphmol_current, atomexpr, bondexpr)
+
+        backbone_carbon_name = oechem.OEHasAtomName('C')
+        backbone_oxygen_name = oechem.OEHasAtomName('O')
+
+        old_backbone_c = list(mcs.GetPattern().GetAtoms(backbone_carbon_name))
+        assert len(old_backbone_c) == 1
+        old_backbone_c = old_backbone_c[0]
+
+        new_backbone_c = list(oegraphmol_proposed.GetAtoms(backbone_carbon_name))
+        assert len(new_backbone_c) == 1
+        new_backbone_c = new_backbone_c[0]
+
+        old_backbone_o = list(mcs.GetPattern().GetAtoms(backbone_oxygen_name))
+        assert len(old_backbone_o) == 1
+        old_backbone_o = old_backbone_o[0]
+
+        new_backbone_o = list(oegraphmol_proposed.GetAtoms(backbone_oxygen_name))
+        assert len(new_backbone_o) == 1
+        new_backbone_o = new_backbone_o[0]
+
+        match_c = oechem.OEMatchPairAtom(old_backbone_c,new_backbone_c)
+        match_o = oechem.OEMatchPairAtom(old_backbone_o,new_backbone_o)
+
+        assert mcs.AddConstraint(match_c)
+        assert mcs.AddConstraint(match_o)
+        mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
+        unique = True
+        matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        match = np.random.choice(matches)
+        new_to_old_atom_map = {}
+        for matchpair in match.GetAtoms():
+            old_index = matchpair.pattern.GetData("topology_index")
+            new_index = matchpair.target.GetData("topology_index")
+            if old_index < 0 or new_index < 0:
+                continue
+            new_to_old_atom_map[new_index] = old_index
+        return matches, new_to_old_atom_map
+
 
     def compute_state_key(self, topology):
         chemical_state_key = ''
@@ -629,6 +734,8 @@ class PointMutationEngine(PolymerProposalEngine):
         for residue_id, residue_name in allowed_mutations[proposed_location]:
             # original_residue : simtk.openmm.app.topology.Residue
             original_residue = chain._residues[residue_id_to_index.index(residue_id)]
+            if original_residue.name == residue_name:
+                continue
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
             index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
             if residue_name == 'HIS':
@@ -782,6 +889,8 @@ class PeptideLibraryEngine(PolymerProposalEngine):
             # original_residue : simtk.openmm.app.topology.Residue
             original_residue = chain._residues[residue_index]
             residue_name = self._one_to_three_letter_code(residue_one_letter)
+            if original_residue.name == residue_name:
+                continue
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
             index_to_new_residues[residue_index] = residue_name
             if residue_name == 'HIS':
