@@ -577,16 +577,6 @@ class PolymerProposalEngine(ProposalEngine):
             local_atom_map[new_ca.index] = old_ca.index
 
             atom_map.update(local_atom_map)
-            if old_residues[index].name == 'PRO' and modified_residues[index].name == 'ARG':
-                old_atoms_in_pro = dict()
-                for atom in old_residues[index].atoms():
-                    old_atoms_in_pro[atom.index] = atom.name
-                new_atoms_in_arg = dict()
-                for atom in modified_residues[index].atoms():
-                    new_atoms_in_arg[atom.index] = atom.name
-                print('Local atom map of PRO to ARG:\n(PRO atom, ARG atom)')
-                for key, value in local_atom_map.items():
-                    print(old_atoms_in_pro[value],new_atoms_in_arg[key])
 
         return atom_map
 
@@ -606,15 +596,18 @@ class PolymerProposalEngine(ProposalEngine):
         matches : list of match
             list of the matches between the molecules
         """
-        print('\nOpenEye')
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
 
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        mcs.Init(oegraphmol_current, atomexpr, bondexpr)
+
         backbone_carbon_name = oechem.OEHasAtomName('C')
         backbone_oxygen_name = oechem.OEHasAtomName('O')
 
-        old_backbone_c = list(oegraphmol_current.GetAtoms(backbone_carbon_name))
+        old_backbone_c = list(mcs.GetPattern().GetAtoms(backbone_carbon_name))
         assert len(old_backbone_c) == 1
         old_backbone_c = old_backbone_c[0]
 
@@ -622,7 +615,7 @@ class PolymerProposalEngine(ProposalEngine):
         assert len(new_backbone_c) == 1
         new_backbone_c = new_backbone_c[0]
 
-        old_backbone_o = list(oegraphmol_current.GetAtoms(backbone_oxygen_name))
+        old_backbone_o = list(mcs.GetPattern().GetAtoms(backbone_oxygen_name))
         assert len(old_backbone_o) == 1
         old_backbone_o = old_backbone_o[0]
 
@@ -632,10 +625,6 @@ class PolymerProposalEngine(ProposalEngine):
 
         match_c = oechem.OEMatchPairAtom(old_backbone_c,new_backbone_c)
         match_o = oechem.OEMatchPairAtom(old_backbone_o,new_backbone_o)
-
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
-        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-        mcs.Init(oegraphmol_current, atomexpr, bondexpr)
 
         assert mcs.AddConstraint(match_c)
         assert mcs.AddConstraint(match_o)
