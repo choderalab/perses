@@ -678,6 +678,12 @@ def _oemol_from_residue(res):
     oechem.OEAddExplicitHydrogens(mol)
     return mol
 
+def _print_failed_SMILES(failed_mol_list):
+    import openeye.oechem as oechem
+    for mol in failed_mol_list:
+        smiles = oechem.OEMolToSmiles(mol)
+        print(smiles)
+
 def _generate_ffxmls():
     import os
     print(os.getcwd())
@@ -687,21 +693,19 @@ def _generate_ffxmls():
     testsystem_t4 = T4LysozymeInhibitorsTestSystem()
     smiles_list_t4 = testsystem_t4.molecules
     oemols_t4 = [generate_molecule_from_smiles(smiles, idx=i) for i, smiles in enumerate(smiles_list_t4)]
-    ffxml_str_t4 = ""
-    for oemol in oemols_t4:
-        try:
-            ffxml_str_t4 += forcefield_generators.generateForceFieldFromMolecules([oemol])
-        except:
-            print("%s failed to charge!" % oechem.OEMolToSmiles(oemol))
+    ffxml_str_t4, failed_list = forcefield_generators.generateForceFieldFromMolecules(oemols_t4, ignoreFailures=True)
     ffxml_out_t4 = open('/Users/grinawap/T4-inhibitors.xml','w')
     ffxml_out_t4.write(ffxml_str_t4)
     ffxml_out_t4.close()
+    if failed_list:
+        print("Failed some T4 inhibitors")
+        _print_failed_SMILES(failed_list)
     print("Parameterizing kinase inhibitors")
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem_kinase = KinaseInhibitorsTestSystem()
     smiles_list_kinase = testsystem_kinase.molecules
     oemols_kinase = [generate_molecule_from_smiles(smiles, idx=i) for i, smiles in enumerate(smiles_list_kinase)]
-    ffxml_str_kinase = forcefield_generators.generateForceFieldFromMolecules(oemols_kinase)
+    ffxml_str_kinase, failed_kinase_list = forcefield_generators.generateForceFieldFromMolecules(oemols_kinase, ignoreFailures=True)
     ffxml_out_kinase = open("/Users/grinawap/kinase-inhibitors.xml",'w')
     ffxml_out_kinase.write(ffxml_str_kinase)
     ffxml_out_t4.close()
