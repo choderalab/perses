@@ -51,18 +51,22 @@ def get_data_filename(relative_path):
 
     return fn
 
-def generate_molecule_from_smiles(smiles):
+def generate_molecule_from_smiles(smiles, idx=0):
     """
     Generate oemol with geometry from smiles
     """
+    print("Molecule %d is %s" % (idx, smiles))
     mol = oechem.OEMol()
+    mol.SetTitle("MOL%d" % idx)
     oechem.OESmilesToMol(mol, smiles)
     oechem.OEAddExplicitHydrogens(mol)
     oechem.OETriposAtomNames(mol)
     oechem.OETriposBondTypeNames(mol)
+    oechem.OEAssignFormalCharges(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega.SetStrictStereo(False)
+    mol.SetTitle("MOL_%d" % idx)
     omega(mol)
     return mol
 
@@ -234,15 +238,19 @@ def run_proposals(proposal_list):
         print("proposing")
         top_proposal = proposal.topology_proposal
         current_positions = proposal.current_positions
-        new_positions = geometry_engine.propose(top_proposal, current_positions, beta)
+        new_positions, logp = geometry_engine.propose(top_proposal, current_positions, beta)
         integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         platform = openmm.Platform.getPlatformByName("Reference")
         context = openmm.Context(top_proposal.new_system, integrator, platform)
         context.setPositions(new_positions)
         state = context.getState(getEnergy=True)
         potential = state.getPotentialEnergy()
-        if np.isnan(potential.value):
-            raise Exception("Potential is nan!")
+        potential_without_units = potential / potential.unit
+        print(str(potential))
+        if np.isnan(potential_without_units):
+            print("NanN potential!")
+        if np.isnan(logp):
+            print("logp is nan")
         del context, integrator
 
 def make_geometry_proposal_array(smiles_list):
@@ -267,6 +275,7 @@ def make_geometry_proposal_array(smiles_list):
     for smiles in smiles_list:
         oemols[smiles] = generate_molecule_from_smiles(smiles)
     for smiles in oemols.keys():
+        print("Generating %s" % smiles)
         syspostop[smiles] = oemol_to_openmm_system(oemols[smiles])
 
     #get a list of all the smiles in the appropriate order
@@ -277,7 +286,8 @@ def make_geometry_proposal_array(smiles_list):
                 continue
             smiles_pairs.append([smiles1, smiles2])
 
-    for pair in smiles_pairs:
+    for i, pair in enumerate(smiles_pairs):
+        print("preparing pair %d" % i)
         smiles_1 = pair[0]
         smiles_2 = pair[1]
         new_to_old_atom_mapping = align_molecules(oemols[smiles_1], oemols[smiles_2])
@@ -668,6 +678,36 @@ def _oemol_from_residue(res):
     oechem.OEAddExplicitHydrogens(mol)
     return mol
 
+def _generate_ffxmls():
+    import os
+    print(os.getcwd())
+    print("Parameterizing T4 inhibitors")
+    from perses.tests.testsystems import T4LysozymeInhibitorsTestSystem
+    from openmoltools import forcefield_generators
+    testsystem_t4 = T4LysozymeInhibitorsTestSystem()
+    smiles_list_t4 = testsystem_t4.molecules
+    oemols_t4 = [generate_molecule_from_smiles(smiles, idx=i) for i, smiles in enumerate(smiles_list_t4)]
+    ffxml_str_t4 = ""
+    for oemol in oemols_t4:
+        try:
+            ffxml_str_t4 += forcefield_generators.generateForceFieldFromMolecules([oemol])
+        except:
+            print("%s failed to charge!" % oechem.OEMolToSmiles(oemol))
+    ffxml_out_t4 = open('/Users/grinawap/T4-inhibitors.xml','w')
+    ffxml_out_t4.write(ffxml_str_t4)
+    ffxml_out_t4.close()
+    print("Parameterizing kinase inhibitors")
+    from perses.tests.testsystems import KinaseInhibitorsTestSystem
+    testsystem_kinase = KinaseInhibitorsTestSystem()
+    smiles_list_kinase = testsystem_kinase.molecules
+    oemols_kinase = [generate_molecule_from_smiles(smiles, idx=i) for i, smiles in enumerate(smiles_list_kinase)]
+    ffxml_str_kinase = forcefield_generators.generateForceFieldFromMolecules(oemols_kinase)
+    ffxml_out_kinase = open("/Users/grinawap/kinase-inhibitors.xml",'w')
+    ffxml_out_kinase.write(ffxml_str_kinase)
+    ffxml_out_t4.close()
+
+
+
 if __name__=="__main__":
     #test_coordinate_conversion()
     #test_run_geometry_engine()
@@ -678,4 +718,4 @@ if __name__=="__main__":
     #test_logp_reverse()
     #_tleap_all()
     #test_mutate_from_all_to_all()
-    test_propose_kinase_inhibitors()
+    _generate_ffxmls()
