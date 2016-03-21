@@ -85,11 +85,11 @@ def generate_initial_molecule(iupac_name):
     omega(mol)
     return mol
 
-def oemol_to_openmm_system(oemol, molecule_name=None):
+def oemol_to_openmm_system(oemol, molecule_name=None, forcefield=['data/gaff.xml']):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename], forcefield_kwargs={'constraints' : None})
+    xml_filenames = [get_data_filename(fname) for fname in forcefield]
+    system_generator = topology_proposal.SystemGenerator(xml_filenames, forcefield_kwargs={'constraints' : None})
     topology = forcefield_generators.generateTopologyFromOEMol(oemol)
     system = system_generator.build_system(topology)
     positions = extractPositionsFromOEMOL(oemol)
@@ -211,7 +211,7 @@ def test_propose_lysozyme_ligands():
     from perses.tests.testsystems import T4LysozymeInhibitorsTestSystem
     testsystem = T4LysozymeInhibitorsTestSystem()
     smiles_list = testsystem.molecules
-    proposals = make_geometry_proposal_array(smiles_list)
+    proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'gaff.xml'])
     run_proposals(proposals)
 
 
@@ -219,7 +219,7 @@ def test_propose_kinase_inhibitors():
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem = KinaseInhibitorsTestSystem()
     smiles_list = testsystem.molecules
-    proposals = make_geometry_proposal_array(smiles_list)
+    proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/kinase-inhibitors.xml', 'data/gaff.xml'])
     run_proposals(proposals)
 
 def run_proposals(proposal_list):
@@ -253,7 +253,7 @@ def run_proposals(proposal_list):
             print("logp is nan")
         del context, integrator
 
-def make_geometry_proposal_array(smiles_list):
+def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
     """
     Make an array of topology_proposals for each molecule to each other
     in the smiles_list. Includes self-proposals so as to test that.
@@ -276,7 +276,7 @@ def make_geometry_proposal_array(smiles_list):
         oemols[smiles] = generate_molecule_from_smiles(smiles)
     for smiles in oemols.keys():
         print("Generating %s" % smiles)
-        syspostop[smiles] = oemol_to_openmm_system(oemols[smiles])
+        syspostop[smiles] = oemol_to_openmm_system(oemols[smiles], forcefield=forcefield)
 
     #get a list of all the smiles in the appropriate order
     smiles_pairs = list()
@@ -722,4 +722,5 @@ if __name__=="__main__":
     #test_logp_reverse()
     #_tleap_all()
     #test_mutate_from_all_to_all()
-    _generate_ffxmls()
+    #_generate_ffxmls()
+    test_propose_kinase_inhibitors()
