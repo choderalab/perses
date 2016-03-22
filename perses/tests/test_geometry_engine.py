@@ -350,10 +350,10 @@ def test_run_geometry_engine(index=0):
     without exceptions. Convert n-pentane to 2-methylpentane
     """
     import copy
-    molecule_name_1 = 'glycine'
-    molecule_name_2 = 'tryptophan'
-    #molecule_name_1 = 'benzene'
-    #molecule_name_2 = 'biphenyl'
+    #molecule_name_1 = 'glycine'
+    #molecule_name_2 = 'tryptophan'
+    molecule_name_1 = 'imatinib'
+    molecule_name_2 = 'erlotinib'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -454,16 +454,6 @@ def test_coordinate_conversion():
         xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         assert np.linalg.norm(xyz-atom_position) < 1.0e-12
 
-def test_dihedral_potential():
-    import perses.rjmc.geometry as geometry
-    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    molecule_name = 'ethane'
-    molecule2 = generate_initial_molecule(molecule_name)
-    sys, pos, top = oemol_to_openmm_system(molecule2, molecule_name)
-    import perses.rjmc.geometry as geometry
-    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    structure = parmed.openmm.load_topology(top, sys)
-
 def test_openmm_dihedral():
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
@@ -515,7 +505,7 @@ def test_try_random_itoc():
     bond_position = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
     angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
     torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
-    for i in range(10):
+    for i in range(1000):
         atom_position += unit.Quantity(np.random.normal(size=3), unit=unit.nanometers)
         r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
         r = (r/r.unit)*unit.nanometers
@@ -714,7 +704,8 @@ def _generate_ffxmls():
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    #test_run_geometry_engine()
+    for i in range(10):
+        test_run_geometry_engine(index=i)
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
@@ -723,4 +714,4 @@ if __name__=="__main__":
     #_tleap_all()
     #test_mutate_from_all_to_all()
     #_generate_ffxmls()
-    test_propose_kinase_inhibitors()
+    #test_propose_kinase_inhibitors()

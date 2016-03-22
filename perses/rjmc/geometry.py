@@ -7,7 +7,7 @@ import simtk.unit as units
 import logging
 import numpy as np
 import copy
-from perses.rjmc import coordinate_tools
+from perses.rjmc import coordinate_numba
 import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
@@ -605,12 +605,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         Cartesian to internal function
         """
         #ensure we have the correct units, then remove them
-        atom_position = atom_position.value_in_unit(units.nanometers)
-        bond_position = bond_position.value_in_unit(units.nanometers)
-        angle_position = angle_position.value_in_unit(units.nanometers)
-        torsion_position = torsion_position.value_in_unit(units.nanometers)
+        atom_position = atom_position.value_in_unit(units.nanometers).astype(np.float64)
+        bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
+        angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
+        torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
 
-        internal_coords = coordinate_tools._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
+        internal_coords = coordinate_numba.cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
 
 
         return internal_coords, internal_coords[0]**2*np.sin(internal_coords[1])
@@ -619,13 +619,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Calculate the cartesian coordinates given the internal, as well as abs(detJ)
         """
-        r = r.in_units_of(units.nanometers)/units.nanometers
-        theta = theta.in_units_of(units.radians)/units.radians
-        phi = phi.in_units_of(units.radians)/units.radians
+        r = r.value_in_unit(units.nanometers)
+        theta = theta.value_in_unit(units.radians)
+        phi = phi.value_in_unit(units.radians)
         bond_position = bond_position.in_units_of(units.nanometers)/units.nanometers
         angle_position = angle_position.in_units_of(units.nanometers)/units.nanometers
         torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
-        xyz = coordinate_tools._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
+        xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
         xyz = units.Quantity(xyz, unit=units.nanometers)
         return xyz, r**2*np.sin(theta)
 
@@ -710,16 +710,18 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         positions_copy = copy.deepcopy(positions)
         positions_copy = positions_copy.in_units_of(units.nanometers)
-        r = r.in_units_of(units.nanometers)
-        theta = theta.in_units_of(units.radians)
+        positions_copy = positions_copy / units.nanometers
+        positions_copy = positions_copy.astype(np.float64)
+        r = r.value_in_unit(units.nanometers)
+        theta = theta.value_in_unit(units.radians)
         bond_atom = torsion.atom2
         angle_atom = torsion.atom3
         torsion_atom = torsion.atom4
-        phis = units.Quantity(np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions), unit=units.radians) # changed to [-pi,+pi) to make it easier to compare with openmm-derived torsions]
-        xyzs = units.Quantity(np.zeros([len(phis), 3]), unit=units.nanometers)
-        for i, phi in enumerate(phis):
-            xyzs[i], _ = self._internal_to_cartesian(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], r, theta, phi)
-        return xyzs, phis
+        phis = np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions) # Can't use units here.
+        xyzs = coordinate_numba.torsion_scan(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], np.array([r, theta, 0.0]), phis)
+        xyzs_quantity = units.Quantity(xyzs, unit=units.nanometers) #have to put the units back now
+        phis = units.Quantity(phis, unit=units.radians)
+        return xyzs_quantity, phis
 
     def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """

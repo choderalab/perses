@@ -1,6 +1,18 @@
 from numba import jit, float64
 import numpy as np
 
+@jit(float64[:](float64[:], float64[:]), nopython=True, nogil=True, cache=True)
+def _cross_vec3(a, b):
+    c = np.zeros(3)
+    c[0] = a[1]*b[2] - a[2]*b[1]
+    c[1] = a[2]*b[0] - a[0]*b[2]
+    c[2] = a[0]*b[1] - a[1]*b[0]
+    return c
+@jit(float64(float64[:]), nopython=True, nogil=True, cache=True)
+def _norm(a):
+    n_2 = np.dot(a, a)
+    return np.sqrt(n_2)
+
 @jit(float64[:,:](float64[:], float64), nopython=True, nogil=True, cache=True)
 def _rotation_matrix(axis, angle):
     """
@@ -25,18 +37,6 @@ def _rotation_matrix(axis, angle):
                                     cos_angle+axis_squared[2]*(1-cos_angle)])
 
     return rotation_matrix
-
-@jit(float64[:](float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-def _cross_vec3(a, b):
-    c = np.zeros(3)
-    c[0] = a[1]*b[2] - a[2]*b[1]
-    c[1] = a[2]*b[0] - a[0]*b[2]
-    c[2] = a[0]*b[1] - a[1]*b[0]
-    return c
-@jit(float64(float64[:]), nopython=True, nogil=True, cache=True)
-def _norm(a):
-    n_2 = np.dot(a, a)
-    return np.sqrt(n_2)
 
 @jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def internal_to_cartesian(bond_position, angle_position, torsion_position, internal_coordinates):
