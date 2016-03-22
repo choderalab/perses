@@ -13,35 +13,34 @@ requirements:
   build:
     - python
     - setuptools
-    - openmm-dev
-    - parmed-dev
     - numpy
     - scipy
-    - openmoltools-dev
-    - alchemy
     - numexpr
-    - openmmtools
-    - pymbar
     - autograd
+    - pymbar-dev
+    - openmm-dev
+    - parmed-dev
+    - openmoltools-dev
+    - alchemy-dev
+    - openmmtools-dev
 
   run:
     - python
-    - openmm-dev
-    - parmed-dev
+    - setuptools
     - numpy
     - scipy
-    - openmoltools-dev
-    - alchemy
     - numexpr
-    - openmmtools
-    - pymbar
     - autograd
+    - pymbar-dev
+    - openmm-dev
+    - parmed-dev
+    - openmoltools-dev
+    - alchemy-dev
+    - openmmtools-dev
 
 test:
   requires:
     - nose
-    - openmmtools
-    - pymbar
   imports:
     - perses
 
