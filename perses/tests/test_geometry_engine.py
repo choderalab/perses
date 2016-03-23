@@ -210,7 +210,7 @@ def test_propose_lysozyme_ligands():
     """
     from perses.tests.testsystems import T4LysozymeInhibitorsTestSystem
     testsystem = T4LysozymeInhibitorsTestSystem()
-    smiles_list = testsystem.molecules
+    smiles_list = testsystem.molecules[:7]
     proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'gaff.xml'])
     run_proposals(proposals)
 
@@ -218,7 +218,7 @@ def test_propose_lysozyme_ligands():
 def test_propose_kinase_inhibitors():
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem = KinaseInhibitorsTestSystem()
-    smiles_list = testsystem.molecules
+    smiles_list = testsystem.molecules[:7]
     proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/kinase-inhibitors.xml', 'data/gaff.xml'])
     run_proposals(proposals)
 
@@ -232,13 +232,19 @@ def run_proposals(proposal_list):
     proposal_list : list of namedtuple
 
     """
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    import time
+    start_time = time.time()
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
     for proposal in proposal_list:
-        print("proposing")
+        current_time = time.time()
+        #print("proposing")
         top_proposal = proposal.topology_proposal
         current_positions = proposal.current_positions
         new_positions, logp = geometry_engine.propose(top_proposal, current_positions, beta)
+        #print("Proposal time is %s" % str(time.time()-current_time))
         integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         platform = openmm.Platform.getPlatformByName("Reference")
         context = openmm.Context(top_proposal.new_system, integrator, platform)
@@ -247,6 +253,9 @@ def run_proposals(proposal_list):
         potential = state.getPotentialEnergy()
         potential_without_units = potential / potential.unit
         print(str(potential))
+        print(" ")
+        print(' ')
+        print(" ")
         if np.isnan(potential_without_units):
             print("NanN potential!")
         if np.isnan(logp):
@@ -439,8 +448,7 @@ def internal_in_unit(internal_coords):
 def test_coordinate_conversion():
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    example_coordinates = unit.Quantity(np.random.normal(size=[100,3]), unit=unit.nanometers)
-    #try to transform random coordinates to and from
+    #try to transform random coordinates to and from cartesian
     for i in range(200):
         indices = np.random.randint(100, size=4)
         atom_position = unit.Quantity(np.array([ 0.80557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
@@ -701,11 +709,10 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 
-
 if __name__=="__main__":
     #test_coordinate_conversion()
-    for i in range(10):
-        test_run_geometry_engine(index=i)
+    #for i in range(10):
+    #test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
@@ -714,4 +721,4 @@ if __name__=="__main__":
     #_tleap_all()
     #test_mutate_from_all_to_all()
     #_generate_ffxmls()
-    #test_propose_kinase_inhibitors()
+    test_propose_kinase_inhibitors()

@@ -12,7 +12,7 @@ import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
 import simtk.openmm.app as app
-
+import time
 
 class GeometryEngine(object):
     """
@@ -78,6 +78,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
         self.nproposed = 0 # number of times self.propose() has been called
+        self._energy_time = 0.0
+        self._torsion_coordinate_time = 0.0
+        self._position_set_time = 0.0
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -180,18 +183,23 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         new_positions : [n,3] np.ndarray
             The new positions (same as input if direction='reverse')
         """
+        initial_time = time.time()
         proposal_order_tool = ProposalOrderTools(top_proposal)
+        proposal_order_time = time.time() - initial_time
         growth_system_generator = GeometrySystemGenerator()
         growth_parameter_name = 'growth_stage'
         if direction=="forward":
+            forward_init = time.time()
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
+            proposal_order_forward = time.time() - forward_init
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
 
             #find and copy known positions
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
-
+            system_init = time.time()
             growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology)
+            growth_system_time = time.time() - system_init
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
@@ -221,7 +229,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 pdbfile = open("%s-stages.pdb" % prefix, 'w')
                 self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
 
-        platform = openmm.Platform.getPlatformByName('Reference')
+        platform = openmm.Platform.getPlatformByName('OpenCL')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         debug = False
@@ -232,8 +240,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             print("The potential of the valence terms is %s" % str(state.getPotentialEnergy()))
         growth_parameter_value = 1
         #now for the main loop:
+        logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
         for atom, torsion in atom_proposal_order.items():
-
             context.setParameter(growth_parameter_name, growth_parameter_value)
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
@@ -306,7 +314,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 pdbfile = open('%s-final.pdb' % prefix, 'w')
                 PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
                 pdbfile.close()
-
+        total_time = time.time() - initial_time
+        logging.log(logging.DEBUG, "Proposal order time: %f s | Proposal order forward: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, proposal_order_forward, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
+        self._torsion_coordinate_time = 0.0
+        self._energy_time = 0.0
+        self._position_set_time = 0.0
         return logp_proposal, new_positions
 
     @staticmethod
@@ -687,7 +699,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         theta = sigma_theta*np.random.randn() + theta0
         return theta
 
-    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=360):
+    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=180):
         """
         Rotate the atom about the
         Parameters
@@ -708,6 +720,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phis : np.ndarray, in radians
             The torsions angles at which a potential will be calculated
         """
+        torsion_scan_init = time.time()
         positions_copy = copy.deepcopy(positions)
         positions_copy = positions_copy.in_units_of(units.nanometers)
         positions_copy = positions_copy / units.nanometers
@@ -721,9 +734,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         xyzs = coordinate_numba.torsion_scan(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], np.array([r, theta, 0.0]), phis)
         xyzs_quantity = units.Quantity(xyzs, unit=units.nanometers) #have to put the units back now
         phis = units.Quantity(phis, unit=units.radians)
+        torsion_scan_time = time.time() - torsion_scan_init
+        self._torsion_coordinate_time += torsion_scan_time
         return xyzs_quantity, phis
 
-    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=180):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -756,11 +771,16 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
         for i, xyz in enumerate(xyzs):
             positions[atom_idx,:] = xyz
+            position_set = time.time()
             growth_context.setPositions(positions)
+            position_time = time.time() - position_set
+            self._position_set_time += position_time
+            energy_computation_init = time.time()
             state = growth_context.getState(getEnergy=True)
+            energy_computation_time = time.time() - energy_computation_init
+            self._energy_time += energy_computation_time
             logq_i = -beta*state.getPotentialEnergy()
             logq[i] = logq_i
-
         if np.sum(np.isnan(logq)) == n_divisions:
             raise Exception("All %d torsion energies in torsion PMF are NaN." % n_divisions)
         logq[np.isnan(logq)] = -np.inf
@@ -770,7 +790,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_torsions = logq - np.log(Z)
         return logp_torsions, phis
 
-    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=180):
         """
         Propose a torsion using OpenMM
 
@@ -804,7 +824,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phi = phis[phi_idx]
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
+    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=180):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -908,6 +928,8 @@ class GeometrySystemGenerator(object):
         for bond in range(reference_bond_force.getNumBonds()):
             bond_parameters = reference_bond_force.getBondParameters(bond)
             growth_idx = self._calculate_growth_idx(bond_parameters[:2], growth_indices)
+            if growth_idx==0:
+                continue
             modified_bond_force.addBond(bond_parameters[0], bond_parameters[1], [bond_parameters[2], bond_parameters[3], growth_idx])
 
         #copy each angle, adding the per particle parameter as well
@@ -915,6 +937,8 @@ class GeometrySystemGenerator(object):
         for angle in range(reference_angle_force.getNumAngles()):
             angle_parameters = reference_angle_force.getAngleParameters(angle)
             growth_idx = self._calculate_growth_idx(angle_parameters[:3], growth_indices)
+            if growth_idx==0:
+                continue
             modified_angle_force.addAngle(angle_parameters[0], angle_parameters[1], angle_parameters[2], [angle_parameters[3], angle_parameters[4], growth_idx])
 
         #copy each torsion, adding the per particle parameter as well
@@ -922,6 +946,8 @@ class GeometrySystemGenerator(object):
         for torsion in range(reference_torsion_force.getNumTorsions()):
             torsion_parameters = reference_torsion_force.getTorsionParameters(torsion)
             growth_idx = self._calculate_growth_idx(torsion_parameters[:4], growth_indices)
+            if growth_idx==0:
+                continue
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
         if add_extra_torsions:
@@ -985,7 +1011,7 @@ class GeometrySystemGenerator(object):
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
         k = 10.0*units.kilojoule_per_mole
-        print([atom.name for atom in growth_indices])
+        #print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
@@ -997,10 +1023,10 @@ class GeometrySystemGenerator(object):
             while (phase < -np.pi):
                 phase += 2*np.pi
             phase *= units.radian
-            print('PHASE>>>> ' + str(phase)) # DEBUG
+            #print('PHASE>>>> ' + str(phase)) # DEBUG
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
-            print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
+            #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
             torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, 0])
 
         return torsion_force
