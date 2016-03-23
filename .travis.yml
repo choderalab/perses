@@ -30,33 +30,33 @@ script:
   - source activate _test
   # Install test dependencies in test environment.
   - conda install --yes --quiet pip nose nose-timer
-  - pip install --upgrade pip
+  #- pip install --upgrade pip
   - pip install $OPENEYE_CHANNEL openeye-toolkits
   # Fix openmm and parmed double dependencies
-  - conda remove --yes parmed parmed-dev && conda install --yes parmed-dev
-  - conda remove --yes openmm openmm-dev && conda install --yes openmm-dev
+  #- conda remove --yes parmed parmed-dev && conda install --yes parmed-dev
+  #- conda remove --yes openmm openmm-dev && conda install --yes openmm-dev
   # Run tests
   #- cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
   - cd devtools && nosetests $NOSETESTS --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
 env:
   matrix:
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.testsystems perses.tests.utils" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.samplers" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="T4LysozymeInhibitorsTestSystem" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="KinaseInhibitorsTestSystem" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlkanesTestSystem" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlanineDipeptideTestSystem" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AblImatinibTestSystem" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.rjmc perses.tests.test_topology_proposal perses.tests.test_geometry_engine" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.bias" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.annihilation perses.tests.test_ncmc_integrator perses.tests.test_elimination" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.testsystems perses.tests.utils" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.samplers" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.rjmc perses.tests.test_topology_proposal perses.tests.test_geometry_engine" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.bias" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.annihilation perses.tests.test_ncmc_integrator perses.tests.test_elimination" OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.testsystems perses.tests.utils"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.samplers"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="T4LysozymeInhibitorsTestSystem"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="KinaseInhibitorsTestSystem"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlkanesTestSystem"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlanineDipeptideTestSystem"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AblImatinibTestSystem"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.rjmc perses.tests.test_topology_proposal perses.tests.test_geometry_engine"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.bias"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.annihilation perses.tests.test_ncmc_integrator perses.tests.test_elimination"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.testsystems perses.tests.utils"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.samplers"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.rjmc perses.tests.test_topology_proposal perses.tests.test_geometry_engine"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.bias"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.annihilation perses.tests.test_ncmc_integrator perses.tests.test_elimination"
 
   global:
     - ORGNAME="omnia"
@@ -64,6 +64,7 @@ env:
     - PACKAGENAME="perses"
     # Location of decrypted OpenEye license file
     - OE_LICENSE="$HOME/oe_license.txt"
+    - OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
     - secure: "RRvLDPu9mPoNaRWIseaJdgShOXI+PaHPWKAIJvW7VYWcAS6iEN7W4Fj4zD5hkocQxc3ou97EtkgID+ApH10bSGKxCykyU0urSY9jsSOJX2m0AE19X0dVr6ySIQkwCWE6kUMVlvQYQo80fM2EMElD+btr4G9XBAhArAO7HvZHkoQ="
 
