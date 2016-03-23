@@ -231,6 +231,175 @@ def load_via_pdbfixer(filename=None, pdbid=None):
     fixer.addMissingHydrogens(7.0)
     return [fixer.topology, fixer.positions]
 
+class T4LysozymeTestSystem(PersesTestSystem):
+    """
+    Create a consistent set of SAMS samplers useful for testing PointMutationEngine on T4 lysozyme in various solvents.
+    Wild Type is T4 L99A
+
+    Properties
+    ----------
+    environments : list of str
+        Available environments: ['vacuum', 'explicit', 'implicit']
+    topologies : dict of simtk.openmm.app.Topology
+        Initial system Topology objects; topologies[environment] is the topology for `environment`
+    positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
+        Initial positions corresponding to initial Topology objects
+    system_generators : dict of SystemGenerator objects
+        SystemGenerator objects for environments
+    proposal_engines : dict of ProposalEngine
+        Proposal engines
+    themodynamic_states : dict of thermodynamic_states
+        Themodynamic states for each environment
+    mcmc_samplers : dict of MCMCSampler objects
+        MCMCSampler objects for environments
+    exen_samplers : dict of ExpandedEnsembleSampler objects
+        ExpandedEnsembleSampler objects for environments
+    sams_samplers : dict of SAMSSampler objects
+        SAMSSampler objects for environments
+    designer : MultiTargetDesign sampler
+        Example MultiTargetDesign sampler for implicit solvent hydration free energies
+
+    Examples
+    --------
+
+    >>> from perses.tests.testsystems import T4LysozymeTestSystem
+    >>> testsystem = T4LysozymeTestSystem()
+    # Build a system
+    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    # Retrieve a SAMSSampler
+    >>> sams_sampler = testsystem.sams_samplers['implicit']
+
+    """
+    def __init__(self):
+        super(T4LysozymeTestSystem, self).__init__()
+        environments = ['explicit-complex', 'explicit-peptide', 'implicit-complex', 'implicit-peptide', 'vacuum-complex', 'vacuum-peptide']
+
+        # Create a system generator for our desired forcefields.
+        from perses.rjmc.topology_proposal import SystemGenerator
+        system_generators = dict()
+        system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=False)
+        system_generators['explicit-complex'] = system_generators['explicit']
+        system_generators['explicit-peptide'] = system_generators['explicit']
+        system_generators['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
+            use_antechamber=False)
+        system_generators['implicit-complex'] = system_generators['implicit']
+        system_generators['implicit-peptide'] = system_generators['implicit']
+        system_generators['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=False)
+        system_generators['vacuum-complex'] = system_generators['vacuum']
+        system_generators['vacuum-peptide'] = system_generators['vacuum']
+
+        # Create peptide in solvent.
+        from pkg_resources import resource_filename
+        pdb_filename = resource_filename('perses', 'data/181L.pdb')
+        import pdbfixer
+        from simtk.openmm.app import PDBFile, Modeller
+        topologies = dict()
+        positions = dict()
+        #pdbfile = PDBFile(pdb_filename)
+        [fixer_topology, fixer_positions] = load_via_pdbfixer(pdb_filename)
+        topologies['complex'] = fixer_topology
+        positions['complex'] = fixer_positions
+        modeller = Modeller(topologies['complex'], positions['complex'])
+
+
+        for chain in modeller.getTopology().chains():
+            pass
+        chains_to_delete = [chain]
+        modeller.delete(chains_to_delete)
+        topologies['receptor'] = modeller.getTopology()
+        positions['receptor'] = modeller.getPositions()
+
+        # Create all environments.
+        for environment in ['implicit', 'vacuum']:
+            for component in ['receptor', 'complex']:
+                topologies[environment + '-' + component] = topologies[component]
+                positions[environment + '-' + component] = positions[component]
+
+        # Set up in explicit solvent.
+        for component in ['receptor', 'complex']:
+            modeller = app.Modeller(topologies[component], positions[component])
+            modeller.addSolvent(system_generators['explicit'].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+            topologies['explicit' + '-' + component] = modeller.getTopology()
+            positions['explicit' + '-' + component] = modeller.getPositions()
+
+        # Set up the proposal engines.
+        allowed_mutations = [
+            [('99','GLY')],
+            [('102','GLN')],
+            [('102','HIS')],
+            [('102','GLU')],
+            [('102','LEU')],
+            [('153','ALA')],
+            [('108','VAL')],
+            [('99','GLY'),('108','VAL')]
+        ]
+        from perses.rjmc.topology_proposal import PointMutationEngine
+        proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
+        proposal_engines = dict()
+        for environment in environments:
+            proposal_engines[environment] = PointMutationEngine(system_generators[environment], 'A', proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+
+        # Generate systems
+        systems = dict()
+        for environment in environments:
+            systems[environment] = system_generators[environment].build_system(topologies[environment])
+
+        # Define thermodynamic state of interest.
+        from perses.samplers.thermodynamics import ThermodynamicState
+        thermodynamic_states = dict()
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+        for component in ['receptor', 'complex']:
+            thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
+            thermodynamic_states['implicit' + '-' + component] = ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
+            thermodynamic_states['vacuum' + '-' + component]   = ThermodynamicState(system=systems['vacuum' + '-' + component], temperature=temperature)
+
+        # Create SAMS samplers
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+        sams_samplers = dict()
+        for environment in environments:
+            chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
+            if environment[0:8] == 'explicit':
+                sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+            else:
+                sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
+            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+            mcmc_samplers[environment].verbose = True
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+            exen_samplers[environment].verbose = True
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment].verbose = True
+
+        # Create test MultiTargetDesign sampler.
+        from perses.samplers.samplers import MultiTargetDesign
+        target_samplers = { sams_samplers['implicit-complex'] : 1.0, sams_samplers['implicit-receptor'] : -1.0 }
+        designer = MultiTargetDesign(target_samplers)
+        designer.verbose = True
+
+        # Store things.
+        self.environments = environments
+        self.topologies = topologies
+        self.positions = positions
+        self.systems = systems
+        self.system_generators = system_generators
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+        self.sams_samplers = sams_samplers
+        self.designer = designer
+
+        # This system must currently be minimized.
+        minimize(self)
+
 class MybTestSystem(PersesTestSystem):
     """
     Create a consistent set of SAMS samplers useful for testing PointMutationEngine on Myb:peptide interaction in various solvents.
@@ -386,6 +555,9 @@ class MybTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+        # This system must currently be minimized.
+        minimize(self)
+
 class AblImatinibTestSystem(PersesTestSystem):
     """
     Create a consistent set of SAMS samplers useful for testing PointMutationEngine on Abl:imatinib.
@@ -416,7 +588,7 @@ class AblImatinibTestSystem(PersesTestSystem):
     Examples
     --------
 
-    >>> from perses.tests.testsystems import MybTestSystem
+    >>> from perses.tests.testsystems import AblImatinibTestSystem
     >>> testsystem = AblImatinibTestSystem()
     # Build a system
     >>> system = testsystem.system_generators['vacuum-inhibitor'].build_system(testsystem.topologies['vacuum-inhibitor'])
