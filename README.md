@@ -1,4 +1,5 @@
-[![Build Status](https://travis-ci.org/choderalab/perses.svg?branch=master)](https://travis-ci.org/choderalab/perses)
+* travis-ci builds: [![Travis Build Status](https://travis-ci.org/choderalab/perses.svg?branch=master)](https://travis-ci.org/choderalab/perses)
+* Jenkins GPU tests: [![Jenkins Test Status](https://jenkins.choderalab.org/buildStatus/icon?job=test-perses-linux-xeon-gtxtitan-src)](https://jenkins.choderalab.org/job/test-perses-linux-xeon-gtxtitan-src/)
 
 # Perses
 
