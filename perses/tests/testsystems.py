@@ -273,28 +273,30 @@ class T4LysozymeTestSystem(PersesTestSystem):
     """
     def __init__(self):
         super(T4LysozymeTestSystem, self).__init__()
-        environments = ['explicit-complex', 'explicit-peptide', 'implicit-complex', 'implicit-peptide', 'vacuum-complex', 'vacuum-peptide']
+        environments = ['explicit-complex', 'explicit-receptor', 'implicit-complex', 'implicit-receptor', 'vacuum-complex', 'vacuum-receptor']
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
+        from pkg_resources import resource_filename
+        gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
+        system_generators['explicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
             use_antechamber=False)
         system_generators['explicit-complex'] = system_generators['explicit']
-        system_generators['explicit-peptide'] = system_generators['explicit']
-        system_generators['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
+        system_generators['explicit-receptor'] = system_generators['explicit']
+        system_generators['implicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=False)
         system_generators['implicit-complex'] = system_generators['implicit']
-        system_generators['implicit-peptide'] = system_generators['implicit']
+        system_generators['implicit-receptor'] = system_generators['implicit']
         system_generators['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
             use_antechamber=False)
         system_generators['vacuum-complex'] = system_generators['vacuum']
-        system_generators['vacuum-peptide'] = system_generators['vacuum']
+        system_generators['vacuum-receptor'] = system_generators['vacuum']
 
-        # Create peptide in solvent.
+        # Create receptor in solvent.
         from pkg_resources import resource_filename
         pdb_filename = resource_filename('perses', 'data/181L.pdb')
         import pdbfixer
@@ -303,10 +305,11 @@ class T4LysozymeTestSystem(PersesTestSystem):
         positions = dict()
         #pdbfile = PDBFile(pdb_filename)
         [fixer_topology, fixer_positions] = load_via_pdbfixer(pdb_filename)
-        topologies['complex'] = fixer_topology
-        positions['complex'] = fixer_positions
-        modeller = Modeller(topologies['complex'], positions['complex'])
-
+        modeller = Modeller(fixer_topology, fixer_positions)
+        residues_to_delete = [ residue for residue in modeller.getTopology().residues() if residue.name in ['HED','CL'] ]
+        modeller.delete(residues_to_delete)
+        topologies['complex'] = modeller.getTopology()
+        positions['complex'] = modeller.getPositions()
 
         for chain in modeller.getTopology().chains():
             pass
@@ -1135,7 +1138,7 @@ def run_myb():
 
 def run_abl_imatinib():
     """
-    Run myb test system.
+    Run abl test system.
     """
     testsystem = AblImatinibTestSystem()
     #for environment in testsystem.environments:
