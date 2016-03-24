@@ -229,7 +229,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 pdbfile = open("%s-stages.pdb" % prefix, 'w')
                 self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
 
-        platform = openmm.Platform.getPlatformByName('OpenCL')
+        platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         debug = False
@@ -639,6 +639,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
         xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
         xyz = units.Quantity(xyz, unit=units.nanometers)
+
         return xyz, r**2*np.sin(theta)
 
     def _bond_logq(self, r, bond, beta):
@@ -769,6 +770,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logq = np.zeros(n_divisions)
         atom_idx = torsion.atom1.idx
         xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
+        xyzs = xyzs.value_in_unit_system(units.md_unit_system)
+        positions = positions.value_in_unit_system(units.md_unit_system)
         for i, xyz in enumerate(xyzs):
             positions[atom_idx,:] = xyz
             position_set = time.time()
