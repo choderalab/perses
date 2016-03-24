@@ -282,17 +282,17 @@ class T4LysozymeTestSystem(PersesTestSystem):
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=False)
+            use_antechamber=True)
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-receptor'] = system_generators['explicit']
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=False)
+            use_antechamber=True)
         system_generators['implicit-complex'] = system_generators['implicit']
         system_generators['implicit-receptor'] = system_generators['implicit']
         system_generators['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=False)
+            use_antechamber=True)
         system_generators['vacuum-complex'] = system_generators['vacuum']
         system_generators['vacuum-receptor'] = system_generators['vacuum']
 
@@ -605,7 +605,7 @@ class AblImatinibTestSystem(PersesTestSystem):
     def __init__(self):
         super(AblImatinibTestSystem, self).__init__()
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
-        solvents = ['vacuum'] # DEBUG
+#        solvents = ['vacuum'] # DEBUG
         components = ['receptor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
         padding = 9.0*unit.angstrom
         explicit_solvent_model = 'tip3p'
