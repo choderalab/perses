@@ -402,9 +402,6 @@ class T4LysozymeTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
-        # This system must currently be minimized.
-        minimize(self)
-
 class MybTestSystem(PersesTestSystem):
     """
     Create a consistent set of SAMS samplers useful for testing PointMutationEngine on Myb:peptide interaction in various solvents.
@@ -560,9 +557,6 @@ class MybTestSystem(PersesTestSystem):
         self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
         self.designer = designer
-
-        # This system must currently be minimized.
-        minimize(self)
 
 class AblImatinibTestSystem(PersesTestSystem):
     """
