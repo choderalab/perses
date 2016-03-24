@@ -21,64 +21,6 @@ import perses.bias.bias_engine as bias_engine
 import perses.rjmc.geometry as geometry
 import perses.annihilation.ncmc_switching as ncmc_switching
 
-class VelocityVerletIntegrator(openmm.CustomIntegrator):
-
-    """Verlocity Verlet integrator.
-
-    Notes
-    -----
-    This integrator is taken verbatim from Peter Eastman's example appearing in the CustomIntegrator header file documentation.
-
-    References
-    ----------
-    W. C. Swope, H. C. Andersen, P. H. Berens, and K. R. Wilson, J. Chem. Phys. 76, 637 (1982)
-
-    Examples
-    --------
-
-    Create a velocity Verlet integrator.
-
-    >>> timestep = 1.0 * simtk.unit.femtoseconds
-    >>> integrator = VelocityVerletIntegrator(timestep)
-
-    """
-
-    def __init__(self, timestep=1.0 * unit.femtoseconds):
-        """Construct a velocity Verlet integrator.
-
-        Parameters
-        ----------
-        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
-           The integration timestep.
-
-        """
-        nsteps = 10
-        super(VelocityVerletIntegrator, self).__init__((nsteps+1) * timestep)
-
-        self.addPerDofVariable("x1", 0)
-
-        # Constrain initial positions and velocities.
-        self.addConstrainPositions()
-        self.addConstrainVelocities()
-
-        self.addUpdateContextState()
-        self.addComputePerDof("v", "v+0.5*dt*f/m")
-        self.addComputePerDof("x", "x+dt*v")
-        self.addComputePerDof("x1", "x")
-        self.addConstrainPositions()
-        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
-        self.addConstrainVelocities()
-
-        for step in range(nsteps):
-
-            self.addUpdateContextState()
-            self.addComputePerDof("v", "v+0.5*dt*f/m")
-            self.addComputePerDof("x", "x+dt*v")
-            self.addComputePerDof("x1", "x")
-            self.addConstrainPositions()
-            self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
-            self.addConstrainVelocities()
-
 
 def generate_initial_molecule(mol_smiles):
     """

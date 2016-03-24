@@ -13,35 +13,37 @@ requirements:
   build:
     - python
     - setuptools
-    - openmm-dev
     - numpy
     - scipy
-    - openmoltools-dev
-    - alchemy >=1.1.3
     - numexpr
-    - openmmtools
-    - pymbar
     - autograd
+    - pymbar-dev
+    - openmm-dev
+    - parmed-dev
+    - openmoltools-dev
+    - alchemy-dev
+    - openmmtools-dev
 
   run:
     - python
-    - openmm-dev
+    - setuptools
     - numpy
     - scipy
-    - openmoltools-dev
-    - alchemy >=1.1.3
     - numexpr
-    - openmmtools
-    - pymbar
     - autograd
+    - pymbar-dev
+    - openmm-dev
+    - parmed-dev
+    - openmoltools-dev
+    - alchemy-dev
+    - openmmtools-dev
 
 test:
   requires:
     - nose
-    - openmmtools
-    - pymbar
   imports:
     - perses
+
 
 about:
   home: https://github.com/choderalab/perses
