@@ -20,7 +20,6 @@ import sys, math
 import numpy as np
 import logging
 from functools import partial
-from unittest import skipIf
 
 import perses.tests.testsystems
 
@@ -69,7 +68,6 @@ def test_valence():
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip test samplers for now to prevent holding up Travis")
 def test_samplers():
     """
     Test samplers on multiple test systems.
