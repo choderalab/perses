@@ -226,8 +226,8 @@ class NCMCEngine(object):
             raise Exception("direction must be one of ['delete', 'insert']; found '%s' instead" % direction)
 
         # DEBUG
-        print('alchemical atoms:')
-        print(alchemical_atoms)
+        #print('alchemical atoms:')
+        #print(alchemical_atoms)
 
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
@@ -288,8 +288,8 @@ class NCMCEngine(object):
 
         # DEBUG: Compute initial potential of unmodified system and alchemical system to make sure finite.
         from perses.tests.utils import compute_potential
-        print(compute_potential(unmodified_system, initial_positions, platform=self.platform))
-        print(compute_potential(alchemical_system, initial_positions, platform=self.platform))
+        #print(compute_potential(unmodified_system, initial_positions, platform=self.platform))
+        #print(compute_potential(alchemical_system, initial_positions, platform=self.platform))
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
@@ -324,8 +324,8 @@ class NCMCEngine(object):
         if np.isnan(initial_potential):
             raise NaNException("Initial potential of 'insert' operation is NaN (unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda)" % (unmodified_potential, alchemical_potential))
         from perses.tests.utils import compute_potential_components
-        print("initial potential before '%s' : %f kT" % (direction, initial_potential))
-        print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
+        #print("initial potential before '%s' : %f kT" % (direction, initial_potential))
+        #print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
 
         # Take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
         try:
@@ -349,9 +349,9 @@ class NCMCEngine(object):
         final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
         if np.isnan(final_potential):
             raise NaNException("Final potential of 'delete' operation is NaN")
-        print("final potential before '%s' : %f kT" % (direction, final_potential))
-        print("final potential components: %s" % str(compute_potential_components(context))) # DEBUG
-        print('')
+        #print("final potential before '%s' : %f kT" % (direction, final_potential))
+        #print("final potential components: %s" % str(compute_potential_components(context))) # DEBUG
+        #print('')
 
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)

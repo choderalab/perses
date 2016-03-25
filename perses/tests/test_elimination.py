@@ -100,7 +100,6 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     logP_switch_n = np.zeros([niterations], np.float64)
-    print("")
     for iteration in range(nequil):
         [positions, velocities] = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
