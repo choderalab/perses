@@ -11,6 +11,7 @@ import logging
 import numpy as np
 import parmed
 import copy
+from unittest import skipIf
 from pkg_resources import resource_filename
 try:
     from urllib.request import urlopen
@@ -133,7 +134,7 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
-
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip geometry test of all amino acids for now to prevent holding up Travis")
 def test_mutate_from_all_to_all():
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
