@@ -1309,6 +1309,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        if not matches:
+            return [],{}
         match = np.random.choice(matches)
         new_to_old_atom_map = {}
         for matchpair in match.GetAtoms():
@@ -1394,6 +1396,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 oechem.OESmilesToMol(current_mol, molecule_smiles_list[i])
                 oechem.OESmilesToMol(proposed_mol, molecule_smiles_list[j])
                 matches, _ = self._get_mol_atom_matches(current_mol, proposed_mol)
+                if not matches:
+                    n_atoms_matching = 0
+                    continue
                 n_atoms_matching = max([len(list(match.GetAtoms())) for match in matches])
                 probability_matrix[i, j] = n_atoms_matching
                 probability_matrix[j, i] = n_atoms_matching
