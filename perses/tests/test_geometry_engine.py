@@ -10,7 +10,9 @@ import simtk.unit as unit
 import logging
 import numpy as np
 import parmed
+from collections import namedtuple, OrderedDict
 import copy
+from unittest import skipIf
 from pkg_resources import resource_filename
 try:
     from urllib.request import urlopen
@@ -30,6 +32,8 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 
+proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
+
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
     In the source distribution, these files are in ``perses/data/*/``,
@@ -48,18 +52,22 @@ def get_data_filename(relative_path):
 
     return fn
 
-def generate_molecule_from_smiles(smiles):
+def generate_molecule_from_smiles(smiles, idx=0):
     """
     Generate oemol with geometry from smiles
     """
+    print("Molecule %d is %s" % (idx, smiles))
     mol = oechem.OEMol()
+    mol.SetTitle("MOL%d" % idx)
     oechem.OESmilesToMol(mol, smiles)
     oechem.OEAddExplicitHydrogens(mol)
     oechem.OETriposAtomNames(mol)
     oechem.OETriposBondTypeNames(mol)
+    oechem.OEAssignFormalCharges(mol)
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega.SetStrictStereo(False)
+    mol.SetTitle("MOL_%d" % idx)
     omega(mol)
     return mol
 
@@ -78,11 +86,11 @@ def generate_initial_molecule(iupac_name):
     omega(mol)
     return mol
 
-def oemol_to_openmm_system(oemol, molecule_name):
+def oemol_to_openmm_system(oemol, molecule_name=None, forcefield=['data/gaff.xml']):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename], forcefield_kwargs={'constraints' : None})
+    xml_filenames = [get_data_filename(fname) for fname in forcefield]
+    system_generator = topology_proposal.SystemGenerator(xml_filenames, forcefield_kwargs={'constraints' : None})
     topology = forcefield_generators.generateTopologyFromOEMol(oemol)
     system = system_generator.build_system(topology)
     positions = extractPositionsFromOEMOL(oemol)
@@ -133,7 +141,7 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
-
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip geometry test of all amino acids for now to prevent holding up Travis")
 def test_mutate_from_all_to_all():
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -197,6 +205,113 @@ def test_mutate_from_all_to_all():
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
 
+def test_propose_lysozyme_ligands():
+    """
+    Try proposing geometries for all T4 ligands from all T4 ligands
+    """
+    from perses.tests.testsystems import T4LysozymeInhibitorsTestSystem
+    testsystem = T4LysozymeInhibitorsTestSystem()
+    smiles_list = testsystem.molecules[:7]
+    proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'gaff.xml'])
+    run_proposals(proposals)
+
+
+def test_propose_kinase_inhibitors():
+    from perses.tests.testsystems import KinaseInhibitorsTestSystem
+    testsystem = KinaseInhibitorsTestSystem()
+    smiles_list = testsystem.molecules[:7]
+    proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/kinase-inhibitors.xml', 'data/gaff.xml'])
+    run_proposals(proposals)
+
+def run_proposals(proposal_list):
+    """
+    Run a list of geometry proposal namedtuples, checking if they render
+    NaN energies
+
+    Parameters
+    ----------
+    proposal_list : list of namedtuple
+
+    """
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    import time
+    start_time = time.time()
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
+    for proposal in proposal_list:
+        current_time = time.time()
+        #print("proposing")
+        top_proposal = proposal.topology_proposal
+        current_positions = proposal.current_positions
+        new_positions, logp = geometry_engine.propose(top_proposal, current_positions, beta)
+        #print("Proposal time is %s" % str(time.time()-current_time))
+        integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        platform = openmm.Platform.getPlatformByName("Reference")
+        context = openmm.Context(top_proposal.new_system, integrator, platform)
+        context.setPositions(new_positions)
+        state = context.getState(getEnergy=True)
+        potential = state.getPotentialEnergy()
+        potential_without_units = potential / potential.unit
+        print(str(potential))
+        print(" ")
+        print(' ')
+        print(" ")
+        if np.isnan(potential_without_units):
+            print("NanN potential!")
+        if np.isnan(logp):
+            print("logp is nan")
+        del context, integrator
+
+def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
+    """
+    Make an array of topology_proposals for each molecule to each other
+    in the smiles_list. Includes self-proposals so as to test that.
+
+    Parameters
+    ----------
+    smiles_list : list of str
+        list of smiles
+
+    Returns
+    -------
+    list of proposal_test namedtuple
+    """
+    topology_proposals = []
+    #make oemol array:
+    oemols = OrderedDict()
+    syspostop = OrderedDict()
+
+    for smiles in smiles_list:
+        oemols[smiles] = generate_molecule_from_smiles(smiles)
+    for smiles in oemols.keys():
+        print("Generating %s" % smiles)
+        syspostop[smiles] = oemol_to_openmm_system(oemols[smiles], forcefield=forcefield)
+
+    #get a list of all the smiles in the appropriate order
+    smiles_pairs = list()
+    for smiles1 in smiles_list:
+        for smiles2 in smiles_list:
+            if smiles1==smiles2:
+                continue
+            smiles_pairs.append([smiles1, smiles2])
+
+    for i, pair in enumerate(smiles_pairs):
+        print("preparing pair %d" % i)
+        smiles_1 = pair[0]
+        smiles_2 = pair[1]
+        new_to_old_atom_mapping = align_molecules(oemols[smiles_1], oemols[smiles_2])
+        sys1, pos1, top1 = syspostop[smiles_1]
+        sys2, pos2, top2 = syspostop[smiles_2]
+        import perses.rjmc.topology_proposal as topology_proposal
+        sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
+                                                                      old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
+        sm_top_proposal._beta = beta
+        proposal_tuple = proposal_test(sm_top_proposal, pos1)
+        topology_proposals.append(proposal_tuple)
+    return topology_proposals
+
+
 def load_pdbid_to_openmm(pdbid):
     """
     create openmm topology without pdb file
@@ -245,10 +360,10 @@ def test_run_geometry_engine(index=0):
     without exceptions. Convert n-pentane to 2-methylpentane
     """
     import copy
-    molecule_name_1 = 'glycine'
-    molecule_name_2 = 'tryptophan'
-    #molecule_name_1 = 'benzene'
-    #molecule_name_2 = 'biphenyl'
+    #molecule_name_1 = 'glycine'
+    #molecule_name_2 = 'tryptophan'
+    molecule_name_1 = 'imatinib'
+    molecule_name_2 = 'erlotinib'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -334,8 +449,7 @@ def internal_in_unit(internal_coords):
 def test_coordinate_conversion():
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    example_coordinates = unit.Quantity(np.random.normal(size=[100,3]), unit=unit.nanometers)
-    #try to transform random coordinates to and from
+    #try to transform random coordinates to and from cartesian
     for i in range(200):
         indices = np.random.randint(100, size=4)
         atom_position = unit.Quantity(np.array([ 0.80557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
@@ -348,16 +462,6 @@ def test_coordinate_conversion():
         phi = rtp[2]*unit.radians
         xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         assert np.linalg.norm(xyz-atom_position) < 1.0e-12
-
-def test_dihedral_potential():
-    import perses.rjmc.geometry as geometry
-    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    molecule_name = 'ethane'
-    molecule2 = generate_initial_molecule(molecule_name)
-    sys, pos, top = oemol_to_openmm_system(molecule2, molecule_name)
-    import perses.rjmc.geometry as geometry
-    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
-    structure = parmed.openmm.load_topology(top, sys)
 
 def test_openmm_dihedral():
     import perses.rjmc.geometry as geometry
@@ -410,7 +514,7 @@ def test_try_random_itoc():
     bond_position = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
     angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
     torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
-    for i in range(10):
+    for i in range(1000):
         atom_position += unit.Quantity(np.random.normal(size=3), unit=unit.nanometers)
         r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
         r = (r/r.unit)*unit.nanometers
@@ -573,8 +677,42 @@ def _oemol_from_residue(res):
     oechem.OEAddExplicitHydrogens(mol)
     return mol
 
+def _print_failed_SMILES(failed_mol_list):
+    import openeye.oechem as oechem
+    for mol in failed_mol_list:
+        smiles = oechem.OEMolToSmiles(mol)
+        print(smiles)
+
+def _generate_ffxmls():
+    import os
+    print(os.getcwd())
+    print("Parameterizing T4 inhibitors")
+    from perses.tests.testsystems import T4LysozymeInhibitorsTestSystem
+    from openmoltools import forcefield_generators
+    testsystem_t4 = T4LysozymeInhibitorsTestSystem()
+    smiles_list_t4 = testsystem_t4.molecules
+    oemols_t4 = [generate_molecule_from_smiles(smiles, idx=i) for i, smiles in enumerate(smiles_list_t4)]
+    ffxml_str_t4, failed_list = forcefield_generators.generateForceFieldFromMolecules(oemols_t4, ignoreFailures=True)
+    ffxml_out_t4 = open('/Users/grinawap/T4-inhibitors.xml','w')
+    ffxml_out_t4.write(ffxml_str_t4)
+    ffxml_out_t4.close()
+    if failed_list:
+        print("Failed some T4 inhibitors")
+        _print_failed_SMILES(failed_list)
+    print("Parameterizing kinase inhibitors")
+    from perses.tests.testsystems import KinaseInhibitorsTestSystem
+    testsystem_kinase = KinaseInhibitorsTestSystem()
+    smiles_list_kinase = testsystem_kinase.molecules
+    oemols_kinase = [generate_molecule_from_smiles(smiles, idx=i) for i, smiles in enumerate(smiles_list_kinase)]
+    ffxml_str_kinase, failed_kinase_list = forcefield_generators.generateForceFieldFromMolecules(oemols_kinase, ignoreFailures=True)
+    ffxml_out_kinase = open("/Users/grinawap/kinase-inhibitors.xml",'w')
+    ffxml_out_kinase.write(ffxml_str_kinase)
+    ffxml_out_t4.close()
+
+
 if __name__=="__main__":
     #test_coordinate_conversion()
+    #for i in range(10):
     #test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
@@ -582,4 +720,6 @@ if __name__=="__main__":
     #test_angle()
     #test_logp_reverse()
     #_tleap_all()
-    test_mutate_from_all_to_all()
+    #test_mutate_from_all_to_all()
+    #_generate_ffxmls()
+    test_propose_kinase_inhibitors()
