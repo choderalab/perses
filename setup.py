@@ -87,5 +87,6 @@ setup(name='perses',
         'openmoltools',
         'alchemy >=1.1.3',
         'numexpr',
+        'numba'
         ],
       )
