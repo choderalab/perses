@@ -550,6 +550,8 @@ class ExpandedEnsembleSampler(object):
     >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
     >>> # Create an MCMC sampler
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Turn off verbosity
+    >>> mcmc_sampler.verbose = False
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
@@ -862,6 +864,8 @@ class SAMSSampler(object):
     >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
     >>> # Create an MCMC sampler
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Turn off verbosity
+    >>> mcmc_sampler.verbose = False
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
