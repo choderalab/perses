@@ -253,15 +253,16 @@ def run_proposals(proposal_list):
         state = context.getState(getEnergy=True)
         potential = state.getPotentialEnergy()
         potential_without_units = potential / potential.unit
-        print(str(potential))
-        print(" ")
-        print(' ')
-        print(" ")
+        #print(str(potential))
+        #print(" ")
+        #print(' ')
+        #print(" ")
         if np.isnan(potential_without_units):
             print("NanN potential!")
         if np.isnan(logp):
             print("logp is nan")
         del context, integrator
+        # TODO: Can we quantify how good the proposals are?
 
 def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
     """
@@ -297,7 +298,7 @@ def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
             smiles_pairs.append([smiles1, smiles2])
 
     for i, pair in enumerate(smiles_pairs):
-        print("preparing pair %d" % i)
+        #print("preparing pair %d" % i)
         smiles_1 = pair[0]
         smiles_2 = pair[1]
         new_to_old_atom_mapping = align_molecules(oemols[smiles_1], oemols[smiles_2])
@@ -523,7 +524,9 @@ def test_try_random_itoc():
         recomputed_xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         new_r, new_theta, new_phi = _get_internal_from_omm(recomputed_xyz,bond_position, angle_position, torsion_position)
         crtp = geometry_engine._cartesian_to_internal(recomputed_xyz,bond_position, angle_position, torsion_position)
-        print(atom_position-recomputed_xyz)
+        # DEBUG
+        # print(atom_position-recomputed_xyz)
+        # TODO: Add a test here that can fail if something is wrong.
 
 def test_logp_reverse():
     """
