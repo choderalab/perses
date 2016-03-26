@@ -393,6 +393,8 @@ class MCMCSampler(object):
     >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
     >>> # Create an MCMC sampler
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Turn off verbosity
+    >>> mcmc_sampler.verbose = False    
     >>> # Run the sampler
     >>> sampler.run()
 
