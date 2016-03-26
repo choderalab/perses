@@ -86,7 +86,8 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps)
+    platform = openmm.Platform.getPlatformByName('Reference')
+    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):

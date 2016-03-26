@@ -42,7 +42,6 @@ env:
   matrix:
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.testsystems perses.tests.utils"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.samplers"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
     #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="T4LysozymeInhibitorsTestSystem"
     #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="KinaseInhibitorsTestSystem"
