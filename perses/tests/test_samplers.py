@@ -72,7 +72,7 @@ def test_samplers():
     """
     Test samplers on multiple test systems.
     """
-    testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem', 'AblImatinibTestSystem']
+    testsystem_names = ['T4LysozymeTestSystem', 'ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem', 'AblImatinibTestSystem']
     niterations = 5 # number of iterations to run
 
     # If TESTSYSTEMS environment variable is specified, test those systems.

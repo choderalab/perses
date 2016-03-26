@@ -222,6 +222,9 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         self.designer = designer
 
 def load_via_pdbfixer(filename=None, pdbid=None):
+    """
+    Load a PDB file via PDBFixer, keeping all heterogens and building in protons for any crystallographic waters.
+    """
     from pdbfixer import PDBFixer
     fixer = PDBFixer(filename=filename, pdbid=pdbid)
     fixer.findMissingResidues()
@@ -288,9 +291,9 @@ class T4LysozymeTestSystem(PersesTestSystem):
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
-        system_generators['implicit-complex'] = system_generators['implicit']
-        system_generators['implicit-receptor'] = system_generators['implicit']
-        system_generators['vacuum'] = SystemGenerator(['amber99sbildn.xml'],
+        #system_generators['implicit-complex'] = system_generators['implicit']
+        #system_generators['implicit-receptor'] = system_generators['implicit']
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
             use_antechamber=True)
         system_generators['vacuum-complex'] = system_generators['vacuum']
@@ -298,12 +301,11 @@ class T4LysozymeTestSystem(PersesTestSystem):
 
         # Create receptor in solvent.
         from pkg_resources import resource_filename
-        pdb_filename = resource_filename('perses', 'data/181L.pdb')
+        pdb_filename = resource_filename('perses', 'data/181L.pdb') # TODO: THIS FILE HAS A LIGAND WITHOUT PROTONS IN IT!
         import pdbfixer
         from simtk.openmm.app import PDBFile, Modeller
         topologies = dict()
         positions = dict()
-        #pdbfile = PDBFile(pdb_filename)
         [fixer_topology, fixer_positions] = load_via_pdbfixer(pdb_filename)
         modeller = Modeller(fixer_topology, fixer_positions)
         residues_to_delete = [ residue for residue in modeller.getTopology().residues() if residue.name in ['HED','CL'] ]
@@ -319,7 +321,8 @@ class T4LysozymeTestSystem(PersesTestSystem):
         positions['receptor'] = modeller.getPositions()
 
         # Create all environments.
-        for environment in ['implicit', 'vacuum']:
+        #for environment in ['implicit', 'vacuum']:
+        for environment in ['vacuum']:
             for component in ['receptor', 'complex']:
                 topologies[environment + '-' + component] = topologies[component]
                 positions[environment + '-' + component] = positions[component]
@@ -385,7 +388,7 @@ class T4LysozymeTestSystem(PersesTestSystem):
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
-        target_samplers = { sams_samplers['implicit-complex'] : 1.0, sams_samplers['implicit-receptor'] : -1.0 }
+        target_samplers = { sams_samplers['explicit-complex'] : 1.0, sams_samplers['explicit-receptor'] : -1.0 }
         designer = MultiTargetDesign(target_samplers)
         designer.verbose = True
 
@@ -1112,6 +1115,20 @@ def test_testsystems():
         f.description = "Testing %s" % (testsystem_name)
         yield f
 
+def run_t4():
+    """
+    Run T4 lysozyme test system.
+    """
+    testsystem = T4LysozymeTestSystem()
+    solvent = 'explicit'
+    for component in ['complex', 'receptor']:
+        testsystem.exen_samplers[solvent + '-' + component].pdbfile = open('t4-' + component + '.pdb', 'w')
+        testsystem.exen_samplers[solvent + '-' + component].options={'nsteps':0} # instantaneous MC
+        testsystem.mcmc_samplers[solvent + '-' + component].nsteps = 50 # use fewer MD steps to speed things up
+        testsystem.sams_samplers[solvent + '-' + component].run(niterations=5)
+    testsystem.designer.verbose = True
+    testsystem.designer.run(niterations=5)
+
 def run_myb():
     """
     Run myb test system.
@@ -1178,7 +1195,8 @@ def run_valence_system():
     testsystem.sams_samplers[environment].run(niterations=5)
 
 if __name__ == '__main__':
+    run_t4()
     #run_valence_system()
-    run_kinase_inhibitors()
+    #run_kinase_inhibitors()
     #run_abl_imatinib()
     #run_myb()
