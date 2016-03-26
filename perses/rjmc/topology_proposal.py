@@ -256,7 +256,7 @@ class PolymerProposalEngine(ProposalEngine):
             atom_map = dict()
             for atom in modeller.topology.atoms():
                 atom_map[atom.index] = atom.index
-            print('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
+            if self.verbose: print('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
             topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
             return topology_proposal
 

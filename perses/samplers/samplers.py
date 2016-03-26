@@ -394,7 +394,7 @@ class MCMCSampler(object):
     >>> # Create an MCMC sampler
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state)
     >>> # Turn off verbosity
-    >>> mcmc_sampler.verbose = False
+    >>> sampler.verbose = False
     >>> # Run the sampler
     >>> sampler.run()
 
