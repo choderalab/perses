@@ -315,7 +315,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
                 pdbfile.close()
         total_time = time.time() - initial_time
-        logging.log(logging.DEBUG, "Proposal order time: %f s | Proposal order forward: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, proposal_order_forward, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
+        if direction=='forward':
+            logging.log(logging.DEBUG, "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
         self._torsion_coordinate_time = 0.0
         self._energy_time = 0.0
         self._position_set_time = 0.0

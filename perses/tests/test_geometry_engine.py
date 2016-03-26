@@ -529,7 +529,6 @@ def test_logp_reverse():
     """
     Make sure logp_reverse and logp_forward are consistent
     """
-    np.seterr(all='raise')
     molecule_name_1 = 'erlotinib'
     molecule_name_2 = 'imatinib'
     #molecule_name_1 = 'benzene'
@@ -711,15 +710,14 @@ def _generate_ffxmls():
 
 
 if __name__=="__main__":
-    #test_coordinate_conversion()
+    test_coordinate_conversion()
     #for i in range(10):
     #test_run_geometry_engine()
     #test_existing_coordinates()
     #test_openmm_dihedral()
-    #test_try_random_itoc()
-    #test_angle()
-    #test_logp_reverse()
+    test_try_random_itoc()
+    test_logp_reverse()
     #_tleap_all()
     #test_mutate_from_all_to_all()
     #_generate_ffxmls()
-    test_propose_kinase_inhibitors()
+    #test_propose_kinase_inhibitors()
