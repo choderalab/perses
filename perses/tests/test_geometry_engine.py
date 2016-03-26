@@ -212,7 +212,7 @@ def test_propose_lysozyme_ligands():
     from perses.tests.testsystems import T4LysozymeInhibitorsTestSystem
     testsystem = T4LysozymeInhibitorsTestSystem()
     smiles_list = testsystem.molecules[:7]
-    proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'gaff.xml'])
+    proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'data/gaff.xml'])
     run_proposals(proposals)
 
 

@@ -86,8 +86,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     """
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    platform = openmm.Platform.getPlatformByName('Reference')
-    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps, platform=platform)
+    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -97,7 +96,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
             raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
 
     nequil = 5 # number of equilibration iterations
-    niterations = 20 # number of round-trip switching trials
+    niterations = 50 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     logP_switch_n = np.zeros([niterations], np.float64)
