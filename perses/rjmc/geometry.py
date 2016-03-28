@@ -635,9 +635,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         r = r.value_in_unit(units.nanometers)
         theta = theta.value_in_unit(units.radians)
         phi = phi.value_in_unit(units.radians)
-        bond_position = bond_position.in_units_of(units.nanometers)/units.nanometers
-        angle_position = angle_position.in_units_of(units.nanometers)/units.nanometers
-        torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
+        bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
+        angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
+        torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
         xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
         xyz = units.Quantity(xyz, unit=units.nanometers)
 

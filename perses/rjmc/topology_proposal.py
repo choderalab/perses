@@ -1387,6 +1387,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         probability_matrix : [n, n] np.ndarray
             matrix of probabilities of proposal from row to column
         """
+        from rjmc.geometry import ProposalOrderTools
         n_smiles = len(molecule_smiles_list)
         probability_matrix = np.zeros([n_smiles, n_smiles])
         for i in range(n_smiles):
