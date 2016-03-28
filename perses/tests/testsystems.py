@@ -34,6 +34,7 @@ from pkg_resources import resource_filename
 from openeye import oechem
 from openmmtools import testsystems
 from perses.tests.utils import sanitizeSMILES
+import copy
 
 ################################################################################
 # CONSTANTS
@@ -308,17 +309,39 @@ class T4LysozymeTestSystem(PersesTestSystem):
         positions = dict()
         [fixer_topology, fixer_positions] = load_via_pdbfixer(pdb_filename)
         modeller = Modeller(fixer_topology, fixer_positions)
-        residues_to_delete = [ residue for residue in modeller.getTopology().residues() if residue.name in ['HED','CL'] ]
-        modeller.delete(residues_to_delete)
-        topologies['complex'] = modeller.getTopology()
-        positions['complex'] = modeller.getPositions()
 
-        for chain in modeller.getTopology().chains():
+        residues_to_delete = [ residue for residue in modeller.getTopology().residues() if residue.name in ['HED','CL','HOH'] ]
+        modeller.delete(residues_to_delete)
+
+        receptor_modeller = copy.deepcopy(modeller)
+        ligand_modeller = copy.deepcopy(modeller)
+
+        for chain in receptor_modeller.getTopology().chains():
             pass
         chains_to_delete = [chain]
-        modeller.delete(chains_to_delete)
-        topologies['receptor'] = modeller.getTopology()
-        positions['receptor'] = modeller.getPositions()
+        receptor_modeller.delete(chains_to_delete)
+        topologies['receptor'] = receptor_modeller.getTopology()
+        positions['receptor'] = receptor_modeller.getPositions()
+
+        for chain in ligand_modeller.getTopology().chains():
+            break
+        chains_to_delete = [chain]
+        ligand_modeller.delete(chains_to_delete)
+        for residue in ligand_modeller.getTopology().residues():
+            if residue.name == 'BNZ':
+                break
+
+        from openmoltools import forcefield_generators
+        mol = forcefield_generators.generateOEMolFromTopologyResidue(residue)
+        oechem.OEAddExplicitHydrogens(mol)
+        oechem.OETriposAtomNames(mol)
+        oechem.OETriposBondTypeNames(mol)
+        new_residue = forcefield_generators.generateTopologyFromOEMol(mol)
+
+        modeller = copy.deepcopy(receptor_modeller)
+        modeller.add(new_residue)
+        topologies['complex'] = modeller.getTopology()
+        positions['complex'] = modeller.getPositions()
 
         # Create all environments.
         #for environment in ['implicit', 'vacuum']:
