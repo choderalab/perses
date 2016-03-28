@@ -1309,15 +1309,16 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
-        if not matches:
+        safe_matches = self._check_for_torsions(proposed_molecule, matches)
+        if not safe_matches:
             return [],{}
-        match = np.random.choice(matches)
+        match = np.random.choice(safe_matches)
         new_to_old_atom_map = {}
         for matchpair in match.GetAtoms():
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
             new_to_old_atom_map[new_index] = old_index
-        return matches, new_to_old_atom_map
+        return safe_matches, new_to_old_atom_map
 
     def _get_mol_atom_map(self, current_molecule, proposed_molecule):
         """
@@ -1396,7 +1397,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 proposed_mol = oechem.OEMol()
                 oechem.OESmilesToMol(current_mol, molecule_smiles_list[i])
                 oechem.OESmilesToMol(proposed_mol, molecule_smiles_list[j])
-                matches, _ = self._get_mol_atom_matches(current_mol, proposed_mol)
+                matches, map = self._get_mol_atom_matches(current_mol, proposed_mol)
                 if not matches:
                     n_atoms_matching = 0
                     continue
@@ -1406,5 +1407,40 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #normalize the rows:
         for i in range(n_smiles):
             row_sum = np.sum(probability_matrix[i, :])
-            probability_matrix[i, :] /= row_sum
+            probability_matrix[i, :] /= row_sum if row_sum > 0 else 1
         return probability_matrix
+
+    def _check_for_torsions(self, new_molecule, atom_matches):
+        """
+        Prune the list of matches so that only matches with mapped
+        torsions are allowed (otherwise they are unusable with the
+        current geometry engine)
+
+        Parameters
+        ----------
+        new_molecule : oechem.OEMol
+            The proposed molecule
+        atom_matches : list of oechem.OEMatch
+            The matches derived with the new_molecule
+            as target
+
+        Returns
+        -------
+        safe_atom_matches : list of oechem.OEMatch
+            Matches that contain at least one torsion.
+            May be empty
+        """
+
+        safe_atom_matches = []
+        for match in atom_matches:
+            atom_set = set()
+            #get the mapped atoms:
+            for matchpair in match.GetAtoms():
+                atom_set.add(matchpair.target)
+            #get all the torsions in the molecule:
+            torsions = list(oechem.OEGetTorsions(new_molecule))
+            for torsion in torsions:
+                if atom_set.issuperset({torsion.a, torsion.b, torsion.c, torsion.d}):
+                    safe_atom_matches.append(match)
+                    break
+        return safe_atom_matches

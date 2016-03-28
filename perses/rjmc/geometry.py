@@ -1247,3 +1247,4 @@ class ProposalOrderTools(object):
                             dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
                             topological_torsions.append(dihedral)
         return topological_torsions
+
