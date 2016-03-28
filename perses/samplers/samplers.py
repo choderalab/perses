@@ -393,6 +393,8 @@ class MCMCSampler(object):
     >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
     >>> # Create an MCMC sampler
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Turn off verbosity
+    >>> sampler.verbose = False
     >>> # Run the sampler
     >>> sampler.run()
 
@@ -550,6 +552,8 @@ class ExpandedEnsembleSampler(object):
     >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
     >>> # Create an MCMC sampler
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Turn off verbosity
+    >>> mcmc_sampler.verbose = False
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
@@ -741,13 +745,14 @@ class ExpandedEnsembleSampler(object):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
 
             # Compute change in eliminated potential contribution.
-            print('potential before geometry  : %12.3f kT' % potential_delete)
-            print('potential after geometry   : %12.3f kT' % potential_insert)
             switch_logp = - (potential_insert - potential_delete)
-            print('---------------------------------------------------------')
-            print('switch_logp                : %12.3f' % switch_logp)
-            print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
-            print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
+            if self.verbose:
+                print('potential before geometry  : %12.3f kT' % potential_delete)
+                print('potential after geometry   : %12.3f kT' % potential_insert)
+                print('---------------------------------------------------------')
+                print('switch_logp                : %12.3f' % switch_logp)
+                print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
+                print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
 
             # Compute total log acceptance probability, including all components.
             logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
@@ -862,6 +867,8 @@ class SAMSSampler(object):
     >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
     >>> # Create an MCMC sampler
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
+    >>> # Turn off verbosity
+    >>> mcmc_sampler.verbose = False
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
