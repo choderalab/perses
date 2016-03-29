@@ -1026,8 +1026,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL', proposal_metadata=None):
         list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
-        self._n_molecules = len(list_of_smiles)
+        self._smiles_list = self._gen_safe_smiles_list(list_of_smiles)
+        self._n_molecules = len(self._smiles_list)
         self._residue_name = residue_name
         self._generated_systems = dict()
         self._generated_topologies = dict()
@@ -1099,6 +1099,33 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
                                                  new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
         return proposal
+
+    def _gen_safe_smiles_list(self, list_of_smiles):
+        """
+        Ensure that the SMILES string input
+        contains no "unreachable" molecules
+
+        Parameters
+        ----------
+        list_of_smiles : list of str
+            List of smiles strings
+
+        Returns
+        -------
+        smiles_list : list of str
+            Canonicalized SMILES which can be reached
+            from another in the group
+        """
+        safe_smiles_list = []
+        prob_matrix = self._calculate_probability_matrix(list_of_smiles)
+        for i, smiles in enumerate(list_of_smiles):
+            if np.sum(prob_matrix[i, :]) > 0:
+                can_smi = self._canonicalize_smiles(smiles)
+                safe_smiles_list.append(can_smi)
+            else:
+                logging.debug("%s is being removed as it is disconnected" % list_of_smiles[i])
+        return safe_smiles_list
+
 
     def _canonicalize_smiles(self, smiles):
         """
@@ -1377,7 +1404,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     def _calculate_probability_matrix(self, molecule_smiles_list):
         """
         Calculate the matrix of probabilities of choosing A | B
-        based on normalized MCSS overlap
+        based on normalized MCSS overlap. Does not check for torsions!
         Parameters
         ----------
         molecule_smiles_list : list of str
@@ -1388,7 +1415,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         probability_matrix : [n, n] np.ndarray
             matrix of probabilities of proposal from row to column
         """
-        from rjmc.geometry import ProposalOrderTools
         n_smiles = len(molecule_smiles_list)
         probability_matrix = np.zeros([n_smiles, n_smiles])
         for i in range(n_smiles):
@@ -1444,3 +1470,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                     safe_atom_matches.append(match)
                     break
         return safe_atom_matches
+
+    @property
+    def safe_smiles(self):
+        return self._smiles_list
