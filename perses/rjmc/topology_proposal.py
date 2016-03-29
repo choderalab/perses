@@ -1030,15 +1030,25 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         metadata for the proposal engine
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', proposal_metadata=None):
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None):
+        if not atom_expr:
+            self.atom_expr = oechem.OEExprOpts_AtomicNumber #oechem.OEExprOpts_Aromaticity #| oechem.OEExprOpts_RingMember
+        else:
+            self.atom_expr = atom_expr
+
+        if not bond_expr:
+            self.bond_expr = 0 #oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        else:
+            self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
-        self._n_molecules = len(list_of_smiles)
+        self._smiles_list = self._gen_safe_smiles_list(list_of_smiles)
+        self._n_molecules = len(self._smiles_list)
+
         self._residue_name = residue_name
         self._generated_systems = dict()
         self._generated_topologies = dict()
         self._matches = dict()
-        self._probabability_matrix = self._calculate_probability_matrix(self._smiles_list)
+        self._probability_matrix = self._calculate_probability_matrix(self._smiles_list)
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata)
 
     def propose(self, current_system, current_topology, current_metadata=None):
@@ -1105,6 +1115,33 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
                                                  new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
         return proposal
+
+    def _gen_safe_smiles_list(self, list_of_smiles):
+        """
+        Ensure that the SMILES string input
+        contains no "unreachable" molecules
+
+        Parameters
+        ----------
+        list_of_smiles : list of str
+            List of smiles strings
+
+        Returns
+        -------
+        smiles_list : list of str
+            Canonicalized SMILES which can be reached
+            from another in the group
+        """
+        safe_smiles_list = []
+        prob_matrix = self._calculate_probability_matrix(list_of_smiles)
+        for i, smiles in enumerate(list_of_smiles):
+            if np.sum(prob_matrix[i, :]) > 0:
+                can_smi = self._canonicalize_smiles(smiles)
+                safe_smiles_list.append(can_smi)
+            else:
+                logging.warning("%s is being removed as it is disconnected" % list_of_smiles[i])
+        return safe_smiles_list
+
 
     def _canonicalize_smiles(self, smiles):
         """
@@ -1309,21 +1346,22 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #atomexpr = oechem.OEExprOpts_AutomorphAtoms | oechem.OEExprOpts_EqCAliphaticONS | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqCHalogen | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCPSAcidRoot | oechem.OEExprOpts_EqNotAromatic
         #bondexpr = oechem.OEExprOpts_AutomorphBonds | oechem.OEExprOpts_EqDoubleTriple
         # This seems to work reasonably well:
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
-        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-        mcs.Init(oegraphmol_current, atomexpr, bondexpr)
+        #self.atom_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        #self.bond_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        mcs.Init(oegraphmol_current, self.atom_expr, self.bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
-        if not matches:
+        safe_matches = self._check_for_torsions(proposed_molecule, matches)
+        if not safe_matches:
             return [],{}
-        match = np.random.choice(matches)
+        match = np.random.choice(safe_matches)
         new_to_old_atom_map = {}
         for matchpair in match.GetAtoms():
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
             new_to_old_atom_map[new_index] = old_index
-        return matches, new_to_old_atom_map
+        return safe_matches, new_to_old_atom_map
 
     def _get_mol_atom_map(self, current_molecule, proposed_molecule):
         """
@@ -1374,15 +1412,19 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             The log probability of the choice
         """
         current_smiles_idx = self._smiles_list.index(molecule_smiles)
-        molecule_probabilities = self._probabability_matrix[current_smiles_idx, :]
-        proposed_smiles = np.random.choice(self._smiles_list, p=molecule_probabilities)
+        molecule_probabilities = self._probability_matrix[current_smiles_idx, :]
+        proposed_smiles_idx = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
+        reverse_probability = self._probability_matrix[proposed_smiles_idx, current_smiles_idx]
+        forward_probability = molecule_probabilities[proposed_smiles_idx]
+        proposed_smiles = self._smiles_list[proposed_smiles_idx]
+        logp = np.log(reverse_probability) - np.log(forward_probability)
         proposed_mol = self._smiles_to_oemol(proposed_smiles)
-        return proposed_smiles, proposed_mol, 0.0
+        return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):
         """
         Calculate the matrix of probabilities of choosing A | B
-        based on normalized MCSS overlap
+        based on normalized MCSS overlap. Does not check for torsions!
         Parameters
         ----------
         molecule_smiles_list : list of str
@@ -1401,7 +1443,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 proposed_mol = oechem.OEMol()
                 oechem.OESmilesToMol(current_mol, molecule_smiles_list[i])
                 oechem.OESmilesToMol(proposed_mol, molecule_smiles_list[j])
-                matches, _ = self._get_mol_atom_matches(current_mol, proposed_mol)
+                matches, map = self._get_mol_atom_matches(current_mol, proposed_mol)
                 if not matches:
                     n_atoms_matching = 0
                     continue
@@ -1411,5 +1453,45 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #normalize the rows:
         for i in range(n_smiles):
             row_sum = np.sum(probability_matrix[i, :])
-            probability_matrix[i, :] /= row_sum
+            probability_matrix[i, :] /= row_sum if row_sum > 0 else 1
         return probability_matrix
+
+    def _check_for_torsions(self, new_molecule, atom_matches):
+        """
+        Prune the list of matches so that only matches with mapped
+        torsions are allowed (otherwise they are unusable with the
+        current geometry engine)
+
+        Parameters
+        ----------
+        new_molecule : oechem.OEMol
+            The proposed molecule
+        atom_matches : list of oechem.OEMatch
+            The matches derived with the new_molecule
+            as target
+
+        Returns
+        -------
+        safe_atom_matches : list of oechem.OEMatch
+            Matches that contain at least one torsion.
+            May be empty
+        """
+
+        safe_atom_matches = []
+        for match in atom_matches:
+            atom_set = set()
+            #get the mapped atoms:
+            for matchpair in match.GetAtoms():
+                atom_set.add(matchpair.target.GetIdx())
+            #get all the torsions in the molecule:
+            torsions = list(oechem.OEGetTorsions(new_molecule))
+            for torsion in torsions:
+                torsion_atom_idx = {torsion.a.GetIdx(), torsion.b.GetIdx(), torsion.c.GetIdx(), torsion.d.GetIdx()}
+                if atom_set.issuperset(torsion_atom_idx):
+                    safe_atom_matches.append(match)
+                    break
+        return safe_atom_matches
+
+    @property
+    def safe_smiles(self):
+        return self._smiles_list

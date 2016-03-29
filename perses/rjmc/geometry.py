@@ -315,7 +315,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
                 pdbfile.close()
         total_time = time.time() - initial_time
-        logging.log(logging.DEBUG, "Proposal order time: %f s | Proposal order forward: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, proposal_order_forward, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
+        if direction=='forward':
+            logging.log(logging.DEBUG, "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
         self._torsion_coordinate_time = 0.0
         self._energy_time = 0.0
         self._position_set_time = 0.0
@@ -634,9 +635,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         r = r.value_in_unit(units.nanometers)
         theta = theta.value_in_unit(units.radians)
         phi = phi.value_in_unit(units.radians)
-        bond_position = bond_position.in_units_of(units.nanometers)/units.nanometers
-        angle_position = angle_position.in_units_of(units.nanometers)/units.nanometers
-        torsion_position = torsion_position.in_units_of(units.nanometers)/units.nanometers
+        bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
+        angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
+        torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
         xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
         xyz = units.Quantity(xyz, unit=units.nanometers)
 
@@ -1246,3 +1247,4 @@ class ProposalOrderTools(object):
                             dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
                             topological_torsions.append(dihedral)
         return topological_torsions
+

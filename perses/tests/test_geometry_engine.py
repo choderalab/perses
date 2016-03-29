@@ -141,7 +141,7 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip geometry test of all amino acids for now to prevent holding up Travis")
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_mutate_from_all_to_all():
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -205,6 +205,7 @@ def test_mutate_from_all_to_all():
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_propose_lysozyme_ligands():
     """
     Try proposing geometries for all T4 ligands from all T4 ligands
@@ -215,7 +216,7 @@ def test_propose_lysozyme_ligands():
     proposals = make_geometry_proposal_array(smiles_list, forcefield=['data/T4-inhibitors.xml', 'data/gaff.xml'])
     run_proposals(proposals)
 
-
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_propose_kinase_inhibitors():
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     testsystem = KinaseInhibitorsTestSystem()
@@ -532,7 +533,6 @@ def test_logp_reverse():
     """
     Make sure logp_reverse and logp_forward are consistent
     """
-    np.seterr(all='raise')
     molecule_name_1 = 'erlotinib'
     molecule_name_2 = 'imatinib'
     #molecule_name_1 = 'benzene'
@@ -714,15 +714,14 @@ def _generate_ffxmls():
 
 
 if __name__=="__main__":
-    #test_coordinate_conversion()
+    test_coordinate_conversion()
     #for i in range(10):
     #test_run_geometry_engine()
-    #test_existing_coordinates()
+    test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
-    #test_angle()
     #test_logp_reverse()
     #_tleap_all()
     #test_mutate_from_all_to_all()
     #_generate_ffxmls()
-    test_propose_kinase_inhibitors()
+    #test_propose_kinase_inhibitors()
