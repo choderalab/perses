@@ -1032,7 +1032,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._generated_systems = dict()
         self._generated_topologies = dict()
         self._matches = dict()
-        self._probabability_matrix = self._calculate_probability_matrix(self._smiles_list)
+        self._probability_matrix = self._calculate_probability_matrix(self._smiles_list)
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata)
 
     def propose(self, current_system, current_topology, current_metadata=None):
@@ -1396,10 +1396,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             The log probability of the choice
         """
         current_smiles_idx = self._smiles_list.index(molecule_smiles)
-        molecule_probabilities = self._probabability_matrix[current_smiles_idx, :]
-        proposed_smiles = np.random.choice(self._smiles_list, p=molecule_probabilities)
+        molecule_probabilities = self._probability_matrix[current_smiles_idx, :]
+        proposed_smiles_idx = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
+        reverse_probability = self._probability_matrix[proposed_smiles_idx, current_smiles_idx]
+        forward_probability = molecule_probabilities[proposed_smiles_idx]
+        proposed_smiles = self._smiles_list[proposed_smiles_idx]
+        logp = np.log(reverse_probability) - np.log(forward_probability)
         proposed_mol = self._smiles_to_oemol(proposed_smiles)
-        return proposed_smiles, proposed_mol, 0.0
+        return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):
         """
