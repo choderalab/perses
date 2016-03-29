@@ -1026,12 +1026,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None):
         if not atom_expr:
-            self.atom_expr = oechem.OEExprOpts_AtomicNumber
+            self.atom_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         else:
             self.atom_expr = atom_expr
 
         if not bond_expr:
-            self.bond_expr = 0
+            self.bond_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         else:
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
@@ -1340,8 +1340,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #atomexpr = oechem.OEExprOpts_AutomorphAtoms | oechem.OEExprOpts_EqCAliphaticONS | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqCHalogen | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCPSAcidRoot | oechem.OEExprOpts_EqNotAromatic
         #bondexpr = oechem.OEExprOpts_AutomorphBonds | oechem.OEExprOpts_EqDoubleTriple
         # This seems to work reasonably well:
-        #self._atom_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
-        #self._bond_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        #self.atom_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        #self.bond_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         mcs.Init(oegraphmol_current, self.atom_expr, self.bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
