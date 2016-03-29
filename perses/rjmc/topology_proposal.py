@@ -1024,10 +1024,20 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         metadata for the proposal engine
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', proposal_metadata=None):
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None):
+        if not atom_expr:
+            self.atom_expr = oechem.OEExprOpts_AtomicNumber
+        else:
+            self.atom_expr = atom_expr
+
+        if not bond_expr:
+            self.bond_expr = 0
+        else:
+            self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
         self._smiles_list = self._gen_safe_smiles_list(list_of_smiles)
         self._n_molecules = len(self._smiles_list)
+
         self._residue_name = residue_name
         self._generated_systems = dict()
         self._generated_topologies = dict()
@@ -1123,7 +1133,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 can_smi = self._canonicalize_smiles(smiles)
                 safe_smiles_list.append(can_smi)
             else:
-                logging.debug("%s is being removed as it is disconnected" % list_of_smiles[i])
+                logging.warning("%s is being removed as it is disconnected" % list_of_smiles[i])
         return safe_smiles_list
 
 
@@ -1330,9 +1340,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #atomexpr = oechem.OEExprOpts_AutomorphAtoms | oechem.OEExprOpts_EqCAliphaticONS | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqCHalogen | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCPSAcidRoot | oechem.OEExprOpts_EqNotAromatic
         #bondexpr = oechem.OEExprOpts_AutomorphBonds | oechem.OEExprOpts_EqDoubleTriple
         # This seems to work reasonably well:
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
-        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-        mcs.Init(oegraphmol_current, atomexpr, bondexpr)
+        #self._atom_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        #self._bond_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        mcs.Init(oegraphmol_current, self.atom_expr, self.bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
@@ -1466,11 +1476,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             atom_set = set()
             #get the mapped atoms:
             for matchpair in match.GetAtoms():
-                atom_set.add(matchpair.target)
+                atom_set.add(matchpair.target.GetIdx())
             #get all the torsions in the molecule:
             torsions = list(oechem.OEGetTorsions(new_molecule))
             for torsion in torsions:
-                if atom_set.issuperset({torsion.a, torsion.b, torsion.c, torsion.d}):
+                torsion_atom_idx = {torsion.a.GetIdx(), torsion.b.GetIdx(), torsion.c.GetIdx(), torsion.d.GetIdx()}
+                if atom_set.issuperset(torsion_atom_idx):
                     safe_atom_matches.append(match)
                     break
         return safe_atom_matches
