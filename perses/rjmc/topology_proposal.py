@@ -1026,12 +1026,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None):
         if not atom_expr:
-            self.atom_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+            self.atom_expr = oechem.OEExprOpts_AtomicNumber #oechem.OEExprOpts_Aromaticity #| oechem.OEExprOpts_RingMember
         else:
             self.atom_expr = atom_expr
 
         if not bond_expr:
-            self.bond_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+            self.bond_expr = 0 #oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         else:
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
