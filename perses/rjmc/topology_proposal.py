@@ -750,7 +750,7 @@ class PointMutationEngine(PolymerProposalEngine):
                 his_choice = np.random.choice(range(len(his_state)),p=his_prob)
                 index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
             # DEBUG
-            print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
+            if self.verbose: print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
 
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues
@@ -1079,7 +1079,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                                                                                 current_mol_smiles)
 
         # DEBUG
-        print('proposed SMILES string: %s' % proposed_mol_smiles)
+        if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
         from openmoltools.openeye import molecule_to_mol2, generate_conformers
         moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=True)
         molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")

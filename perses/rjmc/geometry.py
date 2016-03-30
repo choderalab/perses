@@ -81,6 +81,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._energy_time = 0.0
         self._torsion_coordinate_time = 0.0
         self._position_set_time = 0.0
+        self.verbose = False
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -294,7 +295,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #accumulate logp
             if direction == 'reverse':
-                print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
+                if self.verbose: print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
@@ -342,7 +343,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
         external_bonds = list(res.external_bonds())
         for bond in external_bonds:
-            print(bond)
+            if self.verbose: print(bond)
         new_atoms = {}
         highest_index = 0
         if external_bonds:
@@ -358,16 +359,16 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
             for bond in res.external_bonds():
                 internal_atom = [atom for atom in bond if atom.residue==res][0]
-                print('internal atom')
-                print(internal_atom)
+                if self.verbose: print('internal atom')
+                if self.verbose: print(internal_atom)
                 highest_index += 1
                 if internal_atom.name=='N':
-                    print('Adding H to N')
+                    if self.verbose: print('Adding H to N')
                     new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, -1)
                     new_atom.index = -1
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                 if internal_atom.name=='C':
-                    print('Adding OH to C')
+                    if self.verbose: print('Adding OH to C')
                     new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, -1)
                     new_atom.index = -1
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
@@ -1247,4 +1248,3 @@ class ProposalOrderTools(object):
                             dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
                             topological_torsions.append(dihedral)
         return topological_torsions
-
