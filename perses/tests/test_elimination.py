@@ -13,6 +13,7 @@ from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
 import sys, math
+from unittest import skipIf
 import numpy as np
 from functools import partial
 from pkg_resources import resource_filename
