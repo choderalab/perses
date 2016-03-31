@@ -340,7 +340,6 @@ class T4LysozymeTestSystem(PersesTestSystem):
         mol.SetTitle('BNZ')
         oechem.OESmilesToMol(mol,'C1=CC=CC=C1')
         # put positions from pdb into OEMol
-        print(ligand_modeller.positions)
         giveOpenmmPositionsToOEMOL(ligand_modeller.positions, mol)
         oechem.OEAddExplicitHydrogens(mol)
         oechem.OETriposAtomNames(mol)
@@ -353,15 +352,14 @@ class T4LysozymeTestSystem(PersesTestSystem):
         omega.SetFixSmarts('[c]')
         omega(mol)
         new_positions = extractPositionsFromOEMOL(mol)
-        print(new_positions)
         new_residue = forcefield_generators.generateTopologyFromOEMol(mol)
 
         modeller = copy.deepcopy(receptor_modeller)
         modeller.add(new_residue, new_positions)
         topologies['complex'] = modeller.getTopology()
         positions['complex'] = modeller.getPositions()
-        with open('omegaed_181L.pdb','w') as fo:
-            app.PDBFile.writeFile(modeller.topology, modeller.positions, fo, keepIds=True)
+        #with open('omegaed_181L.pdb','w') as fo:
+        #    app.PDBFile.writeFile(modeller.topology, modeller.positions, fo, keepIds=True)
 
         # Create all environments.
         for environment in ['implicit', 'vacuum']:
