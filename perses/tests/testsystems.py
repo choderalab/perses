@@ -31,7 +31,7 @@ import sys, math
 import numpy as np
 from functools import partial
 from pkg_resources import resource_filename
-from openeye import oechem
+from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
 from perses.tests.utils import sanitizeSMILES
 import copy
@@ -302,7 +302,7 @@ class T4LysozymeTestSystem(PersesTestSystem):
 
         # Create receptor in solvent.
         from pkg_resources import resource_filename
-        pdb_filename = resource_filename('perses', 'data/181L.pdb') # TODO: THIS FILE HAS A LIGAND WITHOUT PROTONS IN IT!
+        pdb_filename = resource_filename('perses', 'data/181L.pdb')
         import pdbfixer
         from simtk.openmm.app import PDBFile, Modeller
         topologies = dict()
@@ -332,14 +332,27 @@ class T4LysozymeTestSystem(PersesTestSystem):
                 break
 
         from openmoltools import forcefield_generators
-        mol = forcefield_generators.generateOEMolFromTopologyResidue(residue)
+        from utils import extractPositionsFromOEMOL, giveOpenmmPositionsToOEMOL
+        # create OEMol version of benzene
+        mol = oechem.OEMol()
+        oechem.OESmilesToMol(mol,'C1=CC=CC=C1')
+        # put positions from pdb into OEMol
+        giveOpenmmPositionsToOEMOL(ligand_modeller.positions, mol)
         oechem.OEAddExplicitHydrogens(mol)
         oechem.OETriposAtomNames(mol)
         oechem.OETriposBondTypeNames(mol)
+        omega = oeomega.OEOmega()
+        omega.SetStrictStereo(False)
+        omega.SetMaxConfs(1)
+        # require omega to preserve coordinates assigned to carbons (from pdb)
+        omega.SetFromCT(False)
+        omega.SetFixSmarts('[c]')
+        omega(mol)
+        new_positions = extractPositionsFromOEMOL(mol)
         new_residue = forcefield_generators.generateTopologyFromOEMol(mol)
 
         modeller = copy.deepcopy(receptor_modeller)
-        modeller.add(new_residue)
+        modeller.add(new_residue, new_positions)
         topologies['complex'] = modeller.getTopology()
         positions['complex'] = modeller.getPositions()
 
