@@ -277,7 +277,9 @@ class T4LysozymeTestSystem(PersesTestSystem):
     """
     def __init__(self):
         super(T4LysozymeTestSystem, self).__init__()
-        environments = ['explicit-complex', 'explicit-receptor', 'implicit-complex', 'implicit-receptor', 'vacuum-complex', 'vacuum-receptor']
+#        environments = ['explicit-complex', 'explicit-receptor', 'implicit-complex', 'implicit-receptor', 'vacuum-complex', 'vacuum-receptor']
+        environments = ['explicit-complex', 'explicit-receptor', 'vacuum-complex', 'vacuum-receptor']
+
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -292,8 +294,8 @@ class T4LysozymeTestSystem(PersesTestSystem):
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
-        #system_generators['implicit-complex'] = system_generators['implicit']
-        #system_generators['implicit-receptor'] = system_generators['implicit']
+        system_generators['implicit-complex'] = system_generators['implicit']
+        system_generators['implicit-receptor'] = system_generators['implicit']
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
             use_antechamber=True)
@@ -357,8 +359,7 @@ class T4LysozymeTestSystem(PersesTestSystem):
         positions['complex'] = modeller.getPositions()
 
         # Create all environments.
-        #for environment in ['implicit', 'vacuum']:
-        for environment in ['vacuum']:
+        for environment in ['implicit', 'vacuum']:
             for component in ['receptor', 'complex']:
                 topologies[environment + '-' + component] = topologies[component]
                 positions[environment + '-' + component] = positions[component]
@@ -367,6 +368,8 @@ class T4LysozymeTestSystem(PersesTestSystem):
         for component in ['receptor', 'complex']:
             modeller = app.Modeller(topologies[component], positions[component])
             modeller.addSolvent(system_generators['explicit'].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+            atoms = list(modeller.topology.atoms())
+            print('Solvated %s has %s atoms' % (component, len(atoms)))
             topologies['explicit' + '-' + component] = modeller.getTopology()
             positions['explicit' + '-' + component] = modeller.getPositions()
 
@@ -391,6 +394,7 @@ class T4LysozymeTestSystem(PersesTestSystem):
         # Generate systems
         systems = dict()
         for environment in environments:
+            print(environment)
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
@@ -400,7 +404,7 @@ class T4LysozymeTestSystem(PersesTestSystem):
         pressure = 1.0*unit.atmospheres
         for component in ['receptor', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
-            thermodynamic_states['implicit' + '-' + component] = ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
+            #thermodynamic_states['implicit' + '-' + component] = ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
             thermodynamic_states['vacuum' + '-' + component]   = ThermodynamicState(system=systems['vacuum' + '-' + component], temperature=temperature)
 
         # Create SAMS samplers
@@ -1160,6 +1164,7 @@ def run_t4():
     for component in ['complex', 'receptor']:
         testsystem.exen_samplers[solvent + '-' + component].pdbfile = open('t4-' + component + '.pdb', 'w')
         testsystem.exen_samplers[solvent + '-' + component].options={'nsteps':0} # instantaneous MC
+        testsystem.mcmc_samplers[solvent + '-' + component].verbose = True # use fewer MD steps to speed things up
         testsystem.mcmc_samplers[solvent + '-' + component].nsteps = 50 # use fewer MD steps to speed things up
         testsystem.sams_samplers[solvent + '-' + component].run(niterations=5)
     testsystem.designer.verbose = True
