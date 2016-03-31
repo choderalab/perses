@@ -64,7 +64,6 @@ def giveOpenmmPositionsToOEMOL(positions, molecule):
     for key in coords.keys():
         coords[key] = (positions._value[key][0],positions._value[key][1],positions._value[key][2])
     molecule.SetCoords(coords)
-    return molecule
 
 def createOEMolFromIUPAC(iupac_name='bosutinib'):
     from openeye import oechem, oeiupac, oeomega
