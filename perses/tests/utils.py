@@ -60,8 +60,9 @@ def extractPositionsFromOEMOL(molecule):
 
 def giveOpenmmPositionsToOEMOL(positions, molecule):
     assert molecule.NumAtoms() == len(positions)
+    positions = positions.in_units_of(unit.angstrom)
     coords = molecule.GetCoords()
-    for key in coords.keys():
+    for key in coords.keys(): # openmm in nm, openeye in A
         coords[key] = (positions._value[key][0],positions._value[key][1],positions._value[key][2])
     molecule.SetCoords(coords)
 
