@@ -649,8 +649,11 @@ class PolymerProposalEngine(ProposalEngine):
 
 
     def compute_state_key(self, topology):
+        for chain in topology.chains():
+            if chain.id == self._chain_id:
+                break
         chemical_state_key = ''
-        for (index, res) in enumerate(topology.residues()):
+        for (index, res) in enumerate(chain._residues):
             if (index > 0):
                 chemical_state_key += '-'
             chemical_state_key += res.name
