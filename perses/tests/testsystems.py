@@ -335,31 +335,32 @@ class T4LysozymeTestSystem(PersesTestSystem):
 
         from openmoltools import forcefield_generators
         from utils import extractPositionsFromOEMOL, giveOpenmmPositionsToOEMOL
+        import perses.rjmc.geometry as geometry
+        from perses.rjmc.topology_proposal import TopologyProposal
         # create OEMol version of benzene
         mol = oechem.OEMol()
-        mol.SetTitle('BNZ')
+        #mol.SetTitle('BNZ') # should be set to residue.name in generateTopologyFromOEMol, not working
         oechem.OESmilesToMol(mol,'C1=CC=CC=C1')
-        # put positions from pdb into OEMol
-        giveOpenmmPositionsToOEMOL(ligand_modeller.positions, mol)
         oechem.OEAddExplicitHydrogens(mol)
         oechem.OETriposAtomNames(mol)
         oechem.OETriposBondTypeNames(mol)
-        omega = oeomega.OEOmega()
-        omega.SetStrictStereo(False)
-        omega.SetMaxConfs(1)
-        # require omega to preserve coordinates assigned to carbons (from pdb)
-        omega.SetFromCT(False)
-        omega.SetFixSmarts('[c]')
-        omega(mol)
-        new_positions = extractPositionsFromOEMOL(mol)
+
         new_residue = forcefield_generators.generateTopologyFromOEMol(mol)
+        for res in new_residue.residues():
+            res.name = 'BNZ'
+        bnz_new_sys = system_generators['vacuum'].build_system(new_residue)
+        kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+        temperature = 300.0 * unit.kelvin
+        kT = kB * temperature
+        beta = 1.0/kT
+        adding_hydrogen_proposal = TopologyProposal(new_topology=new_residue, new_system =bnz_new_sys, old_topology=ligand_modeller.topology, old_system =bnz_new_sys, logp_proposal = 0.0, new_to_old_atom_map = {0:0,1:1,2:2,3:3,4:4,5:5}, old_chemical_state_key='',new_chemical_state_key='')
+        geometry_engine = geometry.FFAllAngleGeometryEngine()
+        new_positions, logp = geometry_engine.propose(adding_hydrogen_proposal, ligand_modeller.positions, beta)
 
         modeller = copy.deepcopy(receptor_modeller)
         modeller.add(new_residue, new_positions)
         topologies['complex'] = modeller.getTopology()
         positions['complex'] = modeller.getPositions()
-        #with open('omegaed_181L.pdb','w') as fo:
-        #    app.PDBFile.writeFile(modeller.topology, modeller.positions, fo, keepIds=True)
 
         # Create all environments.
         for environment in ['implicit', 'vacuum']:
@@ -447,8 +448,6 @@ class T4LysozymeTestSystem(PersesTestSystem):
         self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
         self.designer = designer
-
-        minimize(self)
 
 class MybTestSystem(PersesTestSystem):
     """
