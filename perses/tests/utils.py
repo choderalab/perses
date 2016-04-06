@@ -513,6 +513,33 @@ def compute_potential_components(context):
     del context, integrator
     return energy_components
 
+def smiles_to_topology(smiles):
+    """
+    Convert a SMILES string to an OpenMM
+    Topology
+
+    Parameters
+    ----------
+    smiles : str
+        smiles to be made into topology
+
+    Returns
+    -------
+    topology : simtk.openmm.topology.app
+        topology of the smiles
+    mol : OEMol
+        OEMol with explicit hydrogens
+    """
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    mol = oechem.OEMol()
+    oechem.OESmilesToMol(mol, smiles)
+    oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
+    topology = generateTopologyFromOEMol(mol)
+    return topology, mol
+
+
 def check_system(system):
     """
     Check OpenMM System object for pathologies, like duplicate atoms in torsions.

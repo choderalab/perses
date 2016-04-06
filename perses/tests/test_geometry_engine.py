@@ -130,6 +130,8 @@ def align_molecules(mol1, mol2):
     mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
     atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
     bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+    #atomexpr = oechem.OEExprOpts_HvyDegree
+    bondexpr = 0
     mcs.Init(mol1, atomexpr, bondexpr)
     mcs.SetMCSFunc(oechem.OEMCSMaxAtomsCompleteCycles())
     unique = True
@@ -361,11 +363,13 @@ def test_run_geometry_engine(index=0):
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
     """
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
     import copy
     #molecule_name_1 = 'glycine'
     #molecule_name_2 = 'tryptophan'
-    molecule_name_1 = 'imatinib'
-    molecule_name_2 = 'erlotinib'
+    molecule_name_1 = 'toluene'
+    molecule_name_2 = 'benzene'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -385,7 +389,7 @@ def test_run_geometry_engine(index=0):
     # Turn on PDB file writing.
     geometry_engine.write_proposal_pdb = True
     geometry_engine.pdb_filename_prefix = 'geometry-proposal'
-    test_pdb_file = open("glycine_to_tryptophan_%d_0.pdb" % index, 'w')
+    test_pdb_file = open("cyclohexane_to_benzene_%d_0.pdb" % index, 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
@@ -714,10 +718,10 @@ def _generate_ffxmls():
 
 
 if __name__=="__main__":
-    test_coordinate_conversion()
+    #test_coordinate_conversion()
     #for i in range(10):
-    #test_run_geometry_engine()
-    test_existing_coordinates()
+    test_run_geometry_engine()
+    #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
     #test_logp_reverse()

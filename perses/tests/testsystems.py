@@ -775,6 +775,10 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
         self.molecules = molecules
+        T4_file = open('/Users/grinawap/t4inhibitors.ism','w')
+        T4_file.writelines("\n".join(molecules))
+        T4_file.close()
+        print("written!")
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__()
 
@@ -1005,7 +1009,9 @@ def run_valence_system():
     testsystem.sams_samplers[environment].run(niterations=5)
 
 if __name__ == '__main__':
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
     #run_valence_system()
-    run_kinase_inhibitors()
+    #run_kinase_inhibitors()
     #run_abl_imatinib()
     #run_myb()
