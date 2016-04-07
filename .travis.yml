@@ -40,23 +40,34 @@ script:
   - cd devtools && nosetests $NOSETESTS --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
 env:
   matrix:
+    # Allfast tests for python 2.7
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.testsystems perses.tests.utils"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.samplers"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="T4LysozymeInhibitorsTestSystem"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="KinaseInhibitorsTestSystem"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlkanesTestSystem"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlanineDipeptideTestSystem"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AblImatinibTestSystem"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.rjmc perses.tests.test_topology_proposal perses.tests.test_geometry_engine"
+    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="T4LysozymeInhibitorsTestSystem"
+    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="KinaseInhibitorsTestSystem"
+    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlkanesTestSystem"
+    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlanineDipeptideTestSystem"
+    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AblImatinibTestSystem"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.rjmc"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_topology_proposal"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_geometry_engine"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.bias"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.annihilation perses.tests.test_ncmc_integrator perses.tests.test_elimination"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.annihilation"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_ncmc_integrator"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_elimination"
+    # Main tests for python 3.4
+    # We skip slow tests.
     - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.testsystems perses.tests.utils"
     - python=3.4 CONDA_PY=34 NOSETESTS="perses.samplers"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.rjmc perses.tests.test_topology_proposal perses.tests.test_geometry_engine"
+    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.rjmc"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_topology_proposal"
+    #- python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_geometry_engine"
     - python=3.4 CONDA_PY=34 NOSETESTS="perses.bias"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.annihilation perses.tests.test_ncmc_integrator perses.tests.test_elimination"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.annihilation"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_ncmc_integrator"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_elimination"
 
   global:
     - ORGNAME="omnia"

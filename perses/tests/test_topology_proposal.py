@@ -77,12 +77,12 @@ def test_small_molecule_proposals():
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
     import openeye.oechem as oechem
-    list_of_smiles = ['CCC','CCCC','CCCCC']
+    list_of_smiles = ['CCCC','CCCCC','CCCCCC']
     gaff_xml_filename = get_data_filename('data/gaff.xml')
     stats_dict = {smiles : 0 for smiles in list_of_smiles}
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, system_generator)
-    initial_molecule = generate_initial_molecule('CCC')
+    initial_molecule = generate_initial_molecule('CCCC')
     initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
     proposal = proposal_engine.propose(initial_system, initial_topology)
     for i in range(50):
@@ -437,11 +437,11 @@ def test_run_peptide_library_engine():
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
-    test_run_point_mutation_propose()
-    test_mutate_from_every_amino_to_every_other()
-    test_specify_allowed_mutants()
-    test_propose_self()
-    test_limiting_allowed_residues()
-    test_run_peptide_library_engine()
+    #test_run_point_mutation_propose()
+    #test_mutate_from_every_amino_to_every_other()
+    #test_specify_allowed_mutants()
+    #test_propose_self()
+    #test_limiting_allowed_residues()
+    #test_run_peptide_library_engine()
     test_small_molecule_proposals()
 

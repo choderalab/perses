@@ -23,6 +23,7 @@ requirements:
     - openmoltools-dev
     - alchemy-dev
     - openmmtools-dev
+    - numba
 
   run:
     - python
@@ -37,6 +38,7 @@ requirements:
     - openmoltools-dev
     - alchemy-dev
     - openmmtools-dev
+    - numba
 
 test:
   requires:

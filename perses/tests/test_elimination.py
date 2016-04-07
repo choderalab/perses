@@ -13,6 +13,7 @@ from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
 import sys, math
+from unittest import skipIf
 import numpy as np
 from functools import partial
 from pkg_resources import resource_filename
@@ -96,11 +97,10 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
             raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
 
     nequil = 5 # number of equilibration iterations
-    niterations = 20 # number of round-trip switching trials
+    niterations = 50 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     logP_switch_n = np.zeros([niterations], np.float64)
-    print("")
     for iteration in range(nequil):
         [positions, velocities] = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
@@ -150,7 +150,8 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
         msg += str(logP_n) + '\n'
         raise Exception(msg)
 
-def notest_alchemical_elimination_mutation():
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+def test_alchemical_elimination_mutation():
     """
     Test alchemical elimination for mutations.
     """
@@ -193,7 +194,10 @@ def test_ncmc_alchemical_integrator_stability_molecules():
     Test NCMCAlchemicalIntegrator
 
     """
-    molecule_names = ['imatinib', 'pentane', 'biphenyl']
+    molecule_names = ['pentane', 'biphenyl', 'imatinib']
+    if os.environ.get("TRAVIS", None) == 'true':
+        molecule_names = ['pentane']
+
     for molecule_name in molecule_names:
         from perses.tests.utils import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
@@ -235,7 +239,10 @@ def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    molecule_names = ['imatinib', 'pentane', 'biphenyl']
+    molecule_names = ['pentane', 'biphenyl', 'imatinib']
+    if os.environ.get("TRAVIS", None) == 'true':
+        molecule_names = ['pentane']
+
     for molecule_name in molecule_names:
         from perses.tests.utils import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
@@ -253,6 +260,7 @@ def test_ncmc_engine_molecule():
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_alchemical_elimination_peptide():
     """
     Test alchemical elimination for the alanine dipeptide.
