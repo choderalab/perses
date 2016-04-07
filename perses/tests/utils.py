@@ -58,6 +58,14 @@ def extractPositionsFromOEMOL(molecule):
         positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
     return positions
 
+def giveOpenmmPositionsToOEMOL(positions, molecule):
+    assert molecule.NumAtoms() == len(positions)
+#    positions = positions.in_units_of(unit.angstrom)
+    coords = molecule.GetCoords()
+    for key in coords.keys(): # openmm in nm, openeye in A
+        coords[key] = (positions[key][0]/unit.angstrom,positions[key][1]/unit.angstrom,positions[key][2]/unit.angstrom)
+    molecule.SetCoords(coords)
+
 def createOEMolFromIUPAC(iupac_name='bosutinib'):
     from openeye import oechem, oeiupac, oeomega
 
