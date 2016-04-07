@@ -1016,7 +1016,9 @@ class SystemGenerator(object):
 class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
     This class proposes new small molecules from a prespecified set. It uses
-    uniform proposal probabilities, but can be extended.
+    uniform proposal probabilities, but can be extended. The user is responsible
+    for providing a list of smiles that can be interconverted! The class includes
+    extra functionality to assist with that (it is slow).
 
     Parameters
     ----------
@@ -1041,7 +1043,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         else:
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = self._gen_safe_smiles_list(list_of_smiles)
+        self._smiles_list = list_of_smiles
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
@@ -1400,7 +1402,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #normalize the rows:
         for i in range(n_smiles):
             row_sum = np.sum(probability_matrix[i, :])
-            probability_matrix[i, :] /= row_sum if row_sum > 0 else 1
+            try:
+                probability_matrix[i, :] /= row_sum
+            except ZeroDivisionError:
+                print("One molecule is completely disconnected!")
+                raise
+
         return probability_matrix
 
     @staticmethod
@@ -1454,16 +1461,3 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 pass
         removed_smiles = smiles_set.difference(safe_smiles)
         return safe_smiles, removed_smiles
-
-
-if __name__=="__main__":
-    t4inhib = open('./t4inhibitors.ism')
-    smiles = t4inhib.readlines()
-    clean_smiles = [smilesmol.strip("\n") for smilesmol in smiles]
-    safe_smiles, removed_smiles = SmallMoleculeSetProposalEngine.clean_molecule_list(clean_smiles, oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_AtomicNumber, oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember)
-    preserved_t4 = open('preserved_sys.ism','w')
-    discarded_t4 = open('discarded_sys.ism','w')
-    preserved_t4.writelines("\n".join(safe_smiles))
-    discarded_t4.writelines("\n".join(removed_smiles))
-    preserved_t4.close()
-    discarded_t4.close()
