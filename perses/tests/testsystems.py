@@ -775,10 +775,6 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
         self.molecules = molecules
-        T4_file = open('/Users/grinawap/t4inhibitors.ism','w')
-        T4_file.writelines("\n".join(molecules))
-        T4_file.close()
-        print("written!")
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__()
 
