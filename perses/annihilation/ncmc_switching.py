@@ -541,16 +541,20 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
                 if context_parameter in system_parameters:
                     self.addComputeGlobal(context_parameter, functions[context_parameter])
 
-        # Unroll loop over NCMC steps (for nsteps > 1)
-        for step in range(nsteps):
+        # Loop over NCMC steps (for nsteps > 1)
+        if (nsteps > 0):
+            self.addGlobalVariable('step', 0) # current NCMC step number
+            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
+            self.beginWhileBlock('step < nsteps')
+
             #
             # Alchemical perturbation step
             #
 
             if direction == 'insert':
-                self.addComputeGlobal('lambda', 'max(0,min(1,%f))' % (float(step+1.0) / float(nsteps)))
+                self.addComputeGlobal('lambda', '(step+1)/nsteps')
             elif direction == 'delete':
-                self.addComputeGlobal('lambda', 'max(0,min(1,%f))' % (float(nsteps - step - 1) / float(nsteps)))
+                self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
 
             # Update Context parameters according to provided functions.
             for context_parameter in functions:
@@ -567,6 +571,13 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             self.addConstrainPositions()
             self.addComputePerDof("v", "v+0.5*dti*f/m+(x-x1)/dti")
             self.addConstrainVelocities()
+
+            #
+            # End of loop
+            #
+
+            self.addComputeGlobal('step','step+1')
+            self.endBlock()
 
         # Store final total energy.
         self.addComputeSum("kinetic", "0.5*m*v*v")
