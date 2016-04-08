@@ -1240,8 +1240,7 @@ def run_valence_system():
     testsystem.sams_samplers[environment].run(niterations=5)
 
 if __name__ == '__main__':
-    run_t4()
-    #run_valence_system()
+    run_valence_system()
     #run_kinase_inhibitors()
     #run_abl_imatinib()
     #run_myb()

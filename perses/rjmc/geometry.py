@@ -286,12 +286,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=360)
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=36)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=360)
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=36)
 
             #accumulate logp
             if direction == 'reverse':
@@ -705,7 +705,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         theta = sigma_theta*np.random.randn() + theta0
         return theta
 
-    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=180):
+    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=18):
         """
         Rotate the atom about the
         Parameters
@@ -744,7 +744,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._torsion_coordinate_time += torsion_scan_time
         return xyzs_quantity, phis
 
-    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=180):
+    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=18):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -798,7 +798,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_torsions = logq - np.log(Z)
         return logp_torsions, phis
 
-    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=180):
+    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=18):
         """
         Propose a torsion using OpenMM
 
@@ -832,7 +832,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phi = phis[phi_idx]
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=180):
+    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=18):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -1101,18 +1101,18 @@ class PredHBond(oechem.OEUnaryBondPred):
 class ProposalOrderTools(object):
     """
     This is an internal utility class for determining the order of atomic position proposals.
-    It encapsulates funcionality needed by the geometry engine.
+    It encapsulates funcionality needed by the geometry engine. Atoms can be proposed without
+    torsions or even angles, though this may not be recommended. Default is to require torsions.
 
     Parameters
     ----------
     topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
         The topology proposal containing the relevant move.
-    add_extra_torsions : bool, optional
-        Whether to add additional torsions to keep rings flat. Default true.
     """
 
     def __init__(self, topology_proposal):
         self._topology_proposal = topology_proposal
+
 
     def determine_proposal_order(self, direction='forward'):
         """
@@ -1198,8 +1198,8 @@ class ProposalOrderTools(object):
 
         """
         eligible_torsions = self._get_topological_torsions(atoms_with_positions, atom_for_proposal)
-        if len(eligible_torsions) == 0:
-            raise Exception("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
+        if not eligible_torsions:
+            raise NoTorsionError("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
         torsion_idx = np.random.randint(0, len(eligible_torsions))
         torsion_selected = eligible_torsions[torsion_idx]
         return torsion_selected, np.log(1.0/len(eligible_torsions))
@@ -1251,3 +1251,9 @@ class ProposalOrderTools(object):
                             dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
                             topological_torsions.append(dihedral)
         return topological_torsions
+
+
+class NoTorsionError(Exception):
+    def __init__(self, message):
+        # Call the base class constructor with the parameters it needs
+        super(NoTorsionError, self).__init__(message)

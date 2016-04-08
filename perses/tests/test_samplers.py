@@ -75,6 +75,7 @@ def test_samplers():
     testsystem_names = ['T4LysozymeTestSystem', 'ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem', 'AblImatinibTestSystem']
     niterations = 5 # number of iterations to run
 
+    testsystem_names = ['T4LysozymeInhibitorsTestSystem']
     # If TESTSYSTEMS environment variable is specified, test those systems.
     if 'TESTSYSTEMS' in os.environ:
         testsystem_names = os.environ['TESTSYSTEMS'].split(' ')
@@ -116,5 +117,5 @@ def test_samplers():
 if __name__=="__main__":
     for t in test_samplers():
         print(t.description)
-        if(t.description) == "Testing MultiTargetDesign sampler with ValenceSmallMoleculeLibraryTestSystem transfer free energy from vacuum -> vacuum":
+        if(t.description) == "Testing MultiTargetDesign sampler with T4LysozymeInhibitorsTestSystem transfer free energy from vacuum -> vacuum":
             t()
