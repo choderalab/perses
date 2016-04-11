@@ -345,11 +345,13 @@ class NCMCEngine(object):
                 from simtk.openmm.app import PDBFile
                 filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
                 outfile = open(filename, 'w')
-                PDBFile.writeFile(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile)
+                PDBFile.writeHeader(topology, file=outfile)
+                PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=0)
                 for step in range(self.nsteps):
                     integrator.step(1)
                     if (step+1)%self.write_pdb_interval == 0:
-                        PDBFile.writeFile(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile)
+                        PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=int((step+1)/write_pdb_interval))
+                PDBFile.writeFooter(topology, file=outfile)
                 outfile.close()
             else:
                 integrator.step(self.nsteps)
