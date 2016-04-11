@@ -876,7 +876,12 @@ class GeometrySystemGenerator(object):
     _PeriodicTorsionForceEnergy = "select(step({} - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self):
-        pass
+        self._stericsNonbondedEnergy = "select(step({}-max(growth_idx1, growth_idx2), U_sterics_active, 0)"
+        self._stericsNonbondedEnergy += "U_sterics_active = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
+        self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2);sigma = 0.5*(sigma1 + sigma2);"
+
+
+
 
     def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, force_names=None, force_parameters=None):
         """
@@ -923,9 +928,15 @@ class GeometrySystemGenerator(object):
         modified_torsion_force.addPerTorsionParameter("growth_idx")
         modified_torsion_force.addGlobalParameter(parameter_name, 0)
 
+        modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
+        modified_sterics_force.addPerParticleParameter("sigma")
+        modified_sterics_force.addPerParticleParameter("epsilon")
+        modified_sterics_force.addPerParticleParameter("growth_idx")
+
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
         growth_system.addForce(modified_torsion_force)
+        growth_system.addForce(modified_sterics_force)
 
         #copy the particles over
         for i in range(reference_system.getNumParticles()):
@@ -958,12 +969,25 @@ class GeometrySystemGenerator(object):
                 continue
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
+        #copy parameters for sterics parameters in nonbonded force
+        reference_nonbonded_force = reference_forces['NonbondedForce']
+        for particle_index in range(reference_nonbonded_force.getNumParticles()):
+            [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
+            growth_idx = growth_indices.index(particle_index) + 1 if particle_index in growth_indices else 0
+            modified_sterics_force.addParticle([sigma, epsilon, growth_idx])
+        new_particle_indices = growth_indices
+        old_particle_indices = [idx for idx in range(reference_nonbonded_force.getNumParticles()) if idx not in growth_indices]
+        modified_sterics_force.addInteractionGroup(new_particle_indices, old_particle_indices)
+        modified_sterics_force.addInteractionGroup(new_particle_indices, new_particle_indices)
+
+
         if add_extra_torsions:
             if reference_topology==None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
             self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
 
         return growth_system
+
 
     def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
         """
