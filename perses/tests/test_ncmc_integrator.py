@@ -61,8 +61,11 @@ def collect_switching_data(system, positions, functions, temperature, collision_
 
         # Switch
         integrator.setCurrentIntegrator(1)
-        integrator.step(1)
-        work_n[iteration] = - ncmc_integrator.getLogAcceptanceProbability()
+        if ncmc_nsteps == 0:
+            integrator.step(1)
+        else:
+            integrator.step(ncmc_nsteps)
+        work_n[iteration] = - ncmc_integrator.getLogAcceptanceProbability(context)
 
     # Clean up
     del context, integrator

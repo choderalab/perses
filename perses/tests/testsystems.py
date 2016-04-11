@@ -1239,8 +1239,50 @@ def run_valence_system():
     testsystem.mcmc_samplers[environment].nsteps = 50
     testsystem.sams_samplers[environment].run(niterations=5)
 
+def test_valence_write_pdb_ncmc_switching():
+    """
+    Run abl test system.
+    """
+    testsystem = ValenceSmallMoleculeLibraryTestSystem()
+    environment = 'vacuum'
+    testsystem.exen_samplers[environment].options={'nsteps':10, 'timestep' : 1.0 * unit.femtoseconds}
+    testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 1 # write PDB files for NCMC switching
+    testsystem.mcmc_samplers[environment].nsteps = 10
+    testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
+    testsystem.exen_samplers[environment].run(niterations=1)
+
+def run_abl_imatinib_write_pdb_ncmc_switching():
+    """
+    Run abl test system.
+    """
+    testsystem = AblImatinibTestSystem()
+    #for environment in testsystem.environments:
+    for environment in ['vacuum-complex']:
+        print(environment)
+        testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].options={'nsteps':5000, 'timestep' : 1.0 * unit.femtoseconds}
+        testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
+        testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 10 # write PDB files for NCMC switching
+        testsystem.mcmc_samplers[environment].nsteps = 5000
+        testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
+
+        testsystem.mcmc_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].verbose = True
+        testsystem.sams_samplers[environment].verbose = True
+        #testsystem.mcmc_samplers[environment].run(niterations=5)
+        testsystem.exen_samplers[environment].run(niterations=5)
+
+        #testsystem.sams_samplers[environment].run(niterations=5)
+
+    #testsystem.designer.verbose = True
+    #testsystem.designer.run(niterations=500)
+    #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
+    #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
+
 if __name__ == '__main__':
-    run_valence_system()
+    run_abl_imatinib_write_pdb_ncmc_switching()
+    #run_valence_system()
     #run_kinase_inhibitors()
     #run_abl_imatinib()
     #run_myb()
