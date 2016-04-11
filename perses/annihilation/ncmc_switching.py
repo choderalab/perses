@@ -348,11 +348,16 @@ class NCMCEngine(object):
                 PDBFile.writeHeader(topology, file=outfile)
                 modelIndex = 0
                 PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
-                for step in range(self.nsteps):
-                    integrator.step(1)
-                    if (step+1)%self.write_pdb_interval == 0:
-                        modelIndex += 1
-                        PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
+                try:
+                    for step in range(self.nsteps):
+                        integrator.step(1)
+                        if (step+1)%self.write_pdb_interval == 0:
+                            modelIndex += 1
+                            PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
+                except ValueError as e:
+                    # System is exploding and coordinates won't fit in PDB ATOM fields
+                    print(e)
+
                 PDBFile.writeFooter(topology, file=outfile)
                 outfile.close()
             else:
