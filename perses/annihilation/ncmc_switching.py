@@ -346,11 +346,13 @@ class NCMCEngine(object):
                 filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
                 outfile = open(filename, 'w')
                 PDBFile.writeHeader(topology, file=outfile)
-                PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=0)
+                modelIndex = 0
+                PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
                 for step in range(self.nsteps):
                     integrator.step(1)
                     if (step+1)%self.write_pdb_interval == 0:
-                        PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=int((step+1)/write_pdb_interval))
+                        modelIndex += 1
+                        PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
                 PDBFile.writeFooter(topology, file=outfile)
                 outfile.close()
             else:
