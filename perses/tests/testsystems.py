@@ -1262,11 +1262,11 @@ def run_abl_imatinib_write_pdb_ncmc_switching():
         print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 5000
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10000
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 10 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 5000
+        testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        testsystem.mcmc_samplers[environment].nsteps = 10000
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
         testsystem.mcmc_samplers[environment].verbose = True
