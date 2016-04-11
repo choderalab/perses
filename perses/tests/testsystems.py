@@ -1223,7 +1223,7 @@ def run_kinase_inhibitors():
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
     testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
-    testsystem.exen_samplers[environment].options={'nsteps':0}
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
     testsystem.mcmc_samplers[environment].nsteps = 50
     testsystem.exen_samplers[environment].geometry_engine.write_proposal_pdb = True # write proposal PDBs
     testsystem.sams_samplers[environment].run(niterations=100)
@@ -1235,7 +1235,7 @@ def run_valence_system():
     testsystem = ValenceSmallMoleculeLibraryTestSystem()
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
-    testsystem.exen_samplers[environment].options={'nsteps':0}
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
     testsystem.mcmc_samplers[environment].nsteps = 50
     testsystem.sams_samplers[environment].run(niterations=5)
 
@@ -1245,7 +1245,8 @@ def test_valence_write_pdb_ncmc_switching():
     """
     testsystem = ValenceSmallMoleculeLibraryTestSystem()
     environment = 'vacuum'
-    testsystem.exen_samplers[environment].options={'nsteps':10, 'timestep' : 1.0 * unit.femtoseconds}
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10
+    testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
     testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 1 # write PDB files for NCMC switching
     testsystem.mcmc_samplers[environment].nsteps = 10
     testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
@@ -1261,7 +1262,8 @@ def run_abl_imatinib_write_pdb_ncmc_switching():
         print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].options={'nsteps':5000, 'timestep' : 1.0 * unit.femtoseconds}
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 5000
+        testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
         testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 10 # write PDB files for NCMC switching
         testsystem.mcmc_samplers[environment].nsteps = 5000
