@@ -104,7 +104,16 @@ cmd.viewport(800,600)
 cmd.mset("1 -%d" % cmd.count_states())
 
 # Zoom viewport
-cmd.zoom('complex')
+cmd.zoom('ligand')
+cmd.orient('ligand')
+
+cmd.set_view (\
+     [0.121619843,   -0.006895872,    0.992551982,\
+     0.087170675,   -0.996038020,   -0.017600985,\
+     0.988740742,    0.088662416,   -0.120536640,\
+     0.000000000,    0.000000000, -178.078948975,\
+     1.716222763,    2.769123077,   -0.345157623,\
+   140.398803711,  215.759094238,  -20.000000000] )
 
 # Get number of steps
 nsteps = cmd.count_states()
@@ -118,9 +127,9 @@ cmd.select('ncmc', selection)
 print(atom_indices)
 
 # Render movie
-frame_prefix = 'frames/frame'
+frame_prefix = 'ncmc-insertion-frames/frame'
 cmd.set('ray_trace_frames', 1)
-nskip = 10
+nskip = 1
 frame_number = 0
 for step in range(0,nsteps,nskip):
     print "rendering frame %04d / %04d" % (step+1, nsteps)
