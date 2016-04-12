@@ -286,12 +286,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=36)
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=180)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=36)
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=180)
 
             #accumulate logp
             if direction == 'reverse':
@@ -876,9 +876,9 @@ class GeometrySystemGenerator(object):
     _PeriodicTorsionForceEnergy = "select(step({} - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self):
-        self._stericsNonbondedEnergy = "select(step({}-max(growth_idx1, growth_idx2), U_sterics_active, 0)"
+        self._stericsNonbondedEnergy = "select(step({}-max(growth_idx1, growth_idx2)), U_sterics_active, 0);"
         self._stericsNonbondedEnergy += "U_sterics_active = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
-        self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2);sigma = 0.5*(sigma1 + sigma2);"
+        self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
 
 
 
@@ -932,6 +932,7 @@ class GeometrySystemGenerator(object):
         modified_sterics_force.addPerParticleParameter("sigma")
         modified_sterics_force.addPerParticleParameter("epsilon")
         modified_sterics_force.addPerParticleParameter("growth_idx")
+        modified_sterics_force.addGlobalParameter(parameter_name, 0)
 
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
@@ -975,10 +976,10 @@ class GeometrySystemGenerator(object):
             [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
             growth_idx = growth_indices.index(particle_index) + 1 if particle_index in growth_indices else 0
             modified_sterics_force.addParticle([sigma, epsilon, growth_idx])
-        new_particle_indices = growth_indices
-        old_particle_indices = [idx for idx in range(reference_nonbonded_force.getNumParticles()) if idx not in growth_indices]
-        modified_sterics_force.addInteractionGroup(new_particle_indices, old_particle_indices)
-        modified_sterics_force.addInteractionGroup(new_particle_indices, new_particle_indices)
+        new_particle_indices = [atom.idx for atom in growth_indices]
+        old_particle_indices = [idx for idx in range(reference_nonbonded_force.getNumParticles()) if idx not in new_particle_indices]
+        modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(old_particle_indices))
+        modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(new_particle_indices))
 
 
         if add_extra_torsions:
@@ -1042,7 +1043,7 @@ class GeometrySystemGenerator(object):
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 10.0*units.kilojoule_per_mole
+        k = 40.0*units.kilojoule_per_mole
         #print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
