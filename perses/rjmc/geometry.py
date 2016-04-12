@@ -937,7 +937,6 @@ class GeometrySystemGenerator(object):
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
         growth_system.addForce(modified_torsion_force)
-        growth_system.addForce(modified_sterics_force)
 
         #copy the particles over
         for i in range(reference_system.getNumParticles()):
@@ -971,15 +970,23 @@ class GeometrySystemGenerator(object):
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
         #copy parameters for sterics parameters in nonbonded force
-        reference_nonbonded_force = reference_forces['NonbondedForce']
-        for particle_index in range(reference_nonbonded_force.getNumParticles()):
-            [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
-            growth_idx = growth_indices.index(particle_index) + 1 if particle_index in growth_indices else 0
-            modified_sterics_force.addParticle([sigma, epsilon, growth_idx])
-        new_particle_indices = [atom.idx for atom in growth_indices]
-        old_particle_indices = [idx for idx in range(reference_nonbonded_force.getNumParticles()) if idx not in new_particle_indices]
-        modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(old_particle_indices))
-        modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(new_particle_indices))
+        if 'NonbondedForce' in reference_forces.keys():
+            modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
+            modified_sterics_force.addPerParticleParameter("sigma")
+            modified_sterics_force.addPerParticleParameter("epsilon")
+            modified_sterics_force.addPerParticleParameter("growth_idx")
+            modified_sterics_force.addGlobalParameter(parameter_name, 0)
+            growth_system.addForce(modified_sterics_force)
+            reference_nonbonded_force = reference_forces['NonbondedForce']
+            for particle_index in range(reference_nonbonded_force.getNumParticles()):
+                [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
+                growth_idx = growth_indices.index(particle_index) + 1 if particle_index in growth_indices else 0
+                modified_sterics_force.addParticle([sigma, epsilon, growth_idx])
+            new_particle_indices = [atom.idx for atom in growth_indices]
+            old_particle_indices = [idx for idx in range(reference_nonbonded_force.getNumParticles()) if idx not in new_particle_indices]
+            modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(old_particle_indices))
+            modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(new_particle_indices))
+
 
 
         if add_extra_torsions:
