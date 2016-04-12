@@ -41,8 +41,8 @@ from pymol import util
 # PARAMETERS
 #=============================================================================================
 
-pdb_filename = 'ncmc-insert-1.pdb'
-pkl_filename = 'ncmc-insert-1-atomindices.pkl'
+pdb_filename = 'ncmc-insert-3.pdb'
+pkl_filename = 'ncmc-insert-3-atomindices.pkl'
 
 #=============================================================================================
 # MAIN
@@ -120,9 +120,9 @@ nsteps = cmd.count_states()
 
 import cPickle as pickle
 atom_indices = pickle.load(open(pkl_filename, 'r'))
-selection = '(id %d)' % (atom_indices[0]+1)
+selection = '(id %d)' % (atom_indices[0]+2)
 for index in atom_indices[1:]:
-    selection += ' or (id %d)' % (index+1)
+    selection += ' or (id %d)' % (index+2)
 cmd.select('ncmc', selection)
 print(atom_indices)
 
