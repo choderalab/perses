@@ -340,8 +340,18 @@ class NCMCEngine(object):
             if self.write_pdb_interval:
                 if direction == 'insert':
                     topology = topology_proposal.new_topology
+                    indices = topology_proposal.unique_new_atoms
                 else:
                     topology = topology_proposal.old_topology
+                    indices = topology_proposal.unique_old_atoms
+
+                # Write atom indices that are changing
+                import cPickle as pickle
+                filename = 'ncmc-%s-%d-atomindices.pkl' % (direction, self.nattempted)
+                outfile = open(filename, 'w')
+                pickle.dump(indices, outfile)
+                outfile.close()
+
                 from simtk.openmm.app import PDBFile
                 filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
                 outfile = open(filename, 'w')
