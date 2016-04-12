@@ -348,7 +348,7 @@ class NCMCEngine(object):
                 # Write atom indices that are changing
                 import pickle
                 filename = 'ncmc-%s-%d-atomindices.pkl' % (direction, self.nattempted)
-                outfile = open(filename, 'w')
+                outfile = open(filename, 'wb')
                 pickle.dump(indices, outfile)
                 outfile.close()
 
