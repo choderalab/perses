@@ -128,10 +128,10 @@ def align_molecules(mol1, mol2):
     MCSS two OEmols. Return the mapping of new : old atoms
     """
     mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-    atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+    atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_HvyDegree
     bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
     #atomexpr = oechem.OEExprOpts_HvyDegree
-    bondexpr = 0
+    #bondexpr = 0
     mcs.Init(mol1, atomexpr, bondexpr)
     mcs.SetMCSFunc(oechem.OEMCSMaxAtomsCompleteCycles())
     unique = True
@@ -368,8 +368,8 @@ def test_run_geometry_engine(index=0):
     import copy
     #molecule_name_1 = 'glycine'
     #molecule_name_2 = 'tryptophan'
-    molecule_name_1 = 'toluene'
-    molecule_name_2 = 'benzene'
+    molecule_name_1 = 'erlotinib'
+    molecule_name_2 = 'imatinib'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -389,7 +389,7 @@ def test_run_geometry_engine(index=0):
     # Turn on PDB file writing.
     geometry_engine.write_proposal_pdb = True
     geometry_engine.pdb_filename_prefix = 'geometry-proposal'
-    test_pdb_file = open("cyclohexane_to_benzene_%d_0.pdb" % index, 'w')
+    test_pdb_file = open("erlotinib_to_imatinib_0%d_0_nosterics.pdb" % index, 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
@@ -423,6 +423,8 @@ def test_run_geometry_engine(index=0):
     valence_ctx.setPositions(new_positions)
     vstate = valence_ctx.getState(getEnergy=True)
     print("Valence energy after proposal is %s " % str(vstate.getPotentialEnergy()))
+    final_potential = state2.getPotentialEnergy()
+    return final_potential / final_potential.unit
 
 def test_existing_coordinates():
     """
@@ -719,8 +721,11 @@ def _generate_ffxmls():
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    #for i in range(10):
-    test_run_geometry_engine()
+    niter = 1
+    energies = np.zeros(niter)
+    for i in range(niter):
+        energies[i] = test_run_geometry_engine(index=i)
+    print("The average energy was %f" % np.average(energies))
     #test_existing_coordinates()
     #test_openmm_dihedral()
     #test_try_random_itoc()
