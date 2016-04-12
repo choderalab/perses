@@ -346,7 +346,7 @@ class NCMCEngine(object):
                     indices = topology_proposal.unique_old_atoms
 
                 # Write atom indices that are changing
-                import cPickle as pickle
+                import pickle
                 filename = 'ncmc-%s-%d-atomindices.pkl' % (direction, self.nattempted)
                 outfile = open(filename, 'w')
                 pickle.dump(indices, outfile)

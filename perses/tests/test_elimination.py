@@ -212,7 +212,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
         positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         if np.isnan(np.any(positions / positions.unit)):
             raise Exception('NCMCAlchemicalIntegrator gave NaN positions')
-        if np.isnan(ncmc_integrator.getLogAcceptanceProbability()):
+        if np.isnan(ncmc_integrator.getLogAcceptanceProbability(context)):
             raise Exception('NCMCAlchemicalIntegrator gave NaN logAcceptanceProbability')
 
         del context, ncmc_integrator
