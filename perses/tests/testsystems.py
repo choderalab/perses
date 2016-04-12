@@ -850,6 +850,8 @@ class AblAffinityTestSystem(PersesTestSystem):
                 name = row[0]
                 smiles = row[1]
                 molecules.append(smiles)
+        # Add current molecule
+        molecules.append('Cc1ccc(cc1Nc2nccc(n2)c3cccnc3)NC(=O)c4ccc(cc4)C[NH+]5CCN(CC5)C')
         self.molecules = molecules
 
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
@@ -906,7 +908,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         proposal_metadata = { }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment])
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL')
 
         # Generate systems
         systems = dict()
