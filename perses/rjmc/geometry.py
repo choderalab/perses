@@ -895,7 +895,9 @@ class BootstrapParticleFilter(object):
             How often to resample particles. default 10
         """
 
+        self._system = growth_context.getSystem()
         self._beta = beta
+        self._growth_stage = 0
         self._growth_context = growth_context
         self._atom_torsions = atom_torsions
         self._n_particles = n_particles
@@ -903,20 +905,62 @@ class BootstrapParticleFilter(object):
         self._n_new_atoms = len(self._atom_torsions)
         self._initial_positions = initial_positions
         self._new_indices = [atom.idx for atom in self._atom_torsions.keys()]
-        #create a matrix for weights (n_particles, n_stages)
+        #create a matrix for log weights (n_particles, n_stages)
         self._Wij = np.zeros([self._n_particles, self._n_new_atoms])
         #create an array for positions--only store new positions to avoid
         #consuming way too much memory
         self._new_positions = np.zeros([self._n_particles, self._n_new_atoms, 3])
 
-    def log_unnormalized_target(self, new_positions, growth_stage):
+    def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
+        """
+        Calculate the cartesian coordinates given the internal, as well as abs(detJ)
+        """
+        r = r.value_in_unit(units.nanometers)
+        theta = theta.value_in_unit(units.radians)
+        phi = phi.value_in_unit(units.radians)
+        bond_position = bond_position.astype(np.float64)
+        angle_position = angle_position.astype(np.float64)
+        torsion_position = torsion_position.astype(np.float64)
+        xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
+        return xyz, r**2*np.sin(theta)
+
+    def _get_bond_constraint(self, atom1, atom2, system):
+        """
+        Get the constraint parameters corresponding to the bond
+        between the given atoms
+
+        Parameters
+        ----------
+        atom1 : parmed.Atom object
+           the first atom of the constrained bond
+        atom2 : parmed.Atom object
+           the second atom of the constrained bond
+        system : openmm.System object
+           The system containing the constraint
+
+        Returns
+        -------
+        constraint : float, quantity nm
+            the parameters of the bond constraint
+        """
+        atom_indices = {atom1.idx, atom2.idx}
+        n_constraints = system.getNumConstraints()
+        constraint = None
+        for i in range(n_constraints):
+            constraint_parameters = system.getConstraintParameters(i)
+            constraint_atoms = set(constraint_parameters[:2])
+            if len(constraint_atoms.intersection(atom_indices))==2:
+                constraint = constraint_parameters[2]
+        return constraint
+
+    def _log_unnormalized_target(self, new_positions):
         """
         Given a set of new positions (not all positions!) and a growth
         stage, return the log unnormalized probability.
 
         Parameters
         ----------
-        new_positions : [m, 3] ndarray
+        new_positions :  np.array
             Array containing m 3D coordinates of new atoms
 
         Returns
@@ -926,10 +970,245 @@ class BootstrapParticleFilter(object):
         """
         positions = copy.deepcopy(self._initial_positions)
         positions[self._new_indices] = new_positions
-        self._growth_context.setParameter('growth_stage', growth_stage)
+        self._growth_context.setParameter('growth_stage', self._growth_stage)
         self._growth_context.setPositions(positions)
         energy = self._growth_context.getState(getEnergy=True).getPotentialEnergy()
         return -self._beta*energy
+
+    def _get_relevant_angle(self, atom1, atom2, atom3):
+        """
+        Get the angle containing the 3 given atoms
+        """
+        atom1_angles = set(atom1.angles)
+        atom2_angles = set(atom2.angles)
+        atom3_angles = set(atom3.angles)
+        relevant_angle_set = atom1_angles.intersection(atom2_angles, atom3_angles)
+        relevant_angle = relevant_angle_set.pop()
+        if type(relevant_angle.type.k) != units.Quantity:
+            relevant_angle_with_units = self._add_angle_units(relevant_angle)
+        else:
+            relevant_angle_with_units = relevant_angle
+        return relevant_angle_with_units
+
+    def _add_bond_units(self, bond):
+        """
+        Add the correct units to a harmonic bond
+
+        Arguments
+        ---------
+        bond : parmed bond object
+            The bond to get units
+
+        Returns
+        -------
+
+        """
+        if type(bond.type.k)==units.Quantity:
+            return bond
+        bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
+        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        return bond
+
+    def _add_angle_units(self, angle):
+        """
+        Add the correct units to a harmonic angle
+
+        Arguments
+        ----------
+        angle : parmed angle object
+             the angle to get unit-ed
+
+        Returns
+        -------
+        angle_with_units : parmed angle
+            The angle, but with units on its parameters
+        """
+        if type(angle.type.k)==units.Quantity:
+            return angle
+        angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
+        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        return angle
+
+    def _get_relevant_bond(self, atom1, atom2):
+        """
+        utility function to get the bond connecting atoms 1 and 2.
+        Returns either a bond object or None
+        (since there is no constraint class)
+
+        Arguments
+        ---------
+        atom1 : parmed atom object
+             One of the atoms in the bond
+        atom2 : parmed.atom object
+             The other atom in the bond
+
+        Returns
+        -------
+        relevant_bond_with_units : parmed.Bond
+            Bond connecting the two atoms, if there is one. None if constrained or
+            no bond.
+        """
+        bonds_1 = set(atom1.bonds)
+        bonds_2 = set(atom2.bonds)
+        relevant_bond_set = bonds_1.intersection(bonds_2)
+        relevant_bond = relevant_bond_set.pop()
+        if relevant_bond.type is None:
+            return None
+        relevant_bond_with_units = self._add_bond_units(relevant_bond)
+        return relevant_bond_with_units
+
+    def _bond_logq(self, r, bond):
+        """
+        Calculate the log-probability of a given bond at a given inverse temperature
+
+        Arguments
+        ---------
+        r : float
+            bond length, in nanometers
+        r0 : float
+            equilibrium bond length, in nanometers
+        k_eq : float
+            Spring constant of bond
+        beta : simtk.unit.Quantity
+            1/kT or inverse temperature
+        """
+        k_eq = bond.type.k
+        r0 = bond.type.req
+        logq = -self._beta*0.5*k_eq*(r-r0)**2
+        return logq
+
+    def _angle_logq(self, theta, angle):
+        """
+        Calculate the log-probability of a given bond at a given inverse temperature
+
+        Arguments
+        ---------
+        theta : float
+            bond angle, in randians
+        angle : parmed angle object
+            Bond angle object containing parameters
+        beta : simtk.unit.Quantity
+            1/kT or inverse temperature
+        """
+        k_eq = angle.type.k
+        theta0 = angle.type.theteq
+        logq = -self._beta*k_eq*0.5*(theta-theta0)**2
+        return logq
+
+    def _propose_bond(self, bond):
+        """
+        Bond length proposal
+        """
+        r0 = bond.type.req
+        k = bond.type.k
+        sigma_r = units.sqrt(1.0/(self._beta*k))
+        r = sigma_r*np.random.randn() + r0
+        return r
+
+    def _propose_angle(self, angle):
+        """
+        Bond angle proposal
+        """
+        theta0 = angle.type.theteq
+        k = angle.type.k
+        sigma_theta = units.sqrt(1.0/(self._beta*k))
+        theta = sigma_theta*np.random.randn() + theta0
+        return theta
+
+    def _propose_atom(self, atom, torsion, new_positions):
+        """
+        Propose a set of internal coordinates (r, theta, phi) and transform
+        to cartesian coordinates (with jacobian correction).
+        for the given atom. R and theta are drawn from their respective
+        equilibrium distributions, whereas phi is simply a uniform sample.
+
+        Parameters
+        ----------
+        atom : parmed.Atom
+            atom that will have its position proposed
+        torsion : parmed.Dihedral
+            torsion that contains relevant information for atom
+        new_positions : [m, 3] np.array
+            array of just the new positions (not existing atoms)
+        Returns
+        -------
+        xyz : [1,3] np.array of float
+            The proposed cartesian coordinates
+        logp : float
+            The log probability with jacobian correction
+        """
+        positions = copy.deepcopy(self._initial_positions)
+        positions[self._new_indices] = new_positions
+        bond_atom = torsion.atom2
+        angle_atom = torsion.atom3
+        torsion_atom = torsion.atom4
+
+        if atom != torsion.atom1:
+            raise Exception('atom != torsion.atom1')
+
+        bond = self._get_relevant_bond(atom, bond_atom)
+
+        if bond is not None:
+            r = self._propose_bond(bond)
+            bond_k = bond.type.k
+            sigma_r = units.sqrt(1/(self._beta*bond_k))
+            logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
+            logp_r = self._bond_logq(r, bond) - logZ_r
+        else:
+            constraint = self._get_bond_constraint(atom, bond_atom, self._system)
+            r = constraint #set bond length to exactly constraint
+            logp_r = 0.0
+
+        #propose an angle and calculate its probability
+        angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
+        theta = self._propose_angle(angle)
+        angle_k = angle.type.k
+        sigma_theta = units.sqrt(1/(self._beta*angle_k))
+        logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta/units.radians))) # CHECK DOMAIN AND UNITS
+        logp_theta = self._angle_logq(theta, angle) - logZ_theta
+
+        #propose a torsion angle uniformly (this can be dramatically improved)
+        phi = np.random.uniform(-np.pi, np.pi)
+        logp_phi = -np.log(2*np.pi)
+
+        #get the new cartesian coordinates and detJ:
+        new_xyz, detJ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, theta, phi)
+        #accumulate logp
+        logp_proposal = logp_r + logp_theta + logp_phi + np.log(np.abs(detJ))
+
+        return new_xyz, logp_proposal
+
+    def _resample(self):
+        """
+        Resample from the current set of weights and positions.
+        """
+        particle_indices = range(self._n_particles)
+        new_indices = np.random.choice(particle_indices, size=self._n_particles, p=self._Wij[:, self._growth_stage-1])
+        for particle_index in particle_indices:
+            self._new_positions[particle_index, :, :] = self._new_positions[new_indices[particle_index], :, :]
+        self._Wij[:, self._growth_stage-1] = 1.0 / self._n_particles #set particle weights to be equal
+
+    def _generate_configurations(self):
+        """
+        Generate the ensemble of configurations of the new atoms, approximately
+        from p(x_new | x_common).
+        """
+        for i, atom_torsion in enumerate(self._atom_torsions.items()):
+            self._growth_stage = i+1
+            for particle_index in range(self._n_particles):
+                proposed_xyz, logp_proposal = self._propose_atom(atom_torsion[0], atom_torsion[1])
+                self._new_positions[particle_index, i, :] = proposed_xyz
+                unnormalized_log_target = self._log_unnormalized_target(self._new_positions[particle_index, :,:])
+                self._Wij = [particle_index, i] = unnormalized_log_target - logp_proposal
+            sum_log_weights = np.sum(np.exp(self._Wij[:,i]))
+            self._Wij -= np.log(sum_log_weights)
+            if i % self._resample_frequency == 0 and i != 0:
+                self._resample()
+
+
+
+
+
 
 class GeometrySystemGenerator(object):
     """
