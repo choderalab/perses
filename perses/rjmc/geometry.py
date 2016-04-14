@@ -865,6 +865,72 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         torsion_logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         return torsion_logp
 
+
+class BootstrapParticleFilter(object):
+    """
+    Implements a Bootstrap Particle Filter (BPF)
+    to sample from the appropriate degrees of freedom.
+    Designed for use with the dimension-matching scheme
+    of Perses.
+    """
+
+    def __init__(self, growth_context, atom_torsions, initial_positions, beta, n_particles=18, resample_frequency=10):
+        """
+
+        Parameters
+        ----------
+        growth_context : simtk.openmm.Context object
+            Context containing appropriate "growth system"
+        atom_torsions : dict
+            parmed.Atom : parmed.Dihedral dict that specifies
+            what torsion to use to propose each atom
+        initial_positions : np.ndarray [n,3]
+            The positions of existing atoms.
+        beta : simtk.unit.Quantity
+            The inverse temperature, with units
+        n_particles : int, optional
+            The number of particles in the BPF (note that this
+            is NOT the number of atoms). Default 18.
+        resample_frequency : int, optional
+            How often to resample particles. default 10
+        """
+
+        self._beta = beta
+        self._growth_context = growth_context
+        self._atom_torsions = atom_torsions
+        self._n_particles = n_particles
+        self._resample_frequency = resample_frequency
+        self._n_new_atoms = len(self._atom_torsions)
+        self._initial_positions = initial_positions
+        self._new_indices = [atom.idx for atom in self._atom_torsions.keys()]
+        #create a matrix for weights (n_particles, n_stages)
+        self._Wij = np.zeros([self._n_particles, self._n_new_atoms])
+        #create an array for positions--only store new positions to avoid
+        #consuming way too much memory
+        self._new_positions = np.zeros([self._n_particles, self._n_new_atoms, 3])
+
+    def log_unnormalized_target(self, new_positions, growth_stage):
+        """
+        Given a set of new positions (not all positions!) and a growth
+        stage, return the log unnormalized probability.
+
+        Parameters
+        ----------
+        new_positions : [m, 3] ndarray
+            Array containing m 3D coordinates of new atoms
+
+        Returns
+        -------
+        log_unnormalized_probability : float
+            The unnormalized probability of this configuration
+        """
+        positions = copy.deepcopy(self._initial_positions)
+        positions[self._new_indices] = new_positions
+        self._growth_context.setParameter('growth_stage', growth_stage)
+        self._growth_context.setPositions(positions)
+        energy = self._growth_context.getState(getEnergy=True).getPotentialEnergy()
+        return -self._beta*energy
+
 class GeometrySystemGenerator(object):
     """
     This is an internal utility class that generates OpenMM systems
