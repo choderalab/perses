@@ -25,7 +25,7 @@ try:
 except ImportError:
     from commands import getoutput  # If python 2
 
-
+from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
     """
     This is a container class with convenience methods to access various objects needed
@@ -98,8 +98,8 @@ class TopologyProposal(object):
         self._old_chemical_state_key = old_chemical_state_key
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
-        self._unique_new_atoms = [atom for atom in range(self._new_system.getNumParticles()) if atom not in self._new_to_old_atom_map.keys()]
-        self._unique_old_atoms = [atom for atom in range(self._old_system.getNumParticles()) if atom not in self._new_to_old_atom_map.values()]
+        self._unique_new_atoms = [atom for atom in range(self._new_topology._numAtoms) if atom not in self._new_to_old_atom_map.keys()]
+        self._unique_old_atoms = [atom for atom in range(self._old_topology._numAtoms) if atom not in self._new_to_old_atom_map.values()]
         self._metadata = metadata
 
     @property
@@ -1019,7 +1019,9 @@ class SystemGenerator(object):
 class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
     This class proposes new small molecules from a prespecified set. It uses
-    uniform proposal probabilities, but can be extended.
+    uniform proposal probabilities, but can be extended. The user is responsible
+    for providing a list of smiles that can be interconverted! The class includes
+    extra functionality to assist with that (it is slow).
 
     Parameters
     ----------
@@ -1044,7 +1046,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         else:
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = self._gen_safe_smiles_list(list_of_smiles)
+        self._smiles_list = list_of_smiles
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
@@ -1095,7 +1097,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         smiles_new, _ = self._topology_to_smiles(new_topology)
 
         #map the atoms between the new and old molecule only:
-        _, mol_atom_map = self._get_mol_atom_matches(current_mol, proposed_mol)
+        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol)
 
         #adjust the log proposal for the alignment:
         total_logp = logp_proposal
@@ -1118,33 +1120,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
                                                  new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
         return proposal
-
-    def _gen_safe_smiles_list(self, list_of_smiles):
-        """
-        Ensure that the SMILES string input
-        contains no "unreachable" molecules
-
-        Parameters
-        ----------
-        list_of_smiles : list of str
-            List of smiles strings
-
-        Returns
-        -------
-        smiles_list : list of str
-            Canonicalized SMILES which can be reached
-            from another in the group
-        """
-        safe_smiles_list = []
-        prob_matrix = self._calculate_probability_matrix(list_of_smiles)
-        for i, smiles in enumerate(list_of_smiles):
-            if np.sum(prob_matrix[i, :]) > 0:
-                can_smi = self._canonicalize_smiles(smiles)
-                safe_smiles_list.append(can_smi)
-            else:
-                logging.warning("%s is being removed as it is disconnected" % list_of_smiles[i])
-        return safe_smiles_list
-
 
     def _canonicalize_smiles(self, smiles):
         """
@@ -1326,9 +1301,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         omega(mol)
         return mol
 
-    def _get_mol_atom_matches(self, current_molecule, proposed_molecule):
+    @staticmethod
+    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember, bond_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember):
         """
-        Given two molecules, returns the mapping of atoms between them.
+        Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
         Arguments
         ---------
@@ -1345,45 +1321,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-        # Experimental tinkering with options for MCSS:
-        #atomexpr = oechem.OEExprOpts_AutomorphAtoms | oechem.OEExprOpts_EqCAliphaticONS | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqCHalogen | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCPSAcidRoot | oechem.OEExprOpts_EqNotAromatic
-        #bondexpr = oechem.OEExprOpts_AutomorphBonds | oechem.OEExprOpts_EqDoubleTriple
-        # This seems to work reasonably well:
-        #self.atom_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
-        #self.bond_expr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-        mcs.Init(oegraphmol_current, self.atom_expr, self.bond_expr)
+        mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
-        safe_matches = self._check_for_torsions(proposed_molecule, matches)
-        if not safe_matches:
-            return [],{}
-        match = np.random.choice(safe_matches)
+        if not matches:
+            return {}
+        match = max(matches, key=lambda m: m.NumAtoms())
         new_to_old_atom_map = {}
         for matchpair in match.GetAtoms():
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
             new_to_old_atom_map[new_index] = old_index
-        return safe_matches, new_to_old_atom_map
-
-    def _get_mol_atom_map(self, current_molecule, proposed_molecule):
-        """
-        Get an atom map for the current molecule to the proposed molecule.
-
-        Parameters
-        ----------
-        current_molecule : OEMol
-            String of the current molecule smiles
-        proposed_molecule : OEMol
-            String of the proposed molecule smiles
-
-        Returns
-        -------
-        molecule_atom_map : dict
-            dict containing new_idx : old_idx entries
-        """
-        _, new_to_old_atom_map = self._get_mol_atom_matches(current_molecule, proposed_molecule)
-
         return new_to_old_atom_map
 
 
@@ -1446,55 +1395,72 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 proposed_mol = oechem.OEMol()
                 oechem.OESmilesToMol(current_mol, molecule_smiles_list[i])
                 oechem.OESmilesToMol(proposed_mol, molecule_smiles_list[j])
-                matches, map = self._get_mol_atom_matches(current_mol, proposed_mol)
-                if not matches:
+                atom_map = self._get_mol_atom_map(current_mol, proposed_mol)
+                if not atom_map:
                     n_atoms_matching = 0
                     continue
-                n_atoms_matching = max([len(list(match.GetAtoms())) for match in matches])
+                n_atoms_matching = len(atom_map.keys())
                 probability_matrix[i, j] = n_atoms_matching
                 probability_matrix[j, i] = n_atoms_matching
         #normalize the rows:
         for i in range(n_smiles):
             row_sum = np.sum(probability_matrix[i, :])
-            probability_matrix[i, :] /= row_sum if row_sum > 0 else 1
+            try:
+                probability_matrix[i, :] /= row_sum
+            except ZeroDivisionError:
+                print("One molecule is completely disconnected!")
+                raise
+
         return probability_matrix
 
-    def _check_for_torsions(self, new_molecule, atom_matches):
+    @staticmethod
+    def clean_molecule_list(smiles_list, atom_opts, bond_opts):
         """
-        Prune the list of matches so that only matches with mapped
-        torsions are allowed (otherwise they are unusable with the
-        current geometry engine)
+        A utility function to determine which molecules can be proposed
+        from any other molecule.
 
         Parameters
         ----------
-        new_molecule : oechem.OEMol
-            The proposed molecule
-        atom_matches : list of oechem.OEMatch
-            The matches derived with the new_molecule
-            as target
+        smiles_list
+        atom_opts
+        bond_opts
 
         Returns
         -------
-        safe_atom_matches : list of oechem.OEMatch
-            Matches that contain at least one torsion.
-            May be empty
+        safe_smiles
+        removed_smiles
         """
+        from perses.tests.utils import smiles_to_topology
+        import itertools
+        from perses.rjmc.geometry import ProposalOrderTools, NoTorsionError
+        from perses.tests.test_geometry_engine import oemol_to_openmm_system
+        safe_smiles = set()
+        smiles_pairs = set()
+        smiles_set = set(smiles_list)
 
-        safe_atom_matches = []
-        for match in atom_matches:
-            atom_set = set()
-            #get the mapped atoms:
-            for matchpair in match.GetAtoms():
-                atom_set.add(matchpair.target.GetIdx())
-            #get all the torsions in the molecule:
-            torsions = list(oechem.OEGetTorsions(new_molecule))
-            for torsion in torsions:
-                torsion_atom_idx = {torsion.a.GetIdx(), torsion.b.GetIdx(), torsion.c.GetIdx(), torsion.d.GetIdx()}
-                if atom_set.issuperset(torsion_atom_idx):
-                    safe_atom_matches.append(match)
-                    break
-        return safe_atom_matches
+        for mol1, mol2 in itertools.combinations(smiles_list, 2):
+            smiles_pairs.add((mol1, mol2))
 
-    @property
-    def safe_smiles(self):
-        return self._smiles_list
+        for smiles_pair in smiles_pairs:
+            topology_1, mol1 = smiles_to_topology(smiles_pair[0])
+            topology_2, mol2 = smiles_to_topology(smiles_pair[1])
+            try:
+                sys1, pos1, top1 = oemol_to_openmm_system(mol1)
+                sys2, pos2, top2 = oemol_to_openmm_system(mol2)
+            except:
+                continue
+            new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol1, mol2, atom_expr=atom_opts, bond_expr=bond_opts)
+            if not new_to_old_atom_map:
+                continue
+            top_proposal = TopologyProposal(new_topology=top2, old_topology=top1, new_system=sys2, old_system=sys1, new_to_old_atom_map=new_to_old_atom_map, new_chemical_state_key='e', old_chemical_state_key='w')
+            proposal_order = ProposalOrderTools(top_proposal)
+            try:
+                forward_order = proposal_order.determine_proposal_order(direction='forward')
+                reverse_order = proposal_order.determine_proposal_order(direction='reverse')
+                safe_smiles.add(smiles_pair[0])
+                safe_smiles.add(smiles_pair[1])
+                print("Adding %s and %s" % (smiles_pair[0], smiles_pair[1]))
+            except NoTorsionError:
+                pass
+        removed_smiles = smiles_set.difference(safe_smiles)
+        return safe_smiles, removed_smiles

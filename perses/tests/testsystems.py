@@ -236,7 +236,7 @@ def load_via_pdbfixer(filename=None, pdbid=None):
     fixer.addMissingHydrogens(7.0)
     return [fixer.topology, fixer.positions]
 
-class T4LysozymeTestSystem(PersesTestSystem):
+class T4LysozymeMutationTestSystem(PersesTestSystem):
     """
     Create a consistent set of SAMS samplers useful for testing PointMutationEngine on T4 lysozyme in various solvents.
     Wild Type is T4 L99A
@@ -276,7 +276,7 @@ class T4LysozymeTestSystem(PersesTestSystem):
 
     """
     def __init__(self):
-        super(T4LysozymeTestSystem, self).__init__()
+        super(T4LysozymeMutationTestSystem, self).__init__()
 #        environments = ['explicit-complex', 'explicit-receptor', 'implicit-complex', 'implicit-receptor', 'vacuum-complex', 'vacuum-receptor']
         environments = ['explicit-complex', 'explicit-receptor', 'vacuum-complex', 'vacuum-receptor']
 
@@ -605,7 +605,7 @@ class MybTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
-class AblImatinibTestSystem(PersesTestSystem):
+class AblImatinibResistanceTestSystem(PersesTestSystem):
     """
     Create a consistent set of SAMS samplers useful for testing PointMutationEngine on Abl:imatinib.
 
@@ -635,8 +635,8 @@ class AblImatinibTestSystem(PersesTestSystem):
     Examples
     --------
 
-    >>> from perses.tests.testsystems import AblImatinibTestSystem
-    >>> testsystem = AblImatinibTestSystem()
+    >>> from perses.tests.testsystems import AblImatinibResistanceTestSystem
+    >>> testsystem = AblImatinibResistanceTestSystem()
     # Build a system
     >>> system = testsystem.system_generators['vacuum-inhibitor'].build_system(testsystem.topologies['vacuum-inhibitor'])
     # Retrieve a SAMSSampler
@@ -644,7 +644,7 @@ class AblImatinibTestSystem(PersesTestSystem):
 
     """
     def __init__(self):
-        super(AblImatinibTestSystem, self).__init__()
+        super(AblImatinibResistanceTestSystem, self).__init__()
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
 #        solvents = ['vacuum'] # DEBUG
         components = ['receptor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
@@ -780,9 +780,211 @@ class AblImatinibTestSystem(PersesTestSystem):
         # This system must currently be minimized.
         minimize(self)
 
+class AblAffinityTestSystem(PersesTestSystem):
+    """
+    Create a consistent set of SAMS samplers useful for optimizing kinase inhibitor affinity to Abl.
+
+    TODO: Generalize to standard inhibitor:protein test system and extend to T4 lysozyme small molecules.
+
+    Properties
+    ----------
+    environments : list of str
+        Available environments: ['vacuum', 'explicit', 'implicit']
+    topologies : dict of simtk.openmm.app.Topology
+        Initial system Topology objects; topologies[environment] is the topology for `environment`
+    positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
+        Initial positions corresponding to initial Topology objects
+    system_generators : dict of SystemGenerator objects
+        SystemGenerator objects for environments
+    proposal_engines : dict of ProposalEngine
+        Proposal engines
+    themodynamic_states : dict of thermodynamic_states
+        Themodynamic states for each environment
+    mcmc_samplers : dict of MCMCSampler objects
+        MCMCSampler objects for environments
+    exen_samplers : dict of ExpandedEnsembleSampler objects
+        ExpandedEnsembleSampler objects for environments
+    sams_samplers : dict of SAMSSampler objects
+        SAMSSampler objects for environments
+    designer : MultiTargetDesign sampler
+        Example MultiTargetDesign sampler for implicit solvent hydration free energies
+
+    Examples
+    --------
+
+    >>> from perses.tests.testsystems import AblAffinityTestSystem
+    >>> testsystem = AblAffinityestSystem()
+    # Build a system
+    >>> system = testsystem.system_generators['vacuum-inhibitor'].build_system(testsystem.topologies['vacuum-inhibitor'])
+    # Retrieve a SAMSSampler
+    >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
+
+    """
+    def __init__(self):
+        super(AblAffinityTestSystem, self).__init__()
+        solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
+        solvents = ['vacuum'] # DEBUG
+        components = ['inhibitor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
+        padding = 9.0*unit.angstrom
+        explicit_solvent_model = 'tip3p'
+        setup_path = 'data/abl-imatinib'
+        thermodynamic_states = dict()
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+
+        # Construct list of all environments
+        environments = list()
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                environments.append(environment)
+
+        # Read SMILES from CSV file of clinical kinase inhibitors.
+        from pkg_resources import resource_filename
+        smiles_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.csv')
+        import csv
+        molecules = list()
+        with open(smiles_filename, 'r') as csvfile:
+            csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
+            for row in csvreader:
+                name = row[0]
+                smiles = row[1]
+                molecules.append(smiles)
+        # Add current molecule
+        molecules.append('Cc1ccc(cc1Nc2nccc(n2)c3cccnc3)NC(=O)c4ccc(cc4)C[NH+]5CCN(CC5)C')
+        self.molecules = molecules
+
+        # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
+        molecules = sanitizeSMILES(self.molecules)
+
+        # Create a system generator for desired forcefields
+        from perses.rjmc.topology_proposal import SystemGenerator
+        from pkg_resources import resource_filename
+        gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        system_generators = dict()
+        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=True)
+        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
+            use_antechamber=True)
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=True)
+        # Copy system generators for all environments
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                system_generators[environment] = system_generators[solvent]
+
+        # Load topologies and positions for all components
+        from simtk.openmm.app import PDBFile, Modeller
+        topologies = dict()
+        positions = dict()
+        for component in components:
+            pdb_filename = resource_filename('perses', os.path.join(setup_path, '%s.pdb' % component))
+            print(pdb_filename)
+            pdbfile = PDBFile(pdb_filename)
+            topologies[component] = pdbfile.topology
+            positions[component] = pdbfile.positions
+
+        # Construct positions and topologies for all solvent environments
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                if solvent == 'explicit':
+                    # Create MODELLER object.
+                    modeller = app.Modeller(topologies[component], positions[component])
+                    modeller.addSolvent(system_generators[solvent].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+                    topologies[environment] = modeller.getTopology()
+                    positions[environment] = modeller.getPositions()
+                else:
+                    environment = solvent + '-' + component
+                    topologies[environment] = topologies[component]
+                    positions[environment] = positions[component]
+
+        # Set up the proposal engines.
+        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+        proposal_metadata = { }
+        proposal_engines = dict()
+        for environment in environments:
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL')
+
+        # Generate systems
+        systems = dict()
+        for environment in environments:
+            systems[environment] = system_generators[environment].build_system(topologies[environment])
+
+        # Define thermodynamic state of interest.
+        from perses.samplers.thermodynamics import ThermodynamicState
+        thermodynamic_states = dict()
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+        for component in components:
+            for solvent in solvents:
+                environment = solvent + '-' + component
+                if solvent == 'explicit':
+                    thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
+                else:
+                    thermodynamic_states[environment]   = ThermodynamicState(system=systems[environment], temperature=temperature)
+
+        # Create SAMS samplers
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+        sams_samplers = dict()
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
+
+                if solvent == 'explicit':
+                    thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
+                    sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+                else:
+                    thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
+                    sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
+
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state)
+                mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+                mcmc_samplers[environment].verbose = True
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+                exen_samplers[environment].verbose = True
+                sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+                sams_samplers[environment].verbose = True
+                thermodynamic_states[environment] = thermodynamic_state
+
+        # Create test MultiTargetDesign sampler.
+        # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
+        from perses.samplers.samplers import MultiTargetDesign
+        target_samplers = { sams_samplers['vacuum-complex'] : 1.0, sams_samplers['vacuum-inhibitor'] : -1.0 }
+        designer = MultiTargetDesign(target_samplers)
+        designer.verbose = True
+
+        # Store things.
+        self.molecules = molecules
+        self.environments = environments
+        self.topologies = topologies
+        self.positions = positions
+        self.system_generators = system_generators
+        self.systems = systems
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+        self.sams_samplers = sams_samplers
+        self.designer = designer
+
+        # This system must currently be minimized.
+        minimize(self)
+
 def minimize(testsystem):
     """
     Minimize all structures in test system.
+
+    TODO
+    ----
+    Use sampler thermodynamic states instead of testsystem.systems
 
     Parameters
     ----------
@@ -1192,11 +1394,11 @@ def run_myb():
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
     #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
 
-def run_abl_imatinib():
+def run_abl_imatinib_resistance():
     """
     Run abl test system.
     """
-    testsystem = AblImatinibTestSystem()
+    testsystem = AblImatinibResistanceTestSystem()
     #for environment in testsystem.environments:
     for environment in ['vacuum-complex']:
         print(environment)
@@ -1223,7 +1425,7 @@ def run_kinase_inhibitors():
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
     testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
-    testsystem.exen_samplers[environment].options={'nsteps':0}
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
     testsystem.mcmc_samplers[environment].nsteps = 50
     testsystem.exen_samplers[environment].geometry_engine.write_proposal_pdb = True # write proposal PDBs
     testsystem.sams_samplers[environment].run(niterations=100)
@@ -1235,12 +1437,55 @@ def run_valence_system():
     testsystem = ValenceSmallMoleculeLibraryTestSystem()
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
-    testsystem.exen_samplers[environment].options={'nsteps':0}
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
     testsystem.mcmc_samplers[environment].nsteps = 50
     testsystem.sams_samplers[environment].run(niterations=5)
 
+def test_valence_write_pdb_ncmc_switching():
+    """
+    Run abl test system.
+    """
+    testsystem = ValenceSmallMoleculeLibraryTestSystem()
+    environment = 'vacuum'
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10
+    testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
+    testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 1 # write PDB files for NCMC switching
+    testsystem.mcmc_samplers[environment].nsteps = 10
+    testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
+    testsystem.exen_samplers[environment].run(niterations=1)
+
+def run_abl_affinity_write_pdb_ncmc_switching():
+    """
+    Run abl test system.
+    """
+    testsystem = AblAffinityTestSystem()
+    #for environment in testsystem.environments:
+    for environment in ['vacuum-complex']:
+        print(environment)
+        testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10000
+        testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
+        testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
+        testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        testsystem.mcmc_samplers[environment].nsteps = 10000
+        testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
+
+        testsystem.mcmc_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].verbose = True
+        testsystem.sams_samplers[environment].verbose = True
+        #testsystem.mcmc_samplers[environment].run(niterations=5)
+        testsystem.exen_samplers[environment].run(niterations=5)
+
+        #testsystem.sams_samplers[environment].run(niterations=5)
+
+    #testsystem.designer.verbose = True
+    #testsystem.designer.run(niterations=500)
+    #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
+    #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
+
 if __name__ == '__main__':
-    run_t4()
+    run_abl_affinity_write_pdb_ncmc_switching()
     #run_valence_system()
     #run_kinase_inhibitors()
     #run_abl_imatinib()

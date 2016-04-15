@@ -38,24 +38,6 @@ beta = 1.0/kT
 # TESTS
 ################################################################################
 
-def align_molecules(mol1, mol2):
-    """
-    MCSS two OEmols. Return the mapping of new : old atoms
-    """
-    mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-    atomexpr = oechem.OEExprOpts_AtomicNumber
-    bondexpr = 0
-    mcs.Init(mol1, atomexpr, bondexpr)
-    mcs.SetMCSFunc(oechem.OEMCSMaxAtomsCompleteCycles())
-    unique = True
-    match = [m for m in mcs.Match(mol2, unique)][0]
-    new_to_old_atom_mapping = {}
-    for matchpair in match.GetAtoms():
-        old_index = matchpair.pattern.GetIdx()
-        new_index = matchpair.target.GetIdx()
-        new_to_old_atom_mapping[new_index] = old_index
-    return new_to_old_atom_mapping
-
 def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds, platform=None):
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     if platform == None:
@@ -230,7 +212,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
         positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         if np.isnan(np.any(positions / positions.unit)):
             raise Exception('NCMCAlchemicalIntegrator gave NaN positions')
-        if np.isnan(ncmc_integrator.getLogAcceptanceProbability()):
+        if np.isnan(ncmc_integrator.getLogAcceptanceProbability(context)):
             raise Exception('NCMCAlchemicalIntegrator gave NaN logAcceptanceProbability')
 
         del context, ncmc_integrator

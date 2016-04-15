@@ -41,7 +41,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=default_functions, nsteps=default_nsteps, timestep=default_timestep, constraint_tolerance=None, platform=None):
+    def __init__(self, temperature=default_temperature, functions=default_functions, nsteps=default_nsteps, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -60,6 +60,9 @@ class NCMCEngine(object):
             If not None, this relative constraint tolerance is used for position and velocity constraints.
         platform : simtk.openmm.Platform, optional, default=None
             If specified, the platform to use for OpenMM simulations.
+        write_pdb_interval : int, optional, default=None
+            If a positive integer is specified, a PDB frame will be written with the specified interval on NCMC switching,
+            with a different PDB file generated for each attempt.
 
         """
         # Handle some defaults.
@@ -78,6 +81,10 @@ class NCMCEngine(object):
         self.timestep = timestep
         self.constraint_tolerance = constraint_tolerance
         self.platform = platform
+
+        self.write_pdb_interval = write_pdb_interval
+
+        self.nattempted = 0
 
     @property
     def beta(self):
@@ -329,7 +336,43 @@ class NCMCEngine(object):
 
         # Take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
         try:
-            integrator.step(1)
+            # Write PDB file if requested.
+            if self.write_pdb_interval:
+                if direction == 'insert':
+                    topology = topology_proposal.new_topology
+                    indices = topology_proposal.unique_new_atoms
+                else:
+                    topology = topology_proposal.old_topology
+                    indices = topology_proposal.unique_old_atoms
+
+                # Write atom indices that are changing
+                import pickle
+                filename = 'ncmc-%s-%d-atomindices.pkl' % (direction, self.nattempted)
+                outfile = open(filename, 'wb')
+                pickle.dump(indices, outfile)
+                outfile.close()
+
+                from simtk.openmm.app import PDBFile
+                filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
+                outfile = open(filename, 'w')
+                PDBFile.writeHeader(topology, file=outfile)
+                modelIndex = 0
+                PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
+                try:
+                    for step in range(self.nsteps):
+                        integrator.step(1)
+                        if (step+1)%self.write_pdb_interval == 0:
+                            modelIndex += 1
+                            PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
+                except ValueError as e:
+                    # System is exploding and coordinates won't fit in PDB ATOM fields
+                    print(e)
+
+                PDBFile.writeFooter(topology, file=outfile)
+                outfile.close()
+            else:
+                integrator.step(self.nsteps)
+
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
             if str(e) == "Particle coordinate is nan":
@@ -355,7 +398,7 @@ class NCMCEngine(object):
 
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-        logP_NCMC = integrator.getLogAcceptanceProbability()
+        logP_NCMC = integrator.getLogAcceptanceProbability(context)
         # DEBUG
         logging.debug("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
         # Clean up NCMC switching integrator.
@@ -375,6 +418,9 @@ class NCMCEngine(object):
             potential = initial_potential
         elif direction == 'delete':
             potential = final_potential
+
+        # Keep track of statistics.
+        self.nattempted += 1
 
         # Return
         return [final_positions, logP, potential]
@@ -401,15 +447,16 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
     >>> temperature = 300.0 * unit.kelvin
+    >>> nsteps = 5
     >>> functions = { 'lambda_sterics' : 'lambda' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete')
+    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, nsteps=nsteps, direction='delete')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
     >>> context.setPositions(testsystem.positions)
     >>> # Run the integrator
-    >>> ncmc_integrator.step(1)
+    >>> ncmc_integrator.step(nsteps)
     >>> # Retrieve the log acceptance probability
-    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
+    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability(context)
 
     Turn on an atom and its associated angles and torsions in alanine dipeptide
 
@@ -422,21 +469,22 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create an NCMC switching integrator.
     >>> temperature = 300.0 * unit.kelvin
+    >>> nsteps = 10
     >>> functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete')
+    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, nsteps=nsteps, direction='delete')
     >>> # Create a Context
     >>> context = openmm.Context(alchemical_system, ncmc_integrator)
     >>> context.setPositions(testsystem.positions)
     >>> # Minimize
     >>> openmm.LocalEnergyMinimizer.minimize(context)
     >>> # Run the integrator
-    >>> ncmc_integrator.step(1)
+    >>> ncmc_integrator.step(nsteps)
     >>> # Retrieve the log acceptance probability
-    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability()
+    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability(context)
 
     """
 
-    def __init__(self, temperature, system, functions, nsteps=10, timestep=1.0*unit.femtoseconds, direction='insert'):
+    def __init__(self, temperature, system, functions, nsteps=0, timestep=1.0*unit.femtoseconds, direction='insert'):
         """
         Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
 
@@ -491,6 +539,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         # Compute kT in natural openmm units.
         kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
         kT = kB * temperature
+        self.kT = kT
         kT = kT.value_in_unit_system(unit.md_unit_system)
 
         # Constrain initial positions and velocities.
@@ -541,16 +590,20 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
                 if context_parameter in system_parameters:
                     self.addComputeGlobal(context_parameter, functions[context_parameter])
 
-        # Unroll loop over NCMC steps (for nsteps > 1)
-        for step in range(nsteps):
+        # Loop over NCMC steps (for nsteps > 1)
+        if (nsteps > 0):
+            self.addGlobalVariable('step', 0) # current NCMC step number
+            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
+            self.beginIfBlock('step < nsteps')
+
             #
             # Alchemical perturbation step
             #
 
             if direction == 'insert':
-                self.addComputeGlobal('lambda', 'max(0,min(1,%f))' % (float(step+1.0) / float(nsteps)))
+                self.addComputeGlobal('lambda', '(step+1)/nsteps')
             elif direction == 'delete':
-                self.addComputeGlobal('lambda', 'max(0,min(1,%f))' % (float(nsteps - step - 1) / float(nsteps)))
+                self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
 
             # Update Context parameters according to provided functions.
             for context_parameter in functions:
@@ -568,14 +621,32 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             self.addComputePerDof("v", "v+0.5*dti*f/m+(x-x1)/dti")
             self.addConstrainVelocities()
 
-        # Store final total energy.
-        self.addComputeSum("kinetic", "0.5*m*v*v")
-        self.addComputeGlobal('final_total_energy', 'kinetic + energy')
+            #
+            # End of loop
+            #
 
-        # Compute log acceptance probability.
-        self.addComputeGlobal('log_ncmc_acceptance_probability', '-1 * (final_total_energy - initial_total_energy) / %f' % kT)
+            self.addComputeGlobal('step','step+1') # increment step counter
+            self.endBlock()
 
         return
 
-    def getLogAcceptanceProbability(self):
-        return self.getGlobalVariableByName('log_ncmc_acceptance_probability')
+    def getLogAcceptanceProbability(self, context):
+        """
+        Return the log acceptance probability.
+
+        Parameters
+        ----------
+        context : simtk.openmm.context
+            The Context to which the integrator is bound.
+
+        Returns
+        -------
+        log_ncmc_acceptance_probability : float
+            The log acceptance probability
+        """
+        initial_total_energy = self.getGlobalVariableByName('initial_total_energy') * unit.kilojoules_per_mole / self.kT # dimensionless
+        state = context.getState(getEnergy=True)
+        final_total_energy = (state.getPotentialEnergy() + state.getKineticEnergy()) / self.kT # dimensionless
+
+        log_ncmc_acceptance_probability = - (final_total_energy - initial_total_energy)
+        return log_ncmc_acceptance_probability
