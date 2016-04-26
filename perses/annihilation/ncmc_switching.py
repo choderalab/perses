@@ -614,11 +614,11 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             # Velocity Verlet propagation step
             #
 
-            self.addComputePerDof("v", "v+0.5*dti*f/m")
-            self.addComputePerDof("x", "x+dti*v")
+            self.addComputePerDof("v", "v+0.5*dt*f/m")
+            self.addComputePerDof("x", "x+dt*v")
             self.addComputePerDof("x1", "x")
             self.addConstrainPositions()
-            self.addComputePerDof("v", "v+0.5*dti*f/m+(x-x1)/dti")
+            self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
             self.addConstrainVelocities()
 
             #
@@ -709,7 +709,6 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         #initialize variables for GHMC NCMC. We need to keep track of the total work
         #performed by the perturbation kernel.
         self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
-        self.addGlobalVariable('log_ncmc_acceptance_probability', 0.0) # log of NCMC acceptance probability
         self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
         self.addGlobalVariable("kT", kT)  # thermal energy
         self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
@@ -722,7 +721,8 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         self.addGlobalVariable("accept", 0)  # accept or reject
         self.addGlobalVariable("naccept", 0)  # number accepted
         self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
-        self.addPerDofVariable("x1", 0)  # position before application of constraints
+        self.addGlobalVariable('dti', timestep.value_in_unit_system(unit.md_unit_system)) # inner timestep
+
 
         # Constrain initial positions and velocities.
         self.addConstrainPositions()
@@ -742,7 +742,31 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         self.addComputePerDof("sigma", "sqrt(kT/m)")
 
         if nsteps > 0:
-            self._add_propagate_step()
+            #
+            # Metropolized symplectic step.
+            #
+            self.addComputeSum("ke", "0.5*m*v*v")
+            self.addComputeGlobal("Eold", "ke + energy")
+            self.addComputePerDof("xold", "x")
+            self.addComputePerDof("vold", "v")
+            self.addComputePerDof("v", "v + 0.5*dt*f/m")
+            self.addComputePerDof("x", "x + v*dt")
+            self.addComputePerDof("x1", "x")
+            self.addConstrainPositions()
+            self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
+            self.addConstrainVelocities()
+            self.addComputeSum("ke", "0.5*m*v*v")
+            self.addComputeGlobal("Enew", "ke + energy")
+            self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
+            self.addComputePerDof("x", "x*accept + xold*(1-accept)")
+            self.addComputePerDof("v", "v*accept - vold*(1-accept)")
+
+            #
+            # Velocity randomization
+            #
+            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+            self.addConstrainVelocities()
+
 
         if nsteps == 0:
             #
@@ -763,8 +787,51 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
             self.addGlobalVariable('step', 0) # current NCMC step number
             self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
             self.beginIfBlock('step < nsteps')
-            self._add_perturb_step(direction, functions, system_parameters)
-            self._add_propagate_step()
+
+            self.addComputeGlobal("initial_energy", "energy")
+            if direction == 'insert':
+                self.addComputeGlobal('lambda', '(step+1)/nsteps')
+            elif direction == 'delete':
+                self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
+
+            # Update Context parameters according to provided functions.
+            for context_parameter in functions:
+                if context_parameter in system_parameters:
+                    self.addComputeGlobal(context_parameter, functions[context_parameter])
+            self.addComputeGlobal("final_energy", "energy")
+            self.addComputeGlobal("total_work", "total_work + (final_energy-initial_energy)")
+
+            #
+            # Metropolized symplectic step.
+            #
+            self.addComputeSum("ke", "0.5*m*v*v")
+            self.addComputeGlobal("Eold", "ke + energy")
+            self.addComputePerDof("xold", "x")
+            self.addComputePerDof("vold", "v")
+            self.addComputePerDof("v", "v + 0.5*dt*f/m")
+            self.addComputePerDof("x", "x + v*dt")
+            self.addComputePerDof("x1", "x")
+            self.addConstrainPositions()
+            self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
+            self.addConstrainVelocities()
+            self.addComputeSum("ke", "0.5*m*v*v")
+            self.addComputeGlobal("Enew", "ke + energy")
+            self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
+            self.addComputePerDof("x", "x*accept + xold*(1-accept)")
+            self.addComputePerDof("v", "v*accept - vold*(1-accept)")
+
+            #
+            # Velocity randomization
+            #
+            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+            self.addConstrainVelocities()
+
+            #
+            # Accumulate statistics.
+            #
+            self.addComputeGlobal("naccept", "naccept + accept")
+            self.addComputeGlobal("ntrials", "ntrials + 1")
+
             self.addComputeGlobal('step','step+1') # increment step counter
             self.endBlock()
 
@@ -778,8 +845,8 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         #
         # Velocity perturbation.
         #
-        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities()
+        #self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+        #self.addConstrainVelocities()
 
         #
         # Metropolized symplectic step.
@@ -829,5 +896,9 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         self.addComputeGlobal("final_energy", "energy")
         self.addComputeGlobal("total_work", "total_work + (final_energy-initial_energy)")
 
-    def getLogAcceptanceProbability(self):
-        return -self.getGlobalVariableByName("total_work")
+    def getLogAcceptanceProbability(self, context):
+        logp_accept = -1.0*self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
+        #if self.getGlobalVariableByName("ntrials") > 0:
+            #print("The acceptance rate is %f" % (self.getGlobalVariableByName("naccept") / self.getGlobalVariableByName("ntrials")))
+        #print("logp_accept is %f" % logp_accept)
+        return logp_accept

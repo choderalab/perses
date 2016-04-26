@@ -910,6 +910,7 @@ class BootstrapParticleFilter(object):
         #create an array for positions--only store new positions to avoid
         #consuming way too much memory
         self._new_positions = np.zeros([self._n_particles, self._n_new_atoms, 3])
+        self._generate_configurations()
 
     def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
         """
@@ -1186,7 +1187,7 @@ class BootstrapParticleFilter(object):
         new_indices = np.random.choice(particle_indices, size=self._n_particles, p=self._Wij[:, self._growth_stage-1])
         for particle_index in particle_indices:
             self._new_positions[particle_index, :, :] = self._new_positions[new_indices[particle_index], :, :]
-        self._Wij[:, self._growth_stage-1] = 1.0 / self._n_particles #set particle weights to be equal
+        self._Wij[:, self._growth_stage-1] = -np.log(self._n_particles) #set particle weights to be equal
 
     def _generate_configurations(self):
         """
@@ -1199,13 +1200,14 @@ class BootstrapParticleFilter(object):
                 proposed_xyz, logp_proposal = self._propose_atom(atom_torsion[0], atom_torsion[1])
                 self._new_positions[particle_index, i, :] = proposed_xyz
                 unnormalized_log_target = self._log_unnormalized_target(self._new_positions[particle_index, :,:])
-                self._Wij = [particle_index, i] = unnormalized_log_target - logp_proposal
+                if i > 0:
+                    self._Wij = [particle_index, i] = (unnormalized_log_target - logp_proposal) + self._Wij[particle_index, i-1]
+                else:
+                    self._Wij = [particle_index, i] = unnormalized_log_target - logp_proposal
             sum_log_weights = np.sum(np.exp(self._Wij[:,i]))
             self._Wij -= np.log(sum_log_weights)
             if i % self._resample_frequency == 0 and i != 0:
                 self._resample()
-
-
 
 
 
