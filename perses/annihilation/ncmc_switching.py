@@ -742,6 +742,8 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         self.addComputePerDof("sigma", "sqrt(kT/m)")
 
         if nsteps > 0:
+            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+            self.addConstrainVelocities()
             #
             # Metropolized symplectic step.
             #
@@ -804,6 +806,8 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
             #
             # Metropolized symplectic step.
             #
+            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+            self.addConstrainVelocities()
             self.addComputeSum("ke", "0.5*m*v*v")
             self.addComputeGlobal("Eold", "ke + energy")
             self.addComputePerDof("xold", "x")
