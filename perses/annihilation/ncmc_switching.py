@@ -836,66 +836,6 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
             self.endBlock()
 
 
-
-    def _add_propagate_step(self):
-        """
-        Adds a step of GHMC propagation to the integrator
-        """
-
-        #
-        # Velocity perturbation.
-        #
-        #self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        #self.addConstrainVelocities()
-
-        #
-        # Metropolized symplectic step.
-        #
-        self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Eold", "ke + energy")
-        self.addComputePerDof("xold", "x")
-        self.addComputePerDof("vold", "v")
-        self.addComputePerDof("v", "v + 0.5*dt*f/m")
-        self.addComputePerDof("x", "x + v*dt")
-        self.addComputePerDof("x1", "x")
-        self.addConstrainPositions()
-        self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
-        self.addConstrainVelocities()
-        self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Enew", "ke + energy")
-        self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
-        self.addComputePerDof("x", "x*accept + xold*(1-accept)")
-        self.addComputePerDof("v", "v*accept - vold*(1-accept)")
-
-        #
-        # Velocity randomization
-        #
-        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities()
-
-        #
-        # Accumulate statistics.
-        #
-        self.addComputeGlobal("naccept", "naccept + accept")
-        self.addComputeGlobal("ntrials", "ntrials + 1")
-
-    def _add_perturb_step(self, direction, functions, system_parameters):
-        """
-        Add a step that alchemically perturbs the system
-        """
-        self.addComputeGlobal("initial_energy", "energy")
-        if direction == 'insert':
-            self.addComputeGlobal('lambda', '(step+1)/nsteps')
-        elif direction == 'delete':
-            self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
-
-        # Update Context parameters according to provided functions.
-        for context_parameter in functions:
-            if context_parameter in system_parameters:
-                self.addComputeGlobal(context_parameter, functions[context_parameter])
-        self.addComputeGlobal("final_energy", "energy")
-        self.addComputeGlobal("total_work", "total_work + (final_energy-initial_energy)")
-
     def getLogAcceptanceProbability(self, context):
         logp_accept = -1.0*self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
         #if self.getGlobalVariableByName("ntrials") > 0:
