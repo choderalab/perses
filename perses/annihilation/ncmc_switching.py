@@ -788,7 +788,7 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         if nsteps > 0:
             self.addGlobalVariable('step', 0) # current NCMC step number
             self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
-            self.beginIfBlock('step < nsteps')
+            self.beginIfBlock('step + 1 < nsteps')
 
             self.addComputeGlobal("initial_energy", "energy")
             if direction == 'insert':
@@ -808,6 +808,7 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
             #
             self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
             self.addConstrainVelocities()
+
             self.addComputeSum("ke", "0.5*m*v*v")
             self.addComputeGlobal("Eold", "ke + energy")
             self.addComputePerDof("xold", "x")
@@ -836,10 +837,18 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
             self.addComputeGlobal("naccept", "naccept + accept")
             self.addComputeGlobal("ntrials", "ntrials + 1")
 
-            self.addComputeGlobal('step','step+1') # increment step counter
+            self.addComputeGlobal('step', 'step+1') # increment step counter
             self.endBlock()
 
+    def get_step(self):
+        return self.getGlobalVariableByName("step")
 
+    def reset(self):
+        """
+        Reset step counter and total work
+        """
+        self.setGlobalVariableByName("total_work", 0.0)
+        #self.setGlobalVariableByName("step", 0)
     def getLogAcceptanceProbability(self, context):
         logp_accept = -1.0*self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
         #if self.getGlobalVariableByName("ntrials") > 0:

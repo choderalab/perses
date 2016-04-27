@@ -51,6 +51,7 @@ def collect_switching_data(system, positions, functions, temperature, collision_
 
     for iteration in range(niterations):
         # Equilibrate
+
         integrator.setCurrentIntegrator(0)
         if direction == 'insert':
             context.setParameter('x0', 0)
@@ -62,15 +63,19 @@ def collect_switching_data(system, positions, functions, temperature, collision_
 
         # Switch
         integrator.setCurrentIntegrator(1)
+        ncmc_integrator.reset()
         if ncmc_nsteps == 0:
             integrator.step(1)
         else:
             integrator.step(ncmc_nsteps)
+            #print("The step is %d" % ncmc_integrator.get_step())
         work_n[iteration] = - ncmc_integrator.getLogAcceptanceProbability(context)
+
 
     # Clean up
     del context, integrator
-
+    #print("The work for the %s direction is" % direction)
+    #print(work_n)
     return work_n
 
 def check_harmonic_oscillator_ncmc(ncmc_nsteps=50, ncmc_integrator="VV"):
