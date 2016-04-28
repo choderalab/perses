@@ -6,6 +6,7 @@ import simtk.openmm as openmm
 import simtk.openmm.app as app
 from collections import namedtuple
 import copy
+import warnings
 import os
 import openeye.oechem as oechem
 import numpy as np
@@ -665,6 +666,7 @@ class PointMutationEngine(PolymerProposalEngine):
 
     Arguments
     --------
+    wildtype_topology : openmm.app.Topology
     system_generator : SystemGenerator
     chain_id : str
         id of the chain to mutate
@@ -686,14 +688,15 @@ class PointMutationEngine(PolymerProposalEngine):
             ]
     """
 
-    def __init__(self, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False):
+    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False):
         super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose)
+        self._wildtype = wildtype_topology
         self._max_point_mutants = max_point_mutants
         self._ff = system_generator.forcefield
         self._templates = self._ff._templates
         self._residues_allowed_to_mutate = residues_allowed_to_mutate
         self._allowed_mutations = allowed_mutations
-        if max_point_mutants == None and allowed_mutations == None:
+        if max_point_mutants is None and allowed_mutations is None:
             raise Exception("Must specify either max_point_mutants or allowed_mutations.")
 
     def _choose_mutant(self, modeller, metadata):
@@ -834,6 +837,21 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in modeller.topology.residues() if r.index in index_to_new_residues]
 
+    def compute_state_key(self, topology):
+        chemical_state_key=''
+        wildtype = self._wildtype
+        for chain in topology.chains():
+            if chain.id == self._chain_id:
+                break
+        for wt_chain in wildtype.chains():
+            if wt_chain.id == self._chain_id:
+                break
+        for wt_res, res in zip(wt_chain._residues, chain._residues):
+            if wt_res.name != res.name:
+                if chemical_state_key != '':
+                    chemical_state_key+='-'
+                chemical_state_key+= str(wt_res.name)+str(res.id)+str(res.name)        
+        return chemical_state_key
 
 class PeptideLibraryEngine(PolymerProposalEngine):
     """
