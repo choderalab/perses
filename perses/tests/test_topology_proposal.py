@@ -281,11 +281,13 @@ def test_mutate_from_every_amino_to_every_other():
     current_topology = modeller.topology
     current_positions = modeller.positions
 
+    pm_top_engine._allowed_mutations = [list()]
     for k, proposed_amino in enumerate(aminos):
-        pm_top_engine._allowed_mutations = [[(str(k+2),proposed_amino)]]
-        pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
-        current_system = pm_top_proposal.new_system
-        current_topology = pm_top_proposal.new_topology
+        pm_top_engine._allowed_mutations[0].append((str(k+2),proposed_amino))
+    print(pm_top_engine._allowed_mutations)
+    pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
+    current_system = pm_top_proposal.new_system
+    current_topology = pm_top_proposal.new_topology
 
     for chain in current_topology.chains():
         if chain.id == chain_id:
@@ -299,15 +301,13 @@ def test_mutate_from_every_amino_to_every_other():
         if residue.index == (num_residues -1):
             continue
         new_sequence.append(residue.name)
+    print(new_sequence)
     assert [new_sequence[i] == aminos[i] for i in range(len(aminos))]
 
-    new_topology = modeller.topology
-    new_system = pm_top_engine._ff.createSystem(new_topology)
+    pm_top_engine = topology_proposal.PointMutationEngine(current_topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
 
-    current_system = new_system
-    modeller = app.Modeller(new_topology, modeller.positions)
-    current_topology = modeller.topology
-
+    current_positions = np.zeros((current_topology.getNumAtoms(), 3))
+    modeller = app.Modeller(current_topology, current_positions)
     old_topology = copy.deepcopy(current_topology)
 
     old_chemical_state_key = pm_top_engine.compute_state_key(old_topology)
@@ -437,11 +437,11 @@ def test_run_peptide_library_engine():
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
-    #test_run_point_mutation_propose()
-    #test_mutate_from_every_amino_to_every_other()
-    #test_specify_allowed_mutants()
-    #test_propose_self()
-    #test_limiting_allowed_residues()
-    #test_run_peptide_library_engine()
-    test_small_molecule_proposals()
+#    test_run_point_mutation_propose()
+    test_mutate_from_every_amino_to_every_other()
+#    test_specify_allowed_mutants()
+#    test_propose_self()
+#    test_limiting_allowed_residues()
+#    test_run_peptide_library_engine()
+#    test_small_molecule_proposals()
 

@@ -718,13 +718,13 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _undo_old_mutants(self, modeller, chain_id):
         index_to_new_residues = dict()
+        old_key = self.compute_state_key(modeller.topology)
+        if old_key == '':
+            return index_to_new_residues
         for chain in modeller.topology.chains():
             if chain.id == chain_id:
                 break
         residue_id_to_index = [residue.id for residue in chain._residues]
-        old_key = self.compute_state_key(modeller.topology)
-        if old_key == '':
-            return index_to_new_residues
         for mutant in old_key.split('-'):
             old_res = mutant[:3]
             residue_id = mutant[3:-3]
@@ -763,6 +763,8 @@ class PointMutationEngine(PolymerProposalEngine):
         for residue_id, residue_name in allowed_mutations[proposed_location]:
             # original_residue : simtk.openmm.app.topology.Residue
             original_residue = chain._residues[residue_id_to_index.index(residue_id)]
+            if original_residue.name in ['HID','HIE']:
+                original_residue.name = 'HIS'
             if original_residue.name == residue_name:
                 continue
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
@@ -816,6 +818,8 @@ class PointMutationEngine(PolymerProposalEngine):
             proposed_location = np.random.choice(range(num_residues), p=location_prob)
             # original_residue : simtk.openmm.app.topology.Residue
             original_residue = chain_residues[proposed_location]
+            if original_residue.name in ['HIE','HID']:
+                original_residue.name = 'HIS'
             # amino_prob : np.array, probability value for each amino acid option (uniform, must choose different from current)
             amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
             amino_prob[aminos.index(original_residue.name)] = 0.0
