@@ -723,6 +723,8 @@ class PointMutationEngine(PolymerProposalEngine):
                 break
         residue_id_to_index = [residue.id for residue in chain._residues]
         old_key = self.compute_state_key(modeller.topology)
+        if old_key == '':
+            return index_to_new_residues
         for mutant in old_key.split('-'):
             old_res = mutant[:3]
             residue_id = mutant[3:-3]
