@@ -263,7 +263,7 @@ class PolymerProposalEngine(ProposalEngine):
             atom_map = dict()
             for atom in modeller.topology.atoms():
                 atom_map[atom.index] = atom.index
-            if self.verbose: print('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
+            print('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
             topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
             return topology_proposal
 
@@ -698,6 +698,8 @@ class PointMutationEngine(PolymerProposalEngine):
         self._allowed_mutations = allowed_mutations
         if max_point_mutants is None and allowed_mutations is None:
             raise Exception("Must specify either max_point_mutants or allowed_mutations.")
+        if max_point_mutants is not None and allowed_mutations is not None:
+            warnings.warn("PointMutationEngine: max_point_mutants and allowed_mutations were both specified -- max_point_mutants will be ignored")
 
     def _choose_mutant(self, modeller, metadata):
         chain_id = self._chain_id
@@ -721,7 +723,7 @@ class PointMutationEngine(PolymerProposalEngine):
                 break
         residue_id_to_index = [residue.id for residue in chain._residues]
         old_key = self.compute_state_key(modeller.topology)
-        for mutant in old_key:
+        for mutant in old_key.split('-'):
             old_res = mutant[:3]
             residue_id = mutant[3:-3]
             new_res = mutant[-3:]
@@ -849,7 +851,7 @@ class PointMutationEngine(PolymerProposalEngine):
         return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in modeller.topology.residues() if r.index in index_to_new_residues]
 
     def compute_state_key(self, topology):
-        chemical_state_key = list()
+        chemical_state_key = ''
         wildtype = self._wildtype
         for chain in topology.chains():
             if chain.id == self._chain_id:
@@ -859,7 +861,9 @@ class PointMutationEngine(PolymerProposalEngine):
                 break
         for wt_res, res in zip(wt_chain._residues, chain._residues):
             if wt_res.name != res.name:
-                chemical_state_key.append(str(wt_res.name)+str(res.id)+str(res.name))
+                if chemical_state_key != '':
+                    chemical_state_key+='-'
+                chemical_state_key+= str(wt_res.name)+str(res.id)+str(res.name)
         return chemical_state_key
 
 class PeptideLibraryEngine(PolymerProposalEngine):
