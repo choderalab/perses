@@ -701,20 +701,34 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _choose_mutant(self, modeller, metadata):
         chain_id = self._chain_id
+        index_to_new_residues = self._undo_old_mutants(modeller, chain_id)        
         if self._allowed_mutations is not None:
             allowed_mutations = self._allowed_mutations
-            index_to_new_residues = self._choose_mutation_from_allowed(modeller, chain_id, allowed_mutations)
+            index_to_new_residues = self._choose_mutation_from_allowed(modeller, chain_id, allowed_mutations, index_to_new_residues)
         else:
             # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
-            index_to_new_residues = self._propose_mutations(modeller, chain_id)
+            index_to_new_residues = self._propose_mutations(modeller, chain_id, index_to_new_residues)
 
         # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
         metadata['mutations'] = self._save_mutations(modeller, index_to_new_residues)
 
         return index_to_new_residues, metadata
 
+    def _undo_old_mutants(self, modeller, chain_id):
+        index_to_new_residues = dict()
+        for chain in modeller.topology.chains():
+            if chain.id == chain_id:
+                break
+        residue_id_to_index = [residue.id for residue in chain._residues]
+        old_key = self.compute_state_key(modeller.topology)
+        for mutant in old_key:
+            old_res = mutant[:3]
+            residue_id = mutant[3:-3]
+            new_res = mutant[-3:]
+            index_to_new_residues[residue_id_to_index.index(residue_id)] = new_res
+        return index_to_new_residues
 
-    def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations):
+    def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations, index_to_new_residues):
         """
         Used when allowed mutations have been specified
         Assume (for now) uniform probability of selecting each specified mutant
@@ -733,7 +747,6 @@ class PointMutationEngine(PolymerProposalEngine):
             key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
         """
-        index_to_new_residues = dict()
 
         # chain : simtk.openmm.app.topology.Chain
         for chain in modeller.topology.chains():
@@ -761,7 +774,7 @@ class PointMutationEngine(PolymerProposalEngine):
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues
 
-    def _propose_mutations(self, modeller, chain_id):
+    def _propose_mutations(self, modeller, chain_id, index_to_new_residues):
         """
         Arguments
         ---------
@@ -774,8 +787,6 @@ class PointMutationEngine(PolymerProposalEngine):
             key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
         """
-        index_to_new_residues = dict()
-
         # this shouldn't be here
         aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
         # chain : simtk.openmm.app.topology.Chain
@@ -838,7 +849,7 @@ class PointMutationEngine(PolymerProposalEngine):
         return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in modeller.topology.residues() if r.index in index_to_new_residues]
 
     def compute_state_key(self, topology):
-        chemical_state_key=''
+        chemical_state_key = list()
         wildtype = self._wildtype
         for chain in topology.chains():
             if chain.id == self._chain_id:
@@ -848,9 +859,7 @@ class PointMutationEngine(PolymerProposalEngine):
                 break
         for wt_res, res in zip(wt_chain._residues, chain._residues):
             if wt_res.name != res.name:
-                if chemical_state_key != '':
-                    chemical_state_key+='-'
-                chemical_state_key+= str(wt_res.name)+str(res.id)+str(res.name)        
+                chemical_state_key.append(str(wt_res.name)+str(res.id)+str(res.name))
         return chemical_state_key
 
 class PeptideLibraryEngine(PolymerProposalEngine):

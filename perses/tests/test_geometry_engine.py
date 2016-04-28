@@ -171,7 +171,7 @@ def test_mutate_from_all_to_all():
 
         system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-        pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants)
+        pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
 
         current_system = system
         current_topology = modeller.topology

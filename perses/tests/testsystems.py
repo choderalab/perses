@@ -168,7 +168,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         chain_id = '1'
         allowed_mutations = [[('2','ALA')],[('2','VAL')],[('2','LEU')],[('2','PHE')]]
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+            proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
         # Generate systems
         systems = dict()
@@ -393,7 +393,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         proposal_engines = dict()
         chain_id = 'A'
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+            proposal_engines[environment] = PointMutationEngine(topologies[environment], system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
         # Generate systems
         systems = dict()
@@ -550,7 +550,7 @@ class MybTestSystem(PersesTestSystem):
         proposal_engines = dict()
         chain_id
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+            proposal_engines[environment] = PointMutationEngine(topologies[environment], system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
         # Generate systems
         systems = dict()
@@ -720,7 +720,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         for solvent in solvents:
             for component in ['complex', 'receptor']: # Mutations only apply to components that contain the kinase
                 environment = solvent + '-' + component
-                proposal_engines[environment] = PointMutationEngine(system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+                proposal_engines[environment] = PointMutationEngine(topologies[environment], system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
         # Generate systems ror all environments
         systems = dict()

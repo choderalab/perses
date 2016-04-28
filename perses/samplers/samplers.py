@@ -557,7 +557,7 @@ class ExpandedEnsembleSampler(object):
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
-    >>> proposal_engine = PointMutationEngine(system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
+    >>> proposal_engine = PointMutationEngine(test.topology, system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
     >>> # Run the sampler
     >>> exen_sampler.run()
@@ -872,7 +872,7 @@ class SAMSSampler(object):
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
-    >>> proposal_engine = PointMutationEngine(system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
+    >>> proposal_engine = PointMutationEngine(test.topology, system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
     >>> # Create a SAMS sampler
     >>> sams_sampler = SAMSSampler(exen_sampler)
