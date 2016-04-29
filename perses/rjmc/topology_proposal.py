@@ -830,9 +830,8 @@ class PointMutationEngine(PolymerProposalEngine):
             original_residue = chain_residues[proposed_location]
             if original_residue.name in ['HIE','HID']:
                 original_residue.name = 'HIS'
-            # amino_prob : np.array, probability value for each amino acid option (uniform, must choose different from current)
-            amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
-            amino_prob[aminos.index(original_residue.name)] = 0.0
+            # amino_prob : np.array, probability value for each amino acid option (uniform)
+            amino_prob = np.array([1.0/(len(aminos)) for i in range(len(aminos))])
             # proposed_amino_index : int, index of three letter residue name in aminos list
             proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
