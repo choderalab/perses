@@ -769,7 +769,7 @@ class PointMutationEngine(PolymerProposalEngine):
                 break
         residue_id_to_index = [residue.id for residue in chain._residues]
         # location_prob : np.array, probability value for each residue location (uniform)
-        if self._metadata.has_key('always_change') and self._metadata['always_change']:
+        if 'always_change' in self._metadata and self._metadata['always_change']:
             old_key = self.compute_state_key(modeller.topology)
             location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations)+1)])
             if old_key == '':
@@ -850,7 +850,7 @@ class PointMutationEngine(PolymerProposalEngine):
             if original_residue.name in ['HIE','HID']:
                 original_residue.name = 'HIS'
             # amino_prob : np.array, probability value for each amino acid option (uniform)
-            if self._metadata.has_key('always_change') and self._metadata['always_change']:
+            if 'always_change' in self._metadata and self._metadata['always_change']:
                 amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
                 amino_prob[aminos.index(original_residue.name)] = 0.0
             else:
