@@ -758,24 +758,28 @@ class PointMutationEngine(PolymerProposalEngine):
                 break
         residue_id_to_index = [residue.id for residue in chain._residues]
         # location_prob : np.array, probability value for each residue location (uniform)
-        location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations))])
-        proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
-        for residue_id, residue_name in allowed_mutations[proposed_location]:
-            # original_residue : simtk.openmm.app.topology.Residue
-            original_residue = chain._residues[residue_id_to_index.index(residue_id)]
-            if original_residue.name in ['HID','HIE']:
-                original_residue.name = 'HIS'
-            if original_residue.name == residue_name:
-                continue
-            # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
-            index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
-            if residue_name == 'HIS':
-                his_state = ['HIE','HID']
-                his_prob = np.array([0.5 for i in range(len(his_state))])
-                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-                index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
-            # DEBUG
-            if self.verbose: print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
+        location_prob = np.array([1.0/(len(allowed_mutations)+1.0) for i in range(len(allowed_mutations)+1)])
+        proposed_location = np.random.choice(range(len(allowed_mutations)+1), p=location_prob)
+        if proposed_location == len(allowed_mutations):
+            # choose WT
+            pass
+        else:
+            for residue_id, residue_name in allowed_mutations[proposed_location]:
+                # original_residue : simtk.openmm.app.topology.Residue
+                original_residue = chain._residues[residue_id_to_index.index(residue_id)]
+                if original_residue.name in ['HID','HIE']:
+                    original_residue.name = 'HIS'
+                if original_residue.name == residue_name:
+                    continue
+                # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+                index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
+                if residue_name == 'HIS':
+                    his_state = ['HIE','HID']
+                    his_prob = np.array([0.5 for i in range(len(his_state))])
+                    his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                    index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
+                # DEBUG
+                if self.verbose: print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
 
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues
