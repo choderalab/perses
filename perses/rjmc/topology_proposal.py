@@ -715,8 +715,6 @@ class PointMutationEngine(PolymerProposalEngine):
         else:
             # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
             index_to_new_residues = self._propose_mutations(modeller, chain_id, index_to_new_residues)
-        for key, value in index_to_new_residues.items():
-            if value == 
         # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
         metadata['mutations'] = self._save_mutations(modeller, index_to_new_residues)
 
