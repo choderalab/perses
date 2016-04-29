@@ -210,7 +210,7 @@ def test_propose_self():
     allowed_mutations = [[(mutant_res.id,mutant_res.name)]]
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations, verbose=True)
     print('Self mutation:')
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
     assert pm_top_proposal.old_topology == pm_top_proposal.new_topology
@@ -253,6 +253,7 @@ def test_mutate_from_every_amino_to_every_other():
     import perses.rjmc.topology_proposal as topology_proposal
 
     aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
+    print(aminos)
 
     failed_mutants = 0
 
@@ -272,10 +273,11 @@ def test_mutate_from_every_amino_to_every_other():
     chain_id = 'A'
 
     metadata = dict()
+    metadata['always_change'] = True
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants)
 
     current_system = system
     current_topology = modeller.topology
@@ -284,7 +286,6 @@ def test_mutate_from_every_amino_to_every_other():
     pm_top_engine._allowed_mutations = [list()]
     for k, proposed_amino in enumerate(aminos):
         pm_top_engine._allowed_mutations[0].append((str(k+2),proposed_amino))
-    print(pm_top_engine._allowed_mutations)
     pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
     current_system = pm_top_proposal.new_system
     current_topology = pm_top_proposal.new_topology
@@ -295,16 +296,21 @@ def test_mutate_from_every_amino_to_every_other():
             num_residues = len(chain._residues)
             break
     new_sequence = list()
-    for residue in modeller.topology.residues():
+    for residue in current_topology.residues():
         if residue.index == 0:
             continue
         if residue.index == (num_residues -1):
             continue
+        if residue.name in ['HID','HIE']:
+            residue.name = 'HIS'
         new_sequence.append(residue.name)
     print(new_sequence)
-    assert [new_sequence[i] == aminos[i] for i in range(len(aminos))]
+    for i in range(len(aminos)):
+        print(new_sequence[i], aminos[i])
+        assert new_sequence[i] == aminos[i]
 
-    pm_top_engine = topology_proposal.PointMutationEngine(current_topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
+
+    pm_top_engine = topology_proposal.PointMutationEngine(current_topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants)
 
     current_positions = np.zeros((current_topology.getNumAtoms(), 3))
     modeller = app.Modeller(current_topology, current_positions)
@@ -437,11 +443,11 @@ def test_run_peptide_library_engine():
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
-#    test_run_point_mutation_propose()
+    test_run_point_mutation_propose()
     test_mutate_from_every_amino_to_every_other()
-#    test_specify_allowed_mutants()
-#    test_propose_self()
-#    test_limiting_allowed_residues()
-#    test_run_peptide_library_engine()
+    test_specify_allowed_mutants()
+    test_propose_self()
+    test_limiting_allowed_residues()
+    test_run_peptide_library_engine()
 #    test_small_molecule_proposals()
 
