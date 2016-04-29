@@ -253,7 +253,6 @@ def test_mutate_from_every_amino_to_every_other():
     import perses.rjmc.topology_proposal as topology_proposal
 
     aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
-    print(aminos)
 
     failed_mutants = 0
 
@@ -304,9 +303,7 @@ def test_mutate_from_every_amino_to_every_other():
         if residue.name in ['HID','HIE']:
             residue.name = 'HIS'
         new_sequence.append(residue.name)
-    print(new_sequence)
     for i in range(len(aminos)):
-        print(new_sequence[i], aminos[i])
         assert new_sequence[i] == aminos[i]
 
 
