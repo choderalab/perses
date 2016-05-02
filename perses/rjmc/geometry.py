@@ -1159,7 +1159,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             the logp of the torsion angle
         """
         import scipy.stats as stats
-        logp_torsion = stats.vonmises.pdf(torsion_angle, self._kappa, mean)
+        logp_torsion = stats.vonmises.logpdf(torsion_angle, self._kappa, mean)
         return logp_torsion
 
     def _logp_torsion_reverse(self, positions, torsion, oeconf):

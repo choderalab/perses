@@ -369,8 +369,8 @@ def test_run_geometry_engine(index=0):
     import copy
     #molecule_name_1 = 'glycine'
     #molecule_name_2 = 'tryptophan'
-    molecule_name_1 = 'erlotinib'
-    molecule_name_2 = 'imatinib'
+    molecule_name_1 = 'propane'
+    molecule_name_2 = 'octane'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -386,7 +386,7 @@ def test_run_geometry_engine(index=0):
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
-    geometry_engine = geometry.OmegaFFGeometryEngine(torsion_kappa=30)
+    geometry_engine = geometry.OmegaFFGeometryEngine(torsion_kappa=1)
     # Turn on PDB file writing.
     geometry_engine.write_proposal_pdb = False
     geometry_engine.pdb_filename_prefix = 't12geometry-proposal'
