@@ -11,6 +11,7 @@ from perses.rjmc import coordinate_numba
 import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
+import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import time
 
@@ -866,6 +867,333 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return torsion_logp
 
 
+class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
+    """
+    Instead of using the forcefield to propose torsion angles, use Omega geometries as a reference
+    """
+
+    def __init__(self, torsion_kappa=8.0, max_confs=1):
+        self._kappa = torsion_kappa
+        self._oemols = {}
+        self._max_confs = max_confs
+        self._omega = oeomega.OEOmega()
+        self._omega.SetMaxConfs(max_confs)
+        self.nproposed = 0
+        self.verbose = False
+
+    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
+        """
+        This is an INTERNAL function that handles both the proposal and the logp calculation,
+        to reduce code duplication. Whether it proposes or just calculates a logp is based on
+        the direction option. Note that with respect to "new" and "old" terms, "new" will always
+        mean the direction we are proposing (even in the reverse case), so that for a reverse proposal,
+        this function will still take the new coordinates as new_coordinates
+
+        Parameters
+        ----------
+        top_proposal : topology_proposal.TopologyProposal object
+            topology proposal containing the relevant information
+        old_positions : np.ndarray [n,3] in nm
+            The old coordinates.
+        beta : float
+            Inverse temperature
+        new_positions : np.ndarray [n,3] in nm, optional for forward
+            The new coordinates, if any. For proposal this is none
+        direction : str
+            Whether to make a proposal (forward) or just calculate logp (reverse)
+
+        Returns
+        -------
+        logp_proposal : float
+            the logp of the proposal
+        new_positions : [n,3] np.ndarray
+            The new positions (same as input if direction='reverse')
+        """
+        initial_time = time.time()
+        proposal_order_tool = ProposalOrderTools(top_proposal)
+        proposal_order_time = time.time() - initial_time
+        if direction=="forward":
+            forward_init = time.time()
+            atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
+            proposal_order_forward = time.time() - forward_init
+            structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
+            #find and copy known positions
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
+            new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
+            new_residue_atom_idx = top_proposal.unique_new_atoms[0]
+            atoms = list(top_proposal.new_topology.atoms())
+            new_residue = atoms[new_residue_atom_idx].residue
+            res_mol = self._oemol_from_residue(new_residue)
+            oechem.OECanonicalOrderAtoms(res_mol)
+            oechem.OETriposAtomNames(res_mol)
+            res_smiles = oechem.OEMolToSmiles(res_mol)
+        elif direction=='reverse':
+            if new_positions is None:
+                raise ValueError("For reverse proposals, new_positions must not be none.")
+            atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
+            structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
+            old_residue_atom_idx = top_proposal.unique_old_atoms[0]
+            atoms = list(top_proposal.old_topology.atoms())
+            old_residue = atoms[old_residue_atom_idx].residue
+            res_mol = self._oemol_from_residue(old_residue)
+            oechem.OECanonicalOrderAtoms(res_mol)
+            oechem.OETriposAtomNames(res_mol)
+            res_smiles = oechem.OEMolToSmiles(res_mol)
+        else:
+            raise ValueError("Parameter 'direction' must be forward or reverse")
+
+        logp_proposal = logp_choice
+
+        #choose conformation from omega:
+        if res_smiles not in self._oemols.keys():
+            mol_conf = self._generate_conformations(res_smiles)
+            self._oemols[res_smiles] = mol_conf
+        else:
+            mol_conf = self._oemols[res_smiles]
+        conf_list = list(mol_conf.GetConfs())
+        oeconf = np.random.choice(conf_list)
+        conf_choice_logp = - np.log(len(conf_list))
+        logp_proposal += conf_choice_logp
+
+        #ostream = oechem.oemolostream("Conf1.pdb")
+        #oechem.OEWriteMolecule(ostream, oeconf)
+        if self.write_proposal_pdb:
+            # DEBUG: Write growth stages
+            from simtk.openmm.app import PDBFile
+            prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
+            if direction == 'forward':
+                pdbfile = open('%s-initial.pdb' % prefix, 'w')
+                PDBFile.writeFile(top_proposal.old_topology, old_positions, file=pdbfile)
+                pdbfile.close()
+                pdbfile = open("%s-stages.pdb" % prefix, 'w')
+                self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, 0)
+            else:
+                pdbfile = open('%s-initial.pdb' % prefix, 'w')
+                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
+                pdbfile.close()
+                pdbfile = open("%s-stages.pdb" % prefix, 'w')
+                self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
+
+        logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
+        growth_parameter_value = 1
+        for atom, torsion in atom_proposal_order.items():
+            bond_atom = torsion.atom2
+            angle_atom = torsion.atom3
+            torsion_atom = torsion.atom4
+
+            if atom != torsion.atom1:
+                raise Exception('atom != torsion.atom1')
+
+            #get internal coordinates if direction is reverse
+            if direction=='reverse':
+                atom_coords = old_positions[atom.idx]
+                bond_coords = old_positions[bond_atom.idx]
+                angle_coords = old_positions[angle_atom.idx]
+                torsion_coords = old_positions[torsion_atom.idx]
+                internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
+                r = internal_coordinates[0]*atom_coords.unit
+                theta = internal_coordinates[1]*units.radian
+                phi = internal_coordinates[2]*units.radian
+
+            bond = self._get_relevant_bond(atom, bond_atom)
+            if bond is not None:
+                if direction=='forward':
+                    r = self._propose_bond(bond, beta)
+                bond_k = bond.type.k
+                sigma_r = units.sqrt(1/(beta*bond_k))
+                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
+                logp_r = self._bond_logq(r, bond, beta) - logZ_r
+            else:
+                constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
+                r = constraint #set bond length to exactly constraint
+                logp_r = 0.0
+
+            #propose an angle and calculate its probability
+            angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
+            if direction=='forward':
+                theta = self._propose_angle(angle, beta)
+            angle_k = angle.type.k
+            sigma_theta = units.sqrt(1/(beta*angle_k))
+            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta/units.radians))) # CHECK DOMAIN AND UNITS
+            logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
+
+            #propose a torsion angle and calcualate its probability
+            if direction=='forward':
+                phi, logp_phi = self._propose_torsion_oeconf(torsion, res_mol, oeconf)
+                phi_unit = units.Quantity(phi, unit=units.radian)
+                xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi_unit)
+                new_positions[atom.idx] = xyz
+            else:
+                reference_angle = self._get_omega_torsion(oeconf, res_mol, torsion)
+                adjusted_reference_angle = reference_angle + np.pi
+                logp_phi = self._torsion_vm_logp(phi.value_in_unit(units.radian), adjusted_reference_angle)
+            #accumulate logp
+            if direction == 'reverse':
+                if self.verbose: print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
+            logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
+
+            # DEBUG: Write PDB file for placed atoms
+            atoms_with_positions.append(atom)
+            if self.write_proposal_pdb:
+                if direction=='forward':
+                    self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, growth_parameter_value)
+                else:
+                    self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, growth_parameter_value)
+            growth_parameter_value += 1
+
+        if self.write_proposal_pdb:
+            pdbfile.close()
+
+            prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
+            if direction == 'forward':
+                pdbfile = open('%s-final.pdb' % prefix, 'w')
+                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
+                pdbfile.close()
+        total_time = time.time() - initial_time
+        print("total time: %f" % total_time)
+        return logp_proposal, new_positions
+
+    def _generate_conformations(self, smiles):
+        """
+        Generate an oemol with up to max_confs conformations.
+
+        Parameters
+        ----------
+        smiles : str
+            The SMILES string for the molecule
+
+        Returns
+        -------
+        conf_mol : oechem.OEMol with confs
+        """
+
+        mol = oechem.OEMol()
+        oechem.OESmilesToMol(mol, smiles)
+        oechem.OEAddExplicitHydrogens(mol)
+        oechem.OECanonicalOrderAtoms(mol)
+        oechem.OETriposAtomNames(mol)
+        self._omega(mol)
+        return mol
+
+    def _get_omega_torsion(self, oeconf, res_mol, torsion):
+        """
+        Utility function to get a particular torsion from the conformation.
+        Note that all atoms in the OEConf must have a topology index defined.
+
+        Parameters
+        ----------
+        oeconf : openeye.OEConfBase
+            The conformation of the residue of interest
+        res_mol : oechem.OEMol
+            The OEMol representation with old topology indexes
+        torsion : parmed.Dihedral
+            The chosen torsion for this proposal
+
+        Returns
+        -------
+        torsion_angle : float, in radians
+            The angle in the oeconf geometry
+        """
+        from perses.tests.utils import extractPositionsFromOEMOL
+        positions = extractPositionsFromOEMOL(oeconf)
+        #first, retrieve the tripos names of the atoms
+        atom_1_name = res_mol.GetAtom(PredAtomTopologyIndex(torsion.atom1.idx)).GetName()
+        atom_2_name = res_mol.GetAtom(PredAtomTopologyIndex(torsion.atom2.idx)).GetName()
+        atom_3_name = res_mol.GetAtom(PredAtomTopologyIndex(torsion.atom3.idx)).GetName()
+        atom_4_name = res_mol.GetAtom(PredAtomTopologyIndex(torsion.atom4.idx)).GetName()
+
+        #then, retrieve the atoms from the reference conformation
+        atom_1_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_1_name)).GetIdx()
+        atom_2_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_2_name)).GetIdx()
+        atom_3_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_3_name)).GetIdx()
+        atom_4_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_4_name)).GetIdx()
+
+
+        internal_coords, _ = self._cartesian_to_internal(positions[atom_1_index], positions[atom_2_index], positions[atom_3_index], positions[atom_4_index])
+        return internal_coords[2]
+
+    def _propose_torsion_oeconf(self, torsion, res_mol, oeconf):
+        """
+        Propose a torsion based on a von mises distribution
+        about the reference geometry in oeconf
+        Parameters
+        ----------
+        torsion : parmed.Dihedral
+            torsion of interest
+        res_mol : oechem.OEMol
+            OEMol of the new residue with tripos names and
+            topology_index
+        oeconf : oechem.OEConfBase
+            reference geometry
+
+        Returns
+        -------
+        proposed_torsion_angle : simtk.unit.Quantity radians
+            the proposed torsion angle
+        logp_torsion : the log-probability of the choice
+        """
+        reference_angle = self._get_omega_torsion(oeconf, res_mol, torsion)
+        adjusted_reference = reference_angle
+        proposed_torsion_angle = np.random.vonmises(adjusted_reference, self._kappa)
+        print("Proposing %s-%s-%s-%s with angle %f" % (str(torsion.atom1), str(torsion.atom2), str(torsion.atom3), str(torsion.atom4), proposed_torsion_angle))
+        print("With an unadjusted reference of %s" % str(reference_angle))
+        logp_torsion = self._torsion_vm_logp(proposed_torsion_angle, adjusted_reference)
+        return adjusted_reference, logp_torsion
+
+    def _torsion_vm_logp(self, torsion_angle, mean):
+        """
+        Calculate the logp of the given torsion according to the von mises
+        distribution with the kappa parameter set in the constructor
+
+        Parameters
+        ----------
+        torsion_angle : float, in radians
+            The angle whose logp is desired
+        mean : float, in radians
+            The mean of the distribution
+
+        Returns
+        -------
+        logp_torsion : float
+            the logp of the torsion angle
+        """
+        import scipy.stats as stats
+        logp_torsion = stats.vonmises.pdf(torsion_angle, self._kappa, mean)
+        return logp_torsion
+
+    def _logp_torsion_reverse(self, positions, torsion, oeconf):
+        """
+        Calculate the logp_reverse of the given torsion
+
+        Parameters
+        ----------
+        positions : [n, 3] np.array of float
+            the positions of all the atoms in the system
+        torsion : parmed.Dihedral
+            the torsion of interest
+        oeconf
+
+        Returns
+        -------
+
+        """
+        pass
+
+class PredAtomTopologyIndex(oechem.OEUnaryAtomPred):
+
+    def __init__(self, topology_index):
+        super(PredAtomTopologyIndex, self).__init__()
+        self._topology_index = topology_index
+
+    def __call__(self, atom):
+        atom_data = atom.GetData()
+        if 'topology_index' in atom_data.keys():
+            if atom_data['topology_index'] == self._topology_index:
+                return True
+        return False
+
+
 class BootstrapParticleFilter(object):
     """
     Implements a Bootstrap Particle Filter (BPF)
@@ -895,6 +1223,7 @@ class BootstrapParticleFilter(object):
             How often to resample particles. default 10
         """
 
+        raise NotImplementedError
         self._system = growth_context.getSystem()
         self._beta = beta
         self._growth_stage = 0
@@ -1221,6 +1550,7 @@ class OmegaGeometryEngine(GeometryEngine):
         self._proposal_sigma = 1.0
         self._reference_oemols = {}
         self._metadata = metadata
+        raise NotImplementedError
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -1259,6 +1589,7 @@ class OmegaGeometryEngine(GeometryEngine):
 
         """
         pass
+
 
 class GeometrySystemGenerator(object):
     """
@@ -1573,7 +1904,6 @@ class ProposalOrderTools(object):
             raise ValueError("direction parameter must be either forward or reverse.")
 
 
-        logp_choice = 0
         while(len(new_atoms))>0:
             eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
             if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
@@ -1584,7 +1914,7 @@ class ProposalOrderTools(object):
                 logp_torsion_choice += logp_choice
                 new_atoms.remove(atom)
                 atoms_with_positions.append(atom)
-        return atoms_torsions, logp_choice
+        return atoms_torsions, logp_torsion_choice
 
 
     def _atoms_eligible_for_proposal(self, new_atoms, atoms_with_positions):
@@ -1705,6 +2035,46 @@ class BondOnlyProposalOrder(ProposalOrderTools):
         """
         atoms_bonds = collections.OrderedDict()
         logp_bond_choice = 0.0
+        if direction=='forward':
+            structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
+            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
+        elif direction=='reverse':
+            structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
+            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
+        else:
+            raise ValueError("direction parameter must be either forward or reverse.")
+
+        while(len(new_atoms))>0:
+            eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
+            if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
+                raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
+            for atom in eligible_atoms:
+                chosen_bond_atom, logp_choice = self._choose_bond_partner(atoms_with_positions, atom)
+                atoms_bonds[atom] = chosen_bond_atom
+                logp_bond_choice += logp_choice
+                new_atoms.remove(atom)
+                atoms_with_positions.append(atom)
+        return atoms_bonds, logp_bond_choice
+
+    def _choose_bond_partner(self, atoms_with_positions, atom):
+        """
+        Choose a bond partner to atom that has positions.
+
+        Parameters
+        ----------
+        atoms_with_positoins
+        atom
+
+        Returns
+        -------
+
+        """
+        potential_bond_partners = [a for a in atom.bond_partners if a in atoms_with_positions]
+        logp_choice = np.log(1.0/len(potential_bond_partners))
+        chosen_bonded_atom = np.random.choice(potential_bond_partners)
+        return chosen_bonded_atom, logp_choice
 
 
 class NoTorsionError(Exception):
