@@ -1026,7 +1026,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
                 new_positions[atom.idx] = xyz
             else:
                 reference_angle = self._get_omega_torsion(oeconf, res_mol, torsion)
-                adjusted_reference_angle = reference_angle + np.pi
+                adjusted_reference_angle = reference_angle
                 logp_phi = self._torsion_vm_logp(phi.value_in_unit(units.radian), adjusted_reference_angle)
             #accumulate logp
             if direction == 'reverse':
@@ -1139,7 +1139,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         print("Proposing %s-%s-%s-%s with angle %f" % (str(torsion.atom1), str(torsion.atom2), str(torsion.atom3), str(torsion.atom4), proposed_torsion_angle))
         print("With an unadjusted reference of %s" % str(reference_angle))
         logp_torsion = self._torsion_vm_logp(proposed_torsion_angle, adjusted_reference)
-        return adjusted_reference, logp_torsion
+        return proposed_torsion_angle, logp_torsion
 
     def _torsion_vm_logp(self, torsion_angle, mean):
         """
