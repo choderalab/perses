@@ -369,8 +369,8 @@ def test_run_geometry_engine(index=0):
     import copy
     #molecule_name_1 = 'glycine'
     #molecule_name_2 = 'tryptophan'
-    molecule_name_1 = 'propane'
-    molecule_name_2 = 'octane'
+    molecule_name_1 = 'benzene'
+    molecule_name_2 = 'pyridine'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)

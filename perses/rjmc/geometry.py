@@ -872,14 +872,16 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
     Instead of using the forcefield to propose torsion angles, use Omega geometries as a reference
     """
 
-    def __init__(self, torsion_kappa=8.0, max_confs=1):
+    def __init__(self, torsion_kappa=8.0, max_confs=1, strict_stereo=False):
         self._kappa = torsion_kappa
         self._oemols = {}
         self._max_confs = max_confs
         self._omega = oeomega.OEOmega()
         self._omega.SetMaxConfs(max_confs)
+        self._omega.SetStrictStereo(strict_stereo)
         self.nproposed = 0
         self.verbose = False
+        self.write_proposal_pdb = False
 
     def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
         """
@@ -951,10 +953,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             self._oemols[res_smiles] = mol_conf
         else:
             mol_conf = self._oemols[res_smiles]
-        conf_list = list(mol_conf.GetConfs())
-        oeconf = np.random.choice(conf_list)
-        conf_choice_logp = - np.log(len(conf_list))
-        logp_proposal += conf_choice_logp
+
 
         #ostream = oechem.oemolostream("Conf1.pdb")
         #oechem.OEWriteMolecule(ostream, oeconf)
@@ -1020,14 +1019,17 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion_oeconf(torsion, res_mol, oeconf)
+                phi, logp_phi = self._propose_torsion_oeconf(torsion, res_mol, mol_conf)
                 phi_unit = units.Quantity(phi, unit=units.radian)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi_unit)
                 new_positions[atom.idx] = xyz
             else:
-                reference_angle = self._get_omega_torsion(oeconf, res_mol, torsion)
-                adjusted_reference_angle = reference_angle
-                logp_phi = self._torsion_vm_logp(phi.value_in_unit(units.radian), adjusted_reference_angle)
+                reference_angles = self._get_omega_torsions(mol_conf, res_mol, torsion)
+                #TODO: consider more numerically stable thing here
+                p_phi = 1.0
+                for i, reference_angle in enumerate(reference_angles):
+                    p_phi += np.exp(self._torsion_vm_logp(phi.value_in_unit(units.radian), reference_angle))
+                logp_phi = np.log(p_phi) - np.log(len(reference_angles))
             #accumulate logp
             if direction == 'reverse':
                 if self.verbose: print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
@@ -1076,15 +1078,15 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         self._omega(mol)
         return mol
 
-    def _get_omega_torsion(self, oeconf, res_mol, torsion):
+    def _get_omega_torsions(self, mol_conf, res_mol, torsion):
         """
         Utility function to get a particular torsion from the conformation.
         Note that all atoms in the OEConf must have a topology index defined.
 
         Parameters
         ----------
-        oeconf : openeye.OEConfBase
-            The conformation of the residue of interest
+        mol_conf : openeye.OEMol
+            The conformations of the residue of interest
         res_mol : oechem.OEMol
             The OEMol representation with old topology indexes
         torsion : parmed.Dihedral
@@ -1092,28 +1094,30 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
 
         Returns
         -------
-        torsion_angle : float, in radians
-            The angle in the oeconf geometry
+        torsion_phis : list of float, in radians
+            The angles in the oeconf geometries
         """
         from perses.tests.utils import extractPositionsFromOEMOL
-        positions = extractPositionsFromOEMOL(oeconf)
-        #first, retrieve the tripos names of the atoms
         atom_1_name = res_mol.GetAtom(PredAtomTopologyIndex(torsion.atom1.idx)).GetName()
         atom_2_name = res_mol.GetAtom(PredAtomTopologyIndex(torsion.atom2.idx)).GetName()
         atom_3_name = res_mol.GetAtom(PredAtomTopologyIndex(torsion.atom3.idx)).GetName()
         atom_4_name = res_mol.GetAtom(PredAtomTopologyIndex(torsion.atom4.idx)).GetName()
+        torsion_phis = []
+        for oeconf in mol_conf.GetConfs():
+            positions = extractPositionsFromOEMOL(oeconf)
+            #then, retrieve the atoms from the reference conformation
+            atom_1_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_1_name)).GetIdx()
+            atom_2_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_2_name)).GetIdx()
+            atom_3_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_3_name)).GetIdx()
+            atom_4_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_4_name)).GetIdx()
 
-        #then, retrieve the atoms from the reference conformation
-        atom_1_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_1_name)).GetIdx()
-        atom_2_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_2_name)).GetIdx()
-        atom_3_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_3_name)).GetIdx()
-        atom_4_index = oeconf.GetAtom(oechem.OEHasAtomName(atom_4_name)).GetIdx()
 
+            internal_coords, _ = self._cartesian_to_internal(positions[atom_1_index], positions[atom_2_index], positions[atom_3_index], positions[atom_4_index])
+            torsion_phis.append(internal_coords[2])
 
-        internal_coords, _ = self._cartesian_to_internal(positions[atom_1_index], positions[atom_2_index], positions[atom_3_index], positions[atom_4_index])
-        return internal_coords[2]
+        return torsion_phis
 
-    def _propose_torsion_oeconf(self, torsion, res_mol, oeconf):
+    def _propose_torsion_oeconf(self, torsion, res_mol, mol_conf):
         """
         Propose a torsion based on a von mises distribution
         about the reference geometry in oeconf
@@ -1124,8 +1128,8 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         res_mol : oechem.OEMol
             OEMol of the new residue with tripos names and
             topology_index
-        oeconf : oechem.OEConfBase
-            reference geometry
+        mol_conf : oechem.OEMol
+            reference geometries
 
         Returns
         -------
@@ -1133,12 +1137,14 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             the proposed torsion angle
         logp_torsion : the log-probability of the choice
         """
-        reference_angle = self._get_omega_torsion(oeconf, res_mol, torsion)
+        reference_angle_list = self._get_omega_torsions(mol_conf, res_mol, torsion)
+        reference_angle = np.random.choice(reference_angle_list)
+        logp_choice = - np.log(len(reference_angle_list))
         adjusted_reference = reference_angle
         proposed_torsion_angle = np.random.vonmises(adjusted_reference, self._kappa)
-        print("Proposing %s-%s-%s-%s with angle %f" % (str(torsion.atom1), str(torsion.atom2), str(torsion.atom3), str(torsion.atom4), proposed_torsion_angle))
-        print("With an unadjusted reference of %s" % str(reference_angle))
-        logp_torsion = self._torsion_vm_logp(proposed_torsion_angle, adjusted_reference)
+        #print("Proposing %s-%s-%s-%s with angle %f" % (str(torsion.atom1), str(torsion.atom2), str(torsion.atom3), str(torsion.atom4), proposed_torsion_angle))
+        #print("With an unadjusted reference of %s" % str(reference_angle))
+        logp_torsion = self._torsion_vm_logp(proposed_torsion_angle, adjusted_reference) + logp_choice
         return proposed_torsion_angle, logp_torsion
 
     def _torsion_vm_logp(self, torsion_angle, mean):
