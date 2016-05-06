@@ -77,8 +77,6 @@ def collect_switching_data(system, positions, functions, temperature, collision_
 
     # Clean up
     del context, integrator
-    #print("The work for the %s direction is" % direction)
-    #print(work_n)
     return work_n
 
 def check_harmonic_oscillator_ncmc(ncmc_nsteps=50, ncmc_integrator="VV"):
