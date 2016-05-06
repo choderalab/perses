@@ -526,6 +526,8 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
 
         super(NCMCAlchemicalIntegrator, self).__init__(timestep)
 
+        self.nsteps = nsteps
+
         # Make a list of parameters in the system
         # TODO: We should be able to remove this.
         system_parameters = list()
@@ -535,13 +537,18 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
                 for parameter_index in range(force.getNumGlobalParameters()):
                     system_parameters.append(force.getGlobalParameterName(parameter_index))
 
+        # NCMC variables
         self.addGlobalVariable('kinetic', 0.0) # kinetic energy
         self.addGlobalVariable('initial_total_energy', 0.0) # initial total energy (kinetic + potential)
         self.addGlobalVariable('final_total_energy', 0.0) # final total energy (kinetic + potential)
         self.addGlobalVariable('log_ncmc_acceptance_probability', 0.0) # log of NCMC acceptance probability
-        self.addGlobalVariable('dti', timestep.value_in_unit_system(unit.md_unit_system)) # inner timestep
         self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
-        self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
+
+        if (nsteps > 0):
+            # VV variables
+            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
+            self.addGlobalVariable('step', 0) # current NCMC step number
+            self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
 
         # Compute kT in natural openmm units.
         kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
@@ -574,12 +581,9 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         #
 
         if (nsteps > 0):
-            self.addComputePerDof("v", "v+0.5*dti*f/m")
-            self.addComputePerDof("x", "x+dti*v")
-            self.addComputePerDof("x1", "x")
-            self.addConstrainPositions()
-            self.addComputePerDof("v", "v+0.5*dti*f/m+(x-x1)/dti")
-            self.addConstrainVelocities()
+            self.beginIfBlock('step = 0')
+            self.addVelocityVerletStep()
+            self.endBlock()
 
         # Compute direction that lambda is changing in.
         if (nsteps == 0):
@@ -599,8 +603,6 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
 
         # Loop over NCMC steps (for nsteps > 1)
         if (nsteps > 0):
-            self.addGlobalVariable('step', 0) # current NCMC step number
-            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
             self.beginIfBlock('step < nsteps')
 
             #
@@ -621,12 +623,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             # Velocity Verlet propagation step
             #
 
-            self.addComputePerDof("v", "v+0.5*dt*f/m")
-            self.addComputePerDof("x", "x+dt*v")
-            self.addComputePerDof("x1", "x")
-            self.addConstrainPositions()
-            self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
-            self.addConstrainVelocities()
+            self.addVelocityVerletStep()
 
             #
             # End of loop
@@ -636,6 +633,24 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             self.endBlock()
 
         return
+
+    def addVelocityVerletStep(self):
+        """
+        Add velocity Verlet step.
+        """
+        self.addComputePerDof("v", "v+0.5*dt*f/m")
+        self.addComputePerDof("x", "x+dt*v")
+        self.addComputePerDof("x1", "x")
+        self.addConstrainPositions()
+        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
+        self.addConstrainVelocities()
+
+    def reset(self):
+        """
+        Reset step counter and total work
+        """
+        if self.nsteps > 0:
+            self.setGlobalVariableByName("step", 0)
 
     def getLogAcceptanceProbability(self, context):
         """
@@ -658,13 +673,12 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         log_ncmc_acceptance_probability = - (final_total_energy - initial_total_energy)
         return log_ncmc_acceptance_probability
 
-
 class NCMCGHMCIntegrator(openmm.CustomIntegrator):
     """
     Use NCMC switching to annihilate or introduce particles alchemically.
     """
 
-    def __init__(self, temperature, system, functions, nsteps=0, collision_rate=91.0/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
+    def __init__(self, temperature, system, functions, nsteps=0, collision_rate=9.1/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
         """
         Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
 
@@ -697,6 +711,8 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         if direction not in ['insert', 'delete']:
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
+        self.nsteps = nsteps # store number of steps
+
         super(NCMCGHMCIntegrator, self).__init__(timestep)
         # Make a list of parameters in the system
         # TODO: We should be able to remove this.
@@ -713,22 +729,25 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         self.kT = kT
         kT = kT.value_in_unit_system(unit.md_unit_system)
 
-        #initialize variables for GHMC NCMC. We need to keep track of the total work
-        #performed by the perturbation kernel.
+        # NCMC variables
         self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
-        self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
-        self.addGlobalVariable("kT", kT)  # thermal energy
-        self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
-        self.addPerDofVariable("sigma", 0)
-        self.addGlobalVariable("ke", 0)  # kinetic energy
-        self.addPerDofVariable("vold", 0)  # old velocities
-        self.addPerDofVariable("xold", 0)  # old positions
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
-        self.addGlobalVariable("accept", 0)  # accept or reject
-        self.addGlobalVariable("naccept", 0)  # number accepted
-        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
+        if (nsteps > 0):
+            # GHMC variables
+            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
+            self.addGlobalVariable('step', 0) # current NCMC step number
+            self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
+            self.addGlobalVariable("kT", kT)  # thermal energy
+            self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
+            self.addPerDofVariable("sigma", 0)
+            self.addGlobalVariable("ke", 0)  # kinetic energy
+            self.addPerDofVariable("vold", 0)  # old velocities
+            self.addPerDofVariable("xold", 0)  # old positions
+            self.addGlobalVariable("accept", 0)  # accept or reject
+            self.addGlobalVariable("naccept", 0)  # number accepted
+            self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
         # Constrain initial positions and velocities.
         self.addConstrainPositions()
@@ -741,110 +760,114 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         elif direction == 'delete':
             self.addComputeGlobal('lambda', '1.0')
 
-        # Update Context parameters according to provided functions.
-        for context_parameter in functions:
-            if context_parameter in system_parameters:
-                self.addComputeGlobal(context_parameter, functions[context_parameter])
-        self.addComputePerDof("sigma", "sqrt(kT/m)")
-
-        if nsteps > 0:
-            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-            self.addConstrainVelocities()
-            #
-            # Metropolized symplectic step.
-            #
-            self.addComputeSum("ke", "0.5*m*v*v")
-            self.addComputeGlobal("Eold", "ke + energy")
-            self.addComputePerDof("xold", "x")
-            self.addComputePerDof("vold", "v")
-            self.addComputePerDof("v", "v + 0.5*dt*f/m")
-            self.addComputePerDof("x", "x + v*dt")
-            self.addComputePerDof("x1", "x")
-            self.addConstrainPositions()
-            self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
-            self.addConstrainVelocities()
-            self.addComputeSum("ke", "0.5*m*v*v")
-            self.addComputeGlobal("Enew", "ke + energy")
-            self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
-            self.addComputePerDof("x", "x*accept + xold*(1-accept)")
-            self.addComputePerDof("v", "v*accept - vold*(1-accept)")
-
-            #
-            # Velocity randomization
-            #
-            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-            self.addConstrainVelocities()
-
-
         if nsteps == 0:
             #
-            # Alchemical perturbation step does not appear in step loop.
+            # Initial potential
             #
+            self.addComputeGlobal("Eold", "energy")
 
+            #
+            # Update Context parameters according to provided functions.
+            #
             if direction == 'insert':
                 self.addComputeGlobal('lambda', '1.0')
             elif direction == 'delete':
                 self.addComputeGlobal('lambda', '0.0')
-
-            # Update Context parameters according to provided functions.
             for context_parameter in functions:
                 if context_parameter in system_parameters:
                     self.addComputeGlobal(context_parameter, functions[context_parameter])
 
-        if nsteps > 0:
-            self.addGlobalVariable('step', 0) # current NCMC step number
-            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
-            self.beginIfBlock('step + 1 < nsteps')
+            #
+            # Final potential and work accumulation
+            #
+            self.addComputeGlobal("Enew", "energy")
+            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+        elif nsteps > 0:
+            # Initial step only
+            self.beginIfBlock('step = 0')
+            self.addGHMCStep()
+            self.endBlock()
 
-            self.addComputeGlobal("initial_energy", "energy")
+            # All steps
+            self.beginIfBlock('step < nsteps')
+
+            #
+            # Initial potential
+            #
+            self.addComputeGlobal("Eold", "energy")
+
+            #
+            # Update Context parameters according to provided functions.
+            #
             if direction == 'insert':
                 self.addComputeGlobal('lambda', '(step+1)/nsteps')
             elif direction == 'delete':
                 self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
-
-            # Update Context parameters according to provided functions.
             for context_parameter in functions:
                 if context_parameter in system_parameters:
                     self.addComputeGlobal(context_parameter, functions[context_parameter])
-            self.addComputeGlobal("final_energy", "energy")
-            self.addComputeGlobal("total_work", "total_work + (final_energy-initial_energy)")
 
             #
-            # Metropolized symplectic step.
+            # Final potential and work accumulation
             #
-            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-            self.addConstrainVelocities()
-
-            self.addComputeSum("ke", "0.5*m*v*v")
-            self.addComputeGlobal("Eold", "ke + energy")
-            self.addComputePerDof("xold", "x")
-            self.addComputePerDof("vold", "v")
-            self.addComputePerDof("v", "v + 0.5*dt*f/m")
-            self.addComputePerDof("x", "x + v*dt")
-            self.addComputePerDof("x1", "x")
-            self.addConstrainPositions()
-            self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
-            self.addConstrainVelocities()
-            self.addComputeSum("ke", "0.5*m*v*v")
-            self.addComputeGlobal("Enew", "ke + energy")
-            self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
-            self.addComputePerDof("x", "x*accept + xold*(1-accept)")
-            self.addComputePerDof("v", "v*accept - vold*(1-accept)")
+            self.addComputeGlobal("Enew", "energy")
+            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
 
             #
-            # Velocity randomization
+            # GHMC step
             #
-            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-            self.addConstrainVelocities()
-
-            #
-            # Accumulate statistics.
-            #
-            self.addComputeGlobal("naccept", "naccept + accept")
-            self.addComputeGlobal("ntrials", "ntrials + 1")
+            self.addGHMCStep()
 
             self.addComputeGlobal('step', 'step+1') # increment step counter
             self.endBlock()
+
+    def addGHMCStep(self):
+        """
+        Add a GHMC step.
+        """
+        self.addComputePerDof("sigma", "sqrt(kT/m)")
+
+        #
+        # Velocity randomization
+        #
+        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+        self.addConstrainVelocities()
+
+        #
+        # Metropolized symplectic step.
+        #
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
+
+        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputePerDof("xold", "x")
+        self.addComputePerDof("vold", "v")
+        self.addComputePerDof("v", "v + 0.5*dt*f/m")
+        self.addComputePerDof("x", "x + v*dt")
+        self.addComputePerDof("x1", "x")
+        self.addConstrainPositions()
+        self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
+        self.addConstrainVelocities()
+        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeGlobal("Enew", "ke + energy")
+        self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
+        self.beginIfBlock("accept != 1")
+        self.addComputePerDof("x", "xold")
+        self.addComputePerDof("v", "-vold")
+        self.endBlock()
+
+        #
+        # Velocity randomization
+        #
+        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+        self.addConstrainVelocities()
+
+        #
+        # Accumulate statistics.
+        #
+        self.addComputeGlobal("naccept", "naccept + accept")
+        self.addComputeGlobal("ntrials", "ntrials + 1")
 
     def get_step(self):
         return self.getGlobalVariableByName("step")
@@ -854,10 +877,17 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         Reset step counter and total work
         """
         self.setGlobalVariableByName("total_work", 0.0)
-        #self.setGlobalVariableByName("step", 0)
+        if (self.nsteps > 0):
+            self.setGlobalVariableByName("step", 0)
+            self.setGlobalVariableByName("naccept", 0)
+            self.setGlobalVariableByName("ntrials", 0)
+
+    def getGHMCStatistics(self, context):
+        if (self.nsteps > 0):
+            return (self.getGlobalVariableByName("naccept"), self.getGlobalVariableByName("ntrials"))
+        else:
+            return (0,0)
+
     def getLogAcceptanceProbability(self, context):
         logp_accept = -1.0*self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
-        #if self.getGlobalVariableByName("ntrials") > 0:
-            #print("The acceptance rate is %f" % (self.getGlobalVariableByName("naccept") / self.getGlobalVariableByName("ntrials")))
-        #print("logp_accept is %f" % logp_accept)
         return logp_accept
