@@ -1084,11 +1084,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                                                                                 current_mol_smiles)
 
         # DEBUG
+        strict_stereo = False
         if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
         from openmoltools.openeye import molecule_to_mol2, generate_conformers
-        moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=True)
+        moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=strict_stereo)
         molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
-        moltemp = generate_conformers(proposed_mol, max_confs=1, strictStereo=True)
+        moltemp = generate_conformers(proposed_mol, max_confs=1, strictStereo=strict_stereo)
         molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
 
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
@@ -1302,7 +1303,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return mol
 
     @staticmethod
-    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember, bond_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember):
+    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree, bond_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
