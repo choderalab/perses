@@ -41,7 +41,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=default_functions, nsteps=default_nsteps, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None):
+    def __init__(self, temperature=default_temperature, functions=default_functions, nsteps=default_nsteps, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC'):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -63,6 +63,8 @@ class NCMCEngine(object):
         write_pdb_interval : int, optional, default=None
             If a positive integer is specified, a PDB frame will be written with the specified interval on NCMC switching,
             with a different PDB file generated for each attempt.
+        integrator_type : str, optional, default='GHMC'
+            NCMC internal integrator type ['GHMC', 'VV']
 
         """
         # Handle some defaults.
@@ -81,6 +83,7 @@ class NCMCEngine(object):
         self.timestep = timestep
         self.constraint_tolerance = constraint_tolerance
         self.platform = platform
+        self.integrator_type = integrator_type
 
         self.write_pdb_interval = write_pdb_interval
 
@@ -303,8 +306,12 @@ class NCMCEngine(object):
         functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
 
         # Create an NCMC velocity Verlet integrator.
-        #integrator = NCMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction=direction)
-        integrator = NCMCGHMCIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction=direction)
+        if self.integrator_type == 'VV':
+            integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction=direction)
+        elif self.integrator_type == 'GHMC':
+            integrator = NCMCGHMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction=direction)
+        else:
+            raise Exception("integrator_type '%s' unknown" % self.integrator_type)
         # Set the constraint tolerance if specified.
         if self.constraint_tolerance is not None:
             integrator.setConstraintTolerance(self.constraint_tolerance)
@@ -336,7 +343,7 @@ class NCMCEngine(object):
         #print("initial potential before '%s' : %f kT" % (direction, initial_potential))
         #print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
         self.write_pdb_interval = False
-        # Take a single integrator step since all switching steps are unrolled in NCMCAlchemicalIntegrator.
+        # Take a single integrator step since all switching steps are unrolled in NCMCVVAlchemicalIntegrator.
         try:
             # Write PDB file if requested.
             if self.write_pdb_interval:
@@ -434,66 +441,11 @@ class NCMCEngine(object):
 
 class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     """
-    Use NCMC switching to annihilate or introduce particles alchemically.
-
-    TODO:
-    ----
-    * We may need to avoid unrolling integration steps.
-
-    Examples
-    --------
-
-    Annihilate a Lennard-Jones particle
-
-    >>> # Create an alchemically-perturbed test system
-    >>> from openmmtools import testsystems
-    >>> testsystem = testsystems.LennardJonesCluster()
-    >>> from alchemy import AbsoluteAlchemicalFactory
-    >>> alchemical_atoms = [0]
-    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=alchemical_atoms)
-    >>> alchemical_system = factory.createPerturbedSystem()
-    >>> # Create an NCMC switching integrator.
-    >>> temperature = 300.0 * unit.kelvin
-    >>> nsteps = 5
-    >>> functions = { 'lambda_sterics' : 'lambda' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, nsteps=nsteps, direction='delete')
-    >>> # Create a Context
-    >>> context = openmm.Context(alchemical_system, ncmc_integrator)
-    >>> context.setPositions(testsystem.positions)
-    >>> # Run the integrator
-    >>> ncmc_integrator.step(nsteps)
-    >>> # Retrieve the log acceptance probability
-    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability(context)
-
-    Turn on an atom and its associated angles and torsions in alanine dipeptide
-
-    >>> # Create an alchemically-perturbed test system
-    >>> from openmmtools import testsystems
-    >>> testsystem = testsystems.AlanineDipeptideVacuum()
-    >>> from alchemy import AbsoluteAlchemicalFactory
-    >>> alchemical_atoms = [0,1,2,3] # terminal methyl group
-    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=alchemical_atoms, alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
-    >>> alchemical_system = factory.createPerturbedSystem()
-    >>> # Create an NCMC switching integrator.
-    >>> temperature = 300.0 * unit.kelvin
-    >>> nsteps = 10
-    >>> functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
-    >>> ncmc_integrator = NCMCAlchemicalIntegrator(temperature, alchemical_system, functions, nsteps=nsteps, direction='delete')
-    >>> # Create a Context
-    >>> context = openmm.Context(alchemical_system, ncmc_integrator)
-    >>> context.setPositions(testsystem.positions)
-    >>> # Minimize
-    >>> openmm.LocalEnergyMinimizer.minimize(context)
-    >>> # Run the integrator
-    >>> ncmc_integrator.step(nsteps)
-    >>> # Retrieve the log acceptance probability
-    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability(context)
-
+    Helper base class for NCMC alchemical integrators.
     """
-
-    def __init__(self, temperature, system, functions, nsteps=0, timestep=1.0*unit.femtoseconds, direction='insert'):
+    def __init__(self, temperature, system, functions, nsteps, timestep, direction):
         """
-        Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
+        Initialize base class for NCMC alchemical integrators.
 
         Parameters
         ----------
@@ -513,126 +465,66 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             For `insert`, the parameter 'lambda' is switched from 0 to 1.
             For `delete`, the parameter 'lambda' is switched from 1 to 0.
 
-        Note that each call to integrator.step(1) executes the entire integration program; this should not be called with more than one step.
-
-        A symmetric protocol is used, in which the protocol begins and ends with a velocity Verlet step.
-
-        TODO:
-        * Add a global variable that causes termination of future calls to step(1) after the first
-
         """
-        if direction not in ['insert', 'delete']:
-            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
-
         super(NCMCAlchemicalIntegrator, self).__init__(timestep)
 
-        self.nsteps = nsteps
-
-        # Make a list of parameters in the system
-        # TODO: We should be able to remove this.
-        system_parameters = list()
-        for force_index in range(system.getNumForces()):
-            force = system.getForce(force_index)
-            if hasattr(force, 'getNumGlobalParameters'):
-                for parameter_index in range(force.getNumGlobalParameters()):
-                    system_parameters.append(force.getGlobalParameterName(parameter_index))
-
-        # NCMC variables
-        self.addGlobalVariable('kinetic', 0.0) # kinetic energy
-        self.addGlobalVariable('initial_total_energy', 0.0) # initial total energy (kinetic + potential)
-        self.addGlobalVariable('final_total_energy', 0.0) # final total energy (kinetic + potential)
-        self.addGlobalVariable('log_ncmc_acceptance_probability', 0.0) # log of NCMC acceptance probability
-        self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
-
-        if (nsteps > 0):
-            # VV variables
-            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
-            self.addGlobalVariable('step', 0) # current NCMC step number
-            self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
+        if direction not in ['insert', 'delete']:
+            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
+        self.direction = direction
 
         # Compute kT in natural openmm units.
         kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
         kT = kB * temperature
         self.kT = kT
-        kT = kT.value_in_unit_system(unit.md_unit_system)
 
-        # Constrain initial positions and velocities.
-        self.addConstrainPositions()
-        self.addConstrainVelocities()
-        self.addUpdateContextState()
+        self.has_statistics = False # no GHMC statistics by default
 
-        # Set initial parameters.
-        if direction == 'insert':
+        self.nsteps = nsteps
+
+        # Make a list of parameters in the system
+        self.system_parameters = list()
+        self.alchemical_functions = functions
+        for force_index in range(system.getNumForces()):
+            force = system.getForce(force_index)
+            if hasattr(force, 'getNumGlobalParameters'):
+                for parameter_index in range(force.getNumGlobalParameters()):
+                    self.system_parameters.append(force.getGlobalParameterName(parameter_index))
+
+    def addAlchemicalResetStep(self):
+        """
+        Reset alchemical state to initial state.
+        """
+        if self.direction == 'insert':
             self.addComputeGlobal('lambda', '0.0')
-        elif direction == 'delete':
+        elif self.direction == 'delete':
             self.addComputeGlobal('lambda', '1.0')
 
-        # Update Context parameters according to provided functions.
-        for context_parameter in functions:
-            if context_parameter in system_parameters:
-                self.addComputeGlobal(context_parameter, functions[context_parameter])
+        self.addUpdateAlchemicalParametersStep()
 
-        # Store initial total energy.
-        self.addComputeSum("kinetic", "0.5*m*v*v")
-        self.addComputeGlobal('initial_total_energy', 'kinetic + energy')
-
-        #
-        # Initial Velocity Verlet propagation step
-        #
-
-        if (nsteps > 0):
-            self.beginIfBlock('step = 0')
-            self.addVelocityVerletStep()
-            self.endBlock()
-
-        # Compute direction that lambda is changing in.
-        if (nsteps == 0):
-            #
-            # Alchemical perturbation step does not appear in step loop.
-            #
-
-            if direction == 'insert':
+    def addAlchemicalPerturbationStep(self):
+        """
+        Add alchemical perturbation step.
+        """
+        if self.nsteps == 0:
+            if self.direction == 'insert':
                 self.addComputeGlobal('lambda', '1.0')
-            elif direction == 'delete':
+            elif self.direction == 'delete':
                 self.addComputeGlobal('lambda', '0.0')
-
-            # Update Context parameters according to provided functions.
-            for context_parameter in functions:
-                if context_parameter in system_parameters:
-                    self.addComputeGlobal(context_parameter, functions[context_parameter])
-
-        # Loop over NCMC steps (for nsteps > 1)
-        if (nsteps > 0):
-            self.beginIfBlock('step < nsteps')
-
-            #
-            # Alchemical perturbation step
-            #
-
-            if direction == 'insert':
+        else:
+            if self.direction == 'insert':
                 self.addComputeGlobal('lambda', '(step+1)/nsteps')
-            elif direction == 'delete':
+            elif self.direction == 'delete':
                 self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
 
-            # Update Context parameters according to provided functions.
-            for context_parameter in functions:
-                if context_parameter in system_parameters:
-                    self.addComputeGlobal(context_parameter, functions[context_parameter])
+        self.addUpdateAlchemicalParametersStep()
 
-            #
-            # Velocity Verlet propagation step
-            #
-
-            self.addVelocityVerletStep()
-
-            #
-            # End of loop
-            #
-
-            self.addComputeGlobal('step','step+1') # increment step counter
-            self.endBlock()
-
-        return
+    def addUpdateAlchemicalParametersStep(self):
+        """
+        Update Context parameters according to provided functions.
+        """
+        for context_parameter in self.alchemical_functions:
+            if context_parameter in self.system_parameters:
+                self.addComputeGlobal(context_parameter, self.alchemical_functions[context_parameter])
 
     def addVelocityVerletStep(self):
         """
@@ -645,186 +537,12 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
-    def reset(self):
-        """
-        Reset step counter and total work
-        """
-        if self.nsteps > 0:
-            self.setGlobalVariableByName("step", 0)
-
-    def getLogAcceptanceProbability(self, context):
-        """
-        Return the log acceptance probability.
-
-        Parameters
-        ----------
-        context : simtk.openmm.context
-            The Context to which the integrator is bound.
-
-        Returns
-        -------
-        log_ncmc_acceptance_probability : float
-            The log acceptance probability
-        """
-        initial_total_energy = self.getGlobalVariableByName('initial_total_energy') * unit.kilojoules_per_mole / self.kT # dimensionless
-        state = context.getState(getEnergy=True)
-        final_total_energy = (state.getPotentialEnergy() + state.getKineticEnergy()) / self.kT # dimensionless
-
-        log_ncmc_acceptance_probability = - (final_total_energy - initial_total_energy)
-        return log_ncmc_acceptance_probability
-
-class NCMCGHMCIntegrator(openmm.CustomIntegrator):
-    """
-    Use NCMC switching to annihilate or introduce particles alchemically.
-    """
-
-    def __init__(self, temperature, system, functions, nsteps=0, collision_rate=9.1/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
-        """
-        Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
-
-        Parameters
-        ----------
-        temperature : simtk.unit.Quantity with units compatible with kelvin
-            The temperature to use for computing the NCMC acceptance probability.
-        system : simtk.openmm.System
-            The system to be simulated.
-        functions : dict of str : str
-            functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
-            controls how alchemical context parameter 'parameter' is switched
-        nsteps : int, optional, default=10
-            The number of switching timesteps per call to integrator.step(1).
-        timestep : simtk.unit.Quantity with units compatible with femtoseconds
-            The timestep to use for each NCMC step.
-        direction : str, optional, default='insert'
-            One of ['insert', 'delete'].
-            For `insert`, the parameter 'lambda' is switched from 0 to 1.
-            For `delete`, the parameter 'lambda' is switched from 1 to 0.
-
-        Note that each call to integrator.step(1) executes the entire integration program; this should not be called with more than one step.
-
-        A symmetric protocol is used, in which the protocol begins and ends with a velocity Verlet step.
-
-        TODO:
-        * Add a global variable that causes termination of future calls to step(1) after the first
-
-        """
-        if direction not in ['insert', 'delete']:
-            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
-
-        self.nsteps = nsteps # store number of steps
-
-        super(NCMCGHMCIntegrator, self).__init__(timestep)
-        # Make a list of parameters in the system
-        # TODO: We should be able to remove this.
-        system_parameters = list()
-        for force_index in range(system.getNumForces()):
-            force = system.getForce(force_index)
-            if hasattr(force, 'getNumGlobalParameters'):
-                for parameter_index in range(force.getNumGlobalParameters()):
-                    system_parameters.append(force.getGlobalParameterName(parameter_index))
-        gamma = collision_rate
-        # Compute kT in natural openmm units.
-        kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
-        kT = kB * temperature
-        self.kT = kT
-        kT = kT.value_in_unit_system(unit.md_unit_system)
-
-        # NCMC variables
-        self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
-        self.addGlobalVariable("Eold", 0)  # old energy
-        self.addGlobalVariable("Enew", 0)  # new energy
-
-        if (nsteps > 0):
-            # GHMC variables
-            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
-            self.addGlobalVariable('step', 0) # current NCMC step number
-            self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
-            self.addGlobalVariable("kT", kT)  # thermal energy
-            self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
-            self.addPerDofVariable("sigma", 0)
-            self.addGlobalVariable("ke", 0)  # kinetic energy
-            self.addPerDofVariable("vold", 0)  # old velocities
-            self.addPerDofVariable("xold", 0)  # old positions
-            self.addGlobalVariable("accept", 0)  # accept or reject
-            self.addGlobalVariable("naccept", 0)  # number accepted
-            self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
-
-        # Constrain initial positions and velocities.
-        self.addConstrainPositions()
-        self.addConstrainVelocities()
-        self.addUpdateContextState()
-
-        # Set initial parameters.
-        if direction == 'insert':
-            self.addComputeGlobal('lambda', '0.0')
-        elif direction == 'delete':
-            self.addComputeGlobal('lambda', '1.0')
-
-        if nsteps == 0:
-            #
-            # Initial potential
-            #
-            self.addComputeGlobal("Eold", "energy")
-
-            #
-            # Update Context parameters according to provided functions.
-            #
-            if direction == 'insert':
-                self.addComputeGlobal('lambda', '1.0')
-            elif direction == 'delete':
-                self.addComputeGlobal('lambda', '0.0')
-            for context_parameter in functions:
-                if context_parameter in system_parameters:
-                    self.addComputeGlobal(context_parameter, functions[context_parameter])
-
-            #
-            # Final potential and work accumulation
-            #
-            self.addComputeGlobal("Enew", "energy")
-            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
-        elif nsteps > 0:
-            # Initial step only
-            self.beginIfBlock('step = 0')
-            self.addGHMCStep()
-            self.endBlock()
-
-            # All steps
-            self.beginIfBlock('step < nsteps')
-
-            #
-            # Initial potential
-            #
-            self.addComputeGlobal("Eold", "energy")
-
-            #
-            # Update Context parameters according to provided functions.
-            #
-            if direction == 'insert':
-                self.addComputeGlobal('lambda', '(step+1)/nsteps')
-            elif direction == 'delete':
-                self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
-            for context_parameter in functions:
-                if context_parameter in system_parameters:
-                    self.addComputeGlobal(context_parameter, functions[context_parameter])
-
-            #
-            # Final potential and work accumulation
-            #
-            self.addComputeGlobal("Enew", "energy")
-            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
-
-            #
-            # GHMC step
-            #
-            self.addGHMCStep()
-
-            self.addComputeGlobal('step', 'step+1') # increment step counter
-            self.endBlock()
-
     def addGHMCStep(self):
         """
         Add a GHMC step.
         """
+        self.hasStatistics = True
+
         self.addComputePerDof("sigma", "sqrt(kT/m)")
 
         #
@@ -879,11 +597,12 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
         self.setGlobalVariableByName("total_work", 0.0)
         if (self.nsteps > 0):
             self.setGlobalVariableByName("step", 0)
-            self.setGlobalVariableByName("naccept", 0)
-            self.setGlobalVariableByName("ntrials", 0)
+            if self.has_statistics:
+                self.setGlobalVariableByName("naccept", 0)
+                self.setGlobalVariableByName("ntrials", 0)
 
-    def getGHMCStatistics(self, context):
-        if (self.nsteps > 0):
+    def getStatistics(self, context):
+        if (self.has_statistics):
             return (self.getGlobalVariableByName("naccept"), self.getGlobalVariableByName("ntrials"))
         else:
             return (0,0)
@@ -891,3 +610,233 @@ class NCMCGHMCIntegrator(openmm.CustomIntegrator):
     def getLogAcceptanceProbability(self, context):
         logp_accept = -1.0*self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
         return logp_accept
+
+class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
+    """
+    Use NCMC switching to annihilate or introduce particles alchemically.
+
+    TODO:
+    ----
+    * We may need to avoid unrolling integration steps.
+
+    Examples
+    --------
+
+    Annihilate a Lennard-Jones particle
+
+    >>> # Create an alchemically-perturbed test system
+    >>> from openmmtools import testsystems
+    >>> testsystem = testsystems.LennardJonesCluster()
+    >>> from alchemy import AbsoluteAlchemicalFactory
+    >>> alchemical_atoms = [0]
+    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=alchemical_atoms)
+    >>> alchemical_system = factory.createPerturbedSystem()
+    >>> # Create an NCMC switching integrator.
+    >>> temperature = 300.0 * unit.kelvin
+    >>> nsteps = 5
+    >>> functions = { 'lambda_sterics' : 'lambda' }
+    >>> ncmc_integrator = NCMCVVAlchemicalIntegrator(temperature, alchemical_system, functions, nsteps=nsteps, direction='delete')
+    >>> # Create a Context
+    >>> context = openmm.Context(alchemical_system, ncmc_integrator)
+    >>> context.setPositions(testsystem.positions)
+    >>> # Run the integrator
+    >>> ncmc_integrator.step(nsteps)
+    >>> # Retrieve the log acceptance probability
+    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability(context)
+
+    Turn on an atom and its associated angles and torsions in alanine dipeptide
+
+    >>> # Create an alchemically-perturbed test system
+    >>> from openmmtools import testsystems
+    >>> testsystem = testsystems.AlanineDipeptideVacuum()
+    >>> from alchemy import AbsoluteAlchemicalFactory
+    >>> alchemical_atoms = [0,1,2,3] # terminal methyl group
+    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=alchemical_atoms, alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
+    >>> alchemical_system = factory.createPerturbedSystem()
+    >>> # Create an NCMC switching integrator.
+    >>> temperature = 300.0 * unit.kelvin
+    >>> nsteps = 10
+    >>> functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
+    >>> ncmc_integrator = NCMCVVAlchemicalIntegrator(temperature, alchemical_system, functions, nsteps=nsteps, direction='delete')
+    >>> # Create a Context
+    >>> context = openmm.Context(alchemical_system, ncmc_integrator)
+    >>> context.setPositions(testsystem.positions)
+    >>> # Minimize
+    >>> openmm.LocalEnergyMinimizer.minimize(context)
+    >>> # Run the integrator
+    >>> ncmc_integrator.step(nsteps)
+    >>> # Retrieve the log acceptance probability
+    >>> log_ncmc = ncmc_integrator.getLogAcceptanceProbability(context)
+
+    """
+
+    def __init__(self, temperature, system, functions, nsteps=0, timestep=1.0*unit.femtoseconds, direction='insert'):
+        """
+        Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
+
+        Parameters
+        ----------
+        temperature : simtk.unit.Quantity with units compatible with kelvin
+            The temperature to use for computing the NCMC acceptance probability.
+        system : simtk.openmm.System
+            The system to be simulated.
+        functions : dict of str : str
+            functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
+            controls how alchemical context parameter 'parameter' is switched
+        nsteps : int, optional, default=10
+            The number of switching timesteps per call to integrator.step(1).
+        timestep : simtk.unit.Quantity with units compatible with femtoseconds
+            The timestep to use for each NCMC step.
+        direction : str, optional, default='insert'
+            One of ['insert', 'delete'].
+            For `insert`, the parameter 'lambda' is switched from 0 to 1.
+            For `delete`, the parameter 'lambda' is switched from 1 to 0.
+
+        Note that each call to integrator.step(1) executes the entire integration program; this should not be called with more than one step.
+
+        A symmetric protocol is used, in which the protocol begins and ends with a velocity Verlet step.
+
+        TODO:
+        * Add a global variable that causes termination of future calls to step(1) after the first
+
+        """
+        super(NCMCVVAlchemicalIntegrator, self).__init__(temperature, system, functions, nsteps, timestep, direction)
+
+        #
+        # Initialize global variables
+        #
+
+        # NCMC variables
+        self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
+        self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable('kinetic', 0.0) # kinetic energy
+
+        # VV variables
+        if (nsteps > 0):
+            # VV variables
+            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
+            self.addGlobalVariable('step', 0) # current NCMC step number
+            self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
+
+        # Constrain initial positions and velocities.
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
+        self.addUpdateContextState()
+
+        if nsteps == 0:
+            self.addAlchemicalResetStep()
+            self.addComputeGlobal("Eold", "energy")
+            self.addAlchemicalPerturbationStep()
+            self.addComputeGlobal("Enew", "energy")
+            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+        if nsteps > 0:
+            # Initial step only
+            self.beginIfBlock('step = 0')
+            self.addComputeSum('kinetic', '0.5 * m * v^2')
+            self.addComputeGlobal("Eold", "energy + kinetic")
+            self.addVelocityVerletStep()
+            self.addComputeSum('kinetic', '0.5 * m * v^2')
+            self.addComputeGlobal("Enew", "energy + kinetic")
+            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+            self.endBlock()
+
+            # All steps
+            self.beginIfBlock('step < nsteps')
+            self.addComputeSum('kinetic', '0.5 * m * v^2')
+            self.addComputeGlobal("Eold", "energy + kinetic")
+            self.addAlchemicalPerturbationStep()
+            self.addVelocityVerletStep()
+            self.addComputeSum('kinetic', '0.5 * m * v^2')
+            self.addComputeGlobal("Enew", "energy + kinetic")
+            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+            self.addComputeGlobal('step', 'step+1')
+            self.endBlock()
+
+class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
+    """
+    Use NCMC switching to annihilate or introduce particles alchemically.
+    """
+
+    def __init__(self, temperature, system, functions, nsteps=0, collision_rate=9.1/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
+        """
+        Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
+
+        Parameters
+        ----------
+        temperature : simtk.unit.Quantity with units compatible with kelvin
+            The temperature to use for computing the NCMC acceptance probability.
+        system : simtk.openmm.System
+            The system to be simulated.
+        functions : dict of str : str
+            functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
+            controls how alchemical context parameter 'parameter' is switched
+        nsteps : int, optional, default=10
+            The number of switching timesteps per call to integrator.step(1).
+        timestep : simtk.unit.Quantity with units compatible with femtoseconds
+            The timestep to use for each NCMC step.
+        direction : str, optional, default='insert'
+            One of ['insert', 'delete'].
+            For `insert`, the parameter 'lambda' is switched from 0 to 1.
+            For `delete`, the parameter 'lambda' is switched from 1 to 0.
+
+        Note that each call to integrator.step(1) executes the entire integration program; this should not be called with more than one step.
+
+        A symmetric protocol is used, in which the protocol begins and ends with a velocity Verlet step.
+
+        TODO:
+        * Add a global variable that causes termination of future calls to step(1) after the first
+
+        """
+        super(NCMCGHMCAlchemicalIntegrator, self).__init__(temperature, system, functions, nsteps, timestep, direction)
+
+        gamma = collision_rate
+
+        # NCMC variables
+        self.addGlobalVariable('lambda', 0.0) # initial total energy (kinetic + potential)
+        self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
+
+        if (nsteps > 0):
+            # GHMC variables
+            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
+            self.addGlobalVariable('step', 0) # current NCMC step number
+            self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
+            self.addGlobalVariable("kT", self.kT.value_in_unit_system(unit.md_unit_system))  # thermal energy
+            self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
+            self.addPerDofVariable("sigma", 0)
+            self.addGlobalVariable("ke", 0)  # kinetic energy
+            self.addPerDofVariable("vold", 0)  # old velocities
+            self.addPerDofVariable("xold", 0)  # old positions
+            self.addGlobalVariable("accept", 0)  # accept or reject
+            self.addGlobalVariable("naccept", 0)  # number accepted
+            self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
+
+        # Constrain initial positions and velocities.
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
+        self.addUpdateContextState()
+
+        if nsteps == 0:
+            self.addAlchemicalResetStep()
+            self.addComputeGlobal("Eold", "energy")
+            self.addAlchemicalPerturbationStep()
+            self.addComputeGlobal("Enew", "energy")
+            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+        if nsteps > 0:
+            # Initial step only
+            self.beginIfBlock('step = 0')
+            self.addGHMCStep()
+            self.endBlock()
+
+            # All steps
+            self.beginIfBlock('step < nsteps')
+            self.addComputeGlobal("Eold", "energy")
+            self.addAlchemicalPerturbationStep()
+            self.addComputeGlobal("Enew", "energy")
+            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+            self.addGHMCStep()
+            self.addComputeGlobal('step', 'step+1')
+            self.endBlock()

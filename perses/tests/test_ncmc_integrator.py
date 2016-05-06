@@ -69,10 +69,10 @@ def collect_switching_data(system, positions, functions, temperature, collision_
             #print("The step is %d" % ncmc_integrator.get_step())
         work_n[iteration] = - ncmc_integrator.getLogAcceptanceProbability(context)
 
-        if hasattr(ncmc_integrator, 'getGHMCStatistics'):
+        if ncmc_integrator.has_statistics:
             (naccept_n[iteration], ntrials_n[iteration]) = ncmc_integrator.getGHMCStatistics(context)
 
-    if hasattr(ncmc_integrator, 'getGHMCStatistics'):
+    if ncmc_integrator.has_statistics:
         print('GHMC: %d / %d accepted' % (naccept_n.sum(), ntrials_n.sum()))
 
     # Clean up
@@ -116,13 +116,13 @@ def check_harmonic_oscillator_ncmc(ncmc_nsteps=50, ncmc_integrator="VV"):
     positions = unit.Quantity(np.zeros([1, 3], np.float32), unit.angstroms)
     functions = { 'x0' : 'lambda' } # drag spring center x0
 
-    from perses.annihilation import NCMCAlchemicalIntegrator, ncmc_switching
+    from perses.annihilation import NCMCVVAlchemicalIntegrator, NCMCGHMCAlchemicalIntegrator
     if ncmc_integrator=="VV":
-        ncmc_insert = NCMCAlchemicalIntegrator(temperature, system, functions, direction='insert', nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
-        ncmc_delete = NCMCAlchemicalIntegrator(temperature, system, functions, direction='delete', nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
+        ncmc_insert = NCMCVVAlchemicalIntegrator(temperature, system, functions, direction='insert', nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
+        ncmc_delete = NCMCVVAlchemicalIntegrator(temperature, system, functions, direction='delete', nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
     elif ncmc_integrator=="GHMC":
-        ncmc_insert = ncmc_switching.NCMCGHMCIntegrator(temperature, system, functions, direction='insert', collision_rate=9.1/unit.picoseconds, nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
-        ncmc_delete = ncmc_switching.NCMCGHMCIntegrator(temperature, system, functions, direction='delete', collision_rate=9.1/unit.picoseconds, nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
+        ncmc_insert = NCMCGHMCAlchemicalIntegrator(temperature, system, functions, direction='insert', collision_rate=9.1/unit.picoseconds, nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
+        ncmc_delete = NCMCGHMCAlchemicalIntegrator(temperature, system, functions, direction='delete', collision_rate=9.1/unit.picoseconds, nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
     else:
         raise Exception("%s not recognized as integrator name. Options are VV and GHMC" % ncmc_integrator)
 
