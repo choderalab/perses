@@ -1035,12 +1035,14 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi_unit)
                 new_positions[atom.idx] = xyz
             else:
+                positions = copy.deepcopy(new_positions)
                 reference_angles = self._get_omega_torsions(mol_conf, res_mol, torsion)
                 #TODO: consider more numerically stable thing here
                 p_phi = 1.0
                 for i, reference_angle in enumerate(reference_angles):
                     p_phi += np.exp(self._torsion_vm_logp(phi.value_in_unit(units.radian), reference_angle))
-                logp_phi = np.log(p_phi) - np.log(len(reference_angles))
+                logp_phi_proposal = np.log(p_phi) - np.log(len(reference_angles))
+                _, logp_phi = self._propose_mtm_torsion(atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=phi, logp_proposal_phi=logp_phi_proposal)
             #accumulate logp
             if direction == 'reverse':
                 if self.verbose: print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
@@ -1159,7 +1161,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         logp_torsion = self._torsion_vm_logp(proposed_torsion_angle, adjusted_reference) + logp_choice
         return proposed_torsion_angle, logp_torsion
 
-    def _propose_mtm_torsion(self, atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=None):
+    def _propose_mtm_torsion(self, atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=None, logp_proposal_phi=0.0):
         """
         Use the multiple-try/CBMC method to propose a torsion angle. Omega geometries are used as the proposal distribution
         Parameters
@@ -1192,7 +1194,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         if phi:
             phi = phi.value_in_unit(units.radians)
             proposed_torsions[0] = phi
-            proposal_logps[0] = self._torsion_vm_logp()
+            proposal_logps[0] = logp_proposal_phi
             trial_range = range(1, self._n_trials)
         else:
             trial_range = range(self._n_trials)
