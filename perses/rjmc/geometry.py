@@ -872,7 +872,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
     Instead of using the forcefield to propose torsion angles, use Omega geometries as a reference
     """
 
-    def __init__(self, torsion_kappa=8.0, max_confs=1, strict_stereo=False):
+    def __init__(self, torsion_kappa=8.0, max_confs=1, n_trials=10, strict_stereo=False):
         self._kappa = torsion_kappa
         self._oemols = {}
         self._max_confs = max_confs
@@ -880,6 +880,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         self._omega.SetMaxConfs(max_confs)
         self._omega.SetStrictStereo(strict_stereo)
         self.nproposed = 0
+        self._n_trials = n_trials
         self.verbose = False
         self.write_proposal_pdb = False
 
@@ -914,6 +915,8 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         initial_time = time.time()
         proposal_order_tool = ProposalOrderTools(top_proposal)
         proposal_order_time = time.time() - initial_time
+        growth_system_generator = GeometrySystemGenerator()
+        growth_parameter_name = "growth_stage"
         if direction=="forward":
             forward_init = time.time()
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
@@ -929,6 +932,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, add_extra_torsions=False, reference_topology=top_proposal.new_topology)
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
@@ -942,6 +946,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, add_extra_torsions=False, reference_topology=top_proposal.old_topology)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -976,7 +981,12 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
 
         logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
         growth_parameter_value = 1
+        platform = openmm.Platform.getPlatformByName('Reference')
+        integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+        context = openmm.Context(growth_system, integrator, platform)
+        context.setParameter()
         for atom, torsion in atom_proposal_order.items():
+            context.setParameter(growth_parameter_name, growth_parameter_value)
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
@@ -1019,7 +1029,8 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion_oeconf(torsion, res_mol, mol_conf)
+                positions = copy.deepcopy(new_positions)
+                phi, logp_phi = self._propose_mtm_torsion(atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta)
                 phi_unit = units.Quantity(phi, unit=units.radian)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi_unit)
                 new_positions[atom.idx] = xyz
@@ -1054,6 +1065,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
                 pdbfile.close()
         total_time = time.time() - initial_time
         print("total time: %f" % total_time)
+        growth_parameter_value += 1
         return logp_proposal, new_positions
 
     def _generate_conformations(self, smiles):
@@ -1146,6 +1158,78 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         #print("With an unadjusted reference of %s" % str(reference_angle))
         logp_torsion = self._torsion_vm_logp(proposed_torsion_angle, adjusted_reference) + logp_choice
         return proposed_torsion_angle, logp_torsion
+
+    def _propose_mtm_torsion(self, atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=None):
+        """
+        Use the multiple-try/CBMC method to propose a torsion angle. Omega geometries are used as the proposal distribution
+        Parameters
+        ----------
+        atom
+        torsion
+        res_mol
+        mol_conf
+        positions
+        r
+        theta
+        context
+        beta
+        phi
+
+        Returns
+        -------
+
+        """
+        import coordinate_numba
+        internal_coordinates = np.zeros([3])
+        proposed_torsions = np.zeros([self._n_trials])
+        proposal_logps = np.zeros([self._n_trials])
+        log_proposal_weights = np.zeros([self._n_trials])
+        bond_position = positions[torsion.atom2.idx].value_in_unit(units.nanometers)
+        angle_position = positions[torsion.atom3.idx].value_in_unit(units.nanometers)
+        torsion_position = positions[torsion.atom4.idx].value_in_unit(units.nanometers)
+        internal_coordinates[0] = r.value_in_unit(units.nanometers)
+        internal_coordinates[1] = theta.value_in_unit(units.radians)
+        if phi:
+            phi = phi.value_in_unit(units.radians)
+            proposed_torsions[0] = phi
+            proposal_logps[0] = self._torsion_vm_logp()
+            trial_range = range(1, self._n_trials)
+        else:
+            trial_range = range(self._n_trials)
+
+        for trial_idx in trial_range:
+            proposed_torsions[trial_idx], proposal_logps[trial_idx] = self._propose_torsion_oeconf(torsion, res_mol, mol_conf)
+
+        trial_xyzs = coordinate_numba.torsion_scan(bond_position, angle_position, torsion_position, internal_coordinates, proposed_torsions)
+
+        for i, xyz in enumerate(trial_xyzs):
+            new_positions = copy.deepcopy(positions)
+            new_positions[atom.idx] = xyz
+            context.setPositions(new_positions)
+            state = context.getState(getEnergy=True)
+            potential = state.getPotentialEnergy()
+            unnormalized_log_p = - beta * potential
+            log_proposal_weights[i] = unnormalized_log_p - proposal_logps[i]
+
+        normalized_log_weights = self._normalize_log_weights(log_proposal_weights)
+        weights = np.exp(normalized_log_weights)
+
+        if phi:
+            logp_torsion = np.log(weights[0])
+            return phi, logp_torsion
+        else:
+            phi_idx = np.random.choice(range(self._n_trials), p=weights)
+            return proposed_torsions[phi_idx], np.log(weights[phi_idx])
+
+
+
+    def _normalize_log_weights(self, unnormalized_log_weights):
+        adjusted_log_weights = unnormalized_log_weights - max(unnormalized_log_weights)
+        unnormalized_weights = np.exp(adjusted_log_weights)
+        normalized_log_weights = adjusted_log_weights - np.log(np.sum(unnormalized_weights))
+        return normalized_log_weights
+
+
 
     def _torsion_vm_logp(self, torsion_angle, mean):
         """
@@ -1623,7 +1707,7 @@ class GeometrySystemGenerator(object):
         ----------
         reference_system : simtk.openmm.System object
             The system containing the relevant forces and particles
-        growth_indices : list of int
+        growth_indices : list of atom
             The order in which the atom indices will be proposed
         parameter_name : str
             The name of the global context parameter
@@ -1742,7 +1826,7 @@ class GeometrySystemGenerator(object):
             the new/old torsion force if forward/backward
         reference_topology : openmm.app.Topology object
             the new/old topology if forward/backward
-        growth_indices : list of int
+        growth_indices : list of atom
             The list of new atoms and the order in which they will be added.
 
         Returns
@@ -1833,7 +1917,7 @@ class GeometrySystemGenerator(object):
         ----------
         particle_indices : list of int
             The indices of particles involved in this force
-        growth_indices : list of int
+        growth_indices : list of atom
             The ordered list of indices for atom position proposals
         Returns
         -------
