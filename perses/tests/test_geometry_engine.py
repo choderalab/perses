@@ -386,7 +386,7 @@ def test_run_geometry_engine(index=0):
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
-    geometry_engine = geometry.OmegaFFGeometryEngine(torsion_kappa=50, max_confs=10)
+    geometry_engine = geometry.OmegaFFGeometryEngine(torsion_kappa=5, max_confs=10, n_trials=180)
     # Turn on PDB file writing.
     geometry_engine.write_proposal_pdb = True
     geometry_engine.pdb_filename_prefix = 't13geometry-proposal'
@@ -723,7 +723,7 @@ def _generate_ffxmls():
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    niter = 1
+    niter = 20
     energies = np.zeros(niter)
     for i in range(niter):
         energies[i] = test_run_geometry_engine(index=i)

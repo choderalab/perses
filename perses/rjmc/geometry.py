@@ -932,7 +932,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, add_extra_torsions=False, reference_topology=top_proposal.new_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=True, add_extra_torsions=False, reference_topology=top_proposal.new_topology)
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
@@ -946,7 +946,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, add_extra_torsions=False, reference_topology=top_proposal.old_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=True, add_extra_torsions=False, reference_topology=top_proposal.old_topology)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -984,7 +984,6 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         platform = openmm.Platform.getPlatformByName('Reference')
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-        context.setParameter()
         for atom, torsion in atom_proposal_order.items():
             context.setParameter(growth_parameter_name, growth_parameter_value)
             bond_atom = torsion.atom2
@@ -1035,14 +1034,8 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi_unit)
                 new_positions[atom.idx] = xyz
             else:
-                positions = copy.deepcopy(new_positions)
-                reference_angles = self._get_omega_torsions(mol_conf, res_mol, torsion)
-                #TODO: consider more numerically stable thing here
-                p_phi = 1.0
-                for i, reference_angle in enumerate(reference_angles):
-                    p_phi += np.exp(self._torsion_vm_logp(phi.value_in_unit(units.radian), reference_angle))
-                logp_phi_proposal = np.log(p_phi) - np.log(len(reference_angles))
-                _, logp_phi = self._propose_mtm_torsion(atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=phi, logp_proposal_phi=logp_phi_proposal)
+                positions = copy.deepcopy(old_positions)
+                _, logp_phi = self._propose_mtm_torsion(atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=phi)
             #accumulate logp
             if direction == 'reverse':
                 if self.verbose: print('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
@@ -1161,7 +1154,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         logp_torsion = self._torsion_vm_logp(proposed_torsion_angle, adjusted_reference) + logp_choice
         return proposed_torsion_angle, logp_torsion
 
-    def _propose_mtm_torsion(self, atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=None, logp_proposal_phi=0.0):
+    def _propose_mtm_torsion(self, atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=None):
         """
         Use the multiple-try/CBMC method to propose a torsion angle. Omega geometries are used as the proposal distribution
         Parameters
@@ -1181,7 +1174,6 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         -------
 
         """
-        import coordinate_numba
         internal_coordinates = np.zeros([3])
         proposed_torsions = np.zeros([self._n_trials])
         proposal_logps = np.zeros([self._n_trials])
@@ -1192,9 +1184,15 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         internal_coordinates[0] = r.value_in_unit(units.nanometers)
         internal_coordinates[1] = theta.value_in_unit(units.radians)
         if phi:
+            reference_angles = self._get_omega_torsions(mol_conf, res_mol, torsion)
+            #TODO: consider more numerically stable thing here
+            p_phi = 1.0
+            for i, reference_angle in enumerate(reference_angles):
+                p_phi += np.exp(self._torsion_vm_logp(phi.value_in_unit(units.radian), reference_angle))
+            logp_phi_proposal = np.log(p_phi) - np.log(len(reference_angles))
             phi = phi.value_in_unit(units.radians)
             proposed_torsions[0] = phi
-            proposal_logps[0] = logp_proposal_phi
+            proposal_logps[0] = logp_phi_proposal
             trial_range = range(1, self._n_trials)
         else:
             trial_range = range(self._n_trials)
@@ -1202,7 +1200,9 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         for trial_idx in trial_range:
             proposed_torsions[trial_idx], proposal_logps[trial_idx] = self._propose_torsion_oeconf(torsion, res_mol, mol_conf)
 
-        trial_xyzs = coordinate_numba.torsion_scan(bond_position, angle_position, torsion_position, internal_coordinates, proposed_torsions)
+        trial_xyzs = self.torsion_scan(bond_position, angle_position, torsion_position, internal_coordinates, proposed_torsions)
+
+        trial_xyzs = units.Quantity(trial_xyzs, unit=units.nanometers)
 
         for i, xyz in enumerate(trial_xyzs):
             new_positions = copy.deepcopy(positions)
@@ -1223,7 +1223,20 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             phi_idx = np.random.choice(range(self._n_trials), p=weights)
             return proposed_torsions[phi_idx], np.log(weights[phi_idx])
 
+    def torsion_scan(self, bond_position, angle_position, torsion_position, internal_coordinates, proposed_torsions):
+        """
+        A wrapper of the coordinate_numba version, promotes everything to np.float64
+        """
+        from coordinate_numba import torsion_scan
+        bond_position = bond_position.astype(np.float64)
+        angle_position = angle_position.astype(np.float64)
+        torsion_position = torsion_position.astype(np.float64)
+        internal_coordinates = internal_coordinates.astype(np.float64)
+        proposed_torsions = proposed_torsions.astype(np.float64)
 
+        xyzs = torsion_scan(bond_position, angle_position, torsion_position, internal_coordinates, proposed_torsions)
+
+        return xyzs
 
     def _normalize_log_weights(self, unnormalized_log_weights):
         adjusted_log_weights = unnormalized_log_weights - max(unnormalized_log_weights)
@@ -1701,7 +1714,7 @@ class GeometrySystemGenerator(object):
 
 
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, force_names=None, force_parameters=None):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -1788,7 +1801,7 @@ class GeometrySystemGenerator(object):
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
         #copy parameters for sterics parameters in nonbonded force
-        if 'NonbondedForce' in reference_forces.keys():
+        if 'NonbondedForce' in reference_forces.keys() and use_sterics:
             modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
             modified_sterics_force.addPerParticleParameter("sigma")
             modified_sterics_force.addPerParticleParameter("epsilon")
