@@ -24,7 +24,7 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 # TESTS
 ################################################################################
 
-def collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ghmc_nsteps=200, ncmc_nsteps=50, niterations=20, direction='insert'):
+def collect_switching_data(system, positions, functions, temperature, collision_rate, timestep, platform, ghmc_nsteps=200, ncmc_nsteps=50, niterations=100, direction='insert'):
     """
     Collect switching data.
 
@@ -61,8 +61,11 @@ def collect_switching_data(system, positions, functions, temperature, collision_
 
         # Switch
         integrator.setCurrentIntegrator(1)
-        integrator.step(1)
-        work_n[iteration] = ncmc_integrator.getLogAcceptanceProbability()
+        if ncmc_nsteps == 0:
+            integrator.step(1)
+        else:
+            integrator.step(ncmc_nsteps)
+        work_n[iteration] = - ncmc_integrator.getLogAcceptanceProbability(context)
 
     # Clean up
     del context, integrator
@@ -111,6 +114,7 @@ def check_harmonic_oscillator_ncmc(ncmc_nsteps=50):
 
     from pymbar import BAR
     [df, ddf] = BAR(w_f, w_r, method='self-consistent-iteration')
+    print('%8.3f +- %.3f kT' % (df, ddf))
     if (abs(df) > NSIGMA_MAX * ddf):
         raise Exception('Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0' % (ncmc_nsteps, df, ddf, NSIGMA_MAX))
 
@@ -125,4 +129,4 @@ def test_ncmc_integrator_harmonic_oscillator():
         yield f
 
 if __name__ == '__main__':
-    test_ncmc_harmonic_oscillator()
+    test_ncmc_integrator_harmonic_oscillator()

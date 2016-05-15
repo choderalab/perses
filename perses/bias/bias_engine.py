@@ -13,20 +13,20 @@ import simtk.unit as units
 class BiasEngine(object):
     """
     Generates the bias for expanded ensemble simulations
-    
+
     Arguments
     ---------
     metadata : dict
         Dictionary containing metadata relevant to the implementation
     """
-    
+
     def __init__(self, metadata):
         pass
 
     def g_k(self, molecule_smiles):
         """
         Generate a biasing weight g_k for the state indicated.
-        
+
         Arguments
         --------
         molecule_smiles : string
@@ -48,12 +48,18 @@ class MinimizedPotentialBias(BiasEngine):
     ---------
     smiles_list : list of str
         list of smiles strings corresponding to molecules
+    implicit_solvent : simtk.openmm.app implicit solvent model, optional, default=OBC2
+        Implicit solvent model to use for computing bias.
+    constraints : simtk.openmm.app constraint choice, optional, default=HBonds
+        Constraints to use.
     """
 
-    def __init__(self, smiles_list):
+    def __init__(self, smiles_list, implicit_solvent=app.OBC2, constraints=app.HBonds):
         self._smiles_list = smiles_list
         self._mol_dict = self._create_molecule_list(smiles_list)
         self._gk = dict()
+        self.implicit_solvent = implicit_solvent
+        self.constraints = constraints
 
     def _create_molecule_list(self, smiles_list):
         """
@@ -99,7 +105,7 @@ class MinimizedPotentialBias(BiasEngine):
         prmtop_file, inpcrd_file = openmoltools.amber.run_tleap(molecule_name, gaff_mol2, frcmod)
         prmtop = app.AmberPrmtopFile(prmtop_file)
         crd = app.AmberInpcrdFile(inpcrd_file)
-        system = prmtop.createSystem(implicitSolvent=app.OBC2, constraints=app.HBonds)
+        system = prmtop.createSystem(implicitSolvent=self.implicit_solvent, constraints=self.constraints, removeCMMotion=False)
         positions = crd.getPositions(asNumpy=True)
         return system, positions
 
