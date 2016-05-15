@@ -248,6 +248,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
+            print("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
 
             if atom != torsion.atom1:
                 raise Exception('atom != torsion.atom1')
@@ -287,12 +288,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=180)
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=360)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=180)
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=360)
 
             #accumulate logp
             if direction == 'reverse':
@@ -706,7 +707,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         theta = sigma_theta*np.random.randn() + theta0
         return theta
 
-    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=18):
+    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=360):
         """
         Rotate the atom about the
         Parameters
@@ -745,7 +746,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._torsion_coordinate_time += torsion_scan_time
         return xyzs_quantity, phis
 
-    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=18):
+    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -799,7 +800,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_torsions = logq - np.log(Z)
         return logp_torsions, phis
 
-    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=18):
+
+    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
         Propose a torsion using OpenMM
 
@@ -829,11 +831,24 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
+        self._plot_torsion(phis, logp_torsions, torsion)
         logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         phi = phis[phi_idx]
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=18):
+    def _plot_torsion(self, phis, logp_torsions, torsion):
+        import matplotlib.pyplot as pyplot
+        p_torsion = np.exp(logp_torsions)
+        pyplot.plot(phis, p_torsion)
+
+        pyplot.xlabel("torsion phi")
+        pyplot.ylabel("P(phi)")
+        pyplot.title("Probability of %d-%d-%d-%d" %(torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx))
+        pyplot.grid(False)
+        pyplot.savefig("%d-%d-%d-%d.eps" % (torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx))
+        pyplot.close()
+
+    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
         """
         Calculate the logp of a torsion using OpenMM
 

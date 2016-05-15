@@ -128,7 +128,7 @@ def align_molecules(mol1, mol2):
     MCSS two OEmols. Return the mapping of new : old atoms
     """
     mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-    atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_AtomicNumber
+    atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_HvyDegree
     bondexpr = oechem.OEExprOpts_Aromaticity
     #atomexpr = oechem.OEExprOpts_HvyDegree
     #bondexpr = 0
@@ -369,8 +369,8 @@ def test_run_geometry_engine(index=0):
     import copy
     #molecule_name_1 = 'glycine'
     #molecule_name_2 = 'tryptophan'
-    molecule_name_1 = 'propane'
-    molecule_name_2 = 'octane'
+    molecule_name_1 = 'o-xylene'
+    molecule_name_2 = '2-methyl-1-benzofuran'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -386,7 +386,7 @@ def test_run_geometry_engine(index=0):
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
-    geometry_engine = geometry.OmegaFFGeometryEngine(torsion_kappa=5, max_confs=10, n_trials=180)
+    geometry_engine = geometry.FFAllAngleGeometryEngine()
     # Turn on PDB file writing.
     geometry_engine.write_proposal_pdb = True
     geometry_engine.pdb_filename_prefix = 't13geometry-proposal'
@@ -409,6 +409,8 @@ def test_run_geometry_engine(index=0):
     openmm.LocalEnergyMinimizer.minimize(context)
 
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1_new, beta)
+    if True:
+        return 0
     logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
     print(logp_reverse)
 
@@ -723,7 +725,7 @@ def _generate_ffxmls():
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    niter = 20
+    niter = 1
     energies = np.zeros(niter)
     for i in range(niter):
         energies[i] = test_run_geometry_engine(index=i)
