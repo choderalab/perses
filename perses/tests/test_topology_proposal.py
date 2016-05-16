@@ -166,7 +166,7 @@ def test_specify_allowed_mutants():
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, allowed_mutations=allowed_mutations)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations)
 
     ntrials = 10
     for trian in range(ntrials):
@@ -210,7 +210,7 @@ def test_propose_self():
     allowed_mutations = [[(mutant_res.id,mutant_res.name)]]
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, allowed_mutations=allowed_mutations)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations, verbose=True)
     print('Self mutation:')
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
     assert pm_top_proposal.old_topology == pm_top_proposal.new_topology
@@ -240,7 +240,7 @@ def test_run_point_mutation_propose():
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
 
 
@@ -272,20 +272,22 @@ def test_mutate_from_every_amino_to_every_other():
     chain_id = 'A'
 
     metadata = dict()
+    metadata['always_change'] = True
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants)
 
     current_system = system
     current_topology = modeller.topology
     current_positions = modeller.positions
 
+    pm_top_engine._allowed_mutations = [list()]
     for k, proposed_amino in enumerate(aminos):
-        pm_top_engine._allowed_mutations = [[(str(k+2),proposed_amino)]]
-        pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
-        current_system = pm_top_proposal.new_system
-        current_topology = pm_top_proposal.new_topology
+        pm_top_engine._allowed_mutations[0].append((str(k+2),proposed_amino))
+    pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
+    current_system = pm_top_proposal.new_system
+    current_topology = pm_top_proposal.new_topology
 
     for chain in current_topology.chains():
         if chain.id == chain_id:
@@ -293,21 +295,22 @@ def test_mutate_from_every_amino_to_every_other():
             num_residues = len(chain._residues)
             break
     new_sequence = list()
-    for residue in modeller.topology.residues():
+    for residue in current_topology.residues():
         if residue.index == 0:
             continue
         if residue.index == (num_residues -1):
             continue
+        if residue.name in ['HID','HIE']:
+            residue.name = 'HIS'
         new_sequence.append(residue.name)
-    assert [new_sequence[i] == aminos[i] for i in range(len(aminos))]
+    for i in range(len(aminos)):
+        assert new_sequence[i] == aminos[i]
 
-    new_topology = modeller.topology
-    new_system = pm_top_engine._ff.createSystem(new_topology)
 
-    current_system = new_system
-    modeller = app.Modeller(new_topology, modeller.positions)
-    current_topology = modeller.topology
+    pm_top_engine = topology_proposal.PointMutationEngine(current_topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants)
 
+    current_positions = np.zeros((current_topology.getNumAtoms(), 3))
+    modeller = app.Modeller(current_topology, current_positions)
     old_topology = copy.deepcopy(current_topology)
 
     old_chemical_state_key = pm_top_engine.compute_state_key(old_topology)
@@ -399,7 +402,7 @@ def test_limiting_allowed_residues():
     max_point_mutants = 1
     residues_allowed_to_mutate = ['903','904','905']
 
-    pl_top_library = topology_proposal.PointMutationEngine(system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residues_allowed_to_mutate)
+    pl_top_library = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residues_allowed_to_mutate)
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 
@@ -437,11 +440,11 @@ def test_run_peptide_library_engine():
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
-    #test_run_point_mutation_propose()
-    #test_mutate_from_every_amino_to_every_other()
-    #test_specify_allowed_mutants()
-    #test_propose_self()
-    #test_limiting_allowed_residues()
-    #test_run_peptide_library_engine()
-    test_small_molecule_proposals()
+    test_run_point_mutation_propose()
+    test_mutate_from_every_amino_to_every_other()
+    test_specify_allowed_mutants()
+    test_propose_self()
+    test_limiting_allowed_residues()
+    test_run_peptide_library_engine()
+#    test_small_molecule_proposals()
 

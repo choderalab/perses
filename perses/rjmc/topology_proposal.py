@@ -6,6 +6,7 @@ import simtk.openmm as openmm
 import simtk.openmm.app as app
 from collections import namedtuple
 import copy
+import warnings
 import os
 import openeye.oechem as oechem
 import numpy as np
@@ -258,6 +259,11 @@ class PolymerProposalEngine(ProposalEngine):
             atom.old_index = atom.index
 
         index_to_new_residues, metadata = self._choose_mutant(modeller, metadata)
+        # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
+        residue_map = self._generate_residue_map(modeller, index_to_new_residues)
+        for (res, new_name) in residue_map:
+            if res.name == new_name:
+                del(index_to_new_residues[res.index])
         if len(index_to_new_residues) == 0:
             atom_map = dict()
             for atom in modeller.topology.atoms():
@@ -665,12 +671,14 @@ class PointMutationEngine(PolymerProposalEngine):
 
     Arguments
     --------
+    wildtype_topology : openmm.app.Topology
     system_generator : SystemGenerator
     chain_id : str
         id of the chain to mutate
         (using the first chain with the id, if there are multiple)
     proposal_metadata : dict -- OPTIONAL
         Contains information necessary to initialize proposal engine
+        in use: ['always_change'] = False (default)
     max_point_mutants : int -- OPTIONAL
         default = None
     residues_allowed_to_mutate : list(str) -- OPTIONAL
@@ -686,32 +694,56 @@ class PointMutationEngine(PolymerProposalEngine):
             ]
     """
 
-    def __init__(self, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False):
+    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False):
         super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose)
+        self._wildtype = wildtype_topology
         self._max_point_mutants = max_point_mutants
         self._ff = system_generator.forcefield
         self._templates = self._ff._templates
         self._residues_allowed_to_mutate = residues_allowed_to_mutate
+        if allowed_mutations is not None:
+            for mutation in allowed_mutations:
+                mutation.sort()
         self._allowed_mutations = allowed_mutations
-        if max_point_mutants == None and allowed_mutations == None:
+        if proposal_metadata is None:
+            proposal_metadata = dict()
+        self._metadata = proposal_metadata
+        if max_point_mutants is None and allowed_mutations is None:
             raise Exception("Must specify either max_point_mutants or allowed_mutations.")
+        if max_point_mutants is not None and allowed_mutations is not None:
+            warnings.warn("PointMutationEngine: max_point_mutants and allowed_mutations were both specified -- max_point_mutants will be ignored")
 
     def _choose_mutant(self, modeller, metadata):
         chain_id = self._chain_id
+        index_to_new_residues = self._undo_old_mutants(modeller, chain_id)        
         if self._allowed_mutations is not None:
             allowed_mutations = self._allowed_mutations
-            index_to_new_residues = self._choose_mutation_from_allowed(modeller, chain_id, allowed_mutations)
+            index_to_new_residues = self._choose_mutation_from_allowed(modeller, chain_id, allowed_mutations, index_to_new_residues)
         else:
             # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
-            index_to_new_residues = self._propose_mutations(modeller, chain_id)
-
+            index_to_new_residues = self._propose_mutations(modeller, chain_id, index_to_new_residues)
         # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
         metadata['mutations'] = self._save_mutations(modeller, index_to_new_residues)
 
         return index_to_new_residues, metadata
 
+    def _undo_old_mutants(self, modeller, chain_id):
+        index_to_new_residues = dict()
+        old_key = self.compute_state_key(modeller.topology)
+        if old_key == '':
+            return index_to_new_residues
+        for chain in modeller.topology.chains():
+            if chain.id == chain_id:
+                break
+        residue_id_to_index = [residue.id for residue in chain._residues]
+        for mutant in old_key.split('-'):
+            old_res = mutant[:3]
+            residue_id = mutant[3:-3]
+            new_res = mutant[-3:]
+            index_to_new_residues[residue_id_to_index.index(residue_id)] = new_res
+        return index_to_new_residues
 
-    def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations):
+    def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations, index_to_new_residues):
         """
         Used when allowed mutations have been specified
         Assume (for now) uniform probability of selecting each specified mutant
@@ -730,7 +762,6 @@ class PointMutationEngine(PolymerProposalEngine):
             key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
         """
-        index_to_new_residues = dict()
 
         # chain : simtk.openmm.app.topology.Chain
         for chain in modeller.topology.chains():
@@ -738,27 +769,47 @@ class PointMutationEngine(PolymerProposalEngine):
                 break
         residue_id_to_index = [residue.id for residue in chain._residues]
         # location_prob : np.array, probability value for each residue location (uniform)
-        location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations))])
-        proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
-        for residue_id, residue_name in allowed_mutations[proposed_location]:
-            # original_residue : simtk.openmm.app.topology.Residue
-            original_residue = chain._residues[residue_id_to_index.index(residue_id)]
-            if original_residue.name == residue_name:
-                continue
-            # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
-            index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
-            if residue_name == 'HIS':
-                his_state = ['HIE','HID']
-                his_prob = np.array([0.5 for i in range(len(his_state))])
-                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-                index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
-            # DEBUG
-            if self.verbose: print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
+        if 'always_change' in self._metadata and self._metadata['always_change']:
+            old_key = self.compute_state_key(modeller.topology)
+            location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations)+1)])
+            if old_key == '':
+                location_prob[len(allowed_mutations)] = 0.0
+            else:
+                current_mutation = list()
+                for mutant in old_key.split('-'):
+                    residue_id = mutant[3:-3]
+                    new_res = mutant[-3:]
+                    current_mutation.append((residue_id,new_res))
+                current_mutation.sort()
+                location_prob[allowed_mutations.index(current_mutation)] = 0.0
+        else:
+            location_prob = np.array([1.0/(len(allowed_mutations)+1.0) for i in range(len(allowed_mutations)+1)])
+        proposed_location = np.random.choice(range(len(allowed_mutations)+1), p=location_prob)
+        if proposed_location == len(allowed_mutations):
+            # choose WT
+            pass
+        else:
+            for residue_id, residue_name in allowed_mutations[proposed_location]:
+                # original_residue : simtk.openmm.app.topology.Residue
+                original_residue = chain._residues[residue_id_to_index.index(residue_id)]
+                if original_residue.name in ['HID','HIE']:
+                    original_residue.name = 'HIS'
+                if original_residue.name == residue_name:
+                    continue
+                # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+                index_to_new_residues[residue_id_to_index.index(residue_id)] = residue_name
+                if residue_name == 'HIS':
+                    his_state = ['HIE','HID']
+                    his_prob = np.array([0.5 for i in range(len(his_state))])
+                    his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                    index_to_new_residues[residue_id_to_index.index(residue_id)] = his_state[his_choice]
+                # DEBUG
+                if self.verbose: print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
 
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues
 
-    def _propose_mutations(self, modeller, chain_id):
+    def _propose_mutations(self, modeller, chain_id, index_to_new_residues):
         """
         Arguments
         ---------
@@ -771,8 +822,6 @@ class PointMutationEngine(PolymerProposalEngine):
             key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
         """
-        index_to_new_residues = dict()
-
         # this shouldn't be here
         aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
         # chain : simtk.openmm.app.topology.Chain
@@ -798,9 +847,14 @@ class PointMutationEngine(PolymerProposalEngine):
             proposed_location = np.random.choice(range(num_residues), p=location_prob)
             # original_residue : simtk.openmm.app.topology.Residue
             original_residue = chain_residues[proposed_location]
-            # amino_prob : np.array, probability value for each amino acid option (uniform, must choose different from current)
-            amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
-            amino_prob[aminos.index(original_residue.name)] = 0.0
+            if original_residue.name in ['HIE','HID']:
+                original_residue.name = 'HIS'
+            # amino_prob : np.array, probability value for each amino acid option (uniform)
+            if 'always_change' in self._metadata and self._metadata['always_change']:
+                amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
+                amino_prob[aminos.index(original_residue.name)] = 0.0
+            else:
+                amino_prob = np.array([1.0/(len(aminos)) for i in range(len(aminos))])
             # proposed_amino_index : int, index of three letter residue name in aminos list
             proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
@@ -834,6 +888,21 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in modeller.topology.residues() if r.index in index_to_new_residues]
 
+    def compute_state_key(self, topology):
+        chemical_state_key = ''
+        wildtype = self._wildtype
+        for chain in topology.chains():
+            if chain.id == self._chain_id:
+                break
+        for wt_chain in wildtype.chains():
+            if wt_chain.id == self._chain_id:
+                break
+        for wt_res, res in zip(wt_chain._residues, chain._residues):
+            if wt_res.name != res.name:
+                if chemical_state_key != '':
+                    chemical_state_key+='-'
+                chemical_state_key+= str(wt_res.name)+str(res.id)+str(res.name)
+        return chemical_state_key
 
 class PeptideLibraryEngine(PolymerProposalEngine):
     """
