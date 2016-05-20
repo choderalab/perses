@@ -1047,6 +1047,8 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
                 phi, logp_phi = self._propose_mtm_torsion(atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta)
                 phi_unit = units.Quantity(phi, unit=units.radian)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi_unit)
+                if detJ <= 0.0:
+                    detJ = 0.0
                 new_positions[atom.idx] = xyz
             else:
                 positions = copy.deepcopy(old_positions)
@@ -1169,7 +1171,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         logp_torsion = self._torsion_vm_logp(proposed_torsion_angle, adjusted_reference) + logp_choice
         return proposed_torsion_angle, logp_torsion
 
-    def _propose_mtm_torsion(self, atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=None):
+    def _propose_mtm_torsion(self, atom, torsion, res_mol, mol_conf, positions, r, theta, context, beta, phi=None, use_oeconf=False):
         """
         Use the multiple-try/CBMC method to propose a torsion angle. Omega geometries are used as the proposal distribution
         Parameters
@@ -1201,7 +1203,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         if phi:
             reference_angles = self._get_omega_torsions(mol_conf, res_mol, torsion)
             #TODO: consider more numerically stable thing here
-            p_phi = 1.0
+            p_phi = 0.0
             for i, reference_angle in enumerate(reference_angles):
                 p_phi += np.exp(self._torsion_vm_logp(phi.value_in_unit(units.radian), reference_angle))
             logp_phi_proposal = np.log(p_phi) - np.log(len(reference_angles))
@@ -1213,15 +1215,20 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             trial_range = range(self._n_trials)
 
         for trial_idx in trial_range:
-            proposed_torsions[trial_idx], proposal_logps[trial_idx] = self._propose_torsion_oeconf(torsion, res_mol, mol_conf)
+            if use_oeconf:
+                proposed_torsions[trial_idx], proposal_logps[trial_idx] = self._propose_torsion_oeconf(torsion, res_mol, mol_conf)
+            else:
+                proposed_torsions[trial_idx] = np.random.uniform(-np.pi, np.pi)
+                proposal_logps[trial_idx] = -np.log(self._n_trials)
+
 
         trial_xyzs = self.torsion_scan(bond_position, angle_position, torsion_position, internal_coordinates, proposed_torsions)
 
         trial_xyzs = units.Quantity(trial_xyzs, unit=units.nanometers)
 
-        for i, xyz in enumerate(trial_xyzs):
+        for i, xyz in enumerate(range(self._n_trials)):
             new_positions = copy.deepcopy(positions)
-            new_positions[atom.idx] = xyz
+            new_positions[atom.idx] = units.Quantity(xyz, unit=units.nanometer)
             context.setPositions(new_positions)
             state = context.getState(getEnergy=True)
             potential = state.getPotentialEnergy()
