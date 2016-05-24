@@ -831,7 +831,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
-        self._plot_torsion(phis, logp_torsions, torsion)
         logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         phi = phis[phi_idx]
         return phi, logp
