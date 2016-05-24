@@ -836,17 +836,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phi = phis[phi_idx]
         return phi, logp
 
-    def _plot_torsion(self, phis, logp_torsions, torsion):
-        import matplotlib.pyplot as pyplot
-        p_torsion = np.exp(logp_torsions)
-        pyplot.plot(phis, p_torsion)
-
-        pyplot.xlabel("torsion phi")
-        pyplot.ylabel("P(phi)")
-        pyplot.title("Probability of %d-%d-%d-%d" %(torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx))
-        pyplot.grid(False)
-        pyplot.savefig("%d-%d-%d-%d.eps" % (torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx))
-        pyplot.close()
 
     def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
         """
