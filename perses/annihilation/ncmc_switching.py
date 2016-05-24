@@ -336,7 +336,7 @@ class NCMCEngine(object):
 
         # Compute initial potential of alchemical state.
         initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        print("Initial potential is %s" % str(initial_potential))
+        #print("Initial potential is %s" % str(initial_potential))
         if np.isnan(initial_potential):
             raise NaNException("Initial potential of 'insert' operation is NaN (unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda)" % (unmodified_potential, alchemical_potential))
         from perses.tests.utils import compute_potential_components
@@ -383,9 +383,9 @@ class NCMCEngine(object):
                 for step in range(self.nsteps):
                     integrator.step(1)
                     potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-                    print("Potential at step %d is %s" % (step, str(potential)))
+                    #print("Potential at step %d is %s" % (step, str(potential)))
                     current_step = integrator.get_step()
-                    print("and the integrator's current step is %d" % current_step)
+                    #print("and the integrator's current step is %d" % current_step)
 
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
