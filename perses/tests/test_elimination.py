@@ -196,10 +196,10 @@ def test_ncmc_alchemical_integrator_stability_molecules():
         alchemical_system = alchemical_factory.createPerturbedSystem()
 
         # Create an NCMC switching integrator.
-        from perses.annihilation.ncmc_switching import NCMCGHMCAlchemicalIntegrator
+        from perses.annihilation.ncmc_switching import NCMCVVAlchemicalIntegrator
         temperature = 300.0 * unit.kelvin
         functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda^0.5', 'lambda_torsions' : 'lambda', 'lambda_angles' : 'lambda^2' }
-        ncmc_integrator = NCMCGHMCAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete', nsteps=10, timestep=1.0*unit.femtoseconds)
+        ncmc_integrator = NCMCVVAlchemicalIntegrator(temperature, alchemical_system, functions, direction='delete', nsteps=10, timestep=1.0*unit.femtoseconds)
 
         # Create a Context
         context = openmm.Context(alchemical_system, ncmc_integrator)
