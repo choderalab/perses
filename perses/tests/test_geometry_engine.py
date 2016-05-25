@@ -128,8 +128,8 @@ def align_molecules(mol1, mol2):
     MCSS two OEmols. Return the mapping of new : old atoms
     """
     mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-    atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_HvyDegree
-    bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+    atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_HvyDegree
+    bondexpr = oechem.OEExprOpts_Aromaticity
     #atomexpr = oechem.OEExprOpts_HvyDegree
     #bondexpr = 0
     mcs.Init(mol1, atomexpr, bondexpr)
@@ -358,6 +358,7 @@ def _guessFileFormat(file, filename):
     file.seek(0)
     return 'pdb'
 
+
 def test_run_geometry_engine(index=0):
     """
     Run the geometry engine a few times to make sure that it actually runs
@@ -368,8 +369,8 @@ def test_run_geometry_engine(index=0):
     import copy
     #molecule_name_1 = 'glycine'
     #molecule_name_2 = 'tryptophan'
-    molecule_name_1 = 'erlotinib'
-    molecule_name_2 = 'imatinib'
+    molecule_name_1 = 'imatinib'
+    molecule_name_2 = 'erlotinib'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -385,11 +386,11 @@ def test_run_geometry_engine(index=0):
     sm_top_proposal = topology_proposal.TopologyProposal(new_topology=top2, new_system=sys2, old_topology=top1, old_system=sys1,
                                                                       old_chemical_state_key='',new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_mapping, metadata={'test':0.0})
     sm_top_proposal._beta = beta
-    geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true', 'reference_positions':pos2})
+    geometry_engine = geometry.OmegaFFGeometryEngine(torsion_kappa=8.0, max_confs=10, n_trials=360, strict_stereo=False)
     # Turn on PDB file writing.
-    geometry_engine.write_proposal_pdb = True
-    geometry_engine.pdb_filename_prefix = 'geometry-proposal'
-    test_pdb_file = open("erlotinib_to_imatinib_0%d_0_nosterics.pdb" % index, 'w')
+    geometry_engine.write_proposal_pdb = False
+    geometry_engine.pdb_filename_prefix = 't13geometry-proposal'
+    test_pdb_file = open("%s_to_%s_%d.pdb" % (molecule_name_1, molecule_name_2, index), 'w')
 
     valence_system = copy.deepcopy(sys2)
     valence_system.removeForce(3)
@@ -408,7 +409,8 @@ def test_run_geometry_engine(index=0):
     openmm.LocalEnergyMinimizer.minimize(context)
 
     new_positions, logp_proposal = geometry_engine.propose(sm_top_proposal, pos1_new, beta)
-    geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
+    logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, new_positions, pos1, beta)
+    print(logp_reverse)
 
     app.PDBFile.writeFile(top2, new_positions, file=test_pdb_file)
     test_pdb_file.close()
@@ -721,7 +723,7 @@ def _generate_ffxmls():
 
 if __name__=="__main__":
     #test_coordinate_conversion()
-    niter = 1
+    niter = 10
     energies = np.zeros(niter)
     for i in range(niter):
         energies[i] = test_run_geometry_engine(index=i)
