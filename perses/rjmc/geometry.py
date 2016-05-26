@@ -1064,7 +1064,8 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
                 PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
                 pdbfile.close()
         total_time = time.time() - initial_time
-        print("total time: %f" % total_time)
+        if self.verbose:
+            print("total time: %f" % total_time)
         growth_parameter_value += 1
         return logp_proposal, new_positions
 
