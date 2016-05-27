@@ -1155,10 +1155,10 @@ class ProtonationStateSampler(object):
         """
         # Update the complex sampler log weights using the solvent sampler log weights
         for key in self.solvent_sampler.state_keys:
-            self.complex_sampler.log_weights[key] = self.solvent_sampler.exen_sampler.log_weights[key]
+            self.complex_sampler.log_weights[key] = self.solvent_sampler.sampler.log_weights[key]
 
         if self.verbose:
-            print("log_weights = %s" % str(self.solvent_sampler.exen_sampler.log_weights))
+            print("log_weights = %s" % str(self.solvent_sampler.sampler.log_weights))
 
     def update(self):
         """
