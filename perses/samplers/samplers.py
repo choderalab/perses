@@ -1153,18 +1153,12 @@ class ProtonationStateSampler(object):
         """
         Update all target probabilities.
         """
-        # Gather list of all keys.
-        state_keys = set()
-        for sampler in self.samplers:
-            for key in sampler.state_keys:
-                state_keys.add(key)
-
         # Update the complex sampler log weights using the solvent sampler log weights
         for key in self.solvent_sampler.state_keys:
-            self.complex_sampler.log_weights[key] = self.solvent_sampler.exen_sampler.log_weights[key]
+            self.complex_sampler.log_weights[key] = self.solvent_sampler.sampler.log_weights[key]
 
         if self.verbose:
-            print("log_weights = %s" % str(self.solvent_sampler_log_weights))
+            print("log_weights = %s" % str(self.solvent_sampler.sampler.log_weights))
 
     def update(self):
         """
