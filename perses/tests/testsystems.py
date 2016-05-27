@@ -1718,10 +1718,14 @@ def run_constph():
 
         #testsystem.sams_samplers[environment].run(niterations=5)
 
+    # Run ligand in solvent constant-pH sampler calibration
+    testsystem.exen_samplers['explicit-inhibitor'].verbose=True
+    testsystem.exen_samplers['explicit-inhibitor'].run(niterations=100)
+
+    # Run constant-pH sampler
     testsystem.designer.verbose = True
+    testsystem.designer.update_target_probabilities() # update log weights from inhibitor in solvent calibration
     testsystem.designer.run(niterations=500)
-    #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
-    #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
 
 if __name__ == '__main__':
     run_constph()
