@@ -1092,3 +1092,83 @@ class MultiTargetDesign(object):
         # Update all samplers.
         for iteration in range(niterations):
             self.update()
+
+################################################################################
+# CONSTANT PH SAMPLER
+################################################################################
+
+class ProtonationStateSampler(object):
+    """
+    Protonation state sampler with given fixed target probabilities for ligand in solvent.
+
+    Parameters
+    ----------
+    samplers : list of SAMSSampler
+        The SAMS samplers whose relative partition functions go into the design objective computation.
+    sampler_exponents : dict of SAMSSampler : float
+        samplers.keys() are the samplers, and samplers[key]
+    log_target_probabilities : dict of hashable object : float
+        log_target_probabilities[key] is the computed log objective function (target probability) for chemical state `key`
+    verbose : bool
+        If True, verbose output is printed.
+
+    """
+    def __init__(self, complex_sampler, solvent_sampler, log_state_penalties, verbose=False):
+        """
+        Initialize a protonation state sampler with fixed target probabilities for ligand in solvent.
+
+        Parameters
+        ----------
+        complex_sampler : SAMSSampler
+            Ligand in complex sampler
+        solvent_sampler : SAMSSampler
+            Ligand in solution sampler
+        log_state_penalties : dict
+            log_state_penalties[smiles] is the log state free energy (in kT) for ligand state 'smiles'
+
+        """
+        # Store target samplers.
+        self.log_state_penalties = log_state_penalties
+        self.samplers = [complex_sampler, solvent_sampler]
+
+        # Initialize storage for target probabilities.
+        self.log_target_probabilities = { key : - log_state_penalties[key] for key in log_state_penalties }
+        self.verbose = verbose
+        self.iteration = 0
+
+    @property
+    def state_keys(self):
+        return log_target_probabilities.keys()
+
+    def update_samplers(self):
+        """
+        Update all samplers.
+        """
+        for sampler in self.samplers:
+            sampler.update()
+
+    def update(self):
+        """
+        Run one iteration of the sampler.
+        """
+        if self.verbose:
+            print("*" * 80)
+            print("ProtonationStateSampler iteration %8d" % self.iteration)
+        self.update_samplers()
+        self.iteration += 1
+        if self.verbose:
+            print("*" * 80)
+
+    def run(self, niterations=1):
+        """
+        Run the protonation state sampler for the specified number of iterations.
+
+        Parameters
+        ----------
+        niterations : int
+            The number of iterations to run the sampler for.
+
+        """
+        # Update all samplers.
+        for iteration in range(niterations):
+            self.update()
