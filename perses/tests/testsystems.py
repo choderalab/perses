@@ -1059,6 +1059,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         molecules = sanitizeSMILES(self.molecules)
 
         # Create a system generator for desired forcefields
+        print('Creating system generators...')
         from perses.rjmc.topology_proposal import SystemGenerator
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         system_generators = dict()
@@ -1089,6 +1090,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
             positions[component] = pdbfile.positions
 
         # Construct positions and topologies for all solvent environments
+        print('Constructing positions and topologies...')
         for solvent in solvents:
             for component in components:
                 environment = solvent + '-' + component
@@ -1104,6 +1106,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                     positions[environment] = positions[component]
 
         # Set up the proposal engines.
+        print('Initializing proposal engines...')
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
         proposal_metadata = { }
         proposal_engines = dict()
@@ -1111,11 +1114,13 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
             proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL')
 
         # Generate systems
+        print('Building systems...')
         systems = dict()
         for environment in environments:
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
+        print('Defining thermodynamic states...')
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
         temperature = 300*unit.kelvin
@@ -1129,6 +1134,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                     thermodynamic_states[environment]   = ThermodynamicState(system=systems[environment], temperature=temperature)
 
         # Create SAMS samplers
+        print('Creating SAMS samplers...')
         from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
@@ -1176,8 +1182,10 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+        
         # This system must currently be minimized.
         minimize(self)
+        print('AblImatinibProtonationStateTestSystem initialized.')
 
 def minimize(testsystem):
     """
