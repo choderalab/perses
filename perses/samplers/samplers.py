@@ -1119,7 +1119,7 @@ class ProtonationStateSampler(object):
 
         Parameters
         ----------
-        complex_sampler : SAMSSampler
+        complex_sampler : ExpandedEnsembleSampler
             Ligand in complex sampler
         solvent_sampler : SAMSSampler
             Ligand in solution sampler
@@ -1130,6 +1130,8 @@ class ProtonationStateSampler(object):
         # Store target samplers.
         self.log_state_penalties = log_state_penalties
         self.samplers = [complex_sampler, solvent_sampler]
+        self.complex_sampler = complex_sampler
+        self.solvent_sampler = solvent_sampler
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = { key : - log_state_penalties[key] for key in log_state_penalties }
@@ -1147,6 +1149,23 @@ class ProtonationStateSampler(object):
         for sampler in self.samplers:
             sampler.update()
 
+    def update_target_probabilities(self):
+        """
+        Update all target probabilities.
+        """
+        # Gather list of all keys.
+        state_keys = set()
+        for sampler in self.samplers:
+            for key in sampler.state_keys:
+                state_keys.add(key)
+
+        # Update the complex sampler log weights using the solvent sampler log weights
+        for key in self.solvent_sampler.state_keys:
+            self.complex_sampler.log_weights[key] = self.solvent_sampler.exen_sampler.log_weights[key]
+
+        if self.verbose:
+            print("log_weights = %s" % str(self.solvent_sampler_log_weights))
+
     def update(self):
         """
         Run one iteration of the sampler.
@@ -1155,6 +1174,7 @@ class ProtonationStateSampler(object):
             print("*" * 80)
             print("ProtonationStateSampler iteration %8d" % self.iteration)
         self.update_samplers()
+        self.update_target_probabilities()
         self.iteration += 1
         if self.verbose:
             print("*" * 80)

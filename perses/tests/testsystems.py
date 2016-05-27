@@ -1159,7 +1159,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         # Create test MultiTargetDesign sampler.
         # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
         from perses.samplers.samplers import ProtonationStateSampler
-        designer = ProtonationStateSampler(sams_samplers['vacuum-complex'], sams_samplers['vacuum-inhibitor'], log_state_penalties)
+        designer = ProtonationStateSampler(complex_sampler=exen_samplers['explicit-complex'], solvent_sampler=sams_samplers['explicit-inhibitor'], log_state_penalties=log_state_penalties)
         designer.verbose = True
 
         # Store things.
