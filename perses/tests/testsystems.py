@@ -1691,27 +1691,27 @@ def run_constph():
     """
     testsystem = AblImatinibProtonationStateTestSystem()
     #for environment in testsystem.environments:
-    for environment in ['vacuum-inhibitor']:
+    for environment in ['explicit-inhibitor', 'explicit-complex']:
         print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-constph-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-constph-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10000
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 10000
+        #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        testsystem.mcmc_samplers[environment].nsteps = 5000
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
         testsystem.mcmc_samplers[environment].verbose = True
         testsystem.exen_samplers[environment].verbose = True
         testsystem.sams_samplers[environment].verbose = True
         #testsystem.mcmc_samplers[environment].run(niterations=5)
-        testsystem.exen_samplers[environment].run(niterations=5)
+        #testsystem.exen_samplers[environment].run(niterations=5)
 
         #testsystem.sams_samplers[environment].run(niterations=5)
 
-    #testsystem.designer.verbose = True
-    #testsystem.designer.run(niterations=500)
+    testsystem.designer.verbose = True
+    testsystem.designer.run(niterations=500)
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
     #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
 
