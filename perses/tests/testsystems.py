@@ -1061,14 +1061,15 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         # Create a system generator for desired forcefields
         from perses.rjmc.topology_proposal import SystemGenerator
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        molecules_xml_filename = resource_filename('perses', os.path.join(setup_path, 'Imatinib-epik-charged.ffxml'))
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
+        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
             use_antechamber=True)
-        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
+        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
             use_antechamber=True)
         # Copy system generators for all environments
