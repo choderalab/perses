@@ -1020,6 +1020,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         super(AblImatinibProtonationStateTestSystem, self).__init__()
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
         components = ['inhibitor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
+        components = ['inhibitor'] # DEBUG: Just try inhibitor for now
         padding = 9.0*unit.angstrom
         explicit_solvent_model = 'tip3p'
         setup_path = 'data/constant-pH/abl-imatinib'
@@ -1165,9 +1166,10 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
 
         # Create test MultiTargetDesign sampler.
         # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
-        from perses.samplers.samplers import ProtonationStateSampler
-        designer = ProtonationStateSampler(complex_sampler=exen_samplers['explicit-complex'], solvent_sampler=sams_samplers['explicit-inhibitor'], log_state_penalties=log_state_penalties)
-        designer.verbose = True
+        # DEBUG: Comment out for now
+        #from perses.samplers.samplers import ProtonationStateSampler
+        #designer = ProtonationStateSampler(complex_sampler=exen_samplers['explicit-complex'], solvent_sampler=sams_samplers['explicit-inhibitor'], log_state_penalties=log_state_penalties)
+        #designer.verbose = True
 
         # Store things.
         self.molecules = molecules
@@ -1181,9 +1183,9 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         self.mcmc_samplers = mcmc_samplers
         self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
-        self.designer = designer
+        # self.designer = designer # DEBUG
 
-        
+
         # This system must currently be minimized.
         minimize(self)
         print('AblImatinibProtonationStateTestSystem initialized.')
@@ -1701,6 +1703,10 @@ def run_constph():
     testsystem = AblImatinibProtonationStateTestSystem()
     #for environment in testsystem.environments:
     for environment in ['explicit-inhibitor', 'explicit-complex']:
+        if environment not in testsystem.exen_samplers:
+            print("Skipping '%s' for now..." % environment)
+            continue
+
         print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-constph-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-constph-%s-geometry-proposals.pdb' % environment, 'w')
@@ -1713,6 +1719,7 @@ def run_constph():
 
         testsystem.mcmc_samplers[environment].verbose = True
         testsystem.exen_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].proposal_engine.verbose = True
         testsystem.sams_samplers[environment].verbose = True
         #testsystem.mcmc_samplers[environment].run(niterations=5)
         #testsystem.exen_samplers[environment].run(niterations=5)
@@ -1724,9 +1731,9 @@ def run_constph():
     testsystem.exen_samplers['explicit-inhibitor'].run(niterations=100)
 
     # Run constant-pH sampler
-    testsystem.designer.verbose = True
-    testsystem.designer.update_target_probabilities() # update log weights from inhibitor in solvent calibration
-    testsystem.designer.run(niterations=500)
+    #testsystem.designer.verbose = True
+    #testsystem.designer.update_target_probabilities() # update log weights from inhibitor in solvent calibration
+    #testsystem.designer.run(niterations=500)
 
 if __name__ == '__main__':
     run_constph()
