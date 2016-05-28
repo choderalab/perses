@@ -3,7 +3,7 @@
   <DateGenerated>2016-05-27</DateGenerated>
  </Info>
  <Residues>
-  <Residue name="4-[">
+  <Residue name="imatinib-000">
    <Atom name="C1" type="ca" charge="-0.2556"/>
    <Atom name="C2" type="ca" charge="-0.0476"/>
    <Atom name="C3" type="cp" charge="-0.2837"/>
@@ -147,7 +147,7 @@
    <Bond atomName1="C29" atomName2="H30"/>
    <Bond atomName1="C29" atomName2="H31"/>
   </Residue>
-  <Residue name="4-[">
+  <Residue name="imatinib-001">
    <Atom name="C1" type="ca" charge="-0.251"/>
    <Atom name="C2" type="ca" charge="-0.0574"/>
    <Atom name="C3" type="cp" charge="-0.2757"/>
@@ -291,7 +291,7 @@
    <Bond atomName1="C29" atomName2="H30"/>
    <Bond atomName1="C29" atomName2="H31"/>
   </Residue>
-  <Residue name="4-[">
+  <Residue name="imatinib-002">
    <Atom name="C1" type="ca" charge="-0.2506"/>
    <Atom name="C2" type="ca" charge="-0.0576"/>
    <Atom name="C3" type="cp" charge="-0.2754"/>
@@ -433,7 +433,7 @@
    <Bond atomName1="C29" atomName2="H30"/>
    <Bond atomName1="C29" atomName2="H31"/>
   </Residue>
-  <Residue name="~{N">
+  <Residue name="imatinib-003">
    <Atom name="C1" type="ca" charge="-0.1333"/>
    <Atom name="C2" type="ca" charge="0.0073"/>
    <Atom name="C3" type="cp" charge="-0.1309"/>
@@ -579,7 +579,7 @@
    <Bond atomName1="C29" atomName2="H30"/>
    <Bond atomName1="C29" atomName2="H31"/>
   </Residue>
-  <Residue name="~{N">
+  <Residue name="imatinib-004">
    <Atom name="C1" type="ca" charge="-0.1334"/>
    <Atom name="C2" type="ca" charge="0.0078"/>
    <Atom name="C3" type="cp" charge="-0.1277"/>

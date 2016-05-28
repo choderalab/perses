@@ -1705,7 +1705,8 @@ def run_constph():
     """
     testsystem = AblImatinibProtonationStateTestSystem()
     #for environment in testsystem.environments:
-    for environment in ['explicit-inhibitor', 'explicit-complex']:
+    #for environment in ['explicit-inhibitor', 'explicit-complex']:
+    for environment in ['vacuum-inhibitor', 'vacuum-complex']:
         if environment not in testsystem.exen_samplers:
             print("Skipping '%s' for now..." % environment)
             continue
