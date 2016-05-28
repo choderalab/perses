@@ -21,6 +21,7 @@ except ImportError:
     from io import StringIO
 import openmoltools
 import logging
+import time
 try:
     from subprocess import getoutput  # If python 3
 except ImportError:
@@ -715,7 +716,7 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _choose_mutant(self, modeller, metadata):
         chain_id = self._chain_id
-        index_to_new_residues = self._undo_old_mutants(modeller, chain_id)        
+        index_to_new_residues = self._undo_old_mutants(modeller, chain_id)
         if self._allowed_mutations is not None:
             allowed_mutations = self._allowed_mutations
             index_to_new_residues = self._choose_mutation_from_allowed(modeller, chain_id, allowed_mutations, index_to_new_residues)
@@ -1156,14 +1157,26 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         strict_stereo = False
         if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
         from openmoltools.openeye import molecule_to_mol2, generate_conformers
+        if self.verbose: print('Generating conformers...')
+        timer_start = time.time()
         moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=strict_stereo)
         molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
         moltemp = generate_conformers(proposed_mol, max_confs=1, strictStereo=strict_stereo)
         molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
+        if self.verbose: print('Conformer generation took %.3f s' % (time.time() - timer_start))
 
+        if self.verbose: print('Building new Topology object...')
+        timer_start = time.time()
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
+        if self.verbose: print('System generation took %.3f s' % (time.time() - timer_start))
+
+        if self.verbose: print('Generating System...')
+        timer_start = time.time()
         new_system = self._system_generator.build_system(new_topology)
+        elapsed_time = time.time()
+        if self.verbose: print('System generation took %.3f s' % (time.time() - timer_start))
+
         smiles_new, _ = self._topology_to_smiles(new_topology)
 
         #map the atoms between the new and old molecule only:

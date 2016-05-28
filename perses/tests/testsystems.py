@@ -1067,13 +1067,13 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=False)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=False)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=False)
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -1106,6 +1106,9 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                     environment = solvent + '-' + component
                     topologies[environment] = topologies[component]
                     positions[environment] = positions[component]
+
+                natoms = sum( 1 for atom in topologies[environment].atoms() )
+                print("System '%s' has %d atoms" % (environment, natoms))
 
         # Set up the proposal engines.
         print('Initializing proposal engines...')
@@ -1714,7 +1717,7 @@ def run_constph():
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
         #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 5000
+        testsystem.mcmc_samplers[environment].nsteps = 50
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
         testsystem.mcmc_samplers[environment].verbose = True

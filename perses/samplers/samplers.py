@@ -449,6 +449,9 @@ class MCMCSampler(object):
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
 
         if self.verbose:
+            # Print platform
+            print("Using platform '%s'" % context.getPlatform().getName())
+
             # DEBUG ENERGIES
             state = context.getState(getEnergy=True,getForces=True)
             kT = kB * self.thermodynamic_state.temperature
