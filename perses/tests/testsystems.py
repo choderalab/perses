@@ -1020,6 +1020,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         super(AblImatinibProtonationStateTestSystem, self).__init__()
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
         components = ['inhibitor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
+        solvents = ['vacuum'] # DEBUG: Just try vacuum for now
         components = ['inhibitor'] # DEBUG: Just try inhibitor for now
         padding = 9.0*unit.angstrom
         explicit_solvent_model = 'tip3p'
@@ -1731,8 +1732,10 @@ def run_constph():
         #testsystem.sams_samplers[environment].run(niterations=5)
 
     # Run ligand in solvent constant-pH sampler calibration
-    testsystem.exen_samplers['explicit-inhibitor'].verbose=True
-    testsystem.exen_samplers['explicit-inhibitor'].run(niterations=100)
+    #testsystem.exen_samplers['explicit-inhibitor'].verbose=True
+    #testsystem.exen_samplers['explicit-inhibitor'].run(niterations=100)
+    testsystem.exen_samplers['vacuum-inhibitor'].verbose=True
+    testsystem.exen_samplers['vacuum-inhibitor'].run(niterations=100)
 
     # Run constant-pH sampler
     #testsystem.designer.verbose = True
