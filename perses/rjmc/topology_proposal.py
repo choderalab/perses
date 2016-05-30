@@ -1210,6 +1210,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #Create the TopologyProposal and return it
         proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
                                                  new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
+
+        if self.verbose:
+            ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
+            ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
+            print('Proposed transformation would delete %d atoms and create %d atoms.' % (ndelete, ncreate))
         return proposal
 
     def _canonicalize_smiles(self, smiles):
@@ -1411,7 +1416,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
-        mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
+        #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
+        mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True

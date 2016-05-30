@@ -1987,9 +1987,9 @@ class ProposalOrderTools(object):
         The topology proposal containing the relevant move.
     """
 
-    def __init__(self, topology_proposal):
+    def __init__(self, topology_proposal, verbose=False):
         self._topology_proposal = topology_proposal
-
+        self.verbose = True # DEBUG
 
     def determine_proposal_order(self, direction='forward'):
         """
@@ -2096,6 +2096,11 @@ class ProposalOrderTools(object):
         torsions : list of parmed.Dihedral objects with no "type"
             list of topological torsions including only atoms with positions
         """
+        if self.verbose:
+            print('atoms_with_positions: %s' % str(atoms_with_positions))
+            print('new_atom: %s' % new_atom)
+            print(new_atom.dihedrals)
+
         topological_torsions = []
         angles = new_atom.angles
         atoms_with_positions = set(atoms_with_positions)
