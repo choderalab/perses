@@ -726,8 +726,11 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
+            import time
+            initial_time = time.time()
             geometry_old_positions = ncmc_old_positions
             geometry_new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            if self.verbose: print('proposal took %.3f s' % (time.time() - initial_time))
 
             if self.geometry_pdbfile is not None:
                 print("Writing proposed geometry...")
@@ -737,12 +740,17 @@ class ExpandedEnsembleSampler(object):
                 #self.geometry_pdbfile.write('ENDMDL\n')
                 self.geometry_pdbfile.flush()
 
+            if self.verbose: print("Geometry engine logP_reverse calculation...")
+            initial_time = time.time()
             geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
             geometry_logp = geometry_logp_reverse - geometry_logp_propose
+            if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
 
             if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.
+            initial_time = time.time()
             [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
+            if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)

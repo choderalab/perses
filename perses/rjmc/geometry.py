@@ -2149,7 +2149,6 @@ class ProposalOrderTools(object):
 
         # Recode topological torsions as parmed Dihedral objects
         topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
-        print(topological_torsions)
         return topological_torsions
 
 class BondOnlyProposalOrder(ProposalOrderTools):
