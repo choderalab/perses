@@ -2021,17 +2021,32 @@ class ProposalOrderTools(object):
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
         if direction=='forward':
+            topology = self._topology_proposal.new_topology
+            system = self._topology_proposal.new_system
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
             new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
             #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
         elif direction=='reverse':
+            topology = self._topology_proposal.old_topology
+            system = self._topology_proposal.old_system
             structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
             new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
         else:
             raise ValueError("direction parameter must be either forward or reverse.")
 
+        # DEBUG
+        print('TOPOLOGY')
+        for atom in topology.atoms():
+            print(atom)
+        for bond in topology.bonds():
+            print(bond)
+        print('STRUCTURE')
+        print(structure)
+        for atom in structure.atoms:
+            print(atom, atom.bonds)
+        print('')
 
         while(len(new_atoms))>0:
             eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
