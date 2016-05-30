@@ -1736,6 +1736,9 @@ def run_constph():
     #testsystem.exen_samplers['explicit-inhibitor'].run(niterations=100)
     testsystem.exen_samplers['vacuum-inhibitor'].verbose=True
     testsystem.exen_samplers['vacuum-inhibitor'].run(niterations=100)
+    #testsystem.exen_samplers['explicit-complex'].verbose=True
+    #testsystem.exen_samplers['explicit-complex'].run(niterations=100)
+
 
     # Run constant-pH sampler
     #testsystem.designer.verbose = True

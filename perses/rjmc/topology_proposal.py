@@ -1172,21 +1172,23 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         if self.verbose: print('System generation took %.3f s' % (time.time() - timer_start))
 
         # DEBUG: Write out Topology
-        import cPickle as pickle
-        outfile = open('topology.pkl', 'w')
-        pickle.dump(new_topology, outfile)
-        outfile.close()
+        #import cPickle as pickle
+        #outfile = open('topology.pkl', 'w')
+        #pickle.dump(new_topology, outfile)
+        #outfile.close()
 
         if self.verbose: print('Generating System...')
         timer_start = time.time()
         new_system = self._system_generator.build_system(new_topology)
-        elapsed_time = time.time()
         if self.verbose: print('System generation took %.3f s' % (time.time() - timer_start))
 
         smiles_new, _ = self._topology_to_smiles(new_topology)
 
         #map the atoms between the new and old molecule only:
+        if self.verbose: print('Generating atom map...')
+        timer_start = time.time()
         mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol)
+        if self.verbose: print('Atom map took %.3f s' % (time.time() - timer_start))
 
         #adjust the log proposal for the alignment:
         total_logp = logp_proposal
