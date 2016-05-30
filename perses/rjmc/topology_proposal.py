@@ -1178,7 +1178,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         timer_start = time.time()
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
-        if self.verbose: print('System generation took %.3f s' % (time.time() - timer_start))
+        if self.verbose: print('Topology generation took %.3f s' % (time.time() - timer_start))
 
         # DEBUG: Write out Topology
         #import cPickle as pickle

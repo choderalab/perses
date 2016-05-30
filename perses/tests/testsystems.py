@@ -1020,8 +1020,8 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         super(AblImatinibProtonationStateTestSystem, self).__init__()
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
         components = ['inhibitor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
-        solvents = ['vacuum'] # DEBUG: Just try vacuum for now
-        components = ['inhibitor'] # DEBUG: Just try inhibitor for now
+        #solvents = ['vacuum'] # DEBUG: Just try vacuum for now
+        #components = ['inhibitor'] # DEBUG: Just try inhibitor for now
         padding = 9.0*unit.angstrom
         explicit_solvent_model = 'tip3p'
         setup_path = 'data/constant-pH/abl-imatinib'
@@ -1061,20 +1061,22 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         molecules = sanitizeSMILES(self.molecules)
 
         # Create a system generator for desired forcefields
+        # TODO: Debug why we can't ue pregenerated molecule ffxml parameters. This may be an openmoltools issue.
+        molecules_xml_filename = resource_filename('perses', os.path.join(setup_path, 'Imatinib-epik-charged.ffxml'))
+
         print('Creating system generators...')
         from perses.rjmc.topology_proposal import SystemGenerator
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
-        molecules_xml_filename = resource_filename('perses', os.path.join(setup_path, 'Imatinib-epik-charged.ffxml'))
         system_generators = dict()
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
+        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=False)
-        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
+            use_antechamber=True)
+        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=False)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, molecules_xml_filename, 'amber99sbildn.xml'],
+            use_antechamber=True)
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=False)
+            use_antechamber=True)
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -1166,14 +1168,10 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                 sams_samplers[environment].verbose = True
                 thermodynamic_states[environment] = thermodynamic_state
 
-        # TODO: Create a constant-pH sampler
-
-        # Create test MultiTargetDesign sampler.
-        # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
-        # DEBUG: Comment out for now
-        #from perses.samplers.samplers import ProtonationStateSampler
-        #designer = ProtonationStateSampler(complex_sampler=exen_samplers['explicit-complex'], solvent_sampler=sams_samplers['explicit-inhibitor'], log_state_penalties=log_state_penalties)
-        #designer.verbose = True
+        # Create a constant-pH sampler
+        from perses.samplers.samplers import ProtonationStateSampler
+        designer = ProtonationStateSampler(complex_sampler=exen_samplers['explicit-complex'], solvent_sampler=sams_samplers['explicit-inhibitor'], log_state_penalties=log_state_penalties)
+        designer.verbose = True
 
         # Store things.
         self.molecules = molecules
@@ -1187,7 +1185,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         self.mcmc_samplers = mcmc_samplers
         self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
-        # self.designer = designer # DEBUG
+        self.designer = designer
 
 
         # This system must currently be minimized.
@@ -1705,9 +1703,9 @@ def run_constph():
     Run Abl:imatinib constant-pH test system.
     """
     testsystem = AblImatinibProtonationStateTestSystem()
-    #for environment in testsystem.environments:
+    for environment in testsystem.environments:
     #for environment in ['explicit-inhibitor', 'explicit-complex']:
-    for environment in ['vacuum-inhibitor', 'vacuum-complex']:
+    #for environment in ['vacuum-inhibitor', 'vacuum-complex']:
         if environment not in testsystem.exen_samplers:
             print("Skipping '%s' for now..." % environment)
             continue
@@ -1732,18 +1730,17 @@ def run_constph():
         #testsystem.sams_samplers[environment].run(niterations=5)
 
     # Run ligand in solvent constant-pH sampler calibration
-    #testsystem.exen_samplers['explicit-inhibitor'].verbose=True
-    #testsystem.exen_samplers['explicit-inhibitor'].run(niterations=100)
-    testsystem.exen_samplers['vacuum-inhibitor'].verbose=True
-    testsystem.exen_samplers['vacuum-inhibitor'].run(niterations=100)
+    testsystem.exen_samplers['explicit-inhibitor'].verbose=True
+    testsystem.exen_samplers['explicit-inhibitor'].run(niterations=500)
+    #testsystem.exen_samplers['vacuum-inhibitor'].verbose=True
+    #testsystem.exen_samplers['vacuum-inhibitor'].run(niterations=100)
     #testsystem.exen_samplers['explicit-complex'].verbose=True
     #testsystem.exen_samplers['explicit-complex'].run(niterations=100)
 
-
     # Run constant-pH sampler
-    #testsystem.designer.verbose = True
-    #testsystem.designer.update_target_probabilities() # update log weights from inhibitor in solvent calibration
-    #testsystem.designer.run(niterations=500)
+    testsystem.designer.verbose = True
+    testsystem.designer.update_target_probabilities() # update log weights from inhibitor in solvent calibration
+    testsystem.designer.run(niterations=500)
 
 if __name__ == '__main__':
     run_constph()
