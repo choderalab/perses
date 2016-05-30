@@ -1160,9 +1160,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         if self.verbose: print('Generating conformers...')
         timer_start = time.time()
         moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=strict_stereo)
-        molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
+        #molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
+        from openeye import oechem
+        ofs = oechem.oemolostream('current.mol2')
+        oechem.OETriposAtomTypeNames(moltemp)
+        oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
+        ofs.close()
         moltemp = generate_conformers(proposed_mol, max_confs=1, strictStereo=strict_stereo)
-        molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
+        #molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
+        ofs = oechem.oemolostream('proposed.mol2')
+        oechem.OETriposAtomTypeNames(moltemp)
+        oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
+        ofs.close()
         if self.verbose: print('Conformer generation took %.3f s' % (time.time() - timer_start))
 
         if self.verbose: print('Building new Topology object...')
