@@ -1713,11 +1713,11 @@ def run_constph():
         print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-constph-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-constph-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
         #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 50
+        testsystem.mcmc_samplers[environment].nsteps = 2500
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
         testsystem.mcmc_samplers[environment].verbose = True
@@ -1730,8 +1730,8 @@ def run_constph():
         #testsystem.sams_samplers[environment].run(niterations=5)
 
     # Run ligand in solvent constant-pH sampler calibration
-    testsystem.exen_samplers['explicit-inhibitor'].verbose=True
-    testsystem.exen_samplers['explicit-inhibitor'].run(niterations=500)
+    testsystem.sams_samplers['explicit-inhibitor'].verbose=True
+    testsystem.sams_samplers['explicit-inhibitor'].run(niterations=100)
     #testsystem.exen_samplers['vacuum-inhibitor'].verbose=True
     #testsystem.exen_samplers['vacuum-inhibitor'].run(niterations=100)
     #testsystem.exen_samplers['explicit-complex'].verbose=True

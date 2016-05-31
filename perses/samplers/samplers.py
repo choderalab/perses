@@ -22,6 +22,7 @@ import sys, math
 import numpy as np
 from openmmtools import testsystems
 import copy
+import time
 
 from perses.samplers import thermodynamics
 
@@ -444,6 +445,8 @@ class MCMCSampler(object):
         else:
             raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
 
+        start_time = time.time()
+
         # Create a Context
         context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
@@ -475,6 +478,7 @@ class MCMCSampler(object):
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
 
         if self.verbose:
+            print('Finished integration in %.3f s' % (time.time() - start_time))
             final_energy = context.getState(getEnergy=True).getPotentialEnergy() * self.thermodynamic_state.beta
             print('Final energy is %12.3f kT' % (final_energy))
 
