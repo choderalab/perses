@@ -530,6 +530,17 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         atom2_angles = set(atom2.angles)
         atom3_angles = set(atom3.angles)
         relevant_angle_set = atom1_angles.intersection(atom2_angles, atom3_angles)
+
+        # DEBUG
+        if len(relevant_angle_set) == 0:
+            print('atom1_angles:')
+            print(atom1_angles)
+            print('atom2_angles:')
+            print(atom2_angles)
+            print('atom3_angles:')
+            print(atom3_angles)
+            raise Exception('Atoms %s-%s-%s do not share a parmed Angle term' % (atom1, atom2, atom3))
+
         relevant_angle = relevant_angle_set.pop()
         if type(relevant_angle.type.k) != units.Quantity:
             relevant_angle_with_units = self._add_angle_units(relevant_angle)
@@ -1987,9 +1998,9 @@ class ProposalOrderTools(object):
         The topology proposal containing the relevant move.
     """
 
-    def __init__(self, topology_proposal):
+    def __init__(self, topology_proposal, verbose=False):
         self._topology_proposal = topology_proposal
-
+        self.verbose = True # DEBUG
 
     def determine_proposal_order(self, direction='forward'):
         """
@@ -2011,17 +2022,27 @@ class ProposalOrderTools(object):
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
         if direction=='forward':
+            topology = self._topology_proposal.new_topology
+            system = self._topology_proposal.new_system
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
             new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
             #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
         elif direction=='reverse':
+            topology = self._topology_proposal.old_topology
+            system = self._topology_proposal.old_system
             structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
             new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
         else:
             raise ValueError("direction parameter must be either forward or reverse.")
 
+        # DEBUG
+        #print('STRUCTURE')
+        #print(structure)
+        #for atom in structure.atoms:
+        #    print(atom, atom.bonds, atom.angles, atom.dihedrals)
+        #print('')
 
         while(len(new_atoms))>0:
             eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
@@ -2096,36 +2117,38 @@ class ProposalOrderTools(object):
         torsions : list of parmed.Dihedral objects with no "type"
             list of topological torsions including only atoms with positions
         """
-        topological_torsions = []
-        angles = new_atom.angles
-        atoms_with_positions = set(atoms_with_positions)
-        for angle in angles:
-            if angle.atom1 is new_atom:
-                if angle.atom2 in atoms_with_positions and angle.atom3 in atoms_with_positions:
-                    bonds_to_angle = angle.atom3.bonds
-                    for bond in bonds_to_angle:
-                        bonded_atoms = {bond.atom1, bond.atom2}
-                        if angle.atom2 in bonded_atoms:
-                            continue
-                        if bonded_atoms.issubset(atoms_with_positions):
-                            bond_atom = angle.atom2
-                            angle_atom = angle.atom3
-                            torsion_atom = bond.atom1 if bond.atom2==angle.atom3 else bond.atom2
-                            dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
-                            topological_torsions.append(dihedral)
-            elif angle.atom3 is new_atom:
-                if angle.atom1 in atoms_with_positions and angle.atom2 in atoms_with_positions:
-                    bonds_to_angle = angle.atom1.bonds
-                    for bond in bonds_to_angle:
-                        bonded_atoms = {bond.atom1, bond.atom2}
-                        if angle.atom2 in bonded_atoms:
-                            continue
-                        if bonded_atoms.issubset(atoms_with_positions):
-                            bond_atom = angle.atom2
-                            angle_atom = angle.atom1
-                            torsion_atom = bond.atom1 if bond.atom2==angle.atom1 else bond.atom2
-                            dihedral = parmed.Dihedral(new_atom, bond_atom, angle_atom, torsion_atom)
-                            topological_torsions.append(dihedral)
+        # Compute topological torsions beginning with atom `new_atom` in which all other atoms have positions
+        topological_torsions = list()
+        atom1 = new_atom
+        for bond12 in atom1.bonds:
+            atom2 = bond12.atom2 if bond12.atom1==atom1 else bond12.atom1
+            if atom2 not in atoms_with_positions:
+                continue
+            for bond23 in atom2.bonds:
+                atom3 = bond23.atom2 if bond23.atom1==atom2 else bond23.atom1
+                if (atom3 not in atoms_with_positions) or (atom3 in set([atom1, atom2])):
+                    continue
+                for bond34 in atom3.bonds:
+                    atom4 = bond34.atom2 if bond34.atom1==atom3 else bond34.atom1
+                    if (atom4 not in atoms_with_positions) or (atom4 in set([atom1, atom2, atom3])):
+                        continue
+                    topological_torsions.append((atom1, atom2, atom3, atom4))
+
+        if len(topological_torsions) == 0:
+            # Print debug information
+            print('No topological torsions found!')
+            print('')
+            print('atoms_with_positions: %s' % str(atoms_with_positions))
+            print('new_atom: %s' % new_atom)
+            print('bonds involving new atom:')
+            print(new_atom.bonds)
+            print('angles involving new atom:')
+            print(new_atom.angles)
+            print('dihedrals involving new atom:')
+            print(new_atom.dihedrals)
+
+        # Recode topological torsions as parmed Dihedral objects
+        topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
         return topological_torsions
 
 class BondOnlyProposalOrder(ProposalOrderTools):

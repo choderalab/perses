@@ -22,6 +22,7 @@ import sys, math
 import numpy as np
 from openmmtools import testsystems
 import copy
+import time
 
 from perses.samplers import thermodynamics
 
@@ -444,11 +445,16 @@ class MCMCSampler(object):
         else:
             raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
 
+        start_time = time.time()
+
         # Create a Context
         context = self.sampler_state.createContext(integrator=integrator)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
 
         if self.verbose:
+            # Print platform
+            print("Using platform '%s'" % context.getPlatform().getName())
+
             # DEBUG ENERGIES
             state = context.getState(getEnergy=True,getForces=True)
             kT = kB * self.thermodynamic_state.temperature
@@ -472,6 +478,7 @@ class MCMCSampler(object):
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
 
         if self.verbose:
+            print('Finished integration in %.3f s' % (time.time() - start_time))
             final_energy = context.getState(getEnergy=True).getPotentialEnergy() * self.thermodynamic_state.beta
             print('Final energy is %12.3f kT' % (final_energy))
 
@@ -723,8 +730,11 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
+            import time
+            initial_time = time.time()
             geometry_old_positions = ncmc_old_positions
             geometry_new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            if self.verbose: print('proposal took %.3f s' % (time.time() - initial_time))
 
             if self.geometry_pdbfile is not None:
                 print("Writing proposed geometry...")
@@ -734,12 +744,17 @@ class ExpandedEnsembleSampler(object):
                 #self.geometry_pdbfile.write('ENDMDL\n')
                 self.geometry_pdbfile.flush()
 
+            if self.verbose: print("Geometry engine logP_reverse calculation...")
+            initial_time = time.time()
             geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
             geometry_logp = geometry_logp_reverse - geometry_logp_propose
+            if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
 
             if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.
+            initial_time = time.time()
             [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
+            if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
@@ -1082,6 +1097,100 @@ class MultiTargetDesign(object):
     def run(self, niterations=1):
         """
         Run the multi-target design sampler for the specified number of iterations.
+
+        Parameters
+        ----------
+        niterations : int
+            The number of iterations to run the sampler for.
+
+        """
+        # Update all samplers.
+        for iteration in range(niterations):
+            self.update()
+
+################################################################################
+# CONSTANT PH SAMPLER
+################################################################################
+
+class ProtonationStateSampler(object):
+    """
+    Protonation state sampler with given fixed target probabilities for ligand in solvent.
+
+    Parameters
+    ----------
+    samplers : list of SAMSSampler
+        The SAMS samplers whose relative partition functions go into the design objective computation.
+    sampler_exponents : dict of SAMSSampler : float
+        samplers.keys() are the samplers, and samplers[key]
+    log_target_probabilities : dict of hashable object : float
+        log_target_probabilities[key] is the computed log objective function (target probability) for chemical state `key`
+    verbose : bool
+        If True, verbose output is printed.
+
+    """
+    def __init__(self, complex_sampler, solvent_sampler, log_state_penalties, verbose=False):
+        """
+        Initialize a protonation state sampler with fixed target probabilities for ligand in solvent.
+
+        Parameters
+        ----------
+        complex_sampler : ExpandedEnsembleSampler
+            Ligand in complex sampler
+        solvent_sampler : SAMSSampler
+            Ligand in solution sampler
+        log_state_penalties : dict
+            log_state_penalties[smiles] is the log state free energy (in kT) for ligand state 'smiles'
+
+        """
+        # Store target samplers.
+        self.log_state_penalties = log_state_penalties
+        self.samplers = [complex_sampler, solvent_sampler]
+        self.complex_sampler = complex_sampler
+        self.solvent_sampler = solvent_sampler
+
+        # Initialize storage for target probabilities.
+        self.log_target_probabilities = { key : - log_state_penalties[key] for key in log_state_penalties }
+        self.verbose = verbose
+        self.iteration = 0
+
+    @property
+    def state_keys(self):
+        return log_target_probabilities.keys()
+
+    def update_samplers(self):
+        """
+        Update all samplers.
+        """
+        for sampler in self.samplers:
+            sampler.update()
+
+    def update_target_probabilities(self):
+        """
+        Update all target probabilities.
+        """
+        # Update the complex sampler log weights using the solvent sampler log weights
+        for key in self.solvent_sampler.state_keys:
+            self.complex_sampler.log_weights[key] = self.solvent_sampler.sampler.log_weights[key]
+
+        if self.verbose:
+            print("log_weights = %s" % str(self.solvent_sampler.sampler.log_weights))
+
+    def update(self):
+        """
+        Run one iteration of the sampler.
+        """
+        if self.verbose:
+            print("*" * 80)
+            print("ProtonationStateSampler iteration %8d" % self.iteration)
+        self.update_samplers()
+        self.update_target_probabilities()
+        self.iteration += 1
+        if self.verbose:
+            print("*" * 80)
+
+    def run(self, niterations=1):
+        """
+        Run the protonation state sampler for the specified number of iterations.
 
         Parameters
         ----------
