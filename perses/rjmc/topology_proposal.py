@@ -1537,7 +1537,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         from perses.tests.utils import smiles_to_topology
         import itertools
-        from perses.rjmc.geometry import ProposalOrderTools, NoTorsionError
+        from perses.rjmc.geometry import ProposalOrderTools
         from perses.tests.test_geometry_engine import oemol_to_openmm_system
         safe_smiles = set()
         smiles_pairs = set()
