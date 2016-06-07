@@ -1156,12 +1156,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # DEBUG
         strict_stereo = False
         if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
-        from openmoltools.openeye import molecule_to_mol2, generate_conformers
+        from openmoltools.openeye import generate_conformers
         if self.verbose: print('Generating conformers...')
         timer_start = time.time()
         moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=strict_stereo)
         #molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
-        from openeye import oechem
         ofs = oechem.oemolostream('current.mol2')
         oechem.OETriposAtomTypeNames(moltemp)
         oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
