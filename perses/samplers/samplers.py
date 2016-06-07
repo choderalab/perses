@@ -614,6 +614,10 @@ class ExpandedEnsembleSampler(object):
         for option_name in option_names:
             if option_name not in options:
                 options[option_name] = None
+        if options['nsteps']:
+            self._switching_nsteps = options['nsteps']
+        else:
+            self._switching_nsteps = 0
         from perses.annihilation.ncmc_switching import NCMCEngine
         self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
@@ -629,7 +633,7 @@ class ExpandedEnsembleSampler(object):
 
     @property
     def state_keys(self):
-        return log_weights.keys()
+        return self.log_weights.keys()
 
     def get_log_weight(self, state_key):
         """
@@ -726,7 +730,7 @@ class ExpandedEnsembleSampler(object):
             [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_old_positions)):
-                raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
+                raise Exception("Positions are NaN after NCMC delete with %d steps" % self._switching_nsteps)
 
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
@@ -757,7 +761,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
-                raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
+                raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
 
             # Compute change in eliminated potential contribution.
             switch_logp = - (potential_insert - potential_delete)
@@ -1045,7 +1049,7 @@ class MultiTargetDesign(object):
 
     @property
     def state_keys(self):
-        return log_target_probabilities.keys()
+        return self.log_target_probabilities.keys()
 
     def update_samplers(self):
         """
@@ -1155,7 +1159,7 @@ class ProtonationStateSampler(object):
 
     @property
     def state_keys(self):
-        return log_target_probabilities.keys()
+        return self.log_target_probabilities.keys()
 
     def update_samplers(self):
         """
