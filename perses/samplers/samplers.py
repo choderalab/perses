@@ -734,7 +734,6 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
-            import time
             initial_time = time.time()
             geometry_old_positions = ncmc_old_positions
             geometry_new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
