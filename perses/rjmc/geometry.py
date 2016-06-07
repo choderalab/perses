@@ -1889,7 +1889,6 @@ class GeometrySystemGenerator(object):
             print(e)
 
         #get the omega geometry of the molecule:
-        import openeye.oechem as oechem
         omega = oeomega.OEOmega()
         omega.SetMaxConfs(1)
         omega.SetStrictStereo(False) #TODO: fix stereochem
