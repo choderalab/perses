@@ -122,7 +122,7 @@ frame_prefix = 'atom-creation-frames/frame'
 cmd.set('ray_trace_frames', 1)
 frame_number = 0
 for step in range(nsteps):
-    print "rendering frame %04d / %04d" % (step+1, nsteps)
+    print("rendering frame %04d / %04d" % (step+1, nsteps))
     cmd.frame(step+1)
     cmd.png(frame_prefix + '%04d.png' % (frame_number), ray=True)
     frame_number += 1
