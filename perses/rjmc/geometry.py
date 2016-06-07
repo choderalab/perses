@@ -446,7 +446,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return relevant_bond_with_units
 
     def _get_internal_from_omm(self, atom_coords, bond_coords, angle_coords, torsion_coords):
-        import copy
         #master system, will be used for all three
         sys = openmm.System()
         platform = openmm.Platform.getPlatformByName("Reference")
