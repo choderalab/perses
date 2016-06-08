@@ -570,7 +570,7 @@ class ExpandedEnsembleSampler(object):
     >>> exen_sampler.run()
 
     """
-    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=dict(), platform=None):
+    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None):
         """
         Create an expanded ensemble sampler.
 
@@ -611,6 +611,8 @@ class ExpandedEnsembleSampler(object):
         # Initialize
         self.iteration = 0
         option_names = ['timestep', 'nsteps', 'functions']
+        if options is None:
+            options = dict()
         for option_name in option_names:
             if option_name not in options:
                 options[option_name] = None
