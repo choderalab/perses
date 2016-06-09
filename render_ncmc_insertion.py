@@ -118,7 +118,7 @@ cmd.set_view (\
 # Get number of steps
 nsteps = cmd.count_states()
 
-import cPickle as pickle
+import pickle
 atom_indices = pickle.load(open(pkl_filename, 'r'))
 selection = '(id %d)' % (atom_indices[0]+2)
 for index in atom_indices[1:]:
@@ -132,7 +132,7 @@ cmd.set('ray_trace_frames', 1)
 nskip = 1
 frame_number = 0
 for step in range(0,nsteps,nskip):
-    print "rendering frame %04d / %04d" % (step+1, nsteps)
+    print("rendering frame %04d / %04d" % (step+1, nsteps))
     cmd.frame(step+1)
     cmd.set('sphere_transparency', (1 - (float(step) / float(nsteps-1))), 'ncmc')
     cmd.png(frame_prefix + '%04d.png' % (frame_number), ray=True)

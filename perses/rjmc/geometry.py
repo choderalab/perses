@@ -446,7 +446,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return relevant_bond_with_units
 
     def _get_internal_from_omm(self, atom_coords, bond_coords, angle_coords, torsion_coords):
-        import copy
         #master system, will be used for all three
         sys = openmm.System()
         platform = openmm.Platform.getPlatformByName("Reference")
@@ -1890,8 +1889,6 @@ class GeometrySystemGenerator(object):
             print(e)
 
         #get the omega geometry of the molecule:
-        import openeye.oeomega as oeomega
-        import openeye.oechem as oechem
         omega = oeomega.OEOmega()
         omega.SetMaxConfs(1)
         omega.SetStrictStereo(False) #TODO: fix stereochem

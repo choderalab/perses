@@ -41,7 +41,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=default_functions, nsteps=default_nsteps, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC'):
+    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC'):
         """
         This is the base class for NCMC switching between two different systems.
 

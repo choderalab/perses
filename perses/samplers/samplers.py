@@ -570,7 +570,7 @@ class ExpandedEnsembleSampler(object):
     >>> exen_sampler.run()
 
     """
-    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=dict(), platform=None):
+    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None):
         """
         Create an expanded ensemble sampler.
 
@@ -611,9 +611,15 @@ class ExpandedEnsembleSampler(object):
         # Initialize
         self.iteration = 0
         option_names = ['timestep', 'nsteps', 'functions']
+        if options is None:
+            options = dict()
         for option_name in option_names:
             if option_name not in options:
                 options[option_name] = None
+        if options['nsteps']:
+            self._switching_nsteps = options['nsteps']
+        else:
+            self._switching_nsteps = 0
         from perses.annihilation.ncmc_switching import NCMCEngine
         self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
@@ -629,7 +635,7 @@ class ExpandedEnsembleSampler(object):
 
     @property
     def state_keys(self):
-        return log_weights.keys()
+        return self.log_weights.keys()
 
     def get_log_weight(self, state_key):
         """
@@ -726,11 +732,10 @@ class ExpandedEnsembleSampler(object):
             [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_old_positions)):
-                raise Exception("Positions are NaN after NCMC delete with %d steps" % switching_nsteps)
+                raise Exception("Positions are NaN after NCMC delete with %d steps" % self._switching_nsteps)
 
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
-            import time
             initial_time = time.time()
             geometry_old_positions = ncmc_old_positions
             geometry_new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
@@ -757,7 +762,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
-                raise Exception("Positions are NaN after NCMC insert with %d steps" % switching_nsteps)
+                raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
 
             # Compute change in eliminated potential contribution.
             switch_logp = - (potential_insert - potential_delete)
@@ -1045,7 +1050,7 @@ class MultiTargetDesign(object):
 
     @property
     def state_keys(self):
-        return log_target_probabilities.keys()
+        return self.log_target_probabilities.keys()
 
     def update_samplers(self):
         """
@@ -1155,7 +1160,7 @@ class ProtonationStateSampler(object):
 
     @property
     def state_keys(self):
-        return log_target_probabilities.keys()
+        return self.log_target_probabilities.keys()
 
     def update_samplers(self):
         """
