@@ -16,6 +16,8 @@ branches:
     - master
 
 install:
+  #add random sleep from 1-10s to try to prevent overloading the anaconda servers
+  - sleep $[ ( $RANDOM % 10 )  + 1 ]s
   - source devtools/travis-ci/install.sh
   - export PYTHONUNBUFFERED=true
   - export CC=gcc
