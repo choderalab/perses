@@ -31,7 +31,7 @@ script:
   # Install test dependencies in test environment.
   - conda install --yes --quiet pip nose nose-timer
   #- pip install --upgrade pip
-  - pip install $OPENEYE_CHANNEL openeye-toolkits
+  - pip install $OPENEYE_CHANNEL OpenEye-toolkits
   # Fix openmm and parmed double dependencies
   #- conda remove --yes parmed parmed-dev && conda install --yes parmed-dev
   #- conda remove --yes openmm openmm-dev && conda install --yes openmm-dev
@@ -75,7 +75,7 @@ env:
     - PACKAGENAME="perses"
     # Location of decrypted OpenEye license file
     - OE_LICENSE="$HOME/oe_license.txt"
-    - OPENEYE_CHANNEL="-i https://pypi.anaconda.org/openeye/channel/main/simple"
+    - OPENEYE_CHANNEL="-i https://pypi.anaconda.org/OpenEye/simple"
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
     - secure: "RRvLDPu9mPoNaRWIseaJdgShOXI+PaHPWKAIJvW7VYWcAS6iEN7W4Fj4zD5hkocQxc3ou97EtkgID+ApH10bSGKxCykyU0urSY9jsSOJX2m0AE19X0dVr6ySIQkwCWE6kUMVlvQYQo80fM2EMElD+btr4G9XBAhArAO7HvZHkoQ="
 
