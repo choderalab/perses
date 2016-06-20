@@ -7,7 +7,7 @@ import simtk.unit as units
 import logging
 import numpy as np
 import copy
-from perses.rjmc import coordinate_numba
+#from perses.rjmc import coordinate_numba
 import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
@@ -1251,7 +1251,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         """
         A wrapper of the coordinate_numba version, promotes everything to np.float64
         """
-        from coordinate_numba import torsion_scan
+        from perses.rjmc.coordinate_numba import torsion_scan
         bond_position = bond_position.astype(np.float64)
         angle_position = angle_position.astype(np.float64)
         torsion_position = torsion_position.astype(np.float64)
