@@ -7,7 +7,7 @@ import simtk.unit as units
 import logging
 import numpy as np
 import copy
-from perses.rjmc import coordinate_numba
+#from perses.rjmc import coordinate_numba
 import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
@@ -633,6 +633,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Cartesian to internal function
         """
+        from perses.rjmc import coordinate_numba
         #ensure we have the correct units, then remove them
         atom_position = atom_position.value_in_unit(units.nanometers).astype(np.float64)
         bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
@@ -648,6 +649,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Calculate the cartesian coordinates given the internal, as well as abs(detJ)
         """
+        from perses.rjmc import coordinate_numba
         r = r.value_in_unit(units.nanometers)
         theta = theta.value_in_unit(units.radians)
         phi = phi.value_in_unit(units.radians)
@@ -738,6 +740,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phis : np.ndarray, in radians
             The torsions angles at which a potential will be calculated
         """
+        from perses.rjmc import coordinate_numba
         torsion_scan_init = time.time()
         positions_copy = copy.deepcopy(positions)
         positions_copy = positions_copy.in_units_of(units.nanometers)
@@ -1251,7 +1254,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         """
         A wrapper of the coordinate_numba version, promotes everything to np.float64
         """
-        from coordinate_numba import torsion_scan
+        from perses.rjmc.coordinate_numba import torsion_scan
         bond_position = bond_position.astype(np.float64)
         angle_position = angle_position.astype(np.float64)
         torsion_position = torsion_position.astype(np.float64)
@@ -1374,6 +1377,7 @@ class BootstrapParticleFilter(object):
         """
         Calculate the cartesian coordinates given the internal, as well as abs(detJ)
         """
+        from perses.rjmc import coordinate_numba
         r = r.value_in_unit(units.nanometers)
         theta = theta.value_in_unit(units.radians)
         phi = phi.value_in_unit(units.radians)
