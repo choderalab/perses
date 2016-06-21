@@ -633,6 +633,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Cartesian to internal function
         """
+        from perses.rjmc import coordinate_numba
         #ensure we have the correct units, then remove them
         atom_position = atom_position.value_in_unit(units.nanometers).astype(np.float64)
         bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
@@ -648,6 +649,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         Calculate the cartesian coordinates given the internal, as well as abs(detJ)
         """
+        from perses.rjmc import coordinate_numba
         r = r.value_in_unit(units.nanometers)
         theta = theta.value_in_unit(units.radians)
         phi = phi.value_in_unit(units.radians)
@@ -738,6 +740,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phis : np.ndarray, in radians
             The torsions angles at which a potential will be calculated
         """
+        from perses.rjmc import coordinate_numba
         torsion_scan_init = time.time()
         positions_copy = copy.deepcopy(positions)
         positions_copy = positions_copy.in_units_of(units.nanometers)
@@ -1374,6 +1377,7 @@ class BootstrapParticleFilter(object):
         """
         Calculate the cartesian coordinates given the internal, as well as abs(detJ)
         """
+        from perses.rjmc import coordinate_numba
         r = r.value_in_unit(units.nanometers)
         theta = theta.value_in_unit(units.radians)
         phi = phi.value_in_unit(units.radians)
