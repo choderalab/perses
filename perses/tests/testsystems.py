@@ -1322,6 +1322,11 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                 natoms = sum( 1 for atom in topologies[environment].atoms() )
                 print("System '%s' has %d atoms" % (environment, natoms))
 
+                # DEBUG: Write initial PDB file
+                outfile = open(environment + '.initial.pdb', 'w')
+                PDBFile.writeFile(topologies[environment], positions[environment], file=outfile)
+                outfile.close()
+
         # Set up the proposal engines.
         print('Initializing proposal engines...')
         residue_name = 'UNL' # TODO: Figure out residue name automatically
@@ -1349,7 +1354,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                 if solvent == 'explicit':
                     thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
                 else:
-                    thermodynamic_states[environment]   = ThermodynamicState(system=systems[environment], temperature=temperature)
+                    thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature)
 
         # Create SAMS samplers
         print('Creating SAMS samplers...')
