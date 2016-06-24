@@ -179,9 +179,9 @@ class NCMCEngine(object):
                 integrator.setConstraintTolerance(self.constraint_tolerance)
             # Create a context on the specified platform.
             if self.platform is not None:
-                context = openmm.Context(alchemical_system, integrator, self.platform)
+                context = openmm.Context(system, integrator, self.platform)
             else:
-                context = openmm.Context(alchemical_system, integrator)
+                context = openmm.Context(system, integrator)
             context.setPositions(positions)
             context.applyConstraints(integrator.getConstraintTolerance())
             # Compute potential energy.
@@ -530,20 +530,6 @@ class NCMCHybridEngine(NCMCEngine):
         if direction not in ['insert', 'delete']:
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
-        print("positions:")
-        print("initial")
-        print(initial_positions.shape)
-        print(unmodified_old_system.getNumParticles())
-        print("initial alchemical")
-        print(alchemical_positions.shape)
-        print(alchemical_system.getNumParticles())
-        print("final alchemical")
-        print(final_hybrid_positions.shape)
-        print(alchemical_system.getNumParticles())
-        print("final")
-        print(final_positions.shape)
-        print(unmodified_new_system.getNumParticles())
-    
         def computePotentialEnergy(system, positions):
             """
             Compute potential energy of the specified system object at the specified positions.

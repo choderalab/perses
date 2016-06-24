@@ -62,10 +62,6 @@ class HybridTopologyFactory(object):
         self.unique_atoms1 = [atom for atom in range(topology1._numAtoms) if atom not in atom_mapping_1to2.keys()]
         self.unique_atoms2 = [atom for atom in range(topology2._numAtoms) if atom not in atom_mapping_1to2.values()]
 
-        print("Common atoms: %s " % len(self.atom_mapping_2to1.keys()))
-        print("Unique to sys1: %s " % len(self.unique_atoms1))
-        print("Unique to sys2: %s " % len(self.unique_atoms2))
-
         for atom in self.topology1.atoms():
             atom.which_top = 1
         for atom in self.topology2.atoms():
@@ -191,8 +187,6 @@ class HybridTopologyFactory(object):
                 atom.which_top = 'new'
                 system_atoms[atom.index] = atom
 
-#        print("Number of atoms in new system: %s" % len(system_atoms.keys()))
-
         # Handle constraints.
         if self.verbose: print("Adding constraints from system2...")
         for index in range(system2.getNumConstraints()):
@@ -214,9 +208,6 @@ class HybridTopologyFactory(object):
             #positions[index,0] = pos_atom2[0]
             #positions[index,1] = pos_atom2[1]
             #positions[index,2] = pos_atom2[2]
-
-#        print("Shape of positions:")
-#        print(positions.shape)
 
         # Build a list of Force objects in system.
         forces = [ system.getForce(index) for index in range(system.getNumForces()) ]
