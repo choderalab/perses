@@ -247,7 +247,7 @@ def enumerate_conformations(name, smiles=None, pdbname=None):
 if __name__ == '__main__':
     smiles = 'C1=CN=CN1'
     name = 'imidazole'
-    output_dir = name
+    output_dir = '.'
 
     # Create output directory
     if not os.path.isdir(output_dir):

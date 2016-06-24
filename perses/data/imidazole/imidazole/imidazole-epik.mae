@@ -1,0 +1,169 @@
+{ 
+ s_m_m2io_version
+ :::
+ 2.0.0 
+} 
+
+f_m_ct { 
+ s_m_title
+ s_m_source_file
+ i_m_source_file_index
+ r_lp_tautomer_probability
+ r_epik_Ionization_Penalty
+ r_epik_Ionization_Penalty_Charging
+ r_epik_Ionization_Penalty_Neutral
+ r_epik_State_Penalty
+ i_epik_Tot_Q
+ i_m_ct_format
+ :::
+ imidazole 
+  /Users/choderaj/github/choderalab/perses/perses.choderalab/perses/data/imidazole/imidazole/imidazole-input.mol2 
+  1
+  0.499999999999999
+    0.1010 
+    0.1010 
+    0.0000 
+    0.0910 
+  0
+  2
+ m_depend[5] { 
+  # First column is dependency index #
+  i_m_depend_dependency
+  s_m_depend_property
+  :::
+  1 10 r_epik_Ionization_Penalty 
+  2 10 r_epik_Ionization_Penalty_Charging 
+  3 10 r_epik_Ionization_Penalty_Neutral 
+  4 10 r_epik_State_Penalty 
+  5 10 i_epik_Tot_Q 
+  :::
+ } 
+ m_atom[9] { 
+  # First column is atom index #
+  i_m_mmod_type
+  r_m_x_coord
+  r_m_y_coord
+  r_m_z_coord
+  i_m_residue_number
+  i_m_color
+  r_m_charge1
+  s_m_pdb_residue_name
+  s_m_pdb_atom_name
+  i_m_atomic_number
+  s_m_atom_name
+  r_epik_H2O_pKa
+  r_epik_H2O_pKa_uncertainty
+  :::
+  1 2 0.654900 -0.778400 -0.364000 1 2 -0.26210 "IMI " " C1 " 6 C1  <> <>
+  2 2 1.949900 -0.774000 -0.825900 1 2 0.29080 "IMI " " C2 " 6 C2  <> <>
+  3 25 2.353700 -2.036600 -1.181300 1 43 -0.66510 "IMI " " N1 " 7 N1    6.669    1.474 
+  4 2 1.313300 -2.802000 -0.937100 1 2 0.38080 "IMI " " C3 " 6 C3  <> <>
+  5 25 0.260300 -2.084400 -0.441600 1 43 -0.32080 "IMI " " N2 " 7 N2  <> <>
+  6 41 0.000300 -0.000000 0.000500 1 21 0.17690 "IMI " " H1 " 1 H1  <> <>
+  7 41 2.611700 0.074400 -0.921700 1 21 0.04140 "IMI " " H2 " 1 H2  <> <>
+  8 41 1.258300 -3.869500 -1.094800 1 21 0.05970 "IMI " " H3 " 1 H3  <> <>
+  9 43 -0.754035 -2.372047 -0.127940 1 21 0.29840 "IMI " " H4 " 1 H4   13.800    1.474 
+  :::
+ } 
+ m_bond[9] { 
+  # First column is bond index #
+  i_m_from
+  i_m_to
+  i_m_order
+  :::
+  1 1 5 1
+  2 1 2 2
+  3 1 6 1
+  4 2 3 1
+  5 2 7 1
+  6 3 4 2
+  7 4 5 1
+  8 4 8 1
+  9 5 9 1
+  :::
+ } 
+} 
+
+f_m_ct { 
+ s_m_title
+ s_m_source_file
+ i_m_source_file_index
+ r_lp_tautomer_probability
+ r_epik_Ionization_Penalty
+ r_epik_Ionization_Penalty_Charging
+ r_epik_Ionization_Penalty_Neutral
+ r_epik_State_Penalty
+ i_epik_Tot_Q
+ i_m_ct_format
+ :::
+ imidazole 
+  /Users/choderaj/github/choderalab/perses/perses.choderalab/perses/data/imidazole/imidazole/imidazole-input.mol2 
+  1
+  1
+    1.0983 
+    0.0000 
+    1.0983 
+    1.1552 
+  1
+  2
+ m_depend[5] { 
+  # First column is dependency index #
+  i_m_depend_dependency
+  s_m_depend_property
+  :::
+  1 10 r_epik_Ionization_Penalty 
+  2 10 r_epik_Ionization_Penalty_Charging 
+  3 10 r_epik_Ionization_Penalty_Neutral 
+  4 10 r_epik_State_Penalty 
+  5 10 i_epik_Tot_Q 
+  :::
+ } 
+ m_atom[10] { 
+  # First column is atom index #
+  i_m_mmod_type
+  r_m_x_coord
+  r_m_y_coord
+  r_m_z_coord
+  i_m_residue_number
+  i_m_color
+  r_m_charge1
+  s_m_pdb_residue_name
+  s_m_pdb_atom_name
+  i_m_atomic_number
+  i_m_formal_charge
+  s_m_atom_name
+  r_epik_H2O_pKa
+  r_epik_H2O_pKa_uncertainty
+  :::
+  1 2 0.654900 -0.778400 -0.364000 1 2 -0.26210 "IMI " " C1 " 6 0 "C1"  <> <>
+  2 2 1.949900 -0.774000 -0.825900 1 2 0.29080 "IMI " " C2 " 6 0 "C2"  <> <>
+  3 31 2.353700 -2.036600 -1.181300 1 43 -0.66510 "IMI " " N1 " 7 1 "N1"  <> <>
+  4 2 1.313300 -2.802000 -0.937100 1 2 0.38080 "IMI " " C3 " 6 0 "C3"  <> <>
+  5 25 0.260300 -2.084400 -0.441600 1 43 -0.32080 "IMI " " N2 " 7 0 "N2"  <> <>
+  6 41 0.000300 -0.000000 0.000500 1 21 0.17690 "IMI " " H1 " 1 0 "H1"  <> <>
+  7 41 2.611700 0.074400 -0.921700 1 21 0.04140 "IMI " " H2 " 1 0 "H2"  <> <>
+  8 41 1.258300 -3.869500 -1.094800 1 21 0.05970 "IMI " " H3 " 1 0 "H3"  <> <>
+  9 43 -0.754035 -2.372047 -0.127940 1 21 0.29840 "IMI " " H4 " 1 0 "H4"    6.669    2.220 
+  10 44 3.369051 -2.199816 -1.571713 1 21 0.00000 "IMI " "    " 1 0 ""    6.669    2.220 
+  :::
+ } 
+ m_bond[10] { 
+  # First column is bond index #
+  i_m_from
+  i_m_to
+  i_m_order
+  :::
+  1 1 5 1
+  2 1 2 2
+  3 1 6 1
+  4 2 3 1
+  5 2 7 1
+  6 3 4 2
+  7 3 10 1
+  8 4 5 1
+  9 4 8 1
+  10 5 9 1
+  :::
+ } 
+} 
+
