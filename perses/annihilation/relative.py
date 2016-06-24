@@ -565,12 +565,12 @@ class HybridTopologyFactory(object):
                 method = force.getNonbondedMethod()
                 if method in [mm.NonbondedForce.NoCutoff]:
                     # soft-core Lennard-Jones
-                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x1 = (sigma/reff_sterics)^6;"
+                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6; sigma=0.5*(sigma1*sigma2); epsilon=sqrt(epsilon1*epsilon2);"
                     # soft-core Coulomb
                     electrostatics_energy_expression += "U_electrostatics = ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
                 elif method in [mm.NonbondedForce.CutoffPeriodic, mm.NonbondedForce.CutoffNonPeriodic]:
                     # soft-core Lennard-Jones
-                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6; sigma=0.5*(sigma1*sigma2); epsilon=sqrt(epsilon1*epsilon2);"
                     # reaction-field electrostatics
                     epsilon_solvent = force.getReactionFieldDielectric()
                     r_cutoff = force.getCutoffDistance()
@@ -581,7 +581,7 @@ class HybridTopologyFactory(object):
                     electrostatics_energy_expression += "c_rf = %f;" % (c_rf / c_rf.in_unit_system(unit.md_unit_system).unit)
                 elif method in [mm.NonbondedForce.PME, mm.NonbondedForce.Ewald]:
                     # soft-core Lennard-Jones
-                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6; sigma=0.5*(sigma1*sigma2); epsilon=sqrt(epsilon1*epsilon2);"
                     # Ewald direct-space electrostatics
                     [alpha_ewald, nx, ny, nz] = force.getPMEParameters()
                     if alpha_ewald == 0.0:

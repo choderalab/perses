@@ -886,10 +886,10 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
 
             # Compute change in eliminated potential contribution.
-            switch_logp = - (potential_insert - potential_delete)
+            switch_logp = - potential_insert
             if self.verbose:
-                print('potential before geometry  : %12.3f kT' % potential_delete)
-                print('potential after geometry   : %12.3f kT' % potential_insert)
+                #print('potential before geometry  : %12.3f kT' % potential_delete)
+                #print('potential after geometry   : %12.3f kT' % potential_insert)
                 print('---------------------------------------------------------')
                 print('switch_logp                : %12.3f' % switch_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)

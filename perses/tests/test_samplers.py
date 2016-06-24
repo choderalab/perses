@@ -141,6 +141,7 @@ def test_hybrid_scheme():
         for environment in testsystem.environments:
             chemical_state_key = testsystem.proposal_engines[environment].compute_state_key(testsystem.topologies[environment])
             testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], scheme='geometry-ncmc', options={'nsteps':5})
+#            testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], options={'nsteps':5})
             exen_sampler = testsystem.exen_samplers[environment]
             f = partial(exen_sampler.run, niterations)
             f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
