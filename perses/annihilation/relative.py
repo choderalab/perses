@@ -565,12 +565,12 @@ class HybridTopologyFactory(object):
                 method = force.getNonbondedMethod()
                 if method in [mm.NonbondedForce.NoCutoff]:
                     # soft-core Lennard-Jones
-                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6; sigma=0.5*(sigma1*sigma2); epsilon=sqrt(epsilon1*epsilon2);"
+                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
                     # soft-core Coulomb
                     electrostatics_energy_expression += "U_electrostatics = ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
                 elif method in [mm.NonbondedForce.CutoffPeriodic, mm.NonbondedForce.CutoffNonPeriodic]:
                     # soft-core Lennard-Jones
-                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6; sigma=0.5*(sigma1*sigma2); epsilon=sqrt(epsilon1*epsilon2);"
+                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
                     # reaction-field electrostatics
                     epsilon_solvent = force.getReactionFieldDielectric()
                     r_cutoff = force.getCutoffDistance()
@@ -581,7 +581,7 @@ class HybridTopologyFactory(object):
                     electrostatics_energy_expression += "c_rf = %f;" % (c_rf / c_rf.in_unit_system(unit.md_unit_system).unit)
                 elif method in [mm.NonbondedForce.PME, mm.NonbondedForce.Ewald]:
                     # soft-core Lennard-Jones
-                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6; sigma=0.5*(sigma1*sigma2); epsilon=sqrt(epsilon1*epsilon2);"
+                    sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
                     # Ewald direct-space electrostatics
                     [alpha_ewald, nx, ny, nz] = force.getPMEParameters()
                     if alpha_ewald == 0.0:
@@ -599,9 +599,10 @@ class HybridTopologyFactory(object):
                 sterics_energy_expression += "epsilon = (1-lambda)*epsilonA + lambda*epsilonB;" #interpolation
                 sterics_energy_expression += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
                 sterics_energy_expression += "softcore_alpha = %f;" % softcore_alpha
+                sterics_energy_expression += "sigma = (1-lambda)*sigmaA + lambda*sigmaB;"
                 # TODO: We may have to ensure that softcore_degree is 1 if we are close to an alchemically-eliminated endpoint.
                 sterics_energy_expression += "lambda_alpha = lambda*(1-lambda);"
-                electrostatics_energy_expression += "chargeProd = (1-lambda)*chargeProdA + lambda*chargeProdB;" #interpolation
+                electrostatics_energy_expression += "chargeprod = (1-lambda)*chargeprodA + lambda*chargeprodB;" #interpolation
                 electrostatics_energy_expression += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
                 electrostatics_energy_expression += "softcore_beta = %f;" % (softcore_beta / softcore_beta.in_unit_system(unit.md_unit_system).unit)
                 electrostatics_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
@@ -617,6 +618,13 @@ class HybridTopologyFactory(object):
                 electrostatics_mixing_rules = ""
                 electrostatics_mixing_rules += "chargeprodA = chargeA1*chargeA2;" # mixing rule for charges
                 electrostatics_mixing_rules += "chargeprodB = chargeB1*chargeB2;" # mixing rule for charges
+
+    ### julie debugging
+                print(sterics_mixing_rules)
+                print(electrostatics_mixing_rules)
+                print(sterics_energy_expression)
+                print(electrostatics_energy_expression)
+    ### end 
 
                 # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
                 electrostatics_custom_nonbonded_force = mm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
