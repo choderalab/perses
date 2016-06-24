@@ -619,13 +619,6 @@ class HybridTopologyFactory(object):
                 electrostatics_mixing_rules += "chargeprodA = chargeA1*chargeA2;" # mixing rule for charges
                 electrostatics_mixing_rules += "chargeprodB = chargeB1*chargeB2;" # mixing rule for charges
 
-    ### julie debugging
-                print(sterics_mixing_rules)
-                print(electrostatics_mixing_rules)
-                print(sterics_energy_expression)
-                print(electrostatics_energy_expression)
-    ### end 
-
                 # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
                 electrostatics_custom_nonbonded_force = mm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
                 electrostatics_custom_nonbonded_force.addGlobalParameter("lambda", 0.0);
