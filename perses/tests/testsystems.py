@@ -1324,11 +1324,12 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         # Set up the proposal engines.
         print('Initializing proposal engines...')
+        residue_name = 'UNL' # TODO: Figure out residue name automatically
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
         proposal_metadata = { }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL')
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=residue_name)
 
         # Generate systems
         print('Building systems...')
