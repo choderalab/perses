@@ -505,7 +505,7 @@ class NCMCHybridEngine(NCMCEngine):
                                                platform, write_pdb_interval,
                                                integrator_type)
 
-    def _computeAlchemicalCorrection(self, unmodified_old_system, unmodified_new_system, alchemical_system, initial_positions, final_positions, direction='insert'):
+    def _computeAlchemicalCorrection(self, unmodified_old_system, unmodified_new_system, alchemical_system, initial_positions, alchemical_positions, final_hybrid_positions, final_positions, direction='insert'):
         """
         Compute log probability for correction from transforming real system to AND from alchemical system.
 
@@ -527,10 +527,71 @@ class NCMCHybridEngine(NCMCEngine):
             The log acceptance probability of the switch
         """
 
-        initial_logP_correction = super(NCMCHybridEngine, self)._computeAlchemicalCorrection(unmodified_old_system, alchemical_system, initial_positions, final_positions, direction='delete')
-        final_logP_correction = super(NCMCHybridEngine, self)._computeAlchemicalCorrection(unmodified_new_system, alchemical_system, initial_positions, final_positions, direction='insert')
+        if direction not in ['insert', 'delete']:
+            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
+
+        print("positions:")
+        print("initial")
+        print(initial_positions.shape)
+        print(unmodified_old_system.getNumParticles())
+        print("initial alchemical")
+        print(alchemical_positions.shape)
+        print(alchemical_system.getNumParticles())
+        print("final alchemical")
+        print(final_hybrid_positions.shape)
+        print(alchemical_system.getNumParticles())
+        print("final")
+        print(final_positions.shape)
+        print(unmodified_new_system.getNumParticles())
+    
+        def computePotentialEnergy(system, positions):
+            """
+            Compute potential energy of the specified system object at the specified positions.
+
+            Constraints are applied before the energy is computed.
+
+            Parameters
+            ----------
+            system : simtk.openmm.System
+                The System object for which the potential energy is to be computed.
+            positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+                Positions of the atoms for which energy is to be computed.
+
+            Returns
+            -------
+            potential : simtk.unit.Quantity with units of energy
+                The computed potential energy
+            
+            """
+            # Create dummy integrator.
+            integrator = openmm.VerletIntegrator(self.timestep)
+            # Set the constraint tolerance if specified.
+            if self.constraint_tolerance is not None:
+                integrator.setConstraintTolerance(self.constraint_tolerance)
+            # Create a context on the specified platform.
+            if self.platform is not None:
+                context = openmm.Context(alchemical_system, integrator, self.platform)
+            else:
+                context = openmm.Context(alchemical_system, integrator)
+            context.setPositions(positions)
+            context.applyConstraints(integrator.getConstraintTolerance())
+            # Compute potential energy.
+            potential = context.getState(getEnergy=True).getPotentialEnergy()
+            # Clean up context and integrator.
+            del context, integrator
+            # Return potential energy.
+            return -self.beta * potential
+
+        #initial_logP_correction = super(NCMCHybridEngine, self)._computeAlchemicalCorrection(unmodified_old_system, alchemical_system, initial_positions, final_positions, direction='delete')
+        #final_logP_correction = super(NCMCHybridEngine, self)._computeAlchemicalCorrection(unmodified_new_system, alchemical_system, initial_positions, final_positions, direction='insert')
+
+        # Compute correction from transforming real system to/from alchemical system
+        initial_logP_correction = computePotentialEnergy(alchemical_system, alchemical_positions) - computePotentialEnergy(unmodified_old_system, initial_positions)
+        final_logP_correction = computePotentialEnergy(unmodified_new_system, final_positions) - computePotentialEnergy(alchemical_system, final_hybrid_positions)
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
         return logP_alchemical_correction
+
+
 
     def make_alchemical_system(self, topology_proposal, old_positions, new_positions, direction='insert'):
         """
@@ -570,8 +631,14 @@ class NCMCHybridEngine(NCMCEngine):
         alchemical_factory = HybridTopologyFactory(unmodified_old_system, unmodified_new_system, old_topology, new_topology, old_positions, new_positions, atom_map)
 
         # Return the alchemically-modified system in fully-interacting form.
-        alchemical_system, _, alchemical_positions = alchemical_factory.createPerturbedSystem()
-        return [unmodified_old_system, unmodified_new_system, alchemical_system, alchemical_positions]
+        alchemical_system, _, alchemical_positions, atom_map = alchemical_factory.createPerturbedSystem()
+        return [unmodified_old_system, unmodified_new_system, alchemical_system, alchemical_positions, atom_map]
+
+    def _convert_hybrid_positions_to_final(self, positions, atom_map):
+        final_positions = unit.Quantity(np.zeros([len(atom_map.keys()),3]), unit=unit.nanometers)
+        for finalatom, hybridatom in atom_map.items():
+            final_positions[finalatom] = positions[hybridatom]
+        return final_positions
 
     def integrate(self, topology_proposal, initial_positions, proposed_positions, direction='insert', platform=None):
         """
@@ -617,16 +684,14 @@ class NCMCHybridEngine(NCMCEngine):
 
 ########################################################################
         # Create alchemical system.
-        [unmodified_old_system, unmodified_new_system, alchemical_system, alchemical_positions] = self.make_alchemical_system(topology_proposal, initial_positions, proposed_positions, direction=direction)
+        [unmodified_old_system, unmodified_new_system, alchemical_system, alchemical_positions, final_to_hybrid_atom_map] = self.make_alchemical_system(topology_proposal, initial_positions, proposed_positions, direction=direction)
 ########################################################################
 
         from perses.tests.utils import compute_potential
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
-        print(available_parameters)
         functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
-        print(functions)
 
         # Create an NCMC velocity Verlet integrator.
         if self.integrator_type == 'VV':
@@ -734,7 +799,10 @@ class NCMCHybridEngine(NCMCEngine):
         #print('')
 
         # Store final positions and log acceptance probability.
-        final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+        final_hybrid_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+
+        final_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, final_to_hybrid_atom_map)
+
         logP_NCMC = integrator.getLogAcceptanceProbability(context)
         # DEBUG
         #logging.debug("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
@@ -745,7 +813,7 @@ class NCMCHybridEngine(NCMCEngine):
 ###### This line necessitates copy & paste instead of inheritance ######
 ########################################################################
         # Compute contribution from transforming real system to/from alchemical system.
-        logP_alchemical_correction = self._computeAlchemicalCorrection(unmodified_old_system, unmodified_new_system, alchemical_system, initial_positions, final_positions, direction=direction)
+        logP_alchemical_correction = self._computeAlchemicalCorrection(unmodified_old_system, unmodified_new_system, alchemical_system, initial_positions, alchemical_positions, final_hybrid_positions, final_positions, direction=direction)
 ########################################################################
 
         # Compute total logP
