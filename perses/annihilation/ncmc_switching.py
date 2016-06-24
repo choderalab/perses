@@ -553,7 +553,7 @@ class NCMCHybridEngine(NCMCEngine):
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
         # "direction" is irrelevant and ignored
 
-        atom_map = topology_proposal.new_to_old_atom_map
+        atom_map = topology_proposal.old_to_new_atom_map
 
         #take the unique atoms as those not in the {new_atom : old_atom} atom map
         unmodified_old_system = topology_proposal.old_system
@@ -567,10 +567,10 @@ class NCMCHybridEngine(NCMCEngine):
 
         # Create an alchemical factory.
         from perses.annihilation.relative import HybridTopologyFactory
-        alchemical_factory, _, alchemical_positions = HybridTopologyFactory(unmodified_old_system, unmodified_new_system, old_topology, new_topology, old_positions, new_positions, atom_map)
+        alchemical_factory = HybridTopologyFactory(unmodified_old_system, unmodified_new_system, old_topology, new_topology, old_positions, new_positions, atom_map)
 
         # Return the alchemically-modified system in fully-interacting form.
-        alchemical_system = alchemical_factory.createPerturbedSystem()
+        alchemical_system, _, alchemical_positions = alchemical_factory.createPerturbedSystem()
         return [unmodified_old_system, unmodified_new_system, alchemical_system, alchemical_positions]
 
     def integrate(self, topology_proposal, initial_positions, proposed_positions, direction='insert', platform=None):
