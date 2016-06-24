@@ -865,16 +865,14 @@ class ExpandedEnsembleSampler(object):
 
             if self.geometry_pdbfile is not None:
                 print("Writing proposed geometry...")
-                #self.geometry_pdbfile.write('MODEL     %4d\n' % (self.iteration+1)) # PyMOL doesn't render connectivity correctly this way
                 from simtk.openmm.app import PDBFile
                 PDBFile.writeFile(topology_proposal.new_topology, geometry_new_positions, file=self.geometry_pdbfile)
-                #self.geometry_pdbfile.write('ENDMDL\n')
                 self.geometry_pdbfile.flush()
 
             if self.verbose: print("Performing NCMC switching")
             # Alchemically introduce new atoms.
             initial_time = time.time()
-            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, positions, geometry_new_positions) # , direction='insert') --> can I do this?
+            [ncmc_new_positions, ncmc_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, positions, geometry_new_positions) # , direction='insert') --> can I do this?
             if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
@@ -898,10 +896,10 @@ class ExpandedEnsembleSampler(object):
                 print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
 
             # Compute total log acceptance probability, including all components.
-            logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
+            logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_logp + new_log_weight - old_log_weight
             if self.verbose:
-                print("logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
-                    % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
+                print("logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
+                    % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_logp, old_log_weight, new_log_weight))
 
             # Accept or reject.
             if np.isnan(logp_accept):
