@@ -620,10 +620,10 @@ class ExpandedEnsembleSampler(object):
             self._switching_nsteps = options['nsteps']
         else:
             self._switching_nsteps = 0
-        if scheme='ncmc-geometry-ncmc':
+        if scheme=='ncmc-geometry-ncmc':
             from perses.annihilation.ncmc_switching import NCMCEngine
             self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
-        elif scheme='geometry-ncmc':
+        elif scheme=='geometry-ncmc':
             from perses.annihilation.ncmc_switching import NCMCHybridEngine
             self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         else:
