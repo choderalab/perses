@@ -270,10 +270,10 @@ class HybridTopologyFactory(object):
                 # Create a CustomBondForce to handle interpolated bond parameters.
                 if self.verbose: print("Creating CustomBondForce...")
                 energy_expression  = '(K/2)*(r-length)^2;'
-                energy_expression += 'K = (1-lambda)*K1 + lambda*K2;' # linearly interpolate spring constant
-                energy_expression += 'length = (1-lambda)*length1 + lambda*length2;' # linearly interpolate bond length
+                energy_expression += 'K = (1-lambda_bonds)*K1 + lambda_bonds*K2;' # linearly interpolate spring constant
+                energy_expression += 'length = (1-lambda_bonds)*length1 + lambda_bonds*length2;' # linearly interpolate bond length
                 custom_force = mm.CustomBondForce(energy_expression)
-                custom_force.addGlobalParameter('lambda', 0.0)
+                custom_force.addGlobalParameter('lambda_bonds', 0.0)
                 custom_force.addPerBondParameter('length1') # molecule1 bond length
                 custom_force.addPerBondParameter('K1') # molecule1 spring constant
                 custom_force.addPerBondParameter('length2') # molecule2 bond length
@@ -341,10 +341,10 @@ class HybridTopologyFactory(object):
                 # Create a CustomAngleForce to handle interpolated angle parameters.
                 if self.verbose: print("Creating CustomAngleForce...")
                 energy_expression  = '(K/2)*(theta-theta0)^2;'
-                energy_expression += 'K = (1-lambda)*K_1 + lambda*K_2;' # linearly interpolate spring constant
-                energy_expression += 'theta0 = (1-lambda)*theta0_1 + lambda*theta0_2;' # linearly interpolate equilibrium angle
+                energy_expression += 'K = (1-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
+                energy_expression += 'theta0 = (1-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
                 custom_force = mm.CustomAngleForce(energy_expression)
-                custom_force.addGlobalParameter('lambda', 0.0)
+                custom_force.addGlobalParameter('lambda_angles', 0.0)
                 custom_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
                 custom_force.addPerAngleParameter('K_1') # molecule1 spring constant
                 custom_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
@@ -461,11 +461,11 @@ class HybridTopologyFactory(object):
 
                 # Create a CustomTorsionForce to handle interpolated torsion parameters.
                 if self.verbose: print("Creating CustomTorsionForce...")
-                energy_expression  = '(1-lambda)*U1 + lambda*U2;'
+                energy_expression  = '(1-lambda_torsions)*U1 + lambda_torsions*U2;'
                 energy_expression += 'U1 = K1*(1+cos(periodicity1*theta-phase1));'
                 energy_expression += 'U2 = K2*(1+cos(periodicity2*theta-phase2));'
                 custom_force = mm.CustomTorsionForce(energy_expression)
-                custom_force.addGlobalParameter('lambda', 0.0)
+                custom_force.addGlobalParameter('lambda_torsions', 0.0)
                 custom_force.addPerTorsionParameter('periodicity1') # molecule1 periodicity
                 custom_force.addPerTorsionParameter('phase1') # molecule1 phase
                 custom_force.addPerTorsionParameter('K1') # molecule1 spring constant
@@ -596,18 +596,18 @@ class HybridTopologyFactory(object):
                     raise Exception("Nonbonded method %s not supported yet." % str(method))
 
                 # Add additional definitions common to all methods.
-                sterics_energy_expression += "epsilon = (1-lambda)*epsilonA + lambda*epsilonB;" #interpolation
+                sterics_energy_expression += "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
                 sterics_energy_expression += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
                 sterics_energy_expression += "softcore_alpha = %f;" % softcore_alpha
-                sterics_energy_expression += "sigma = (1-lambda)*sigmaA + lambda*sigmaB;"
+                sterics_energy_expression += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
                 # TODO: We may have to ensure that softcore_degree is 1 if we are close to an alchemically-eliminated endpoint.
-                sterics_energy_expression += "lambda_alpha = lambda*(1-lambda);"
-                electrostatics_energy_expression += "chargeprod = (1-lambda)*chargeprodA + lambda*chargeprodB;" #interpolation
+                sterics_energy_expression += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+                electrostatics_energy_expression += "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
                 electrostatics_energy_expression += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
                 electrostatics_energy_expression += "softcore_beta = %f;" % (softcore_beta / softcore_beta.in_unit_system(unit.md_unit_system).unit)
                 electrostatics_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
                 # TODO: We may have to ensure that softcore_degree is 1 if we are close to an alchemically-eliminated endpoint.
-                electrostatics_energy_expression += "lambda_beta = lambda*(1-lambda);"
+                electrostatics_energy_expression += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
 
                 # Define mixing rules.
                 sterics_mixing_rules = ""
@@ -621,11 +621,11 @@ class HybridTopologyFactory(object):
 
                 # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
                 electrostatics_custom_nonbonded_force = mm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
-                electrostatics_custom_nonbonded_force.addGlobalParameter("lambda", 0.0);
+                electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0);
                 electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
                 electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
                 sterics_custom_nonbonded_force = mm.CustomNonbondedForce("U_sterics;" + sterics_energy_expression + sterics_mixing_rules)
-                sterics_custom_nonbonded_force.addGlobalParameter("lambda", 0.0);
+                sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0);
                 sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
                 sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
                 sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final

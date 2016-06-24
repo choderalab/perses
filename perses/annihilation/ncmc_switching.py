@@ -624,7 +624,9 @@ class NCMCHybridEngine(NCMCEngine):
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
+        print(available_parameters)
         functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
+        print(functions)
 
         # Create an NCMC velocity Verlet integrator.
         if self.integrator_type == 'VV':
