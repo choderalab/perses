@@ -620,8 +620,15 @@ class ExpandedEnsembleSampler(object):
             self._switching_nsteps = options['nsteps']
         else:
             self._switching_nsteps = 0
-        from perses.annihilation.ncmc_switching import NCMCEngine
-        self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
+        if scheme='ncmc-geometry-ncmc':
+            from perses.annihilation.ncmc_switching import NCMCEngine
+            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
+        elif scheme='geometry-ncmc':
+    ############ SUBCLASS ###########
+            from perses.annihilation.ncmc_switching import NCMCEngine
+            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
+        else:
+            raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
         self.geometry_engine = OmegaFFGeometryEngine(torsion_kappa=300.0, max_confs=10)
         self.naccepted = 0
@@ -853,17 +860,10 @@ class ExpandedEnsembleSampler(object):
             old_log_weight = self.get_log_weight(old_state_key)
             new_log_weight = self.get_log_weight(new_state_key)
 
-            if self.verbose: print("Performing NCMC annihilation")
-            # Alchemically eliminate atoms being removed.
-            [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
-            # Check that positions are not NaN
-            if np.any(np.isnan(ncmc_old_positions)):
-                raise Exception("Positions are NaN after NCMC delete with %d steps" % self._switching_nsteps)
-
             if self.verbose: print("Geometry engine proposal...")
             # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
             initial_time = time.time()
-            geometry_old_positions = ncmc_old_positions
+            geometry_old_positions = positions
             geometry_new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
             if self.verbose: print('proposal took %.3f s' % (time.time() - initial_time))
 
@@ -875,13 +875,7 @@ class ExpandedEnsembleSampler(object):
                 #self.geometry_pdbfile.write('ENDMDL\n')
                 self.geometry_pdbfile.flush()
 
-            if self.verbose: print("Geometry engine logP_reverse calculation...")
-            initial_time = time.time()
-            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
-            geometry_logp = geometry_logp_reverse - geometry_logp_propose
-            if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
-
-            if self.verbose: print("Performing NCMC insertion")
+            if self.verbose: print("Performing NCMC switching")
             # Alchemically introduce new atoms.
             initial_time = time.time()
             [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
@@ -889,6 +883,13 @@ class ExpandedEnsembleSampler(object):
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
+
+            if self.verbose: print("Geometry engine logP_reverse calculation...")
+            initial_time = time.time()
+############################### --> Pending Patrick's approval: correct use of positions
+            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, ncmc_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_logp = geometry_logp_reverse - geometry_logp_propose
+            if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
 
             # Compute change in eliminated potential contribution.
             switch_logp = - (potential_insert - potential_delete)
