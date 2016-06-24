@@ -881,7 +881,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("Geometry engine logP_reverse calculation...")
             initial_time = time.time()
 ############################### --> Pending Patrick's approval: correct use of positions
-            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, ncmc_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
             geometry_logp = geometry_logp_reverse - geometry_logp_propose
             if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
 
