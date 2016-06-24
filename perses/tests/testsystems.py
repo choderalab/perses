@@ -1774,7 +1774,7 @@ def test_testsystems():
     Test instantiation of all test systems.
     """
     testsystem_names = ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
-    niterations = 5 # number of iterations to run
+    niterations = 2 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
