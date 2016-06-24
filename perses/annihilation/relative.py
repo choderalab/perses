@@ -607,7 +607,7 @@ class HybridTopologyFactory(object):
                 electrostatics_energy_expression += "softcore_beta = %f;" % (softcore_beta / softcore_beta.in_unit_system(unit.md_unit_system).unit)
                 electrostatics_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
                 # TODO: We may have to ensure that softcore_degree is 1 if we are close to an alchemically-eliminated endpoint.
-                sterics_energy_expression += "lambda_beta = lambda*(1-lambda);"
+                electrostatics_energy_expression += "lambda_beta = lambda*(1-lambda);"
 
                 # Define mixing rules.
                 sterics_mixing_rules = ""
