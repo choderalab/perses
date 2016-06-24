@@ -570,9 +570,9 @@ class NCMCHybridEngine(NCMCEngine):
                 integrator.setConstraintTolerance(self.constraint_tolerance)
             # Create a context on the specified platform.
             if self.platform is not None:
-                context = openmm.Context(alchemical_system, integrator, self.platform)
+                context = openmm.Context(system, integrator, self.platform)
             else:
-                context = openmm.Context(alchemical_system, integrator)
+                context = openmm.Context(system, integrator)
             context.setPositions(positions)
             context.applyConstraints(integrator.getConstraintTolerance())
             # Compute potential energy.
