@@ -624,9 +624,8 @@ class ExpandedEnsembleSampler(object):
             from perses.annihilation.ncmc_switching import NCMCEngine
             self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         elif scheme='geometry-ncmc':
-    ############ SUBCLASS ###########
-            from perses.annihilation.ncmc_switching import NCMCEngine
-            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
+            from perses.annihilation.ncmc_switching import NCMCHybridEngine
+            self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
@@ -812,9 +811,6 @@ class ExpandedEnsembleSampler(object):
         elif self.scheme == 'geometry-ncmc':
             if self.verbose: print("Updating chemical state with geometry-ncmc scheme...")
 
-##########################################################################################
-########### HAS NOT BEEN IMPLEMENTED -- UNCHANGED FROM NCMC-GEOMETRY-NCMC ################
-
             # DEBUG: Check current topology can be built.
             try:
                 self.proposal_engine._system_generator.build_system(self.topology)
@@ -878,7 +874,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("Performing NCMC switching")
             # Alchemically introduce new atoms.
             initial_time = time.time()
-            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
+            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, positions, geometry_new_positions) # , direction='insert') --> can I do this?
             if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
