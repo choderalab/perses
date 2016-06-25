@@ -65,11 +65,6 @@ class HybridTopologyFactory(object):
         self.unique_atoms1 = [atom for atom in range(topology1._numAtoms) if atom not in self.atom_mapping_1to2.keys()]
         self.unique_atoms2 = [atom for atom in range(topology2._numAtoms) if atom not in self.atom_mapping_1to2.values()]
 
-        for atom in self.topology1.atoms():
-            atom.which_top = 1
-        for atom in self.topology2.atoms():
-            atom.which_top = 2
-
         self.verbose = False
 
     def createPerturbedSystem(self):
@@ -97,7 +92,6 @@ class HybridTopologyFactory(object):
 
         system_atoms = dict()
         for atom in topology.atoms():
-            atom.which_top = 'new'
             system_atoms[atom.index] = atom
 
         system1 = self.system1
@@ -108,72 +102,12 @@ class HybridTopologyFactory(object):
         common2 = mapping2.keys()
         assert len(common1) == len(common2)
 
-        printed_map = False
-        name_map = list()
-        for atom1idx, atom2idx in mapping1.items():
-            atom1 = system1_atoms[atom1idx]
-            atom2 = system2_atoms[atom2idx]
-            assert atom1.which_top == 1
-            assert atom2.which_top == 2
-            if atom1.residue.name == atom2.residue.name and atom1.residue.name != 'MOL':
-                assert atom1.name == atom2.name
-            else:
-                if not printed_map:
-                    #print(atom1.residue.name, atom2.residue.name)
-                    for resatom in atom1.residue.atoms():
-                        try:
-                            #print(resatom.name, system2_atoms[mapping1[resatom.index]].name)
-                            name_map.append((resatom.name, system2_atoms[mapping1[resatom.index]].name))
-                        except: pass
-                    printed_map = True
-        name_map.sort()
-
-        printed_map = False
-        name_map2 = list()
-        for atom2idx, atom1idx in mapping2.items():
-            atom1 = system1_atoms[atom1idx]
-            atom2 = system2_atoms[atom2idx]
-            assert atom1.which_top == 1
-            assert atom2.which_top == 2
-            if atom1.residue.name == atom2.residue.name and atom1.residue.name != 'MOL':
-                assert atom1.name == atom2.name
-            else:
-                if not printed_map:
-                    for resatom in atom2.residue.atoms():
-                        try:
-                            match_name = system1_atoms[mapping2[resatom.index]].name
-                            name_map2.append((match_name, resatom.name))
-                        except: pass
-                    printed_map = True
-        name_map2.sort()
-        assert name_map == name_map2
-
-        name_map12 = list()
-        printed_map = False
-        for atom2idx, atom1idx in mapping2.items():
-            atom1 = system1_atoms[atom1idx]
-            atom2 = system2_atoms[atom2idx]
-            if atom1.residue.name == atom2.residue.name and atom1.residue.name != 'MOL':
-                assert atom1.name == atom2.name
-            else:
-                if not printed_map:
-                    for resatom in atom1.residue.atoms():
-                        try: 
-                            match_name = system2_atoms[mapping1[resatom.index]].name
-                            name_map12.append((resatom.name, match_name))
-                        except: pass
-                    printed_map = True
-        name_map12.sort()
-        assert name_map == name_map12
-
         sys2_indices_in_system = copy.deepcopy(self.atom_mapping_2to1)
 
         residues_2_to_sys = dict()
         for index2, index in sys2_indices_in_system.items():
             atom = system_atoms[index]
             atom2 = system2_atoms[index2]
-            assert atom.which_top == 'new'
-            assert atom2.which_top == 2
             #if not atom.name == atom2.name:
                 #print(atom.name, atom2.name, atom.residue, atom2.residue)
             residues_2_to_sys[atom2.residue] = atom.residue
@@ -190,10 +124,7 @@ class HybridTopologyFactory(object):
             topology.addAtom(name, element, residue)
 
         for atom in topology.atoms():
-            try:
-                identity = atom.which_top
-            except:
-                atom.which_top = 'new'
+            if not atom.index in system_atoms.keys():
                 system_atoms[atom.index] = atom
 
         # Handle constraints.
@@ -213,7 +144,7 @@ class HybridTopologyFactory(object):
         for atom2 in self.unique_atoms2:
             pos_atom2 = self.positions2[atom2,:]
             index = sys2_indices_in_system[atom2]
-            positions[index] = pos_atom2 # ?
+            positions[index] = pos_atom2 
             #positions[index,0] = pos_atom2[0]
             #positions[index,1] = pos_atom2[1]
             #positions[index,2] = pos_atom2[2]
@@ -404,13 +335,7 @@ class HybridTopologyFactory(object):
                     atoms2 = list(atoms2)
                     if set(atoms2).issubset(common2):
                         atoms  = [sys2_indices_in_system[atom2] for atom2 in atoms2]
-                        for index in atoms:
-                            atom = list(topology.atoms())[index]
-                            assert atom.which_top == 'new'
                         atoms1 = [mapping2[atom2] for atom2 in atoms2]
-                        for index in atoms1:
-                            atom = system1_atoms[index]
-                            assert atom.which_top == 1
                         # Find torsion index terms.
                         try:
                             index  = torsions[unique(atoms)]
