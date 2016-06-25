@@ -29,11 +29,14 @@ class HybridTopologyFactory(object):
         """
         self.softcore_alpha=0.5
         self.softcore_beta=12*unit.angstrom**2
-        self.system1 = system1
-        self.system2 = system2
+        self.system1 = copy.deepcopy(system1)
+        self.system2 = copy.deepcopy(system2)
 
-        self.topology1 = topology1
-        self.topology2 = topology2
+        self.return_self = False
+        if topology1 == topology2:
+            self.return_self = True
+        self.topology1 = copy.deepcopy(topology1)
+        self.topology2 = copy.deepcopy(topology2)
 
         system2_atoms = dict()
         for atom2 in self.topology2.atoms():
@@ -44,11 +47,11 @@ class HybridTopologyFactory(object):
             system1_atoms[atom1.index] = atom1
         self.system1_atoms = system1_atoms
 
-        self.positions1 = positions1
-        self.positions2 = positions2
-        self.atom_mapping_1to2 = atom_mapping_1to2
+        self.positions1 = copy.deepcopy(positions1)
+        self.positions2 = copy.deepcopy(positions2)
+        self.atom_mapping_1to2 = copy.deepcopy(atom_mapping_1to2)
         keys_to_delete = list()
-        for atom1idx, atom2idx in atom_mapping_1to2.items():
+        for atom1idx, atom2idx in self.atom_mapping_1to2.items():
             atom1 = system1_atoms[atom1idx]
             atom2 = system2_atoms[atom2idx]
             if not atom1.name == atom2.name:
@@ -56,11 +59,11 @@ class HybridTopologyFactory(object):
                     continue
                 keys_to_delete.append(atom1idx)
         for key in keys_to_delete:
-            del(atom_mapping_1to2[key])
+            del(self.atom_mapping_1to2[key])
 
-        self.atom_mapping_2to1 = {old_atom : new_atom for new_atom, old_atom in atom_mapping_1to2.items()}
-        self.unique_atoms1 = [atom for atom in range(topology1._numAtoms) if atom not in atom_mapping_1to2.keys()]
-        self.unique_atoms2 = [atom for atom in range(topology2._numAtoms) if atom not in atom_mapping_1to2.values()]
+        self.atom_mapping_2to1 = {old_atom : new_atom for new_atom, old_atom in self.atom_mapping_1to2.items()}
+        self.unique_atoms1 = [atom for atom in range(topology1._numAtoms) if atom not in self.atom_mapping_1to2.keys()]
+        self.unique_atoms2 = [atom for atom in range(topology2._numAtoms) if atom not in self.atom_mapping_1to2.values()]
 
         for atom in self.topology1.atoms():
             atom.which_top = 1
@@ -71,8 +74,14 @@ class HybridTopologyFactory(object):
 
     def createPerturbedSystem(self):
 
-        if self.topology1 == self.topology2:
+        if self.return_self:
             return [self.system1, self.topology1, self.positions1, self.atom_mapping_2to1]
+
+        topology1 = copy.deepcopy(self.topology1)
+        self.topology1 = topology1
+        topology2 = copy.deepcopy(self.topology2)
+        self.topology2 = topology2
+
         softcore_alpha = self.softcore_alpha
         softcore_beta = self.softcore_beta
 

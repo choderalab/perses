@@ -484,19 +484,24 @@ class NCMCHybridEngine(NCMCEngine):
         temperature : simtk.unit.Quantity with units compatible with kelvin
             The temperature at which switching is to be run
         functions : dict of str:str, optional, default=default_functions
-            functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
-            controls how alchemical context parameter 'parameter' is switched
+            functions[parameter] is the function (parameterized by 't' which
+            switched from 0 to 1) that controls how alchemical context
+            parameter 'parameter' is switched
         nsteps : int, optional, default=1
             The number of steps to use for switching.
-        timestep : simtk.unit.Quantity with units compatible with femtoseconds, optional, default=1*femtosecond
-            The timestep to use for integration of switching velocity Verlet steps.
+        timestep : simtk.unit.Quantity with units compatible with femtoseconds,
+            optional, default=1*femtosecond
+            The timestep to use for integration of switching velocity
+            Verlet steps.
         constraint_tolerance : float, optional, default=None
-            If not None, this relative constraint tolerance is used for position and velocity constraints.
+            If not None, this relative constraint tolerance is used for
+            position and velocity constraints.
         platform : simtk.openmm.Platform, optional, default=None
             If specified, the platform to use for OpenMM simulations.
         write_pdb_interval : int, optional, default=None
-            If a positive integer is specified, a PDB frame will be written with the specified interval on NCMC switching,
-            with a different PDB file generated for each attempt.
+            If a positive integer is specified, a PDB frame will be written
+            with the specified interval on NCMC switching, with a different
+            PDB file generated for each attempt.
         integrator_type : str, optional, default='GHMC'
             NCMC internal integrator type ['GHMC', 'VV']
         """
@@ -505,19 +510,34 @@ class NCMCHybridEngine(NCMCEngine):
                                                platform, write_pdb_interval,
                                                integrator_type)
 
-    def _computeAlchemicalCorrection(self, unmodified_old_system, unmodified_new_system, alchemical_system, initial_positions, alchemical_positions, final_hybrid_positions, final_positions, direction='insert'):
+    def _computeAlchemicalCorrection(self, unmodified_old_system,
+                                     unmodified_new_system, alchemical_system,
+                                     initial_positions, alchemical_positions,
+                                     final_hybrid_positions, final_positions,
+                                     direction='insert'):
         """
-        Compute log probability for correction from transforming real system to AND from alchemical system.
+        Compute log probability for correction from transforming real system
+        to AND from alchemical system.
 
         Parameters
         ----------
-        unmodified_system : simtk.unit.System
+        unmodified_old_system : simtk.unit.System
+            Real fully-interacting system.
+        unmodified_new_system : simtk.unit.System
             Real fully-interacting system.
         alchemical_system : simtk.unit.System
             Alchemically modified system in fully-interacting form.
-        initial_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
+        initial_positions : simtk.unit.Quantity of dimensions [nparticles,3]
+            with units compatible with angstroms
             The initial positions before NCMC switching.
-        final_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
+        alchemical_positions : simtk.unit.Quantity of dimensions [nparticles,3]
+            with units compatible with angstroms
+            The initial positions of hybrid topology before NCMC switching.
+        final_hybrid_positions : simtk.unit.Quantity of dimensions
+            [nparticles,3] with units compatible with angstroms
+            The final positions of hybrid topology after NCMC switching.
+        final_positions : simtk.unit.Quantity of dimensions [nparticles,3]
+            with units compatible with angstroms
             The final positions after NCMC switching.
         direction : str, optional, default='insert'
             Not used in calculation
@@ -527,10 +547,7 @@ class NCMCHybridEngine(NCMCEngine):
             The log acceptance probability of the switch
         """
 
-        if direction not in ['insert', 'delete']:
-            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
-
-        def computePotentialEnergy(system, positions):
+        def compute_logP(system, positions):
             """
             Compute potential energy of the specified system object at the specified positions.
 
@@ -568,18 +585,16 @@ class NCMCHybridEngine(NCMCEngine):
             # Return potential energy.
             return -self.beta * potential
 
-        #initial_logP_correction = super(NCMCHybridEngine, self)._computeAlchemicalCorrection(unmodified_old_system, alchemical_system, initial_positions, final_positions, direction='delete')
-        #final_logP_correction = super(NCMCHybridEngine, self)._computeAlchemicalCorrection(unmodified_new_system, alchemical_system, initial_positions, final_positions, direction='insert')
-
         # Compute correction from transforming real system to/from alchemical system
-        initial_logP_correction = computePotentialEnergy(alchemical_system, alchemical_positions) - computePotentialEnergy(unmodified_old_system, initial_positions)
-        final_logP_correction = computePotentialEnergy(unmodified_new_system, final_positions) - computePotentialEnergy(alchemical_system, final_hybrid_positions)
+        initial_logP_correction = compute_logP(alchemical_system, alchemical_positions) - compute_logP(unmodified_old_system, initial_positions)
+        final_logP_correction = compute_logP(unmodified_new_system, final_positions) - compute_logP(alchemical_system, final_hybrid_positions)
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
         return logP_alchemical_correction
 
 
 
-    def make_alchemical_system(self, topology_proposal, old_positions, new_positions, direction='insert'):
+    def make_alchemical_system(self, topology_proposal, old_positions,
+                               new_positions, direction='insert'):
         """
         Generate an alchemically-modified system at the correct atoms
         based on the topology proposal
@@ -588,11 +603,13 @@ class NCMCHybridEngine(NCMCEngine):
         topology_proposal : TopologyProposal namedtuple
             Contains old topology, proposed new topology, and atom mapping
         direction : str, optional, default='insert'
-            Direction of topology proposal to use for identifying alchemical atoms (allowed values: ['insert', 'delete'])
+            Direction of topology proposal to use for identifying alchemical
+            atoms (allowed values: ['insert', 'delete'])
         Returns
         -------
         unmodified_system : simtk.openmm.System
-            Unmodified real system corresponding to appropriate leg of transformation.
+            Unmodified real system corresponding to appropriate leg of
+            transformation.
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
         """
@@ -614,11 +631,16 @@ class NCMCHybridEngine(NCMCEngine):
 
         # Create an alchemical factory.
         from perses.annihilation.relative import HybridTopologyFactory
-        alchemical_factory = HybridTopologyFactory(unmodified_old_system, unmodified_new_system, old_topology, new_topology, old_positions, new_positions, atom_map)
+        alchemical_factory = HybridTopologyFactory(unmodified_old_system,
+                                                   unmodified_new_system,
+                                                   old_topology, new_topology,
+                                                   old_positions,
+                                                   new_positions, atom_map)
 
         # Return the alchemically-modified system in fully-interacting form.
         alchemical_system, _, alchemical_positions, atom_map = alchemical_factory.createPerturbedSystem()
-        return [unmodified_old_system, unmodified_new_system, alchemical_system, alchemical_positions, atom_map]
+        return [unmodified_old_system, unmodified_new_system,
+                alchemical_system, alchemical_positions, atom_map]
 
     def _convert_hybrid_positions_to_final(self, positions, atom_map):
         final_positions = unit.Quantity(np.zeros([len(atom_map.keys()),3]), unit=unit.nanometers)
@@ -670,7 +692,14 @@ class NCMCHybridEngine(NCMCEngine):
 
 ########################################################################
         # Create alchemical system.
-        [unmodified_old_system, unmodified_new_system, alchemical_system, alchemical_positions, final_to_hybrid_atom_map] = self.make_alchemical_system(topology_proposal, initial_positions, proposed_positions, direction=direction)
+        [unmodified_old_system,
+         unmodified_new_system,
+         alchemical_system,
+         alchemical_positions,
+         final_to_hybrid_atom_map] = self.make_alchemical_system(
+                                          topology_proposal, initial_positions,
+                                          proposed_positions,
+                                          direction=direction)
 ########################################################################
 
         from perses.tests.utils import compute_potential
