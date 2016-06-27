@@ -1192,6 +1192,213 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         minimize(self)
         print('AblImatinibProtonationStateTestSystem initialized.')
 
+class ImidazoleProtonationStateTestSystem(PersesTestSystem):
+    """
+    Create a consistent set of SAMS samplers useful for sampling protonation states of imidazole in water.
+
+    Properties
+    ----------
+    environments : list of str
+        Available environments: ['vacuum', 'explicit', 'implicit']
+    topologies : dict of simtk.openmm.app.Topology
+        Initial system Topology objects; topologies[environment] is the topology for `environment`
+    positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
+        Initial positions corresponding to initial Topology objects
+    system_generators : dict of SystemGenerator objects
+        SystemGenerator objects for environments
+    proposal_engines : dict of ProposalEngine
+        Proposal engines
+    themodynamic_states : dict of thermodynamic_states
+        Themodynamic states for each environment
+    mcmc_samplers : dict of MCMCSampler objects
+        MCMCSampler objects for environments
+    exen_samplers : dict of ExpandedEnsembleSampler objects
+        ExpandedEnsembleSampler objects for environments
+    sams_samplers : dict of SAMSSampler objects
+        SAMSSampler objects for environments
+    designer : MultiTargetDesign sampler
+        Example MultiTargetDesign sampler for implicit solvent hydration free energies
+
+    Examples
+    --------
+
+    >>> from perses.tests.testsystems import AblImatinibProtonationStateTestSystem
+    >>> testsystem = AblImatinibProtonationStateTestSystem()
+    # Build a system
+    >>> system = testsystem.system_generators['explicit-inhibitor'].build_system(testsystem.topologies['explicit-inhibitor'])
+    # Retrieve a SAMSSampler
+    >>> sams_sampler = testsystem.sams_samplers['explicit-inhibitor']
+
+    """
+    def __init__(self):
+        super(ImidazoleProtonationStateTestSystem, self).__init__()
+        solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
+        components = ['imidazole']
+        padding = 9.0*unit.angstrom
+        explicit_solvent_model = 'tip3p'
+        setup_path = 'data/constant-pH/imidazole/'
+        thermodynamic_states = dict()
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+
+        # Construct list of all environments
+        environments = list()
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                environments.append(environment)
+
+        # Read mol2 file containing protonation states and extract canonical isomeric SMILES from this.
+        from pkg_resources import resource_filename
+        molecules = list()
+        mol2_filename = resource_filename('perses', os.path.join(setup_path, 'imidazole/imidazole-epik-charged.mol2'))
+        ifs = oechem.oemolistream(mol2_filename)
+        mol = oechem.OEMol()
+        while oechem.OEReadMolecule(ifs, mol):
+            smiles = oechem.OEMolToSmiles(mol)
+            molecules.append(smiles)
+        # Read log probabilities
+        log_state_penalties = dict()
+        state_penalties_filename = resource_filename('perses', os.path.join(setup_path, 'imidazole/imidazole-state-penalties.out'))
+        for (smiles, log_state_penalty) in zip(molecules, np.fromfile(state_penalties_filename, sep='\n')):
+            log_state_penalties[smiles] = log_state_penalty
+
+        # Add current molecule
+        smiles = 'C1=CN=CN1'
+        molecules.append(smiles)
+        self.molecules = molecules
+        log_state_penalties[smiles] = 0.0
+
+        # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
+        molecules = sanitizeSMILES(self.molecules)
+
+        # Create a system generator for desired forcefields
+        print('Creating system generators...')
+        from perses.rjmc.topology_proposal import SystemGenerator
+        gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        system_generators = dict()
+        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=True)
+        system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
+            use_antechamber=True)
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=True)
+        # Copy system generators for all environments
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                system_generators[environment] = system_generators[solvent]
+
+        # Load topologies and positions for all components
+        from simtk.openmm.app import PDBFile, Modeller
+        topologies = dict()
+        positions = dict()
+        for component in components:
+            pdb_filename = resource_filename('perses', os.path.join(setup_path, '%s.pdb' % component))
+            print(pdb_filename)
+            pdbfile = PDBFile(pdb_filename)
+            topologies[component] = pdbfile.topology
+            positions[component] = pdbfile.positions
+
+        # Construct positions and topologies for all solvent environments
+        print('Constructing positions and topologies...')
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                if solvent == 'explicit':
+                    # Create MODELLER object.
+                    modeller = app.Modeller(topologies[component], positions[component])
+                    modeller.addSolvent(system_generators[solvent].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+                    topologies[environment] = modeller.getTopology()
+                    positions[environment] = modeller.getPositions()
+                else:
+                    environment = solvent + '-' + component
+                    topologies[environment] = topologies[component]
+                    positions[environment] = positions[component]
+
+                natoms = sum( 1 for atom in topologies[environment].atoms() )
+                print("System '%s' has %d atoms" % (environment, natoms))
+
+                # DEBUG: Write initial PDB file
+                outfile = open(environment + '.initial.pdb', 'w')
+                PDBFile.writeFile(topologies[environment], positions[environment], file=outfile)
+                outfile.close()
+
+        # Set up the proposal engines.
+        print('Initializing proposal engines...')
+        residue_name = 'UNL' # TODO: Figure out residue name automatically
+        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+        proposal_metadata = { }
+        proposal_engines = dict()
+        for environment in environments:
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=residue_name)
+
+        # Generate systems
+        print('Building systems...')
+        systems = dict()
+        for environment in environments:
+            systems[environment] = system_generators[environment].build_system(topologies[environment])
+
+        # Define thermodynamic state of interest.
+        print('Defining thermodynamic states...')
+        from perses.samplers.thermodynamics import ThermodynamicState
+        thermodynamic_states = dict()
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+        for component in components:
+            for solvent in solvents:
+                environment = solvent + '-' + component
+                if solvent == 'explicit':
+                    thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
+                else:
+                    thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature)
+
+        # Create SAMS samplers
+        print('Creating SAMS samplers...')
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+        sams_samplers = dict()
+        for solvent in solvents:
+            for component in components:
+                environment = solvent + '-' + component
+                chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
+
+                if solvent == 'explicit':
+                    thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
+                    sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+                else:
+                    thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
+                    sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
+
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state)
+                mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+                mcmc_samplers[environment].verbose = True
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+                exen_samplers[environment].verbose = True
+                sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+                sams_samplers[environment].verbose = True
+                thermodynamic_states[environment] = thermodynamic_state
+
+        # Store things.
+        self.molecules = molecules
+        self.environments = environments
+        self.topologies = topologies
+        self.positions = positions
+        self.system_generators = system_generators
+        self.systems = systems
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+        self.sams_samplers = sams_samplers
+        self.designer = None
+
+        print('ImidazoleProtonationStateTestSystem initialized.')
+
 def minimize(testsystem):
     """
     Minimize all structures in test system.
@@ -1567,7 +1774,7 @@ def test_testsystems():
     Test instantiation of all test systems.
     """
     testsystem_names = ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
-    niterations = 5 # number of iterations to run
+    niterations = 2 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
@@ -1698,7 +1905,7 @@ def run_abl_affinity_write_pdb_ncmc_switching():
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
     #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
 
-def run_constph():
+def run_constph_abl():
     """
     Run Abl:imatinib constant-pH test system.
     """
@@ -1742,8 +1949,38 @@ def run_constph():
     testsystem.designer.update_target_probabilities() # update log weights from inhibitor in solvent calibration
     testsystem.designer.run(niterations=500)
 
+def run_constph_imidazole():
+    """
+    Run imidazole constant-pH test system.
+    """
+    testsystem = ImidazoleProtonationStateTestSystem()
+    for environment in testsystem.environments:
+        if environment not in testsystem.exen_samplers:
+            print("Skipping '%s' for now..." % environment)
+            continue
+
+        print(environment)
+        testsystem.exen_samplers[environment].pdbfile = open('imidazole-constph-%s.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].geometry_pdbfile = open('imidazole-constph-%s-geometry-proposals.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50
+        testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
+        testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
+        #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        testsystem.mcmc_samplers[environment].nsteps = 2500
+        testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
+
+        testsystem.mcmc_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].proposal_engine.verbose = True
+        testsystem.sams_samplers[environment].verbose = True
+
+    # Run ligand in solvent constant-pH sampler calibration
+    testsystem.sams_samplers['explicit-imidazole'].verbose=True
+    testsystem.sams_samplers['explicit-imidazole'].run(niterations=1000)
+
 if __name__ == '__main__':
-    run_constph()
+    run_constph_imidazole()
+    #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
     #run_valence_system()
     #run_kinase_inhibitors()
