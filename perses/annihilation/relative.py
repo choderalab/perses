@@ -183,6 +183,10 @@ class HybridTopologyFactory(object):
                 if self.verbose: print("Finding bonds unique to each molecule...")
                 unique_bonds1 = [ bonds1[atoms] for atoms in bonds1 if not set(atoms).issubset(common1) ]
                 unique_bonds2 = [ bonds2[atoms] for atoms in bonds2 if not set(atoms).issubset(common2) ]
+
+                for atoms, index in bonds.items():
+                    [atom_i, atom_j, length, K] = force.getBondParameters(index)
+                    force.setBondParameters(index, atom_i, atom_j, length, 0*K)
  
                 # Build list of bonds shared among all molecules.
                 if self.verbose: print("Building a list of shared bonds...")
@@ -198,14 +202,6 @@ class HybridTopologyFactory(object):
                         index2 = bonds2[unique(atoms2)]
                         # Store.
                         shared_bonds.append( (index, index1, index2) )
-    
-                # Add bonds that are unique to molecule2.
-                if self.verbose: print("Adding bonds unique to molecule2...")
-                for index2 in unique_bonds2:
-                    [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
-                    atom_i = sys2_indices_in_system[atom2_i]
-                    atom_j = sys2_indices_in_system[atom2_j]
-                    force.addBond(atom_i, atom_j, length2, K2)
     
                 # Create a CustomBondForce to handle interpolated bond parameters.
                 if self.verbose: print("Creating CustomBondForce...")
@@ -230,7 +226,19 @@ class HybridTopologyFactory(object):
                     [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
                     [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
                     custom_force.addBond(atom_i, atom_j, [length1, K1, length2, K2])
+
+                if self.verbose: print("Adding custom parameters to unique bonds...")
+                for index2 in unique_bonds2:
+                    [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
+                    atom_i = sys2_indices_in_system[atom2_i]
+                    atom_j = sys2_indices_in_system[atom2_j]
+                    custom_force.addBond(atom_i, atom_j, [length2, 0.1*K2, length2, K2])
     
+                for index1 in unique_bonds1:
+                    [atom_i, atom_j, length1, K1] = force1.getBondParameters(index1)
+                    custom_force.addBond(atom_i, atom_j, [length1, K1, length1, 0.1*K1])
+
+
             if force_name == 'HarmonicAngleForce':
                 #
                 # Process HarmonicAngleForce
@@ -281,8 +289,8 @@ class HybridTopologyFactory(object):
                 # Create a CustomAngleForce to handle interpolated angle parameters.
                 if self.verbose: print("Creating CustomAngleForce...")
                 energy_expression  = '(K/2)*(theta-theta0)^2;'
-                energy_expression += 'K = (1-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
-                energy_expression += 'theta0 = (1-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
+                energy_expression += 'K = (1.1-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
+                energy_expression += 'theta0 = (1.1-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
                 custom_force = mm.CustomAngleForce(energy_expression)
                 custom_force.addGlobalParameter('lambda_angles', 0.0)
                 custom_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
