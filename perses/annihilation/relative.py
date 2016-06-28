@@ -276,16 +276,12 @@ class HybridTopologyFactory(object):
                         index2 = angles2[unique(atoms2)]
                         # Store.
                         shared_angles.append( (index, index1, index2) )
-    
-                # Add angles that are unique to molecule2.
-                if self.verbose: print("Adding angles unique to molecule2...")
-                for index2 in unique_angles2:
-                    [atom2_i, atom2_j, atom2_k, theta2, K2] = force2.getAngleParameters(index2)
-                    atom_i = sys2_indices_in_system[atom2_i]
-                    atom_j = sys2_indices_in_system[atom2_j]
-                    atom_k = sys2_indices_in_system[atom2_k]
-                    force.addAngle(atom_i, atom_j, atom_k, theta2, K2)
 
+                if self.verbose: print("Removing existing angle parameters...")
+                for index in range(force.getNumAngles()):
+                    [atom_i, atom_j, atom_k, angle, K] = force.getAngleParameters(index)
+                    force.setAngleParameters(index, atom_i, atom_j, atom_k, angle, 0*K)
+    
                 # Create a CustomAngleForce to handle interpolated angle parameters.
                 if self.verbose: print("Creating CustomAngleForce...")
                 energy_expression  = '(K/2)*(theta-theta0)^2;'

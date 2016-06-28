@@ -140,7 +140,7 @@ def test_hybrid_scheme():
         from perses.samplers.samplers import ExpandedEnsembleSampler
         for environment in testsystem.environments:
             chemical_state_key = testsystem.proposal_engines[environment].compute_state_key(testsystem.topologies[environment])
-            testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], scheme='geometry-ncmc', options={'nsteps':5})
+            testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], scheme='geometry-ncmc', options={'nsteps':100})
 #            testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], options={'nsteps':5})
             exen_sampler = testsystem.exen_samplers[environment]
             exen_sampler.verbose = True
@@ -152,7 +152,7 @@ def test_hybrid_scheme():
             sams_sampler = testsystem.sams_samplers[environment]
             f = partial(sams_sampler.run, niterations)
             f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
-            yield f
+            #yield f
         # Test MultiTargetDesign sampler for implicit hydration free energy
         from perses.samplers.samplers import MultiTargetDesign
         # Construct a target function for identifying mutants that maximize the peptide implicit solvent hydration free energy
@@ -161,7 +161,7 @@ def test_hybrid_scheme():
             designer = MultiTargetDesign(target_samplers)
             f = partial(designer.run, niterations)
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
-            yield f
+            #yield f
 
 
 if __name__=="__main__":

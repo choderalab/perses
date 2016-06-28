@@ -505,6 +505,11 @@ class NCMCHybridEngine(NCMCEngine):
         integrator_type : str, optional, default='GHMC'
             NCMC internal integrator type ['GHMC', 'VV']
         """
+        if functions is None:
+            functions = default_functions
+            functions['lambda_bonds'] = '0.8*lambda+0.2'
+            functions['lambda_angles'] = '0.8*lambda+0.2'
+
         super(NCMCHybridEngine, self).__init__(temperature, functions, nsteps,
                                                timestep, constraint_tolerance,
                                                platform, write_pdb_interval,
@@ -682,12 +687,11 @@ class NCMCHybridEngine(NCMCEngine):
         if (self.nsteps == 0):
             # Special case of instantaneous insertion/deletion.
             logP = 0.0
-            final_positions = copy.deepcopy(initial_positions)
+            final_positions = copy.deepcopy(proposed_positions)
             from perses.tests.utils import compute_potential
-            if direction == 'delete':
-                potential = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
-            elif direction == 'insert':
-                potential = self.beta * compute_potential(topology_proposal.new_system, initial_positions, platform=self.platform)
+            potential_del = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+            potential_ins = self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
+            potential = potential_del - potential_ins
             return [final_positions, logP, potential]
 
 ########################################################################
@@ -838,10 +842,7 @@ class NCMCHybridEngine(NCMCEngine):
         del alchemical_system
 
         # Select whether to return initial or final potential.
-        if direction == 'insert':
-            potential = initial_potential
-        elif direction == 'delete':
-            potential = final_potential
+        potential = final_potential - initial_potential
 
         # Keep track of statistics.
         self.nattempted += 1

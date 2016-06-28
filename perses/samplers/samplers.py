@@ -629,7 +629,7 @@ class ExpandedEnsembleSampler(object):
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
-        self.geometry_engine = OmegaFFGeometryEngine(torsion_kappa=300.0, max_confs=10)
+        self.geometry_engine = FFAllAngleGeometryEngine(metadata=dict())
         self.naccepted = 0
         self.nrejected = 0
         self.number_of_state_visits = dict()
