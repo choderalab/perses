@@ -15,6 +15,7 @@ default_functions = {
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
 default_timestep = 1.0 * unit.femtoseconds
+default_steps_per_propagation = 1
 
 class NaNException(Exception):
     def __init__(self, *args, **kwargs):
@@ -41,7 +42,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC'):
+    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC'):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -54,6 +55,8 @@ class NCMCEngine(object):
             controls how alchemical context parameter 'parameter' is switched
         nsteps : int, optional, default=1
             The number of steps to use for switching.
+        steps_per_propagation : int, optional, default=1
+            The number of intermediate propagation steps taken at each switching step
         timestep : simtk.unit.Quantity with units compatible with femtoseconds, optional, default=1*femtosecond
             The timestep to use for integration of switching velocity Verlet steps.
         constraint_tolerance : float, optional, default=None
@@ -84,6 +87,7 @@ class NCMCEngine(object):
         self.constraint_tolerance = constraint_tolerance
         self.platform = platform
         self.integrator_type = integrator_type
+        self.steps_per_propagation = steps_per_propagation
 
         self.write_pdb_interval = write_pdb_interval
 
@@ -307,9 +311,9 @@ class NCMCEngine(object):
 
         # Create an NCMC velocity Verlet integrator.
         if self.integrator_type == 'VV':
-            integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction=direction)
+            integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, steps_per_propagation=self.steps_per_propagation, timestep=self.timestep, direction=direction)
         elif self.integrator_type == 'GHMC':
-            integrator = NCMCGHMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction=direction)
+            integrator = NCMCGHMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, steps_per_propagation=self.steps_per_propagation, timestep=self.timestep, direction=direction)
         else:
             raise Exception("integrator_type '%s' unknown" % self.integrator_type)
         # Set the constraint tolerance if specified.
