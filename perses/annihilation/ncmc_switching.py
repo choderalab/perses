@@ -855,7 +855,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     """
     Helper base class for NCMC alchemical integrators.
     """
-    def __init__(self, temperature, system, functions, nsteps, timestep, direction):
+    def __init__(self, temperature, system, functions, nsteps, steps_per_propagation, timestep, direction):
         """
         Initialize base class for NCMC alchemical integrators.
 
@@ -868,8 +868,10 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         functions : dict of str : str
             functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
             controls how alchemical context parameter 'parameter' is switched
-        nsteps : int, optional, default=10
+        nsteps : int
             The number of switching timesteps per call to integrator.step(1).
+        steps_per_propagation : int
+            The number of propagation steps taken at each value of lambda
         timestep : simtk.unit.Quantity with units compatible with femtoseconds
             The timestep to use for each NCMC step.
         direction : str, optional, default='insert'
@@ -1082,7 +1084,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
 
     """
 
-    def __init__(self, temperature, system, functions, nsteps=0, timestep=1.0*unit.femtoseconds, direction='insert'):
+    def __init__(self, temperature, system, functions, nsteps=0, steps_per_propagation=1, timestep=1.0*unit.femtoseconds, direction='insert'):
         """
         Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
 
@@ -1097,6 +1099,8 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             controls how alchemical context parameter 'parameter' is switched
         nsteps : int, optional, default=10
             The number of switching timesteps per call to integrator.step(1).
+        steps_per_propagation : int, optional, default=1
+            The number of propagation steps taken at each value of lambda
         timestep : simtk.unit.Quantity with units compatible with femtoseconds
             The timestep to use for each NCMC step.
         direction : str, optional, default='insert'
@@ -1112,7 +1116,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         * Add a global variable that causes termination of future calls to step(1) after the first
 
         """
-        super(NCMCVVAlchemicalIntegrator, self).__init__(temperature, system, functions, nsteps, timestep, direction)
+        super(NCMCVVAlchemicalIntegrator, self).__init__(temperature, system, functions, nsteps, steps_per_propagation, timestep, direction)
 
         #
         # Initialize global variables
@@ -1131,6 +1135,8 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
             self.addGlobalVariable('step', 0) # current NCMC step number
             self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
+            self.addGlobalVariable('psteps', steps_per_propagation)
+            self.addGlobalVariable('pstep', 0)
 
         # Constrain initial positions and velocities.
         self.addConstrainPositions()
@@ -1144,11 +1150,15 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addComputeGlobal("Enew", "energy")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
         if nsteps > 0:
+            self.addComputeGlobal('pstep', '0')
             # Initial step only
             self.beginIfBlock('step = 0')
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Eold", "energy + kinetic")
+            self.beginWhileBlock('pstep < psteps')
             self.addVelocityVerletStep()
+            self.addComputeGlobal('pstep', 'pstep+1')
+            self.endBlock()
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Enew", "energy + kinetic")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
@@ -1159,7 +1169,10 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Eold", "energy + kinetic")
             self.addAlchemicalPerturbationStep()
+            self.beginWhileBlock('pstep < psteps')
             self.addVelocityVerletStep()
+            self.addComputeGlobal('pstep', 'pstep+1')
+            self.endBlock()
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Enew", "energy + kinetic")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
@@ -1171,7 +1184,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
     Use NCMC switching to annihilate or introduce particles alchemically.
     """
 
-    def __init__(self, temperature, system, functions, nsteps=0, collision_rate=9.1/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
+    def __init__(self, temperature, system, functions, nsteps=0, steps_per_propagation=1, collision_rate=9.1/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
         """
         Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
 
@@ -1184,8 +1197,10 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         functions : dict of str : str
             functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
             controls how alchemical context parameter 'parameter' is switched
-        nsteps : int, optional, default=10
+        nsteps : int, optional, default=0
             The number of switching timesteps per call to integrator.step(1).
+        steps_per_propagation : int, optional, default=1
+            The number of propagation steps taken at each value of lambda
         timestep : simtk.unit.Quantity with units compatible with femtoseconds
             The timestep to use for each NCMC step.
         direction : str, optional, default='insert'
@@ -1201,7 +1216,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         * Add a global variable that causes termination of future calls to step(1) after the first
 
         """
-        super(NCMCGHMCAlchemicalIntegrator, self).__init__(temperature, system, functions, nsteps, timestep, direction)
+        super(NCMCGHMCAlchemicalIntegrator, self).__init__(temperature, system, functions, nsteps, steps_per_propagation, timestep, direction)
 
         gamma = collision_rate
 
@@ -1225,6 +1240,8 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable("accept", 0)  # accept or reject
             self.addGlobalVariable("naccept", 0)  # number accepted
             self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
+            self.addGlobalVariable("pstep", 0) # number of propagation steps taken
+            self.addGlobalVariable("psteps", steps_per_propagation) # total number of propagation steps
 
         # Constrain initial positions and velocities.
         self.addConstrainPositions()
@@ -1238,9 +1255,13 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addComputeGlobal("Enew", "energy")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
         if nsteps > 0:
+            self.addComputeGlobal('pstep', '0')
             # Initial step only
             self.beginIfBlock('step = 0')
+            self.beginWhileBlock('pstep < psteps')
             self.addGHMCStep()
+            self.addComputeGlobal('pstep', 'pstep+1')
+            self.endBlock()
             self.endBlock()
 
             # All steps
@@ -1249,6 +1270,9 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addAlchemicalPerturbationStep()
             self.addComputeGlobal("Enew", "energy")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+            self.beginWhileBlock('pstep < psteps')
             self.addGHMCStep()
+            self.addComputeGlobal('pstep', 'pstep+1')
+            self.endBlock()
             self.addComputeGlobal('step', 'step+1')
             self.endBlock()
