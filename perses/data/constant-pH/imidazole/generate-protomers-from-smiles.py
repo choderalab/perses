@@ -4,7 +4,7 @@
 Generate protomers using Epik.
 
 """
-
+from __future__ import print_function
 import os
 import re
 import csv
@@ -47,11 +47,11 @@ def read_molecules(filename):
         return molecules
 
 def DumpSDData(mol):
-    print ("SD data of", mol.GetTitle())
+    print("SD data of", mol.GetTitle())
     #loop over SD data
     for dp in oechem.OEGetSDDataPairs(mol):
-        print (dp.GetTag(), ':', dp.GetValue())
-    print ()
+        print(dp.GetTag(), ':', dp.GetValue())
+    print()
 
 def retrieve_url(url, filename):
     import urllib2
@@ -142,7 +142,7 @@ def enumerate_conformations(name, smiles=None, pdbname=None):
         residue_name = pdbname
     elif smiles:
         # Generate molecule geometry with OpenEye
-        print "Generating molecule {}".format(name)
+        print("Generating molecule {}".format(name))
         oe_molecule = openeye.smiles_to_oemol(smiles)
         # Assign Tripos atom types
         oechem.OETriposAtomTypeNames(oe_molecule)
@@ -151,14 +151,14 @@ def enumerate_conformations(name, smiles=None, pdbname=None):
             oe_molecule = openeye.get_charges(oe_molecule, keep_confs=1)
         except RuntimeError as e:
             traceback.print_exc()
-            print "Skipping molecule " + name
+            print("Skipping molecule " + name)
             return
         residue_name = re.sub('[^A-Za-z]+', '', name.upper())[:3]
     else:
         raise Exception('Must provide SMILES string or pdbname')
 
     # Save mol2 file, preserving atom names
-    print "Running epik on molecule {}".format(name)
+    print("Running epik on molecule {}".format(name))
     mol2_file_path = output_basepath + '-input.mol2'
     write_mol2_preserving_atomnames(mol2_file_path, oe_molecule, residue_name)
 
@@ -191,7 +191,7 @@ def enumerate_conformations(name, smiles=None, pdbname=None):
         oechem.OEReadMolecule(ifs_mol2, mol2_molecule)
 
         index += 1
-        print "Charging molecule %d" % (index)
+        print("Charging molecule %d" % (index))
         try:
             # Charge molecule.
             charged_molecule = openeye.get_charges(mol2_molecule, max_confs=800, strictStereo=False, normalize=True, keep_confs=None)
