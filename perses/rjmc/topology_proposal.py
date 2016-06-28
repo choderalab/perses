@@ -1338,7 +1338,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for chain in mol_topology.chains():
             newChain = new_topology.addChain(chain.id)
             for residue in chain.residues():
-                newResidue = new_topology.addResidue(residue.name, newChain, residue.id)
+                newResidue = new_topology.addResidue(self._residue_name, newChain, residue.id)
                 for atom in residue.atoms():
                     newAtom = new_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
                     newAtoms[atom] = newAtom

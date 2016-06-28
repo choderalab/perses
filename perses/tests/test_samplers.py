@@ -72,10 +72,9 @@ def test_samplers():
     """
     Test samplers on multiple test systems.
     """
-    testsystem_names = ['T4LysozymeMutationTestSystem', 'ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem', 'AblImatinibResistanceTestSystem', 'AblAffinityTestSystem']
-    niterations = 50 # number of iterations to run
+    testsystem_names = ['ImidazoleProtonationStateTestSystem', 'T4LysozymeMutationTestSystem', 'ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem', 'AblImatinibResistanceTestSystem', 'AblAffinityTestSystem']
+    niterations = 5 # number of iterations to run
 
-    testsystem_names = ['T4LysozymeInhibitorsTestSystem']
     # If TESTSYSTEMS environment variable is specified, test those systems.
     if 'TESTSYSTEMS' in os.environ:
         testsystem_names = os.environ['TESTSYSTEMS'].split(' ')
@@ -103,13 +102,9 @@ def test_samplers():
             f = partial(sams_sampler.run, niterations)
             f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
             yield f
-        # Test MultiTargetDesign sampler for implicit hydration free energy
-        from perses.samplers.samplers import MultiTargetDesign
-        # Construct a target function for identifying mutants that maximize the peptide implicit solvent hydration free energy
-        for environment in testsystem.environments:
-            target_samplers = { testsystem.sams_samplers[environment] : 1.0, testsystem.sams_samplers['vacuum'] : -1.0 }
-            designer = MultiTargetDesign(target_samplers)
-            f = partial(designer.run, niterations)
+        # Test MultiTargetDesign sampler, if present.
+        if hasattr(testsystem, 'designer') and (testsystem.designer is not None):
+            f = partial(testsystem.designer.run, niterations)
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
 
