@@ -3,8 +3,8 @@ Storage layer for perses automated molecular design.
 
 TODO
 ----
-* Flesh out API
-* Implement it
+* Add write_sampler_state(modname, sampler_state, iteration)
+* Generalize write_quantity to handle units
 
 """
 
@@ -79,6 +79,22 @@ class NetCDFStorage(object):
         """
         pass
 
+    def write_quantity(self, modname, varname, value, iteration=None):
+        """Write a floating-point number
+
+        Parameters
+        ---
+        modname : str
+            The name of the module in the code writing the variable
+        varname : str
+            The variable name to be stored
+        value : float
+            The floating-point value to be written
+        iteration : int, optional, default=None
+            The local iteration for the module, or `None` if this is a singleton
+        """
+        pass
+
     def write_array(self, modname, varname, array, iteration=None):
         """Write a numpy array as a native NetCDF array
 
@@ -94,6 +110,11 @@ class NetCDFStorage(object):
             The local iteration for the module, or `None` if this is a singleton
         """
         pass
+
+    def sync(self):
+        """Flush write buffer.
+        """
+        self._ncfile.sync()
 
     def close(self):
         """Close the storage layer.

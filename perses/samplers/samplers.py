@@ -400,7 +400,7 @@ class MCMCSampler(object):
     >>> sampler.run()
 
     """
-    def __init__(self, thermodynamic_state, sampler_state):
+    def __init__(self, thermodynamic_state, sampler_state, topology=None, storage=None):
         """
         Create an MCMC sampler.
 
@@ -410,12 +410,18 @@ class MCMCSampler(object):
             The thermodynamic state to simulate
         sampler_state : SamplerState
             The initial sampler state to simulate from.
+        topology : simtk.openmm.app.Topology, optional, default=None
+            Topology object corresponding to system being simulated (for writing)
+        storage : NetCDFStorage, optional, default=None
+            Storage layer to use for writing.
 
         """
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.sampler_state = copy.deepcopy(sampler_state)
+        self.storage = storage
+        self.topology = topology
         # Initialize
         self.iteration = 0
         # For GHMC integrator
@@ -471,11 +477,21 @@ class MCMCSampler(object):
         self.sampler_state = SamplerState.createFromContext(context)
         self.sampler_state.velocities = None # erase velocities since we may change dimensionality next
 
+        # Write positions and box vectors
+        # TODO: Generalize this to add NetCDFStorage.write_sampler_state(modname, sampelr_state, iteration)
+        if self.storage:
+            kT = kB * self.thermodynamic_state.temperature
+            self.storage.write_configuration(self.__class__.__name__, self.sampler_state.positions, self.sampler_state.topology, iteration=self.iteration)
+            self.storage.write_quantity(self.__class__.__name__, 'kinetic_energy', self.sampler_state.kinetic_energy / kT, iteration=self.iteration)
+            self.storage.write_quantity(self.__class__.__name__, 'potential_energy', self.sampler_state.potential_energy / kT, iteration=self.iteration)
+            self.storage.write_quantity(self.__class__.__name__, 'volume', self.sampler_state.volume / unit.angstroms**3, iteration=self.iteration)
+
         # Report statistics.
         if self.integrator_name == 'GHMC':
             naccept = integrator.getGlobalVariableByName('naccept')
             fraction_accepted = float(naccept) / float(self.nsteps)
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
+            if self.storage: self.storage.write_quantity(self.__class__.__name__, 'fraction_accepted', fraction_accepted, iteration=self.iteration)
 
         if self.verbose:
             print('Finished integration in %.3f s' % (time.time() - start_time))
@@ -491,11 +507,13 @@ class MCMCSampler(object):
             self.thermodynamic_state.system.setDefaultPeriodicBoxVectors(*self.sampler_state.box_vectors)
             self.sampler_state.system.setDefaultPeriodicBoxVectors(*self.sampler_state.box_vectors)
 
-        # Increment iteration count
-        self.iteration += 1
-
         if self.verbose:
             print("." * 80)
+
+        if self.storage: self.storage.sync()
+
+        # Increment iteration count
+        self.iteration += 1
 
     def run(self, niterations=1):
         """
@@ -795,6 +813,7 @@ class ExpandedEnsembleSampler(object):
                 self.sampler.sampler_state.system = topology_proposal.new_system
                 self.topology = topology_proposal.new_topology
                 self.sampler.sampler_state.positions = ncmc_new_positions
+                self.sampler.topology = topology
                 self.state_key = topology_proposal.new_chemical_state_key
                 self.naccepted += 1
                 if self.verbose: print("    accepted")
