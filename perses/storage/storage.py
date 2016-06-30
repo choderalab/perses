@@ -36,9 +36,11 @@ class NetCDFStorage(object):
 
     def __init__(self, filename, mode='a'):
         self._filename = filename
-
-        # Open NetCDF file here...
         self._ncfile = netcdf.Dataset(self._filename, mode=mode)
+
+        # Create standard dimensions.
+        if 'iterations' not in self._ncfile.dimensions:
+            self._ncfile.createDimension('iterations', size=None)
 
     def write_configuration(self, envname, modname, varname, positions, topology, iteration=None, frame=None, nframes=None):
         """Write a configuration (or one of a sequence of configurations) to be stored as a native NetCDF array
@@ -83,6 +85,21 @@ class NetCDFStorage(object):
         """
         pass
 
+    def _find_group(self, envname, modname):
+        """Retrieve the specified group, creating it if it does not exist.
+
+        Parameters
+        ----------
+        envname : str
+           Environment name
+        modname : str
+           Module name
+
+        """
+        groupname = '%s/%s' % (envname, modname)
+        ncgrp = self._ncfile.createGroup(groupname)
+        return ncgrp
+
     def write_quantity(self, envname, modname, varname, value, iteration=None):
         """Write a floating-point number
 
@@ -99,7 +116,15 @@ class NetCDFStorage(object):
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
         """
-        pass
+        ncgrp = self._find_group(envname, modname)
+
+        if varname not in ncgrp.variables:
+            ncgrp.createVariable(varname, 'f8', dimensions=('iterations',), chunksizes=(1,))
+
+        if iteration is not None:
+            ncgrp.variables[varname][iteration] = value
+        else:
+            ncgrp.variables[varname] = value
 
     def write_array(self, envname, modname, varname, array, iteration=None):
         """Write a numpy array as a native NetCDF array

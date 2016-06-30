@@ -49,6 +49,28 @@ def test_storage_append():
     storage = NetCDFStorage(tmpfile.name, mode='a')
     storage.close()
 
+def test_write_quantity():
+    """Test writing of a quantity.
+    """
+    tmpfile = tempfile.NamedTemporaryFile()
+    storage = NetCDFStorage(tmpfile.name, mode='w')
+
+    storage.write_quantity('envname', 'modname', 'singleton', 1.0)
+
+    for iteration in range(10):
+        storage.write_quantity('envname', 'modname', 'varname', float(iteration), iteration=iteration)
+
+    for iteration in range(10):
+        assert (storage._ncfile['/envname/modname/varname'][iteration] == float(iteration))
+
+def test_sync():
+    """Test writing of a quantity.
+    """
+    tmpfile = tempfile.NamedTemporaryFile()
+    storage = NetCDFStorage(tmpfile.name, mode='w')
+    storage.write_quantity('envname', 'modname', 'singleton', 1.0)
+    storage.sync()
+
 def test_storage_with_samplers():
     """Test storage layer inside all samplers.
     """
@@ -86,7 +108,7 @@ def test_storage_with_samplers():
             f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
             yield f
         # Test MultiTargetDesign sampler, if present.
-        if hasattr(testsystem, 'designer') and (testsystem.designer is not None):                        
+        if hasattr(testsystem, 'designer') and (testsystem.designer is not None):
             f = partial(testsystem.designer.run, niterations)
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
