@@ -400,7 +400,7 @@ class MCMCSampler(object):
     >>> sampler.run()
 
     """
-    def __init__(self, thermodynamic_state, sampler_state, topology=None, storage=None):
+    def __init__(self, thermodynamic_state, sampler_state, topology=None, envname=None, storage=None):
         """
         Create an MCMC sampler.
 
@@ -412,6 +412,8 @@ class MCMCSampler(object):
             The initial sampler state to simulate from.
         topology : simtk.openmm.app.Topology, optional, default=None
             Topology object corresponding to system being simulated (for writing)
+        envname : str, optional, default=None
+            Name of environment this sampler is attached to.
         storage : NetCDFStorage, optional, default=None
             Storage layer to use for writing.
 
@@ -420,8 +422,9 @@ class MCMCSampler(object):
         # TODO: Make deep copies?
         self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.sampler_state = copy.deepcopy(sampler_state)
-        self.storage = storage
         self.topology = topology
+        self.envname = envname
+        self.storage = storage
         # Initialize
         self.iteration = 0
         # For GHMC integrator
@@ -481,17 +484,17 @@ class MCMCSampler(object):
         # TODO: Generalize this to add NetCDFStorage.write_sampler_state(modname, sampelr_state, iteration)
         if self.storage:
             kT = kB * self.thermodynamic_state.temperature
-            self.storage.write_configuration(self.__class__.__name__, self.sampler_state.positions, self.sampler_state.topology, iteration=self.iteration)
-            self.storage.write_quantity(self.__class__.__name__, 'kinetic_energy', self.sampler_state.kinetic_energy / kT, iteration=self.iteration)
-            self.storage.write_quantity(self.__class__.__name__, 'potential_energy', self.sampler_state.potential_energy / kT, iteration=self.iteration)
-            self.storage.write_quantity(self.__class__.__name__, 'volume', self.sampler_state.volume / unit.angstroms**3, iteration=self.iteration)
+            self.storage.write_configuration(self.envname, self.__class__.__name__, 'positions', self.sampler_state.positions, self.topology, iteration=self.iteration)
+            self.storage.write_quantity(self.envname, self.__class__.__name__, 'kinetic_energy', self.sampler_state.kinetic_energy / kT, iteration=self.iteration)
+            self.storage.write_quantity(self.envname, self.__class__.__name__, 'potential_energy', self.sampler_state.potential_energy / kT, iteration=self.iteration)
+            self.storage.write_quantity(self.envname, self.__class__.__name__, 'volume', self.sampler_state.volume / unit.angstroms**3, iteration=self.iteration)
 
         # Report statistics.
         if self.integrator_name == 'GHMC':
             naccept = integrator.getGlobalVariableByName('naccept')
             fraction_accepted = float(naccept) / float(self.nsteps)
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
-            if self.storage: self.storage.write_quantity(self.__class__.__name__, 'fraction_accepted', fraction_accepted, iteration=self.iteration)
+            if self.storage: self.storage.write_quantity(self.envname, self.__class__.__name__, 'fraction_accepted', fraction_accepted, iteration=self.iteration)
 
         if self.verbose:
             print('Finished integration in %.3f s' % (time.time() - start_time))
@@ -588,7 +591,7 @@ class ExpandedEnsembleSampler(object):
     >>> exen_sampler.run()
 
     """
-    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None):
+    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None, envname=None, storage=None):
         """
         Create an expanded ensemble sampler.
 
@@ -625,6 +628,7 @@ class ExpandedEnsembleSampler(object):
         self.log_weights = log_weights
         self.scheme = scheme
         if self.log_weights is None: self.log_weights = dict()
+        self.storage = storage
 
         # Initialize
         self.iteration = 0
@@ -649,7 +653,6 @@ class ExpandedEnsembleSampler(object):
         self.pdbfile = None # if not None, write PDB file
         self.geometry_pdbfile = None # if not None, write PDB file of geometry proposals
         self.accept_everything = False # if True, will accept anything that doesn't lead to NaNs
-
 
     @property
     def state_keys(self):
@@ -821,6 +824,21 @@ class ExpandedEnsembleSampler(object):
                 self.nrejected += 1
                 if self.verbose: print("    rejected")
 
+            # Write to storage.
+            if self.storage:
+                self.storage.write_configuration(self.sampler.envname, self.__class__.__name__, 'positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
+                self.storage.write_object(self.sampler.envname, self.__class__.__name__, 'state_key', self.state_key, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'naccepted', self.naccepted, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'nrejected', self.nrejected, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_accept', logp_accept, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_geometry', geometry_logp, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_switch', switch_logp, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_ncmc_elimination', ncmc_elimination_logp, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'new_log_weight', new_log_weight, iteration=self.iteration)
+                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'old_log_weight', old_log_weight, iteration=self.iteration)
+
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
 
@@ -845,6 +863,9 @@ class ExpandedEnsembleSampler(object):
             from simtk.openmm.app import PDBFile
             PDBFile.writeModel(self.topology, self.sampler.sampler_state.positions, self.pdbfile, self.iteration)
             self.pdbfile.flush()
+
+        if self.storage:
+            self.storage.sync()
 
     def run(self, niterations=1):
         """
@@ -919,7 +940,7 @@ class SAMSSampler(object):
     >>> sams_sampler.run()
 
     """
-    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='default'):
+    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='default', storage=None):
         """
         Create a SAMS Sampler.
 
@@ -947,6 +968,7 @@ class SAMSSampler(object):
         else:
             self.log_target_probabilities = dict()
         self.update_method = update_method
+        self.storage = storage
 
         # Initialize.
         self.iteration = 0
@@ -984,6 +1006,10 @@ class SAMSSampler(object):
 
         # Update log weights for sampler.
         self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }
+
+        if self.storage:
+            self.storage.write_object(self.sampler.sampler.envname, self.__class__.__name__, 'logZ', self.logZ, iteration=self.iteration)
+            self.storage.write_object(self.sampler.sampler.envname, self.__class__.__name__, 'log_weights', self.sampler.log_weights, iteration=self.iteration)
 
     def update(self):
         """
@@ -1031,7 +1057,7 @@ class MultiTargetDesign(object):
         If True, verbose output is printed.
 
     """
-    def __init__(self, target_samplers, verbose=False):
+    def __init__(self, target_samplers, storage=None, verbose=False):
         """
         Initialize a multi-objective design sampler with the specified target sampler powers.
 
@@ -1039,6 +1065,10 @@ class MultiTargetDesign(object):
         ----------
         target_samplers : dict
             target_samplers[sampler] is the exponent associated with SAMS sampler `sampler` in the multi-objective design.
+        storage : NetCDFStorage, optional, default=None
+            If specified, will use the storage layer to write trajectory data.
+        verbose : bool, optional, default=False
+            If true, will print verbose output
 
         The target sampler weights for N samplers with specified exponents \alpha_n are given by
 
@@ -1061,6 +1091,7 @@ class MultiTargetDesign(object):
         # Store target samplers.
         self.sampler_exponents = target_samplers
         self.samplers = list(target_samplers.keys())
+        self.storage = storage
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
@@ -1104,6 +1135,9 @@ class MultiTargetDesign(object):
 
         if self.verbose:
             print("log_target_probabilities = %s" % str(self.log_target_probabilities))
+
+        if self.storage:
+            self.storage.write_object(self.__class__.__name__, self.__class__.__name__, 'log_target_probabilities', self.log_target_probabilities, iteration=self.iteration)
 
     def update(self):
         """

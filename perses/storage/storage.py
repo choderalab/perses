@@ -40,11 +40,13 @@ class NetCDFStorage(object):
         # Open NetCDF file here...
         self._ncfile = netcdf.Dataset(self._filename, mode=mode)
 
-    def write_configuration(self, modname, varname, positions, topology, iteration=None, frame=None, nframes=None):
+    def write_configuration(self, envname, modname, varname, positions, topology, iteration=None, frame=None, nframes=None):
         """Write a configuration (or one of a sequence of configurations) to be stored as a native NetCDF array
 
         Parameters
         ---
+        envname : str
+            The name of the environment this module is attached to.
         modname : str
             The name of the module in the code writing the variable
         varname : str
@@ -63,11 +65,13 @@ class NetCDFStorage(object):
         """
         pass
 
-    def write_object(self, modname, varname, object, iteration=None):
+    def write_object(self, envname, modname, varname, object, iteration=None):
         """Serialize a Python object
 
         Parameters
         ---
+        envname : str
+            The name of the environment this module is attached to.
         modname : str
             The name of the module in the code writing the variable
         varname : str
@@ -79,11 +83,13 @@ class NetCDFStorage(object):
         """
         pass
 
-    def write_quantity(self, modname, varname, value, iteration=None):
+    def write_quantity(self, envname, modname, varname, value, iteration=None):
         """Write a floating-point number
 
         Parameters
         ---
+        envname : str
+            The name of the environment this module is attached to.
         modname : str
             The name of the module in the code writing the variable
         varname : str
@@ -95,11 +101,13 @@ class NetCDFStorage(object):
         """
         pass
 
-    def write_array(self, modname, varname, array, iteration=None):
+    def write_array(self, envname, modname, varname, array, iteration=None):
         """Write a numpy array as a native NetCDF array
 
         Parameters
         ---
+        envname : str
+            The name of the environment this module is attached to.
         modname : str
             The name of the module in the code writing the variable
         varname : str

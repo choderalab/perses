@@ -34,6 +34,59 @@ import perses.annihilation.ncmc_switching as ncmc_switching
 ################################################################################
 
 def test_storage_create():
+    """Test storage layer creating a new file.
+    """
     tmpfile = tempfile.NamedTemporaryFile()
     storage = NetCDFStorage(tmpfile.name, mode='w')
     storage.close()
+
+def test_storage_append():
+    """Test storage layer appending to a file.
+    """
+    tmpfile = tempfile.NamedTemporaryFile()
+    storage = NetCDFStorage(tmpfile.name, mode='w')
+    storage.close()
+    storage = NetCDFStorage(tmpfile.name, mode='a')
+    storage.close()
+
+def test_storage_with_samplers():
+    """Test storage layer inside all samplers.
+    """
+    testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem']
+    niterations = 5 # number of iterations to run
+
+    for testsystem_name in testsystem_names:
+        # Create storage.
+        tmpfile = tempfile.NamedTemporaryFile()
+        storage = NetCDFStorage(tmpfile.name, mode='w')
+
+        import perses.tests.testsystems
+        testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
+        # Instantiate test system.
+        testsystem = testsystem_class()
+        # Test MCMCSampler samplers.
+        for environment in testsystem.environments:
+            mcmc_sampler = testsystem.mcmc_samplers[environment]
+            mcmc_sampler.storage = storage
+            f = partial(mcmc_sampler.run, niterations)
+            f.description = "Testing MCMC sampler with %s '%s'" % (testsystem_name, environment)
+            yield f
+        # Test ExpandedEnsembleSampler samplers.
+        for environment in testsystem.environments:
+            exen_sampler = testsystem.exen_samplers[environment]
+            exen_sampler.storage = storage
+            f = partial(exen_sampler.run, niterations)
+            f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
+            yield f
+        # Test SAMSSampler samplers.
+        for environment in testsystem.environments:
+            sams_sampler = testsystem.sams_samplers[environment]
+            sams_sampler.storage = storage
+            f = partial(sams_sampler.run, niterations)
+            f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
+            yield f
+        # Test MultiTargetDesign sampler, if present.
+        if hasattr(testsystem, 'designer') and (testsystem.designer is not None):                        
+            f = partial(testsystem.designer.run, niterations)
+            f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
+            yield f
