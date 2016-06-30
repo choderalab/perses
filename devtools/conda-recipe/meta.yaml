@@ -24,6 +24,7 @@ requirements:
     - alchemy-dev
     - openmmtools-dev
     - numba
+    - netcdf4
 
   run:
     - python
@@ -39,10 +40,12 @@ requirements:
     - alchemy-dev
     - openmmtools-dev
     - numba
+    - netcdf4
 
 test:
   requires:
     - nose
+    - nose-timer
   imports:
     - perses
 
