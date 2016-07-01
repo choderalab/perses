@@ -158,7 +158,38 @@ class NetCDFStorage(object):
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
         """
-        pass
+        ncgrp = self._find_group(envname, modname)
+
+        if varname not in ncgrp.variables:
+            # Create dimensions
+            dimensions = list()
+            if iteration is not None:
+                dimensions.append('iterations')
+            for (dimension_index, size) in enumerate(array.shape):
+                dimension_name = varname + str(dimension_index)
+                ncdim = self._ncfile.createDimension(dimension_name, size)
+                dimensions.append(dimension_name)
+            dimensions = tuple(dimensions)
+
+            # Create variables
+            if iteration is not None:
+                ncgrp.createVariable(varname, array.dtype, dimensions=dimensions, chunksizes=((1,) + array.shape))
+            else:
+                ncgrp.createVariable(varname, array.dtype, dimensions=dimensions, chunksizes=array.shape)
+
+        # Check dimensions
+        expected_shape = list()
+        for (dimension_index, size) in enumerate(array.shape):
+            dimension_name = varname + str(dimension_index)
+            expected_shape.append(self._ncfile.dimensions[dimension_name].size)
+        expected_shape = tuple(expected_shape)
+        if expected_shape != array.shape:
+            raise Exception("write_array called for /%s/%s/%s with different dimension (%s) than initially called (%s); dimension must stay constant." % (envname, modname, varname, str(array.shape), str(expected_shape)))
+
+        if iteration is not None:
+            ncgrp.variables[varname][iteration] = array
+        else:
+            ncgrp.variables[varname] = array
 
     def sync(self):
         """Flush write buffer.

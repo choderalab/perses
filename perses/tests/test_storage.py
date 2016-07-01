@@ -64,6 +64,25 @@ def test_write_quantity():
     for iteration in range(10):
         assert (storage._ncfile['/envname/modname/varname'][iteration] == float(iteration))
 
+def test_write_array():
+    """Test writing of a array.
+    """
+    tmpfile = tempfile.NamedTemporaryFile()
+    storage = NetCDFStorage(tmpfile.name, mode='w')
+
+    from numpy.random import random
+    shape = (10,3)
+    array = random(shape)
+    storage.write_array('envname', 'modname', 'singleton', array)
+
+    for iteration in range(10):
+        array = random(shape)
+        storage.write_array('envname', 'modname', 'varname', array, iteration=iteration)
+
+    for iteration in range(10):
+        array = storage._ncfile['/envname/modname/varname'][iteration]
+        assert array.shape == shape
+
 def test_write_object():
     """Test writing of a object.
     """
