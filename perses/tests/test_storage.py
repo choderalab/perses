@@ -20,6 +20,7 @@ import numpy as np
 import logging
 import tempfile
 from functools import partial
+import cPickle as pickle
 
 from perses.storage import NetCDFStorage
 import perses.tests.testsystems
@@ -62,6 +63,25 @@ def test_write_quantity():
 
     for iteration in range(10):
         assert (storage._ncfile['/envname/modname/varname'][iteration] == float(iteration))
+
+def test_write_object():
+    """Test writing of a object.
+    """
+    tmpfile = tempfile.NamedTemporaryFile()
+    storage = NetCDFStorage(tmpfile.name, mode='w')
+
+    obj = { 0 : 0 }
+    storage.write_object('envname', 'modname', 'singleton', obj)
+
+    for iteration in range(10):
+        obj = { 'iteration' : iteration }
+        storage.write_object('envname', 'modname', 'varname', obj, iteration=iteration)
+
+    for iteration in range(10):
+        string = storage._ncfile['/envname/modname/varname'][iteration]
+        obj = pickle.loads(string.encode('ascii'))
+        assert ('iteration' in obj)
+        assert (obj['iteration'] == iteration)
 
 def test_sync():
     """Test writing of a quantity.

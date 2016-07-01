@@ -83,7 +83,7 @@ class NetCDFStorage(object):
         """
         pass
 
-    def write_object(self, envname, modname, varname, object, iteration=None):
+    def write_object(self, envname, modname, varname, obj, iteration=None):
         """Serialize a Python object
 
         Parameters
@@ -94,7 +94,7 @@ class NetCDFStorage(object):
             The name of the module in the code writing the variable
         varname : str
             The variable name to be stored
-        object : object
+        obj : object
             The object to be serialized
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
@@ -107,7 +107,7 @@ class NetCDFStorage(object):
             else:
                 ncgrp.createVariable(varname, str, dimensions=(), chunksizes=(1,))
 
-        value = pickle.dumps(object)
+        value = pickle.dumps(obj)
         if iteration is not None:
             ncgrp.variables[varname][iteration] = value
         else:
