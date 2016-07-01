@@ -20,6 +20,7 @@ import numpy as np
 import copy
 import time
 import netCDF4 as netcdf
+import cPickle as pickle
 
 ################################################################################
 # LOGGER
@@ -41,6 +42,21 @@ class NetCDFStorage(object):
         # Create standard dimensions.
         if 'iterations' not in self._ncfile.dimensions:
             self._ncfile.createDimension('iterations', size=None)
+
+    def _find_group(self, envname, modname):
+        """Retrieve the specified group, creating it if it does not exist.
+
+        Parameters
+        ----------
+        envname : str
+           Environment name
+        modname : str
+           Module name
+
+        """
+        groupname = '%s/%s' % (envname, modname)
+        ncgrp = self._ncfile.createGroup(groupname)
+        return ncgrp
 
     def write_configuration(self, envname, modname, varname, positions, topology, iteration=None, frame=None, nframes=None):
         """Write a configuration (or one of a sequence of configurations) to be stored as a native NetCDF array
@@ -83,22 +99,19 @@ class NetCDFStorage(object):
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
         """
-        pass
+        ncgrp = self._find_group(envname, modname)
 
-    def _find_group(self, envname, modname):
-        """Retrieve the specified group, creating it if it does not exist.
+        if varname not in ncgrp.variables:
+            if iteration is not None:
+                ncgrp.createVariable(varname, str, dimensions=('iterations',), chunksizes=(1,))
+            else:
+                ncgrp.createVariable(varname, str, dimensions=(), chunksizes=(1,))
 
-        Parameters
-        ----------
-        envname : str
-           Environment name
-        modname : str
-           Module name
-
-        """
-        groupname = '%s/%s' % (envname, modname)
-        ncgrp = self._ncfile.createGroup(groupname)
-        return ncgrp
+        value = pickle.dumps(object)
+        if iteration is not None:
+            ncgrp.variables[varname][iteration] = value
+        else:
+            ncgrp.variables[varname] = value
 
     def write_quantity(self, envname, modname, varname, value, iteration=None):
         """Write a floating-point number
@@ -119,7 +132,10 @@ class NetCDFStorage(object):
         ncgrp = self._find_group(envname, modname)
 
         if varname not in ncgrp.variables:
-            ncgrp.createVariable(varname, 'f8', dimensions=('iterations',), chunksizes=(1,))
+            if iteration is not None:
+                ncgrp.createVariable(varname, 'f8', dimensions=('iterations',), chunksizes=(1,))
+            else:
+                ncgrp.createVariable(varname, 'f8', dimensions=(), chunksizes=(1,))
 
         if iteration is not None:
             ncgrp.variables[varname][iteration] = value

@@ -80,7 +80,9 @@ def test_storage_with_samplers():
     for testsystem_name in testsystem_names:
         # Create storage.
         tmpfile = tempfile.NamedTemporaryFile()
-        storage = NetCDFStorage(tmpfile.name, mode='w')
+        filename = tmpfile.name
+        filename = 'output.nc' # DEBUG
+        storage = NetCDFStorage(filename, mode='w')
 
         import perses.tests.testsystems
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
@@ -109,6 +111,7 @@ def test_storage_with_samplers():
             yield f
         # Test MultiTargetDesign sampler, if present.
         if hasattr(testsystem, 'designer') and (testsystem.designer is not None):
+            testsystem.designer.storage = storage
             f = partial(testsystem.designer.run, niterations)
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
