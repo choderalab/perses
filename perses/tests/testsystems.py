@@ -195,7 +195,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
@@ -422,7 +422,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
@@ -578,7 +578,7 @@ class MybTestSystem(PersesTestSystem):
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
@@ -746,7 +746,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], envname=environment)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
@@ -945,7 +945,7 @@ class AblAffinityTestSystem(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], envname=environment)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
@@ -1159,7 +1159,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], envname=environment)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
@@ -1374,7 +1374,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], envname=environment)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
@@ -1541,7 +1541,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':500})
@@ -1721,7 +1721,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
             mcmc_samplers[environment].nsteps = 500 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':0})
