@@ -111,6 +111,7 @@ def test_storage_with_samplers():
         for environment in testsystem.environments:
             mcmc_sampler = testsystem.mcmc_samplers[environment]
             mcmc_sampler.storage = storage
+            mcmc_sampler.verbose = False
             f = partial(mcmc_sampler.run, niterations)
             f.description = "Testing MCMC sampler with %s '%s'" % (testsystem_name, environment)
             yield f
@@ -118,6 +119,7 @@ def test_storage_with_samplers():
         for environment in testsystem.environments:
             exen_sampler = testsystem.exen_samplers[environment]
             exen_sampler.storage = storage
+            exen_sampler.verbose = False
             f = partial(exen_sampler.run, niterations)
             f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
             yield f
@@ -125,12 +127,14 @@ def test_storage_with_samplers():
         for environment in testsystem.environments:
             sams_sampler = testsystem.sams_samplers[environment]
             sams_sampler.storage = storage
+            sams_sampler.verbose = False
             f = partial(sams_sampler.run, niterations)
             f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
             yield f
         # Test MultiTargetDesign sampler, if present.
         if hasattr(testsystem, 'designer') and (testsystem.designer is not None):
             testsystem.designer.storage = storage
+            testsystem.designer.verbose = False
             f = partial(testsystem.designer.run, niterations)
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
