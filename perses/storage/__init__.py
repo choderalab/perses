@@ -1,2 +1,1 @@
-#
-from storage import NetCDFStorage
+from perses.storage.storage import *

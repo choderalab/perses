@@ -101,7 +101,6 @@ def test_storage_with_samplers():
         # Create storage.
         tmpfile = tempfile.NamedTemporaryFile()
         filename = tmpfile.name
-        filename = 'output.nc' # DEBUG
         storage = NetCDFStorage(filename, mode='w')
 
         import perses.tests.testsystems
