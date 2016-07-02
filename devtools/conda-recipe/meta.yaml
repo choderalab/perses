@@ -17,12 +17,12 @@ requirements:
     - scipy
     - numexpr
     - autograd
-    - pymbar-dev
-    - openmm-dev
-    - parmed-dev
-    - openmoltools-dev
-    - alchemy-dev
-    - openmmtools-dev
+    - pymbar
+    - openmm
+    - parmed
+    - openmoltools
+    - alchemy
+    - openmmtools
     - numba
     - netcdf4
     - matplotlib
@@ -35,12 +35,12 @@ requirements:
     - scipy
     - numexpr
     - autograd
-    - pymbar-dev
-    - openmm-dev
-    - parmed-dev
-    - openmoltools-dev
-    - alchemy-dev
-    - openmmtools-dev
+    - pymbar
+    - openmm
+    - parmed
+    - openmoltools
+    - alchemy
+    - openmmtools
     - numba
     - netcdf4
     - matplotlib
