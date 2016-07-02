@@ -87,7 +87,8 @@ class Analysis(object):
                     plt.figure(figsize=(8, 6))
 
                     for (index, direction) in enumerate(['delete', 'insert']):
-                        plt.subplot(2,1,index+1)
+                        plot_index = index+1
+                        plt.subplot(2,1,plot_index)
                         # Plot average work distribution in think solid line
                         plt.plot(work[direction].mean(0), 'k-', linewidth=1.0, alpha=1.0)
                         # Plot bundle of work trajectories in transparent lines
@@ -98,9 +99,9 @@ class Analysis(object):
                         nsteps = work[direction].shape[1]
                         plt.axis([0, nsteps, -worklim, +worklim])
                         # Label plot
-                        if index == 2: plt.xlabel('steps')
+                        if plot_index == 2: plt.xlabel('steps')
                         plt.ylabel('work / kT')
-                        plt.title(direction)
+                        plt.title("NCMC in environment '%s' : %s" % (envname, direction))
                         plt.legend(['average work', 'work trajectories'])
 
                     pdf.savefig()  # saves the current figure into a pdf page
