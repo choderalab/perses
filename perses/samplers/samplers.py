@@ -481,20 +481,19 @@ class MCMCSampler(object):
         self.sampler_state.velocities = None # erase velocities since we may change dimensionality next
 
         # Write positions and box vectors
-        # TODO: Generalize this to add NetCDFStorage.write_sampler_state(modname, sampelr_state, iteration)
         if self.storage:
             kT = kB * self.thermodynamic_state.temperature
-            self.storage.write_configuration(self.envname, self.__class__.__name__, 'positions', self.sampler_state.positions, self.topology, iteration=self.iteration)
-            self.storage.write_quantity(self.envname, self.__class__.__name__, 'kinetic_energy', self.sampler_state.kinetic_energy / kT, iteration=self.iteration)
-            self.storage.write_quantity(self.envname, self.__class__.__name__, 'potential_energy', self.sampler_state.potential_energy / kT, iteration=self.iteration)
-            self.storage.write_quantity(self.envname, self.__class__.__name__, 'volume', self.sampler_state.volume / unit.angstroms**3, iteration=self.iteration)
+            self.storage.write_configuration('positions', self.sampler_state.positions, self.topology, iteration=self.iteration)
+            self.storage.write_quantity('kinetic_energy', self.sampler_state.kinetic_energy / kT, iteration=self.iteration)
+            self.storage.write_quantity('potential_energy', self.sampler_state.potential_energy / kT, iteration=self.iteration)
+            self.storage.write_quantity('volume', self.sampler_state.volume / unit.angstroms**3, iteration=self.iteration)
 
         # Report statistics.
         if self.integrator_name == 'GHMC':
             naccept = integrator.getGlobalVariableByName('naccept')
             fraction_accepted = float(naccept) / float(self.nsteps)
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
-            if self.storage: self.storage.write_quantity(self.envname, self.__class__.__name__, 'fraction_accepted', fraction_accepted, iteration=self.iteration)
+            if self.storage: self.storage.write_quantity('fraction_accepted', fraction_accepted, iteration=self.iteration)
 
         if self.verbose:
             print('Finished integration in %.3f s' % (time.time() - start_time))
@@ -826,18 +825,18 @@ class ExpandedEnsembleSampler(object):
 
             # Write to storage.
             if self.storage:
-                self.storage.write_configuration(self.sampler.envname, self.__class__.__name__, 'positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
-                self.storage.write_object(self.sampler.envname, self.__class__.__name__, 'state_key', self.state_key, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'naccepted', self.naccepted, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'nrejected', self.nrejected, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_accept', logp_accept, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_geometry', geometry_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_switch', switch_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_ncmc_elimination', ncmc_elimination_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'new_log_weight', new_log_weight, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'old_log_weight', old_log_weight, iteration=self.iteration)
+                self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
+                self.storage.write_object('state_key', self.state_key, iteration=self.iteration)
+                self.storage.write_quantity('naccepted', self.naccepted, iteration=self.iteration)
+                self.storage.write_quantity('nrejected', self.nrejected, iteration=self.iteration)
+                self.storage.write_quantity('logp_accept', logp_accept, iteration=self.iteration)
+                self.storage.write_quantity('logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
+                self.storage.write_quantity('logp_geometry', geometry_logp, iteration=self.iteration)
+                self.storage.write_quantity('logp_switch', switch_logp, iteration=self.iteration)
+                self.storage.write_quantity('logp_ncmc_elimination', ncmc_elimination_logp, iteration=self.iteration)
+                self.storage.write_quantity('logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
+                self.storage.write_quantity('new_log_weight', new_log_weight, iteration=self.iteration)
+                self.storage.write_quantity('old_log_weight', old_log_weight, iteration=self.iteration)
 
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
@@ -1008,8 +1007,8 @@ class SAMSSampler(object):
         self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }
 
         if self.storage:
-            self.storage.write_object(self.sampler.sampler.envname, self.__class__.__name__, 'logZ', self.logZ, iteration=self.iteration)
-            self.storage.write_object(self.sampler.sampler.envname, self.__class__.__name__, 'log_weights', self.sampler.log_weights, iteration=self.iteration)
+            self.storage.write_object('logZ', self.logZ, iteration=self.iteration)
+            self.storage.write_object('log_weights', self.sampler.log_weights, iteration=self.iteration)
 
     def update(self):
         """
@@ -1137,7 +1136,7 @@ class MultiTargetDesign(object):
             print("log_target_probabilities = %s" % str(self.log_target_probabilities))
 
         if self.storage:
-            self.storage.write_object(self.__class__.__name__, self.__class__.__name__, 'log_target_probabilities', self.log_target_probabilities, iteration=self.iteration)
+            self.storage.write_object('log_target_probabilities', self.log_target_probabilities, iteration=self.iteration)
 
     def update(self):
         """

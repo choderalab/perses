@@ -22,7 +22,7 @@ import tempfile
 from functools import partial
 import cPickle as pickle
 
-from perses.storage import NetCDFStorage
+from perses.storage import NetCDFStorage, NetCDFStorageView
 import perses.tests.testsystems
 
 import perses.rjmc.topology_proposal as topology_proposal
@@ -50,16 +50,33 @@ def test_storage_append():
     storage = NetCDFStorage(tmpfile.name, mode='a')
     storage.close()
 
+def test_sync():
+    """Test writing of a quantity.
+    """
+    tmpfile = tempfile.NamedTemporaryFile()
+    storage = NetCDFStorage(tmpfile.name, mode='w')
+    storage.sync()
+
+def test_storage_view():
+    """Test writing of a quantity.
+    """
+    tmpfile = tempfile.NamedTemporaryFile()
+    storage = NetCDFStorage(tmpfile.name, mode='w')
+    view = NetCDFStorageView(storage, 'envname', 'modname')
+    view.sync()
+    view.close()
+
 def test_write_quantity():
     """Test writing of a quantity.
     """
     tmpfile = tempfile.NamedTemporaryFile()
     storage = NetCDFStorage(tmpfile.name, mode='w')
+    view = NetCDFStorageView(storage, 'envname', 'modname')
 
-    storage.write_quantity('envname', 'modname', 'singleton', 1.0)
+    view.write_quantity('singleton', 1.0)
 
     for iteration in range(10):
-        storage.write_quantity('envname', 'modname', 'varname', float(iteration), iteration=iteration)
+        view.write_quantity('varname', float(iteration), iteration=iteration)
 
     for iteration in range(10):
         assert (storage._ncfile['/envname/modname/varname'][iteration] == float(iteration))
@@ -69,15 +86,16 @@ def test_write_array():
     """
     tmpfile = tempfile.NamedTemporaryFile()
     storage = NetCDFStorage(tmpfile.name, mode='w')
+    view = NetCDFStorageView(storage, 'envname', 'modname')
 
     from numpy.random import random
     shape = (10,3)
     array = random(shape)
-    storage.write_array('envname', 'modname', 'singleton', array)
+    view.write_array('singleton', array)
 
     for iteration in range(10):
         array = random(shape)
-        storage.write_array('envname', 'modname', 'varname', array, iteration=iteration)
+        view.write_array('varname', array, iteration=iteration)
 
     for iteration in range(10):
         array = storage._ncfile['/envname/modname/varname'][iteration]
@@ -88,27 +106,20 @@ def test_write_object():
     """
     tmpfile = tempfile.NamedTemporaryFile()
     storage = NetCDFStorage(tmpfile.name, mode='w')
+    view = NetCDFStorageView(storage, 'envname', 'modname')
 
     obj = { 0 : 0 }
-    storage.write_object('envname', 'modname', 'singleton', obj)
+    view.write_object('singleton', obj)
 
     for iteration in range(10):
         obj = { 'iteration' : iteration }
-        storage.write_object('envname', 'modname', 'varname', obj, iteration=iteration)
+        view.write_object('varname', obj, iteration=iteration)
 
     for iteration in range(10):
         string = storage._ncfile['/envname/modname/varname'][iteration]
         obj = pickle.loads(string.encode('ascii'))
         assert ('iteration' in obj)
         assert (obj['iteration'] == iteration)
-
-def test_sync():
-    """Test writing of a quantity.
-    """
-    tmpfile = tempfile.NamedTemporaryFile()
-    storage = NetCDFStorage(tmpfile.name, mode='w')
-    storage.write_quantity('envname', 'modname', 'singleton', 1.0)
-    storage.sync()
 
 def test_storage_with_samplers():
     """Test storage layer inside all samplers.
@@ -129,7 +140,7 @@ def test_storage_with_samplers():
         # Test MCMCSampler samplers.
         for environment in testsystem.environments:
             mcmc_sampler = testsystem.mcmc_samplers[environment]
-            mcmc_sampler.storage = storage
+            mcmc_sampler.storage = NetCDFStorageView(storage, environment, 'MCMCSampler')
             mcmc_sampler.verbose = False
             f = partial(mcmc_sampler.run, niterations)
             f.description = "Testing MCMC sampler with %s '%s'" % (testsystem_name, environment)
@@ -137,7 +148,7 @@ def test_storage_with_samplers():
         # Test ExpandedEnsembleSampler samplers.
         for environment in testsystem.environments:
             exen_sampler = testsystem.exen_samplers[environment]
-            exen_sampler.storage = storage
+            exen_sampler.storage = NetCDFStorageView(storage, environment, 'ExpandedEnsembleSampler')
             exen_sampler.verbose = False
             f = partial(exen_sampler.run, niterations)
             f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
@@ -145,14 +156,14 @@ def test_storage_with_samplers():
         # Test SAMSSampler samplers.
         for environment in testsystem.environments:
             sams_sampler = testsystem.sams_samplers[environment]
-            sams_sampler.storage = storage
+            sams_sampler.storage = NetCDFStorageView(storage, environment, 'SAMSSampler')
             sams_sampler.verbose = False
             f = partial(sams_sampler.run, niterations)
             f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
             yield f
         # Test MultiTargetDesign sampler, if present.
         if hasattr(testsystem, 'designer') and (testsystem.designer is not None):
-            testsystem.designer.storage = storage
+            testsystem.designer.storage = NetCDFStorageView(storage, environment, 'MultiTargetDesign')
             testsystem.designer.verbose = False
             f = partial(testsystem.designer.run, niterations)
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)

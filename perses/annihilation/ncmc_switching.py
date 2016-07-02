@@ -68,7 +68,6 @@ class NCMCEngine(object):
             with a different PDB file generated for each attempt.
         integrator_type : str, optional, default='GHMC'
             NCMC internal integrator type ['GHMC', 'VV']
-
         """
         # Handle some defaults.
         if functions == None:
