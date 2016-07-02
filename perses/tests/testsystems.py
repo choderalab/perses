@@ -1822,7 +1822,7 @@ def checktestsystem(testsystem_class):
     # Instantiate test system.
     tmpfile = tempfile.NamedTemporaryFile()
     storage_filename = tmpfile.name
-    testsystem = testsystem_class(storage_filename)
+    testsystem = testsystem_class(storage_filename=storage_filename)
     # Check topologies
     check_topologies(testsystem)
 
