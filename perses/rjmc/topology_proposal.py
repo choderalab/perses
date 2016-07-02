@@ -1126,9 +1126,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._generated_topologies = dict()
         self._matches = dict()
 
-        self._storage = storage
+        self._storage = None
         if storage is not None:
-            self._storage.modname = self.__class__.__name__
+            self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         self._probability_matrix = self._calculate_probability_matrix(self._smiles_list)
 

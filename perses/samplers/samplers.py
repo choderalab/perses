@@ -24,6 +24,7 @@ from openmmtools import testsystems
 import copy
 import time
 
+from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
 
 ################################################################################
@@ -400,7 +401,7 @@ class MCMCSampler(object):
     >>> sampler.run()
 
     """
-    def __init__(self, thermodynamic_state, sampler_state, topology=None, envname=None, storage=None):
+    def __init__(self, thermodynamic_state, sampler_state, topology=None, storage=None):
         """
         Create an MCMC sampler.
 
@@ -412,8 +413,7 @@ class MCMCSampler(object):
             The initial sampler state to simulate from.
         topology : simtk.openmm.app.Topology, optional, default=None
             Topology object corresponding to system being simulated (for writing)
-        envname : str, optional, default=None
-            Name of environment this sampler is attached to.
+
         storage : NetCDFStorage, optional, default=None
             Storage layer to use for writing.
 
@@ -423,9 +423,11 @@ class MCMCSampler(object):
         self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.sampler_state = copy.deepcopy(sampler_state)
         self.topology = topology
-        self.envname = envname
-        self.storage = storage
-        if self.storage is not None: self.storage.modname = self.__class__.__name__
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
+
         # Initialize
         self.iteration = 0
         # For GHMC integrator
@@ -630,8 +632,10 @@ class ExpandedEnsembleSampler(object):
         self.log_weights = log_weights
         self.scheme = scheme
         if self.log_weights is None: self.log_weights = dict()
-        self.storage = storage
-        if self.storage is not None: self.storage.modname = self.__class__.__name__
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         # Initialize
         self.iteration = 0
@@ -753,7 +757,7 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Performing NCMC annihilation")
             # Alchemically eliminate atoms being removed.
-            [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
+            [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete', iteration=self.iteration)
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_old_positions)):
                 raise Exception("Positions are NaN after NCMC delete with %d steps" % self._switching_nsteps)
@@ -782,7 +786,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.
             initial_time = time.time()
-            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
+            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert', iteration=self.iteration)
             if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
@@ -972,8 +976,10 @@ class SAMSSampler(object):
         else:
             self.log_target_probabilities = dict()
         self.update_method = update_method
-        self.storage = storage
-        if self.storage is not None: self.storage.modname = self.__class__.__name__
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         # Initialize.
         self.iteration = 0
@@ -1096,8 +1102,10 @@ class MultiTargetDesign(object):
         # Store target samplers.
         self.sampler_exponents = target_samplers
         self.samplers = list(target_samplers.keys())
-        self.storage = storage
-        if self.storage is not None: self.storage.modname = self.__class__.__name__
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
@@ -1215,8 +1223,10 @@ class ProtonationStateSampler(object):
         self.samplers = [complex_sampler, solvent_sampler]
         self.complex_sampler = complex_sampler
         self.solvent_sampler = solvent_sampler
-        self.storage = storage
-        if self.storage is not None: self.storage.modname = self.__class__.__name__
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = { key : - log_state_penalties[key] for key in log_state_penalties }

@@ -94,6 +94,10 @@ class NCMCEngine(object):
 
         self.nattempted = 0
 
+        self._storage = None
+        if storage is not None:
+            self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
+
     @property
     def beta(self):
         kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
@@ -252,7 +256,7 @@ class NCMCEngine(object):
         alchemical_system = alchemical_factory.createPerturbedSystem()
         return [unmodified_system, alchemical_system]
 
-    def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None):
+    def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None, iteration=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
 
@@ -272,6 +276,8 @@ class NCMCEngine(object):
                 'delete' causes lambda to switch from 1 to 0 over nsteps steps of integration
         platform : simtk.openmm.Platform, optional, default=None
             If not None, this platform is used for integration.
+        iteration : int, optional, default=None
+            Iteration number, for storage purposes.
 
         Returns
         -------
@@ -348,7 +354,7 @@ class NCMCEngine(object):
         #print("initial potential before '%s' : %f kT" % (direction, initial_potential))
         #print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
         self.write_pdb_interval = False
-        # Take a single integrator step since all switching steps are unrolled in NCMCVVAlchemicalIntegrator.
+        # Integrate switching
         try:
             # Write PDB file if requested.
             if self.write_pdb_interval:
@@ -377,6 +383,7 @@ class NCMCEngine(object):
                         integrator.step(1)
                         if (step+1)%self.write_pdb_interval == 0:
                             modelIndex += 1
+                            # TODO: Replace with storage layer
                             PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
                 except ValueError as e:
                     # System is exploding and coordinates won't fit in PDB ATOM fields
@@ -385,12 +392,19 @@ class NCMCEngine(object):
                 PDBFile.writeFooter(topology, file=outfile)
                 outfile.close()
             else:
+                work = np.zeros([self.nsteps], np.float64) # work[n] is the accumulated work up to step n
                 for step in range(self.nsteps):
                     integrator.step(1)
-                    potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+                    #potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
                     #print("Potential at step %d is %s" % (step, str(potential)))
-                    current_step = integrator.get_step()
+                    #current_step = integrator.get_step()
                     #print("and the integrator's current step is %d" % current_step)
+
+                    # Store accumulated work
+                    work[step] = - integrator.getLogAcceptanceProbability(context)
+
+                if self._storage:
+                    self._storage.write_array('work_' % diretion, work, iteration=iteration)
 
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
