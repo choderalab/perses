@@ -650,7 +650,7 @@ class ExpandedEnsembleSampler(object):
         else:
             self._switching_nsteps = 0
         from perses.annihilation.ncmc_switching import NCMCEngine
-        self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
+        self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
         self.geometry_engine = OmegaFFGeometryEngine(torsion_kappa=300.0, max_confs=10)
         self.naccepted = 0

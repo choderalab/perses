@@ -2,8 +2,11 @@ from __future__ import print_function
 import numpy as np
 import copy
 import logging
+import traceback
 from simtk import openmm, unit
 from openmmtools.integrators import GHMCIntegrator
+from perses.storage import NetCDFStorageView
+
 default_functions = {
     'lambda_sterics' : 'lambda',
     'lambda_electrostatics' : 'lambda',
@@ -404,13 +407,14 @@ class NCMCEngine(object):
                     work[step] = - integrator.getLogAcceptanceProbability(context)
 
                 if self._storage:
-                    self._storage.write_array('work_' % diretion, work, iteration=iteration)
+                    self._storage.write_array('work_%s' % direction, work, iteration=iteration)
 
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
             if str(e) == "Particle coordinate is nan":
                 raise NaNException(str(e))
             else:
+                traceback.print_exc()
                 raise e
 
         # Set final context parameters.

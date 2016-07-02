@@ -1911,13 +1911,23 @@ def run_kinase_inhibitors():
 def run_valence_system():
     """
     Run valence molecules test system.
+
+    This system only has one environment (vacuum), so SAMS is used.
+
     """
-    testsystem = ValenceSmallMoleculeLibraryTestSystem()
+    testsystem = ValenceSmallMoleculeLibraryTestSystem(storage_filename='output.nc')
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
-    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
-    testsystem.mcmc_samplers[environment].nsteps = 50
-    testsystem.sams_samplers[environment].run(niterations=5)
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
+    testsystem.mcmc_samplers[environment].nsteps = 5
+    testsystem.sams_samplers[environment].run(niterations=50)
+
+    # Analyze data.
+    #from perses.analysis import Analysis
+    #analysis = Analysis(storage_filename='output.nc')
+    #analysis.plot_sams_weights('sams.pdf')
+    #analysis.plot_ncmc_work('ncmc.pdf')
+
 
 def test_valence_write_pdb_ncmc_switching():
     """
@@ -2036,10 +2046,10 @@ def run_constph_imidazole():
     testsystem.sams_samplers['explicit-imidazole'].run(niterations=1000)
 
 if __name__ == '__main__':
-    run_constph_imidazole()
+    run_valence_system()
+    #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
-    #run_valence_system()
     #run_kinase_inhibitors()
     #run_abl_imatinib()
     #run_myb()
