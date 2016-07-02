@@ -20,7 +20,7 @@ import numpy as np
 import logging
 import tempfile
 from functools import partial
-import cPickle as pickle
+import pickle
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
 import perses.tests.testsystems
