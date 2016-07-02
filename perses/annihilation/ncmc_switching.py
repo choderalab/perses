@@ -412,7 +412,11 @@ class NCMCEngine(object):
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
             if str(e) == "Particle coordinate is nan":
-                raise NaNException(str(e))
+                msg = "Particle coordinate is nan during NCMC integration while using integrator_type '%s'" % self.integrator_type
+                if self.integrator_type == 'GHMC':
+                    msg += '\n'
+                    msg += 'This should NEVER HAPPEN with GHMC!'
+                raise NaNException(msg)
             else:
                 traceback.print_exc()
                 raise e

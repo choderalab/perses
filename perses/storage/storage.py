@@ -5,6 +5,7 @@ TODO
 ----
 * Add write_sampler_state(modname, sampler_state, iteration)
 * Generalize write_quantity to handle units
+* Add data access routines for reading to isolate low-level storage layer
 
 """
 

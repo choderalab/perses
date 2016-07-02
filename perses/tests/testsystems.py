@@ -1853,7 +1853,7 @@ def run_t4_inhibitors():
         testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50 # NCMC switching
         testsystem.sams_samplers[environment].verbose = True
     testsystem.designer.verbose = True
-    testsystem.designer.run(niterations=5)
+    testsystem.designer.run(niterations=50)
 
     # Analyze data.
     #from perses.analysis import Analysis
