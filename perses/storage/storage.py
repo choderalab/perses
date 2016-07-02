@@ -172,8 +172,8 @@ class NetCDFStorage(object):
                 dimensions.append('iterations')
             for (dimension_index, size) in enumerate(array.shape):
                 dimension_name = ''
-                if self.envname: dimension_name += self.envname + '_'
-                if self.modname: dimension_name += self.modname + '_'
+                if self._envname: dimension_name += self._envname + '_'
+                if self._modname: dimension_name += self._modname + '_'
                 dimension_name += varname + '_' + str(dimension_index)
                 ncdim = self._ncfile.createDimension(dimension_name, size)
                 dimensions.append(dimension_name)
