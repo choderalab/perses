@@ -165,18 +165,21 @@ class NetCDFStorage(object):
         """
         ncgrp = self._find_group()
 
+        def dimension_name(dimension_index):
+            dimension_name = ''
+            if self._envname: dimension_name += self._envname + '_'
+            if self._modname: dimension_name += self._modname + '_'
+            dimension_name += varname + '_' + str(dimension_index)
+            return dimension_name
+
         if varname not in ncgrp.variables:
             # Create dimensions
             dimensions = list()
             if iteration is not None:
                 dimensions.append('iterations')
             for (dimension_index, size) in enumerate(array.shape):
-                dimension_name = ''
-                if self._envname: dimension_name += self._envname + '_'
-                if self._modname: dimension_name += self._modname + '_'
-                dimension_name += varname + '_' + str(dimension_index)
-                ncdim = self._ncfile.createDimension(dimension_name, size)
-                dimensions.append(dimension_name)
+                ncdim = self._ncfile.createDimension(dimension_name(dimension_index), size)
+                dimensions.append(dimension_name(dimension_index))
             dimensions = tuple(dimensions)
 
             # Create variables
@@ -188,8 +191,7 @@ class NetCDFStorage(object):
         # Check dimensions
         expected_shape = list()
         for (dimension_index, size) in enumerate(array.shape):
-            dimension_name = varname + str(dimension_index)
-            expected_shape.append(self._ncfile.dimensions[dimension_name].size)
+            expected_shape.append(self._ncfile.dimensions[dimension_name(dimension_index)].size)
         expected_shape = tuple(expected_shape)
         if expected_shape != array.shape:
             raise Exception("write_array called for /%s/%s/%s with different dimension (%s) than initially called (%s); dimension must stay constant." % (envname, modname, varname, str(array.shape), str(expected_shape)))

@@ -88,19 +88,23 @@ def test_write_array():
     """
     tmpfile = tempfile.NamedTemporaryFile()
     storage = NetCDFStorage(tmpfile.name, mode='w')
-    view = NetCDFStorageView(storage, 'envname', 'modname')
+    view1 = NetCDFStorageView(storage, 'envname1', 'modname')
+    view2 = NetCDFStorageView(storage, 'envname2', 'modname')
 
     from numpy.random import random
     shape = (10,3)
     array = random(shape)
-    view.write_array('singleton', array)
+    view1.write_array('singleton', array)
 
     for iteration in range(10):
         array = random(shape)
-        view.write_array('varname', array, iteration=iteration)
+        view1.write_array('varname', array, iteration=iteration)
+        view2.write_array('varname', array, iteration=iteration)
 
     for iteration in range(10):
-        array = storage._ncfile['/envname/modname/varname'][iteration]
+        array = storage._ncfile['/envname1/modname/varname'][iteration]
+        assert array.shape == shape
+        array = storage._ncfile['/envname2/modname/varname'][iteration]
         assert array.shape == shape
 
 def test_write_object():
