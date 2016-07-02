@@ -42,7 +42,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC'):
+    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC', storage=None):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -68,6 +68,8 @@ class NCMCEngine(object):
             with a different PDB file generated for each attempt.
         integrator_type : str, optional, default='GHMC'
             NCMC internal integrator type ['GHMC', 'VV']
+        storage : NetCDFStorageView, optional, default=None
+            If specified, write data using this class.
         """
         # Handle some defaults.
         if functions == None:

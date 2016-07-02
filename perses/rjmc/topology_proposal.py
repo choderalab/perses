@@ -1103,9 +1103,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         The name that will be used for small molecule residues in the topology
     proposal_metadata : dict
         metadata for the proposal engine
+    storage : NetCDFStorageView, optional, default=None
+        If specified, write statistics to this storage layer.
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None):
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None):
         if not atom_expr:
             self.atom_expr = oechem.OEExprOpts_AtomicNumber #oechem.OEExprOpts_Aromaticity #| oechem.OEExprOpts_RingMember
         else:
@@ -1123,7 +1125,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._generated_systems = dict()
         self._generated_topologies = dict()
         self._matches = dict()
+
+        self._storage = storage
+        if storage is not None:
+            self._storage.modname = self.__class__.__name__
+
         self._probability_matrix = self._calculate_probability_matrix(self._smiles_list)
+
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata)
 
     def propose(self, current_system, current_topology, current_metadata=None):
@@ -1515,6 +1523,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             except ZeroDivisionError:
                 print("One molecule is completely disconnected!")
                 raise
+
+        if self._storage:
+            self._storage.write_object('molecule_smiles_list', molecule_smiles_list)
+            self._storage.write_array('probability_matrix', probability_matrix)
 
         return probability_matrix
 

@@ -50,23 +50,22 @@ class NetCDFStorage(object):
         """
         self._filename = filename
         self._ncfile = netcdf.Dataset(self._filename, mode=mode)
+        self._envname = None
+        self._modname = None
 
         # Create standard dimensions.
         if 'iterations' not in self._ncfile.dimensions:
             self._ncfile.createDimension('iterations', size=None)
 
-    def _find_group(self, envname, modname):
+    def _find_group(self):
         """Retrieve the specified group, creating it if it does not exist.
 
-        Parameters
-        ----------
-        envname : str
-           Environment name
-        modname : str
-           Module name
-
         """
-        groupname = '%s/%s' % (envname, modname)
+        groupname = '/'
+        if self._envname is not None:
+            groupname += self._envname + '/'
+        if self._modname is not None:
+            groupname += self._modname + '/'
         ncgrp = self._ncfile.createGroup(groupname)
         return ncgrp
 
@@ -79,29 +78,6 @@ class NetCDFStorage(object):
         """Close the storage layer.
         """
         self._ncfile.close()
-
-################################################################################
-# BOUND STORAGE VIEW
-################################################################################
-
-class NetCDFStorageView(NetCDFStorage):
-    """NetCDF storage view with bound environment and module names.
-    """
-    def __init__(self, storage, envname, modname):
-        """Initialize a view of the storage with a specific environment and module name.
-
-        Parameters
-        ----------
-        envname : str
-            The name of the environment this module is attached to.
-        modname : str
-            The name of the module in the code writing the variable
-        """
-        self._filename = storage._filename
-        self._ncfile = storage._ncfile
-        self.envname = envname
-        self.modname = modname
-
 
     def write_configuration(self, varname, positions, topology, iteration=None, frame=None, nframes=None):
         """Write a configuration (or one of a sequence of configurations) to be stored as a native NetCDF array
@@ -136,7 +112,7 @@ class NetCDFStorageView(NetCDFStorage):
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
         """
-        ncgrp = self._find_group(self.envname, self.modname)
+        ncgrp = self._find_group()
 
         if varname not in ncgrp.variables:
             if iteration is not None:
@@ -162,7 +138,7 @@ class NetCDFStorageView(NetCDFStorage):
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
         """
-        ncgrp = self._find_group(self.envname, self.modname)
+        ncgrp = self._find_group()
 
         if varname not in ncgrp.variables:
             if iteration is not None:
@@ -187,7 +163,7 @@ class NetCDFStorageView(NetCDFStorage):
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
         """
-        ncgrp = self._find_group(self.envname, self.modname)
+        ncgrp = self._find_group()
 
         if varname not in ncgrp.variables:
             # Create dimensions
@@ -219,3 +195,28 @@ class NetCDFStorageView(NetCDFStorage):
             ncgrp.variables[varname][iteration] = array
         else:
             ncgrp.variables[varname] = array
+
+################################################################################
+# BOUND STORAGE VIEWS THAT ENCAPSULATE ENVIRONMENT NAMES AND MODULE NAMES
+################################################################################
+
+class NetCDFStorageView(NetCDFStorage):
+    """NetCDF storage view with bound environment and module names.
+    """
+    def __init__(self, storage, envname=None, modname=None):
+        """Initialize a view of the storage with a specific environment and module name.
+
+        Parameters
+        ----------
+        envname : str, optional, default=None
+            Set the name of the environment this module is attached to.
+        modname : str, optional, default=None
+            Set the name of the module in the code writing the variable
+        """
+        self._filename = storage._filename
+        self._ncfile = storage._ncfile
+        self._envname = storage._envname
+        self._modname = storage._modname
+
+        if envname: self._envname = envname
+        if modname: self._modname = modname

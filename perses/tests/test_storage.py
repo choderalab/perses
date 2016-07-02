@@ -62,9 +62,11 @@ def test_storage_view():
     """
     tmpfile = tempfile.NamedTemporaryFile()
     storage = NetCDFStorage(tmpfile.name, mode='w')
-    view = NetCDFStorageView(storage, 'envname', 'modname')
-    view.sync()
-    view.close()
+    view1 = NetCDFStorageView(storage, envname='envname')
+    view2 = NetCDFStorageView(view1, modname='modname')
+    assert (view1._envname == 'envname')
+    assert (view2._envname == 'envname')
+    assert (view2._modname == 'modname')
 
 def test_write_quantity():
     """Test writing of a quantity.
@@ -131,16 +133,14 @@ def test_storage_with_samplers():
         # Create storage.
         tmpfile = tempfile.NamedTemporaryFile()
         filename = tmpfile.name
-        storage = NetCDFStorage(filename, mode='w')
 
         import perses.tests.testsystems
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
         # Instantiate test system.
-        testsystem = testsystem_class()
+        testsystem = testsystem_class(storage_filename=filename)
         # Test MCMCSampler samplers.
         for environment in testsystem.environments:
             mcmc_sampler = testsystem.mcmc_samplers[environment]
-            mcmc_sampler.storage = NetCDFStorageView(storage, environment, 'MCMCSampler')
             mcmc_sampler.verbose = False
             f = partial(mcmc_sampler.run, niterations)
             f.description = "Testing MCMC sampler with %s '%s'" % (testsystem_name, environment)
@@ -148,7 +148,6 @@ def test_storage_with_samplers():
         # Test ExpandedEnsembleSampler samplers.
         for environment in testsystem.environments:
             exen_sampler = testsystem.exen_samplers[environment]
-            exen_sampler.storage = NetCDFStorageView(storage, environment, 'ExpandedEnsembleSampler')
             exen_sampler.verbose = False
             f = partial(exen_sampler.run, niterations)
             f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
@@ -156,14 +155,12 @@ def test_storage_with_samplers():
         # Test SAMSSampler samplers.
         for environment in testsystem.environments:
             sams_sampler = testsystem.sams_samplers[environment]
-            sams_sampler.storage = NetCDFStorageView(storage, environment, 'SAMSSampler')
             sams_sampler.verbose = False
             f = partial(sams_sampler.run, niterations)
             f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
             yield f
         # Test MultiTargetDesign sampler, if present.
         if hasattr(testsystem, 'designer') and (testsystem.designer is not None):
-            testsystem.designer.storage = NetCDFStorageView(storage, environment, 'MultiTargetDesign')
             testsystem.designer.verbose = False
             f = partial(testsystem.designer.run, niterations)
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)

@@ -425,6 +425,7 @@ class MCMCSampler(object):
         self.topology = topology
         self.envname = envname
         self.storage = storage
+        if self.storage is not None: self.storage.modname = self.__class__.__name__
         # Initialize
         self.iteration = 0
         # For GHMC integrator
@@ -616,6 +617,8 @@ class ExpandedEnsembleSampler(object):
             Options for initializing switching scheme, such as 'timestep', 'nsteps', 'functions' for NCMC
         platform : simtk.openmm.Platform, optional, default=None
             Platform to use for NCMC switching.  If `None`, default (fastest) platform is used.
+        storage : NetCDFStorageView, optional, default=None
+            If specified, use this storage layer.
 
         """
         # Keep copies of initializing arguments.
@@ -628,6 +631,7 @@ class ExpandedEnsembleSampler(object):
         self.scheme = scheme
         if self.log_weights is None: self.log_weights = dict()
         self.storage = storage
+        if self.storage is not None: self.storage.modname = self.__class__.__name__
 
         # Initialize
         self.iteration = 0
@@ -953,6 +957,7 @@ class SAMSSampler(object):
             If specified, unnormalized target probabilities; default is all 0.
         update_method : str, optional, default='default'
             SAMS update algorithm
+        storage : NetCDFStorageView, optional, default=None
 
         """
         # Keep copies of initializing arguments.
@@ -968,6 +973,7 @@ class SAMSSampler(object):
             self.log_target_probabilities = dict()
         self.update_method = update_method
         self.storage = storage
+        if self.storage is not None: self.storage.modname = self.__class__.__name__
 
         # Initialize.
         self.iteration = 0
@@ -1091,6 +1097,7 @@ class MultiTargetDesign(object):
         self.sampler_exponents = target_samplers
         self.samplers = list(target_samplers.keys())
         self.storage = storage
+        if self.storage is not None: self.storage.modname = self.__class__.__name__
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
@@ -1185,7 +1192,7 @@ class ProtonationStateSampler(object):
         If True, verbose output is printed.
 
     """
-    def __init__(self, complex_sampler, solvent_sampler, log_state_penalties, verbose=False):
+    def __init__(self, complex_sampler, solvent_sampler, log_state_penalties, storage=None, verbose=False):
         """
         Initialize a protonation state sampler with fixed target probabilities for ligand in solvent.
 
@@ -1197,6 +1204,10 @@ class ProtonationStateSampler(object):
             Ligand in solution sampler
         log_state_penalties : dict
             log_state_penalties[smiles] is the log state free energy (in kT) for ligand state 'smiles'
+        storage : NetCDFStorage, optional, default=None
+            If specified, will use the storage layer to write trajectory data.
+        verbose : bool, optional, default=False
+            If true, will print verbose output
 
         """
         # Store target samplers.
@@ -1204,6 +1215,8 @@ class ProtonationStateSampler(object):
         self.samplers = [complex_sampler, solvent_sampler]
         self.complex_sampler = complex_sampler
         self.solvent_sampler = solvent_sampler
+        self.storage = storage
+        if self.storage is not None: self.storage.modname = self.__class__.__name__
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = { key : - log_state_penalties[key] for key in log_state_penalties }
