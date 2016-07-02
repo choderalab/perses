@@ -1,1 +1,1 @@
-from perses.tests.testsystems import *
+from perses.tests import testsystems

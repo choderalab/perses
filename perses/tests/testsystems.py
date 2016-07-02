@@ -1839,6 +1839,28 @@ def test_testsystems():
         f.description = "Testing %s" % (testsystem_name)
         yield f
 
+def run_t4_inhibitors():
+    """
+    Run T4 lysozyme inhibitors in solvents test system.
+    """
+    testsystem = T4LysozymeInhibitorsTestSystem(storage_filename='output.nc')
+    for environment in ['explicit', 'vacuum']:
+        #testsystem.exen_samplers[environment].pdbfile = open('t4-' + component + '.pdb', 'w')
+        #testsystem.exen_samplers[environment].options={'nsteps':50} # instantaneous MC
+        testsystem.mcmc_samplers[environment].verbose = True
+        testsystem.mcmc_samplers[environment].nsteps = 50 # use fewer MD steps to speed things up
+        testsystem.exen_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50 # NCMC switching
+        testsystem.sams_samplers[environment].verbose = True
+    testsystem.designer.verbose = True
+    testsystem.designer.run(niterations=5)
+
+    # Analyze data.
+    #from perses.analysis import Analysis
+    #analysis = Analysis(storage_filename='output.nc')
+    #analysis.plot_sams_weights('sams.pdf')
+    #analysis.plot_ncmc_work('ncmc.pdf')
+
 def run_t4():
     """
     Run T4 lysozyme test system.
@@ -1853,6 +1875,12 @@ def run_t4():
         testsystem.sams_samplers[solvent + '-' + component].run(niterations=5)
     testsystem.designer.verbose = True
     testsystem.designer.run(niterations=5)
+
+    # Analyze data.
+    #from perses.analysis import Analysis
+    #analysis = Analysis(storage_filename='output.nc')
+    #analysis.plot_sams_weights('sams.pdf')
+    #analysis.plot_ncmc_work('ncmc.pdf')
 
 def run_myb():
     """
@@ -1921,13 +1949,6 @@ def run_valence_system():
     testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
     testsystem.mcmc_samplers[environment].nsteps = 5
     testsystem.sams_samplers[environment].run(niterations=50)
-
-    # Analyze data.
-    #from perses.analysis import Analysis
-    #analysis = Analysis(storage_filename='output.nc')
-    #analysis.plot_sams_weights('sams.pdf')
-    #analysis.plot_ncmc_work('ncmc.pdf')
-
 
 def test_valence_write_pdb_ncmc_switching():
     """
@@ -2046,7 +2067,8 @@ def run_constph_imidazole():
     testsystem.sams_samplers['explicit-imidazole'].run(niterations=1000)
 
 if __name__ == '__main__':
-    run_valence_system()
+    #run_valence_system()
+    run_t4_inhibitors()
     #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
