@@ -70,6 +70,14 @@ class NetCDFStorage(object):
         ncgrp = self._ncfile.createGroup(groupname)
         return ncgrp
 
+    def _encode_string(string, encoding='ascii'):
+        """Encode strings to ASCII to avoid python 3 crap.
+        """
+        try:
+            return string.encode(encoding)
+        except UnicodeEncodeError:
+            return string
+
     def sync(self):
         """Flush write buffer.
         """
@@ -84,7 +92,7 @@ class NetCDFStorage(object):
         """Write a configuration (or one of a sequence of configurations) to be stored as a native NetCDF array
 
         Parameters
-        ---
+        ----------
         varname : str
             The variable name to be stored
         positions : simtk.unit.Quantity of size [natoms,3] with units compatible with angstroms
@@ -102,16 +110,17 @@ class NetCDFStorage(object):
         pass
 
     def write_object(self, varname, obj, iteration=None):
-        """Serialize a Python object
+        """Serialize a Python object, encoding as 'latin1' when storing in NetCDF.
 
         Parameters
-        ---
+        ----------
         varname : str
             The variable name to be stored
         obj : object
             The object to be serialized
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
+
         """
         ncgrp = self._find_group()
 
@@ -121,11 +130,12 @@ class NetCDFStorage(object):
             else:
                 ncgrp.createVariable(varname, str, dimensions=(), chunksizes=(1,))
 
-        value = pickle.dumps(obj)
+        pickled_data = pickle.dumps(obj)
+        encoded = pickled_data.decode('latin1') # must encode to store as text
         if iteration is not None:
-            ncgrp.variables[varname][iteration] = value
+            ncgrp.variables[varname][iteration] = encoded
         else:
-            ncgrp.variables[varname] = value
+            ncgrp.variables[varname] = encoded
 
     def write_quantity(self, varname, value, iteration=None):
         """Write a floating-point number

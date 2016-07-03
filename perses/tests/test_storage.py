@@ -123,7 +123,7 @@ def test_write_object():
 
     for iteration in range(10):
         string = storage._ncfile['/envname/modname/varname'][iteration]
-        obj = pickle.loads(string.encode('ascii'))
+        obj = pickle.loads(string.encode('latin1'))
         assert ('iteration' in obj)
         assert (obj['iteration'] == iteration)
 
