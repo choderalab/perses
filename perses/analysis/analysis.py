@@ -3,6 +3,7 @@ Analysis tools for perses automated molecular design.
 
 TODO
 ----
+* Analyze all but last iteration to ensure we can analyze a running simulation?
 
 """
 
@@ -20,7 +21,8 @@ import time
 import netCDF4 as netcdf
 import cPickle as pickle
 
-import matplotlib
+import matplotlib as mpl
+mpl.use('Agg')
 import seaborn
 
 from matplotlib.backends.backend_pdf import PdfPages
@@ -78,17 +80,27 @@ class Analysis(object):
                 for direction in ['delete', 'insert']:
                     varname = '/' + envname + '/' + modname + '/' + 'work_' + direction
                     try:
-                        work[direction] = self._ncfile[varname][:,:]
+                        # TODO: For now, we analyze all but the last sample, so that this can be run on active simulations.
+                        # Later, we should find some way to omit the last sample only if it is nonsensical.
+                        work[direction] = self._ncfile[varname][:-1,:]
                         print('Found %s' % varname)
                     except Exception as e:
                         pass
 
                 if len(work) > 0:
-                    plt.figure(figsize=(8, 6))
+                    plt.figure(figsize=(12, 8))
 
-                    for (index, direction) in enumerate(['delete', 'insert']):
-                        plot_index = index+1
-                        plt.subplot(2,1,plot_index)
+                    nrows = 2
+                    ncols = 6
+                    workcols = 2
+                    for (row, direction) in enumerate(['delete', 'insert']):
+                        #
+                        # Plot work vs step
+                        #
+
+                        col = 0
+                        plt.subplot2grid((nrows,ncols), (row, col), colspan=(ncols-workcols))
+
                         # Plot average work distribution in think solid line
                         plt.plot(work[direction].mean(0), 'k-', linewidth=1.0, alpha=1.0)
                         # Plot bundle of work trajectories in transparent lines
@@ -99,10 +111,30 @@ class Analysis(object):
                         nsteps = work[direction].shape[1]
                         plt.axis([0, nsteps, -worklim, +worklim])
                         # Label plot
-                        if plot_index == 2: plt.xlabel('steps')
+                        if row == 1: plt.xlabel('steps')
                         plt.ylabel('work / kT')
                         plt.title("NCMC in environment '%s' : %s" % (envname, direction))
-                        plt.legend(['average work', 'work trajectories'])
+                        plt.legend(['average work', 'NCMC attempts'])
+
+                        #
+                        # Plot work histogram
+                        #
+
+                        col = ncols - workcols
+                        plt.subplot2grid((nrows,ncols), (row, col), colspan=workcols)
+
+                        # Plot average work distribution in think solid line
+                        nbins = 40
+                        workvals = work[direction][:-1,-1]
+                        plt.hist(workvals, nbins)
+                        # Adjust axes to eliminate large-magnitude outliers (keep 98% of data in-range)
+                        #worklim = np.percentile(workvals, 98)
+                        #oldaxis = plt.axis()
+                        #plt.axis([-worklim, +worklim, 0, oldaxis[3]])
+                        # Label plot
+                        if row == 1: plt.xlabel('work / kT')
+                        plt.title("total %s work" % direction)
+
 
                     pdf.savefig()  # saves the current figure into a pdf page
                     plt.close()

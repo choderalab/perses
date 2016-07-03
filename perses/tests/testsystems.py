@@ -2041,15 +2041,15 @@ def run_imidazole():
     """
     Run imidazole constant-pH test system.
     """
-    testsystem = ImidazoleProtonationStateTestSystem()
+    testsystem = ImidazoleProtonationStateTestSystem(storage_filename='output.nc')
     for environment in testsystem.environments:
         if environment not in testsystem.exen_samplers:
             print("Skipping '%s' for now..." % environment)
             continue
 
         print(environment)
-        testsystem.exen_samplers[environment].pdbfile = open('imidazole-constph-%s.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].geometry_pdbfile = open('imidazole-constph-%s-geometry-proposals.pdb' % environment, 'w')
+        #testsystem.exen_samplers[environment].pdbfile = open('imidazole-constph-%s.pdb' % environment, 'w')
+        #testsystem.exen_samplers[environment].geometry_pdbfile = open('imidazole-constph-%s-geometry-proposals.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
