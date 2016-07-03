@@ -2037,7 +2037,7 @@ def run_constph_abl():
     testsystem.designer.update_target_probabilities() # update log weights from inhibitor in solvent calibration
     testsystem.designer.run(niterations=500)
 
-def run_constph_imidazole():
+def run_imidazole():
     """
     Run imidazole constant-pH test system.
     """
@@ -2054,7 +2054,7 @@ def run_constph_imidazole():
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
         #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 2500
+        testsystem.mcmc_samplers[environment].nsteps = 500
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
         testsystem.mcmc_samplers[environment].verbose = True
@@ -2064,11 +2064,12 @@ def run_constph_imidazole():
 
     # Run ligand in solvent constant-pH sampler calibration
     testsystem.sams_samplers['explicit-imidazole'].verbose=True
-    testsystem.sams_samplers['explicit-imidazole'].run(niterations=1000)
+    testsystem.sams_samplers['explicit-imidazole'].run(niterations=100)
 
 if __name__ == '__main__':
     #run_valence_system()
-    run_t4_inhibitors()
+    #run_t4_inhibitors()
+    run_imidazole()
     #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()

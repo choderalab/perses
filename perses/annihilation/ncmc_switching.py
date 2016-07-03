@@ -395,7 +395,7 @@ class NCMCEngine(object):
                 PDBFile.writeFooter(topology, file=outfile)
                 outfile.close()
             else:
-                work = np.zeros([self.nsteps], np.float64) # work[n] is the accumulated work up to step n
+                work = np.zeros([self.nsteps+1], np.float64) # work[n] is the accumulated work up to step n
                 for step in range(self.nsteps):
                     integrator.step(1)
                     #potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
@@ -404,7 +404,7 @@ class NCMCEngine(object):
                     #print("and the integrator's current step is %d" % current_step)
 
                     # Store accumulated work
-                    work[step] = - integrator.getLogAcceptanceProbability(context)
+                    work[step+1] = - integrator.getLogAcceptanceProbability(context)
 
                 if self._storage:
                     self._storage.write_array('work_%s' % direction, work, iteration=iteration)

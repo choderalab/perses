@@ -15,6 +15,7 @@ import tempfile
 from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
+from perses.storage import NetCDFStorageView
 try:
     from StringIO import StringIO
 except ImportError:

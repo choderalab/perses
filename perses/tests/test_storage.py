@@ -1,9 +1,6 @@
 """
 Test storage layer.
 
-TODO:
-* Write tests
-
 """
 
 __author__ = 'John D. Chodera'

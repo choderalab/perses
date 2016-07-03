@@ -33,7 +33,7 @@ from perses.analysis import Analysis
 def test_analysis():
     """Test analysis tools.
     """
-    testsystem_names = ['T4LysozymeInhibitorsTestSystem']
+    testsystem_names = ['ImidazoleProtonationStateTestSystem']
     niterations = 5 # number of iterations to run
 
     for testsystem_name in testsystem_names:
@@ -54,8 +54,17 @@ def test_analysis():
             testsystem.exen_samplers[environment].verbose = False
             testsystem.exen_samplers[environment].ncmc_engine.nsteps = 5 # NCMC switching
             testsystem.sams_samplers[environment].verbose = False
-        testsystem.designer.verbose = False
-        testsystem.designer.run(niterations=5)
+
+        # Run test simulations.
+        niterations = 5 # just a few iterations
+        if testsystem.designer is not None:
+            # Run the designer
+            testsystem.designer.verbose = False
+            testsystem.designer.run(niterations=niterations)
+        else:
+            # Run the SAMS samplers.
+            for environment in testsystem.environments:
+                testsystem.sams_samplers[environment].run(niterations=niterations)
 
         # Analyze file.
         # TODO: Use temporary filenames
