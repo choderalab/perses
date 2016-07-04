@@ -2050,7 +2050,7 @@ def run_imidazole():
         print(environment)
         #testsystem.exen_samplers[environment].pdbfile = open('imidazole-constph-%s.pdb' % environment, 'w')
         #testsystem.exen_samplers[environment].geometry_pdbfile = open('imidazole-constph-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
         #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
