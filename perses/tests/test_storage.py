@@ -139,30 +139,23 @@ def test_storage_with_samplers():
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
         # Instantiate test system.
         testsystem = testsystem_class(storage_filename=filename)
+
         # Test MCMCSampler samplers.
         for environment in testsystem.environments:
             mcmc_sampler = testsystem.mcmc_samplers[environment]
             mcmc_sampler.verbose = False
-            f = partial(mcmc_sampler.run, niterations)
-            f.description = "Testing MCMC sampler with %s '%s'" % (testsystem_name, environment)
-            yield f
+            mcmc_sampler.run(niterations)
         # Test ExpandedEnsembleSampler samplers.
         for environment in testsystem.environments:
             exen_sampler = testsystem.exen_samplers[environment]
             exen_sampler.verbose = False
-            f = partial(exen_sampler.run, niterations)
-            f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
-            yield f
+            exen_sampler.run(niterations)
         # Test SAMSSampler samplers.
         for environment in testsystem.environments:
             sams_sampler = testsystem.sams_samplers[environment]
             sams_sampler.verbose = False
-            f = partial(sams_sampler.run, niterations)
-            f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
-            yield f
+            sams_sampler.run(niterations)
         # Test MultiTargetDesign sampler, if present.
         if hasattr(testsystem, 'designer') and (testsystem.designer is not None):
             testsystem.designer.verbose = False
-            f = partial(testsystem.designer.run, niterations)
-            f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
-            yield f
+            testsystem.designer.run(niterations)
