@@ -22,6 +22,7 @@ import copy
 import time
 import netCDF4 as netcdf
 import pickle
+import json
 
 ################################################################################
 # LOGGER
@@ -110,7 +111,7 @@ class NetCDFStorage(object):
         pass
 
     def write_object(self, varname, obj, iteration=None):
-        """Serialize a Python object, encoding as 'latin1' when storing in NetCDF.
+        """Serialize a Python object, encoding as JSON when storing as string in NetCDF.
 
         Parameters
         ----------
@@ -119,7 +120,7 @@ class NetCDFStorage(object):
         obj : object
             The object to be serialized
         iteration : int, optional, default=None
-            The local iteration for the module, or `None` if this is a singleton
+            The local iteration for the module, or `None` if this is a singleton        
 
         """
         ncgrp = self._find_group()
@@ -130,8 +131,7 @@ class NetCDFStorage(object):
             else:
                 ncgrp.createVariable(varname, str, dimensions=(), chunksizes=(1,))
 
-        pickled_data = pickle.dumps(obj)
-        encoded = pickled_data.decode('latin1') # must encode to store as text
+        encoded = json.dumps(obj)
         if iteration is not None:
             ncgrp.variables[varname][iteration] = encoded
         else:
@@ -141,7 +141,7 @@ class NetCDFStorage(object):
         """Write a floating-point number
 
         Parameters
-        ---
+        ----------
         varname : str
             The variable name to be stored
         value : float

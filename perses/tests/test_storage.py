@@ -17,7 +17,7 @@ import numpy as np
 import logging
 import tempfile
 from functools import partial
-import pickle
+import json
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
 import perses.tests.testsystems
@@ -119,8 +119,8 @@ def test_write_object():
         view.write_object('varname', obj, iteration=iteration)
 
     for iteration in range(10):
-        string = storage._ncfile['/envname/modname/varname'][iteration]
-        obj = pickle.loads(string.encode('latin1'))
+        encoded = storage._ncfile['/envname/modname/varname'][iteration]
+        obj = json.loads(encoded)
         assert ('iteration' in obj)
         assert (obj['iteration'] == iteration)
 
