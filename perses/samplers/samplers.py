@@ -657,8 +657,6 @@ class ExpandedEnsembleSampler(object):
             self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
-        from perses.annihilation.ncmc_switching import NCMCEngine
-        self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
         self.geometry_engine = FFAllAngleGeometryEngine(metadata=dict())
         self.naccepted = 0
