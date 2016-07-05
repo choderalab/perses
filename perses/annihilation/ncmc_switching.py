@@ -647,9 +647,10 @@ class NCMCHybridEngine(NCMCEngine):
                                                    new_positions, atom_map)
 
         # Return the alchemically-modified system in fully-interacting form.
-        alchemical_system, _, alchemical_positions, atom_map = alchemical_factory.createPerturbedSystem()
+        alchemical_system, _, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
         return [unmodified_old_system, unmodified_new_system,
-                alchemical_system, alchemical_positions, atom_map]
+                alchemical_system, alchemical_positions, final_atom_map,
+                initial_atom_map]
 
     def _convert_hybrid_positions_to_final(self, positions, atom_map):
         final_positions = unit.Quantity(np.zeros([len(atom_map.keys()),3]), unit=unit.nanometers)
