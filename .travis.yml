@@ -43,6 +43,7 @@ script:
 env:
   matrix:
     # Allfast tests for python 2.7
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.storage perses.tests.test_storage"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.testsystems perses.tests.utils"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.samplers"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
