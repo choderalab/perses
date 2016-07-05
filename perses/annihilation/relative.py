@@ -69,8 +69,10 @@ class HybridTopologyFactory(object):
 
     def createPerturbedSystem(self):
 
+        sys1_indices_in_system = { a:a for a in self.system1_atoms.keys() }
+
         if self.return_self:
-            return [self.system1, self.topology1, self.positions1, self.atom_mapping_2to1]
+            return [self.system1, self.topology1, self.positions1, self.atom_mapping_2to1, sys1_indices_in_system]
 
         topology1 = copy.deepcopy(self.topology1)
         self.topology1 = topology1
@@ -103,8 +105,6 @@ class HybridTopologyFactory(object):
         assert len(common1) == len(common2)
 
         sys2_indices_in_system = copy.deepcopy(self.atom_mapping_2to1)
-
-        sys1_indices_in_system = { a:a for a in system1_atoms.keys() }
 
         residues_2_to_sys = dict()
         for index2, index in sys2_indices_in_system.items():
