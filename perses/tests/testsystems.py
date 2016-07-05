@@ -2080,27 +2080,27 @@ def run_imidazole():
 def run_fused_rings():
     """
     Run fused rings test system.
-    """
-    testsystem = FusedRingsTestSystem()
-    """
-    Run T4 lysozyme inhibitors in solvents test system.
-    """
-    storage_filename = 'output.nc'
-    testsystem = T4LysozymeInhibitorsTestSystem(storage_filename=storage_filename)
-    for environment in ['explicit', 'vacuum']:
-        testsystem.mcmc_samplers[environment].verbose = True
-        testsystem.mcmc_samplers[environment].nsteps = 50 # use fewer MD steps to speed things up
-        testsystem.exen_samplers[environment].verbose = True
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50 # NCMC switching steps
-        testsystem.sams_samplers[environment].verbose = True
-    testsystem.designer.verbose = True
-    testsystem.designer.run(niterations=500)
+    Vary number of NCMC steps
 
-    # Analyze data.
-    from perses.analysis import Analysis
-    analysis = Analysis(storage_filename=storage_filename)
-    #analysis.plot_sams_weights('sams.pdf')
-    analysis.plot_ncmc_work('ncmc.pdf')
+    """
+    nsteps_to_try = [0, 10, 100, 1000, 10000, 100000] # number of NCMC steps
+    for ncmc_steps in nsteps_to_try:
+        storage_filename = 'output-%d.nc' % ncmc_steps
+        testsystem = FusedRingsTestSystem(storage_filename=storage_filename)
+        for environment in ['explicit', 'vacuum']:
+            testsystem.mcmc_samplers[environment].verbose = True
+            testsystem.mcmc_samplers[environment].nsteps = 500
+            testsystem.exen_samplers[environment].verbose = True
+            testsystem.exen_samplers[environment].ncmc_engine.nsteps = ncmc_steps # NCMC switching steps
+            testsystem.sams_samplers[environment].verbose = True
+        testsystem.designer.verbose = True
+        testsystem.designer.run(niterations=100)
+
+        # Analyze data.
+        from perses.analysis import Analysis
+        analysis = Analysis(storage_filename=storage_filename)
+        #analysis.plot_sams_weights('sams.pdf')
+        analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
     run_fused_rings()
