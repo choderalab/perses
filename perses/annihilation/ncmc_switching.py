@@ -2,8 +2,11 @@ from __future__ import print_function
 import numpy as np
 import copy
 import logging
+import traceback
 from simtk import openmm, unit
 from openmmtools.integrators import GHMCIntegrator
+from perses.storage import NetCDFStorageView
+
 default_functions = {
     'lambda_sterics' : 'lambda',
     'lambda_electrostatics' : 'lambda',
@@ -42,7 +45,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC'):
+    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC', storage=None):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -68,7 +71,8 @@ class NCMCEngine(object):
             with a different PDB file generated for each attempt.
         integrator_type : str, optional, default='GHMC'
             NCMC internal integrator type ['GHMC', 'VV']
-
+        storage : NetCDFStorageView, optional, default=None
+            If specified, write data using this class.
         """
         # Handle some defaults.
         if functions == None:
@@ -92,6 +96,10 @@ class NCMCEngine(object):
         self.write_pdb_interval = write_pdb_interval
 
         self.nattempted = 0
+
+        self._storage = None
+        if storage is not None:
+            self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
     @property
     def beta(self):
@@ -251,7 +259,7 @@ class NCMCEngine(object):
         alchemical_system = alchemical_factory.createPerturbedSystem()
         return [unmodified_system, alchemical_system]
 
-    def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None):
+    def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None, iteration=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
 
@@ -271,6 +279,8 @@ class NCMCEngine(object):
                 'delete' causes lambda to switch from 1 to 0 over nsteps steps of integration
         platform : simtk.openmm.Platform, optional, default=None
             If not None, this platform is used for integration.
+        iteration : int, optional, default=None
+            Iteration number, for storage purposes.
 
         Returns
         -------
@@ -347,7 +357,7 @@ class NCMCEngine(object):
         #print("initial potential before '%s' : %f kT" % (direction, initial_potential))
         #print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
         self.write_pdb_interval = False
-        # Take a single integrator step since all switching steps are unrolled in NCMCVVAlchemicalIntegrator.
+        # Integrate switching
         try:
             # Write PDB file if requested.
             if self.write_pdb_interval:
@@ -376,6 +386,7 @@ class NCMCEngine(object):
                         integrator.step(1)
                         if (step+1)%self.write_pdb_interval == 0:
                             modelIndex += 1
+                            # TODO: Replace with storage layer
                             PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
                 except ValueError as e:
                     # System is exploding and coordinates won't fit in PDB ATOM fields
@@ -384,18 +395,30 @@ class NCMCEngine(object):
                 PDBFile.writeFooter(topology, file=outfile)
                 outfile.close()
             else:
+                work = np.zeros([self.nsteps+1], np.float64) # work[n] is the accumulated work up to step n
                 for step in range(self.nsteps):
                     integrator.step(1)
-                    potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+                    #potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
                     #print("Potential at step %d is %s" % (step, str(potential)))
-                    current_step = integrator.get_step()
+                    #current_step = integrator.get_step()
                     #print("and the integrator's current step is %d" % current_step)
+
+                    # Store accumulated work
+                    work[step+1] = - integrator.getLogAcceptanceProbability(context)
+
+                if self._storage:
+                    self._storage.write_array('work_%s' % direction, work, iteration=iteration)
 
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
             if str(e) == "Particle coordinate is nan":
-                raise NaNException(str(e))
+                msg = "Particle coordinate is nan during NCMC integration while using integrator_type '%s'" % self.integrator_type
+                if self.integrator_type == 'GHMC':
+                    msg += '\n'
+                    msg += 'This should NEVER HAPPEN with GHMC!'
+                raise NaNException(msg)
             else:
+                traceback.print_exc()
                 raise e
 
         # Set final context parameters.

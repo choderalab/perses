@@ -17,14 +17,17 @@ requirements:
     - scipy
     - numexpr
     - autograd
-    - pymbar-dev
-    - openmm-dev
-    - parmed-dev
-    - openmoltools-dev
-    - alchemy-dev
-    - openmmtools-dev
+    - pymbar
+    - openmm
+    - parmed
+    - openmoltools
+    - alchemy
+    - openmmtools
     - numba
     - netcdf4
+    - matplotlib
+    - seaborn
+    - pdbfixer
 
   run:
     - python
@@ -33,14 +36,17 @@ requirements:
     - scipy
     - numexpr
     - autograd
-    - pymbar-dev
-    - openmm-dev
-    - parmed-dev
-    - openmoltools-dev
-    - alchemy-dev
-    - openmmtools-dev
+    - pymbar
+    - openmm
+    - parmed
+    - openmoltools
+    - alchemy
+    - openmmtools
     - numba
     - netcdf4
+    - matplotlib
+    - seaborn
+    - pdbfixer
 
 test:
   requires:
@@ -48,7 +54,6 @@ test:
     - nose-timer
   imports:
     - perses
-
 
 about:
   home: https://github.com/choderalab/perses

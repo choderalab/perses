@@ -24,6 +24,7 @@ from openmmtools import testsystems
 import copy
 import time
 
+from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
 
 ################################################################################
@@ -400,7 +401,7 @@ class MCMCSampler(object):
     >>> sampler.run()
 
     """
-    def __init__(self, thermodynamic_state, sampler_state, topology=None, envname=None, storage=None):
+    def __init__(self, thermodynamic_state, sampler_state, topology=None, storage=None):
         """
         Create an MCMC sampler.
 
@@ -412,8 +413,7 @@ class MCMCSampler(object):
             The initial sampler state to simulate from.
         topology : simtk.openmm.app.Topology, optional, default=None
             Topology object corresponding to system being simulated (for writing)
-        envname : str, optional, default=None
-            Name of environment this sampler is attached to.
+
         storage : NetCDFStorage, optional, default=None
             Storage layer to use for writing.
 
@@ -423,8 +423,11 @@ class MCMCSampler(object):
         self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.sampler_state = copy.deepcopy(sampler_state)
         self.topology = topology
-        self.envname = envname
-        self.storage = storage
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
+
         # Initialize
         self.iteration = 0
         # For GHMC integrator
@@ -481,20 +484,19 @@ class MCMCSampler(object):
         self.sampler_state.velocities = None # erase velocities since we may change dimensionality next
 
         # Write positions and box vectors
-        # TODO: Generalize this to add NetCDFStorage.write_sampler_state(modname, sampelr_state, iteration)
         if self.storage:
             kT = kB * self.thermodynamic_state.temperature
-            self.storage.write_configuration(self.envname, self.__class__.__name__, 'positions', self.sampler_state.positions, self.topology, iteration=self.iteration)
-            self.storage.write_quantity(self.envname, self.__class__.__name__, 'kinetic_energy', self.sampler_state.kinetic_energy / kT, iteration=self.iteration)
-            self.storage.write_quantity(self.envname, self.__class__.__name__, 'potential_energy', self.sampler_state.potential_energy / kT, iteration=self.iteration)
-            self.storage.write_quantity(self.envname, self.__class__.__name__, 'volume', self.sampler_state.volume / unit.angstroms**3, iteration=self.iteration)
+            self.storage.write_configuration('positions', self.sampler_state.positions, self.topology, iteration=self.iteration)
+            self.storage.write_quantity('kinetic_energy', self.sampler_state.kinetic_energy / kT, iteration=self.iteration)
+            self.storage.write_quantity('potential_energy', self.sampler_state.potential_energy / kT, iteration=self.iteration)
+            self.storage.write_quantity('volume', self.sampler_state.volume / unit.angstroms**3, iteration=self.iteration)
 
         # Report statistics.
         if self.integrator_name == 'GHMC':
             naccept = integrator.getGlobalVariableByName('naccept')
             fraction_accepted = float(naccept) / float(self.nsteps)
             if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
-            if self.storage: self.storage.write_quantity(self.envname, self.__class__.__name__, 'fraction_accepted', fraction_accepted, iteration=self.iteration)
+            if self.storage: self.storage.write_quantity('fraction_accepted', fraction_accepted, iteration=self.iteration)
 
         if self.verbose:
             print('Finished integration in %.3f s' % (time.time() - start_time))
@@ -617,6 +619,8 @@ class ExpandedEnsembleSampler(object):
             Options for initializing switching scheme, such as 'timestep', 'nsteps', 'functions' for NCMC
         platform : simtk.openmm.Platform, optional, default=None
             Platform to use for NCMC switching.  If `None`, default (fastest) platform is used.
+        storage : NetCDFStorageView, optional, default=None
+            If specified, use this storage layer.
 
         """
         # Keep copies of initializing arguments.
@@ -628,7 +632,10 @@ class ExpandedEnsembleSampler(object):
         self.log_weights = log_weights
         self.scheme = scheme
         if self.log_weights is None: self.log_weights = dict()
-        self.storage = storage
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         # Initialize
         self.iteration = 0
@@ -644,12 +651,14 @@ class ExpandedEnsembleSampler(object):
             self._switching_nsteps = 0
         if scheme=='ncmc-geometry-ncmc':
             from perses.annihilation.ncmc_switching import NCMCEngine
-            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
+            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         elif scheme=='geometry-ncmc':
             from perses.annihilation.ncmc_switching import NCMCHybridEngine
             self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
+        from perses.annihilation.ncmc_switching import NCMCEngine
+        self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
         self.geometry_engine = FFAllAngleGeometryEngine(metadata=dict())
         self.naccepted = 0
@@ -756,7 +765,7 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Performing NCMC annihilation")
             # Alchemically eliminate atoms being removed.
-            [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete')
+            [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, positions, direction='delete', iteration=self.iteration)
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_old_positions)):
                 raise Exception("Positions are NaN after NCMC delete with %d steps" % self._switching_nsteps)
@@ -785,7 +794,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("Performing NCMC insertion")
             # Alchemically introduce new atoms.
             initial_time = time.time()
-            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert')
+            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert', iteration=self.iteration)
             if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
@@ -831,18 +840,18 @@ class ExpandedEnsembleSampler(object):
                 if self.verbose: print("    rejected")
             # Write to storage.
             if self.storage:
-                self.storage.write_configuration(self.sampler.envname, self.__class__.__name__, 'positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
-                self.storage.write_object(self.sampler.envname, self.__class__.__name__, 'state_key', self.state_key, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'naccepted', self.naccepted, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'nrejected', self.nrejected, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_accept', logp_accept, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_geometry', geometry_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_switch', switch_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_ncmc_elimination', ncmc_elimination_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'new_log_weight', new_log_weight, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'old_log_weight', old_log_weight, iteration=self.iteration)
+                self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
+                self.storage.write_object('state_key', self.state_key, iteration=self.iteration)
+                self.storage.write_quantity('naccepted', self.naccepted, iteration=self.iteration)
+                self.storage.write_quantity('nrejected', self.nrejected, iteration=self.iteration)
+                self.storage.write_quantity('logp_accept', logp_accept, iteration=self.iteration)
+                self.storage.write_quantity('logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
+                self.storage.write_quantity('logp_geometry', geometry_logp, iteration=self.iteration)
+                self.storage.write_quantity('logp_switch', switch_logp, iteration=self.iteration)
+                self.storage.write_quantity('logp_ncmc_elimination', ncmc_elimination_logp, iteration=self.iteration)
+                self.storage.write_quantity('logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
+                self.storage.write_quantity('new_log_weight', new_log_weight, iteration=self.iteration)
+                self.storage.write_quantity('old_log_weight', old_log_weight, iteration=self.iteration)
 
 
         elif self.scheme == 'geometry-ncmc':
@@ -1089,6 +1098,7 @@ class SAMSSampler(object):
             If specified, unnormalized target probabilities; default is all 0.
         update_method : str, optional, default='default'
             SAMS update algorithm
+        storage : NetCDFStorageView, optional, default=None
 
         """
         # Keep copies of initializing arguments.
@@ -1103,7 +1113,10 @@ class SAMSSampler(object):
         else:
             self.log_target_probabilities = dict()
         self.update_method = update_method
-        self.storage = storage
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         # Initialize.
         self.iteration = 0
@@ -1143,8 +1156,8 @@ class SAMSSampler(object):
         self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }
 
         if self.storage:
-            self.storage.write_object(self.sampler.sampler.envname, self.__class__.__name__, 'logZ', self.logZ, iteration=self.iteration)
-            self.storage.write_object(self.sampler.sampler.envname, self.__class__.__name__, 'log_weights', self.sampler.log_weights, iteration=self.iteration)
+            self.storage.write_object('logZ', self.logZ, iteration=self.iteration)
+            self.storage.write_object('log_weights', self.sampler.log_weights, iteration=self.iteration)
 
     def update(self):
         """
@@ -1226,7 +1239,10 @@ class MultiTargetDesign(object):
         # Store target samplers.
         self.sampler_exponents = target_samplers
         self.samplers = list(target_samplers.keys())
-        self.storage = storage
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = dict()
@@ -1272,7 +1288,7 @@ class MultiTargetDesign(object):
             print("log_target_probabilities = %s" % str(self.log_target_probabilities))
 
         if self.storage:
-            self.storage.write_object(self.__class__.__name__, self.__class__.__name__, 'log_target_probabilities', self.log_target_probabilities, iteration=self.iteration)
+            self.storage.write_object('log_target_probabilities', self.log_target_probabilities, iteration=self.iteration)
 
     def update(self):
         """
@@ -1321,7 +1337,7 @@ class ProtonationStateSampler(object):
         If True, verbose output is printed.
 
     """
-    def __init__(self, complex_sampler, solvent_sampler, log_state_penalties, verbose=False):
+    def __init__(self, complex_sampler, solvent_sampler, log_state_penalties, storage=None, verbose=False):
         """
         Initialize a protonation state sampler with fixed target probabilities for ligand in solvent.
 
@@ -1333,6 +1349,10 @@ class ProtonationStateSampler(object):
             Ligand in solution sampler
         log_state_penalties : dict
             log_state_penalties[smiles] is the log state free energy (in kT) for ligand state 'smiles'
+        storage : NetCDFStorage, optional, default=None
+            If specified, will use the storage layer to write trajectory data.
+        verbose : bool, optional, default=False
+            If true, will print verbose output
 
         """
         # Store target samplers.
@@ -1340,6 +1360,10 @@ class ProtonationStateSampler(object):
         self.samplers = [complex_sampler, solvent_sampler]
         self.complex_sampler = complex_sampler
         self.solvent_sampler = solvent_sampler
+
+        self.storage = None
+        if storage is not None:
+            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         # Initialize storage for target probabilities.
         self.log_target_probabilities = { key : - log_state_penalties[key] for key in log_state_penalties }
