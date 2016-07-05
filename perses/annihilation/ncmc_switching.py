@@ -704,10 +704,11 @@ class NCMCHybridEngine(NCMCEngine):
          unmodified_new_system,
          alchemical_system,
          alchemical_positions,
-         final_to_hybrid_atom_map] = self.make_alchemical_system(
-                                          topology_proposal, initial_positions,
-                                          proposed_positions,
-                                          direction=direction)
+         final_to_hybrid_atom_map,
+         initial_to_hybrid_atom_map] = self.make_alchemical_system(
+                                            topology_proposal, initial_positions,
+                                            proposed_positions,
+                                            direction=direction)
 ########################################################################
 
         from perses.tests.utils import compute_potential
@@ -825,6 +826,7 @@ class NCMCHybridEngine(NCMCEngine):
         final_hybrid_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
 
         final_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, final_to_hybrid_atom_map)
+        new_old_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, initial_to_hybrid_atom_map)
 
         logP_NCMC = integrator.getLogAcceptanceProbability(context)
         # DEBUG
@@ -852,7 +854,7 @@ class NCMCHybridEngine(NCMCEngine):
         self.nattempted += 1
 
         # Return
-        return [final_positions, logP, potential]
+        return [final_positions, new_old_positions, logP, potential]
 
 
 class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
