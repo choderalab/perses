@@ -44,6 +44,7 @@ env:
   matrix:
     # Allfast tests for python 2.7
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.storage perses.tests.test_storage"
+    - python=2.7 CONDA_PY=27 NOSETESTS="perses.analysis perses.tests.test_analysis"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.testsystems perses.tests.utils"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.samplers"
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
@@ -62,6 +63,8 @@ env:
     - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_elimination"
     # Main tests for python 3.4
     # We skip slow tests.
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.storage perses.tests.test_storage"
+    - python=3.4 CONDA_PY=34 NOSETESTS="perses.analysis perses.tests.test_analysis"
     - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.testsystems perses.tests.utils"
     - python=3.4 CONDA_PY=34 NOSETESTS="perses.samplers"
     #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
@@ -72,6 +75,18 @@ env:
     - python=3.4 CONDA_PY=34 NOSETESTS="perses.annihilation"
     - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_ncmc_integrator"
     - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_elimination"
+    # Main tests for python 3.5
+    # We skip slow tests.
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.storage perses.tests.test_storage"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.analysis perses.tests.test_analysis"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.tests.testsystems perses.tests.utils"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.samplers"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.rjmc"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.tests.test_topology_proposal"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.bias"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.annihilation"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.tests.test_ncmc_integrator"
+    - python=3.5 CONDA_PY=35 NOSETESTS="perses.tests.test_elimination"
 
   global:
     - ORGNAME="omnia"

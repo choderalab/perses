@@ -34,6 +34,8 @@ from pkg_resources import resource_filename
 from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
 from perses.tests.utils import sanitizeSMILES
+from perses.storage import NetCDFStorage, NetCDFStorageView
+import tempfile
 import copy
 
 ################################################################################
@@ -74,7 +76,20 @@ class PersesTestSystem(object):
         Example MultiTargetDesign sampler
 
     """
-    def __init__(self):
+    def __init__(self, storage_filename=None, mode='w'):
+        """Create a testsystem.
+
+        Parameters
+        ----------
+        storage_filename : str, optional, default=None
+           If specified, bind to this storage file.
+        mode : str, optional, default='w'
+           File open mode, 'w' for (over)write, 'a' for append.
+
+        """
+        self.storage = None
+        if storage_filename is not None:
+            self.storage = NetCDFStorage(storage_filename, mode='w')
         self.environments = list()
         self.topologies = dict()
         self.positions = dict()
@@ -125,8 +140,8 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['implicit']
 
     """
-    def __init__(self):
-        super(AlanineDipeptideTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(AlanineDipeptideTestSystem, self).__init__(**kwargs)
         environments = ['explicit', 'implicit', 'vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -190,23 +205,27 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         exen_samplers = dict()
         sams_samplers = dict()
         for environment in environments:
+            storage = None
+            if self.storage:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment == 'explicit':
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
             exen_samplers[environment].verbose = True
-            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['implicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
-        designer = MultiTargetDesign(target_samplers)
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
         # Store things.
@@ -275,11 +294,10 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['implicit']
 
     """
-    def __init__(self):
-        super(T4LysozymeMutationTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(T4LysozymeMutationTestSystem, self).__init__(**kwargs)
 #        environments = ['explicit-complex', 'explicit-receptor', 'implicit-complex', 'implicit-receptor', 'vacuum-complex', 'vacuum-receptor']
         environments = ['explicit-complex', 'explicit-receptor', 'vacuum-complex', 'vacuum-receptor']
-
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -417,23 +435,27 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         exen_samplers = dict()
         sams_samplers = dict()
         for environment in environments:
+            storage = None
+            if self.storage:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment[0:8] == 'explicit':
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
             exen_samplers[environment].verbose = True
-            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['explicit-complex'] : 1.0, sams_samplers['explicit-receptor'] : -1.0 }
-        designer = MultiTargetDesign(target_samplers)
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
         # Store things.
@@ -487,8 +509,8 @@ class MybTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['implicit-peptide']
 
     """
-    def __init__(self):
-        super(MybTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(MybTestSystem, self).__init__(**kwargs)
         environments = ['explicit-complex', 'explicit-peptide', 'implicit-complex', 'implicit-peptide', 'vacuum-complex', 'vacuum-peptide']
 
         # Create a system generator for our desired forcefields.
@@ -573,6 +595,10 @@ class MybTestSystem(PersesTestSystem):
         exen_samplers = dict()
         sams_samplers = dict()
         for environment in environments:
+            storage = None
+            if self.storage:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment[0:8] == 'explicit':
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
@@ -589,7 +615,7 @@ class MybTestSystem(PersesTestSystem):
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['implicit-complex'] : 1.0, sams_samplers['implicit-peptide'] : -1.0 }
-        designer = MultiTargetDesign(target_samplers)
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
         # Store things.
@@ -643,8 +669,8 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
 
     """
-    def __init__(self):
-        super(AblImatinibResistanceTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(AblImatinibResistanceTestSystem, self).__init__(**kwargs)
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
 #        solvents = ['vacuum'] # DEBUG
         components = ['receptor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
@@ -739,6 +765,10 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                 environment = solvent + '-' + component
                 chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
 
+                storage = None
+                if self.storage:
+                    storage = NetCDFStorageView(self.storage, envname=environment)
+
                 if solvent == 'explicit':
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
@@ -746,12 +776,12 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], envname=environment)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
                 exen_samplers[environment].verbose = True
-                sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+                sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
                 thermodynamic_states[environment] = thermodynamic_state
 
@@ -759,7 +789,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['vacuum-complex'] : 1.0, sams_samplers['vacuum-receptor'] : -1.0 }
-        designer = MultiTargetDesign(target_samplers)
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
         # Store things.
@@ -820,8 +850,8 @@ class AblAffinityTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
 
     """
-    def __init__(self):
-        super(AblAffinityTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(AblAffinityTestSystem, self).__init__(**kwargs)
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
         solvents = ['vacuum'] # DEBUG
         components = ['inhibitor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
@@ -908,7 +938,10 @@ class AblAffinityTestSystem(PersesTestSystem):
         proposal_metadata = { }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL')
+            storage = None
+            if self.storage:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL', storage=storage)
 
         # Generate systems
         systems = dict()
@@ -938,6 +971,10 @@ class AblAffinityTestSystem(PersesTestSystem):
                 environment = solvent + '-' + component
                 chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
 
+                storage = None
+                if self.storage:
+                    storage = NetCDFStorageView(self.storage, envname=environment)
+
                 if solvent == 'explicit':
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
@@ -945,12 +982,12 @@ class AblAffinityTestSystem(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], envname=environment)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
                 exen_samplers[environment].verbose = True
-                sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+                sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
                 thermodynamic_states[environment] = thermodynamic_state
 
@@ -958,7 +995,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['vacuum-complex'] : 1.0, sams_samplers['vacuum-inhibitor'] : -1.0 }
-        designer = MultiTargetDesign(target_samplers)
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
         # Store things.
@@ -1016,8 +1053,8 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['explicit-inhibitor']
 
     """
-    def __init__(self):
-        super(AblImatinibProtonationStateTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(AblImatinibProtonationStateTestSystem, self).__init__(**kwargs)
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
         components = ['inhibitor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
         #solvents = ['vacuum'] # DEBUG: Just try vacuum for now
@@ -1152,6 +1189,10 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                 environment = solvent + '-' + component
                 chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
 
+                storage = None
+                if self.storage:
+                    storage = NetCDFStorageView(self.storage, envname=environment)
+
                 if solvent == 'explicit':
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
@@ -1159,18 +1200,18 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], envname=environment)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
                 exen_samplers[environment].verbose = True
-                sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+                sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
                 thermodynamic_states[environment] = thermodynamic_state
 
         # Create a constant-pH sampler
         from perses.samplers.samplers import ProtonationStateSampler
-        designer = ProtonationStateSampler(complex_sampler=exen_samplers['explicit-complex'], solvent_sampler=sams_samplers['explicit-inhibitor'], log_state_penalties=log_state_penalties)
+        designer = ProtonationStateSampler(complex_sampler=exen_samplers['explicit-complex'], solvent_sampler=sams_samplers['explicit-inhibitor'], log_state_penalties=log_state_penalties, storage=self.storage)
         designer.verbose = True
 
         # Store things.
@@ -1186,7 +1227,6 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
         self.designer = designer
-
 
         # This system must currently be minimized.
         minimize(self)
@@ -1230,8 +1270,8 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['explicit-inhibitor']
 
     """
-    def __init__(self):
-        super(ImidazoleProtonationStateTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(ImidazoleProtonationStateTestSystem, self).__init__(**kwargs)
         solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
         components = ['imidazole']
         padding = 9.0*unit.angstrom
@@ -1334,7 +1374,10 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         proposal_metadata = { }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=residue_name)
+            storage = None
+            if self.storage is not None:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=residue_name, storage=storage)
 
         # Generate systems
         print('Building systems...')
@@ -1367,6 +1410,10 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                 environment = solvent + '-' + component
                 chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
 
+                storage = None
+                if self.storage is not None:
+                    storage = NetCDFStorageView(self.storage, envname=environment)
+
                 if solvent == 'explicit':
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
@@ -1374,12 +1421,12 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], envname=environment)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
                 exen_samplers[environment].verbose = True
-                sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+                sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
                 thermodynamic_states[environment] = thermodynamic_state
 
@@ -1471,8 +1518,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['explicit']
 
     """
-    def __init__(self):
-        super(SmallMoleculeLibraryTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(SmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
         environments = ['explicit', 'vacuum']
@@ -1536,23 +1583,27 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         exen_samplers = dict()
         sams_samplers = dict()
         for environment in environments:
+            storage = None
+            if self.storage:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment == 'explicit':
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':500})
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':500}, storage=storage)
             exen_samplers[environment].verbose = True
-            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['explicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
-        designer = MultiTargetDesign(target_samplers)
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
 
         # Store things.
         self.molecules = molecules
@@ -1571,15 +1622,15 @@ class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
     """
     Library of small alkanes in various solvent environments.
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.molecules = ['CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
-        super(AlkanesTestSystem, self).__init__()
+        super(AlkanesTestSystem, self).__init__(**kwargs)
 
 class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
     """
     Library of clinical kinase inhibitors in various solvent environments.
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         # Read SMILES from CSV file of clinical kinase inhibitors.
         from pkg_resources import resource_filename
         smiles_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.csv')
@@ -1593,7 +1644,7 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
                 molecules.append(smiles)
         self.molecules = molecules
         # Intialize
-        super(KinaseInhibitorsTestSystem, self).__init__()
+        super(KinaseInhibitorsTestSystem, self).__init__(**kwargs)
 
 class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
     """
@@ -1611,7 +1662,7 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
                 molecules.append(smiles)
         return molecules
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         # Read SMILES from CSV file of clinical kinase inhibitors.
         from pkg_resources import resource_filename
         molecules = list()
@@ -1619,7 +1670,7 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
         self.molecules = molecules
         # Intialize
-        super(T4LysozymeInhibitorsTestSystem, self).__init__()
+        super(T4LysozymeInhibitorsTestSystem, self).__init__(**kwargs)
 
 class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
@@ -1661,8 +1712,8 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['vacuum']
 
     """
-    def __init__(self):
-        super(ValenceSmallMoleculeLibraryTestSystem, self).__init__()
+    def __init__(self, **kwargs):
+        super(ValenceSmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
         molecules = ['CCCCC','CC(C)CC', 'CC(CC)CC', 'C(C)CCC', 'C(CC)CCC']
         environments = ['vacuum']
 
@@ -1716,23 +1767,27 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         exen_samplers = dict()
         sams_samplers = dict()
         for environment in environments:
+            storage = None
+            if self.storage:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment == 'explicit':
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 500 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':0})
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':0}, storage=storage)
             exen_samplers[environment].verbose = True
-            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['vacuum'] : 1.0, sams_samplers['vacuum'] : -1.0 }
-        designer = MultiTargetDesign(target_samplers)
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
 
         # Store things.
         self.molecules = molecules
@@ -1765,7 +1820,9 @@ def check_topologies(testsystem):
 
 def checktestsystem(testsystem_class):
     # Instantiate test system.
-    testsystem = testsystem_class()
+    tmpfile = tempfile.NamedTemporaryFile()
+    storage_filename = tmpfile.name
+    testsystem = testsystem_class(storage_filename=storage_filename)
     # Check topologies
     check_topologies(testsystem)
 
@@ -1782,6 +1839,28 @@ def test_testsystems():
         f.description = "Testing %s" % (testsystem_name)
         yield f
 
+def run_t4_inhibitors():
+    """
+    Run T4 lysozyme inhibitors in solvents test system.
+    """
+    testsystem = T4LysozymeInhibitorsTestSystem(storage_filename='output.nc')
+    for environment in ['explicit', 'vacuum']:
+        #testsystem.exen_samplers[environment].pdbfile = open('t4-' + component + '.pdb', 'w')
+        #testsystem.exen_samplers[environment].options={'nsteps':50} # instantaneous MC
+        testsystem.mcmc_samplers[environment].verbose = True
+        testsystem.mcmc_samplers[environment].nsteps = 50 # use fewer MD steps to speed things up
+        testsystem.exen_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50 # NCMC switching
+        testsystem.sams_samplers[environment].verbose = True
+    testsystem.designer.verbose = True
+    testsystem.designer.run(niterations=50)
+
+    # Analyze data.
+    #from perses.analysis import Analysis
+    #analysis = Analysis(storage_filename='output.nc')
+    #analysis.plot_sams_weights('sams.pdf')
+    #analysis.plot_ncmc_work('ncmc.pdf')
+
 def run_t4():
     """
     Run T4 lysozyme test system.
@@ -1796,6 +1875,12 @@ def run_t4():
         testsystem.sams_samplers[solvent + '-' + component].run(niterations=5)
     testsystem.designer.verbose = True
     testsystem.designer.run(niterations=5)
+
+    # Analyze data.
+    #from perses.analysis import Analysis
+    #analysis = Analysis(storage_filename='output.nc')
+    #analysis.plot_sams_weights('sams.pdf')
+    #analysis.plot_ncmc_work('ncmc.pdf')
 
 def run_myb():
     """
@@ -1854,13 +1939,16 @@ def run_kinase_inhibitors():
 def run_valence_system():
     """
     Run valence molecules test system.
+
+    This system only has one environment (vacuum), so SAMS is used.
+
     """
-    testsystem = ValenceSmallMoleculeLibraryTestSystem()
+    testsystem = ValenceSmallMoleculeLibraryTestSystem(storage_filename='output.nc')
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
-    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
-    testsystem.mcmc_samplers[environment].nsteps = 50
-    testsystem.sams_samplers[environment].run(niterations=5)
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
+    testsystem.mcmc_samplers[environment].nsteps = 5
+    testsystem.sams_samplers[environment].run(niterations=50)
 
 def test_valence_write_pdb_ncmc_switching():
     """
@@ -1949,24 +2037,24 @@ def run_constph_abl():
     testsystem.designer.update_target_probabilities() # update log weights from inhibitor in solvent calibration
     testsystem.designer.run(niterations=500)
 
-def run_constph_imidazole():
+def run_imidazole():
     """
     Run imidazole constant-pH test system.
     """
-    testsystem = ImidazoleProtonationStateTestSystem()
+    testsystem = ImidazoleProtonationStateTestSystem(storage_filename='output.nc')
     for environment in testsystem.environments:
         if environment not in testsystem.exen_samplers:
             print("Skipping '%s' for now..." % environment)
             continue
 
         print(environment)
-        testsystem.exen_samplers[environment].pdbfile = open('imidazole-constph-%s.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].geometry_pdbfile = open('imidazole-constph-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50
+        #testsystem.exen_samplers[environment].pdbfile = open('imidazole-constph-%s.pdb' % environment, 'w')
+        #testsystem.exen_samplers[environment].geometry_pdbfile = open('imidazole-constph-%s-geometry-proposals.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
         #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 2500
+        testsystem.mcmc_samplers[environment].nsteps = 500
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
         testsystem.mcmc_samplers[environment].verbose = True
@@ -1976,13 +2064,15 @@ def run_constph_imidazole():
 
     # Run ligand in solvent constant-pH sampler calibration
     testsystem.sams_samplers['explicit-imidazole'].verbose=True
-    testsystem.sams_samplers['explicit-imidazole'].run(niterations=1000)
+    testsystem.sams_samplers['explicit-imidazole'].run(niterations=100)
 
 if __name__ == '__main__':
-    run_constph_imidazole()
+    #run_valence_system()
+    #run_t4_inhibitors()
+    run_imidazole()
+    #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
-    #run_valence_system()
     #run_kinase_inhibitors()
     #run_abl_imatinib()
     #run_myb()
