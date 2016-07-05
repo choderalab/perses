@@ -104,6 +104,8 @@ class HybridTopologyFactory(object):
 
         sys2_indices_in_system = copy.deepcopy(self.atom_mapping_2to1)
 
+        sys1_indices_in_system = { a:a for a in system1_atoms.keys() }
+
         residues_2_to_sys = dict()
         for index2, index in sys2_indices_in_system.items():
             atom = system_atoms[index]
@@ -633,5 +635,5 @@ class HybridTopologyFactory(object):
                 #raise Exception("Force type %s unknown." % force_name)
                 pass
 
-        return [system, topology, positions, sys2_indices_in_system]# system? like an openmm one? --> yes, also topology and positions or no?
+        return [system, topology, positions, sys2_indices_in_system, sys1_indices_in_system]# system? like an openmm one? --> yes, also topology and positions or no?
 
