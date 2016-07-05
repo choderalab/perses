@@ -1672,6 +1672,17 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__(**kwargs)
 
+class FusedRingsTestSystem(SmallMoleculeLibraryTestSystem):
+    """
+    Simple test system containing fused rings (benzene <--> naphtalene) in explicit solvent.
+    """
+    def __init__(self, **kwargs):
+        # Read SMILES from CSV file of clinical kinase inhibitors.
+        from pkg_resources import resource_filename
+        self.molecules = ['c1ccccc1', 'c1ccc2ccccc2c1']
+        # Intialize
+        super(FusedRingsTestSystem, self).__init__(**kwargs)
+
 class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     Create a consistent set of samplers useful for testing SmallMoleculeProposalEngine on alkanes with a valence-only forcefield.
@@ -2066,10 +2077,36 @@ def run_imidazole():
     testsystem.sams_samplers['explicit-imidazole'].verbose=True
     testsystem.sams_samplers['explicit-imidazole'].run(niterations=100)
 
+def run_fused_rings():
+    """
+    Run fused rings test system.
+    """
+    testsystem = FusedRingsTestSystem()
+    """
+    Run T4 lysozyme inhibitors in solvents test system.
+    """
+    storage_filename = 'output.nc'
+    testsystem = T4LysozymeInhibitorsTestSystem(storage_filename=storage_filename)
+    for environment in ['explicit', 'vacuum']:
+        testsystem.mcmc_samplers[environment].verbose = True
+        testsystem.mcmc_samplers[environment].nsteps = 50 # use fewer MD steps to speed things up
+        testsystem.exen_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50 # NCMC switching steps
+        testsystem.sams_samplers[environment].verbose = True
+    testsystem.designer.verbose = True
+    testsystem.designer.run(niterations=500)
+
+    # Analyze data.
+    from perses.analysis import Analysis
+    analysis = Analysis(storage_filename=storage_filename)
+    #analysis.plot_sams_weights('sams.pdf')
+    analysis.plot_ncmc_work('ncmc.pdf')
+
 if __name__ == '__main__':
+    run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
-    run_imidazole()
+    #run_imidazole()
     #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
