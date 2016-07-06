@@ -615,7 +615,7 @@ class NCMCHybridEngine(NCMCEngine):
 
 
     def make_alchemical_system(self, topology_proposal, old_positions,
-                               new_positions, direction='insert'):
+                               new_positions):
         """
         Generate an alchemically-modified system at the correct atoms
         based on the topology proposal
@@ -623,9 +623,6 @@ class NCMCHybridEngine(NCMCEngine):
         ---------
         topology_proposal : TopologyProposal namedtuple
             Contains old topology, proposed new topology, and atom mapping
-        direction : str, optional, default='insert'
-            Direction of topology proposal to use for identifying alchemical
-            atoms (allowed values: ['insert', 'delete'])
         Returns
         -------
         unmodified_system : simtk.openmm.System
@@ -634,9 +631,6 @@ class NCMCHybridEngine(NCMCEngine):
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
         """
-        if direction not in ['insert', 'delete']:
-            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
-        # "direction" is irrelevant and ignored
 
         atom_map = topology_proposal.old_to_new_atom_map
 
@@ -670,11 +664,9 @@ class NCMCHybridEngine(NCMCEngine):
             final_positions[finalatom] = positions[hybridatom]
         return final_positions
 
-    def integrate(self, topology_proposal, initial_positions, proposed_positions, direction='insert', platform=None):
+    def integrate(self, topology_proposal, initial_positions, proposed_positions, platform=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
-        For `delete`, the system is first modified from fully interacting to alchemically modified, and then NCMC switching is used to eliminate atoms.
-        For `insert`, the system begins with eliminated atoms in an alchemically noninteracting form and NCMC switching is used to turn atoms on, followed by making system real.
         The contribution of transforming the real system to/from an alchemical system is included.
         Parameters
         ----------
@@ -684,10 +676,6 @@ class NCMCHybridEngine(NCMCEngine):
             Positions of the atoms at the beginning of the NCMC switching.
         proposed_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
             Positions of the new system atoms proposed by geometry engine.
-        direction : str, optional, default='insert'
-            Direction of alchemical switching:
-                'insert' causes lambda to switch from 0 to 1 over nsteps steps of integration
-                'delete' causes lambda to switch from 1 to 0 over nsteps steps of integration
         platform : simtk.openmm.Platform, optional, default=None
             If not None, this platform is used for integration.
         Returns
@@ -703,9 +691,7 @@ class NCMCHybridEngine(NCMCEngine):
             For `delete`, the potential energy of the final (alchemically eliminated) conformation.
             For `insert`, the potential energy of the initial (alchemically eliminated) conformation.
         """
-        if direction not in ['insert', 'delete']:
-            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
-
+        direction = 'insert'
         if (self.nsteps == 0):
             # Special case of instantaneous insertion/deletion.
             logP = 0.0
@@ -725,8 +711,7 @@ class NCMCHybridEngine(NCMCEngine):
          final_to_hybrid_atom_map,
          initial_to_hybrid_atom_map] = self.make_alchemical_system(
                                             topology_proposal, initial_positions,
-                                            proposed_positions,
-                                            direction=direction)
+                                            proposed_positions)
 ########################################################################
 
         from perses.tests.utils import compute_potential
@@ -737,9 +722,9 @@ class NCMCHybridEngine(NCMCEngine):
 
         # Create an NCMC velocity Verlet integrator.
         if self.integrator_type == 'VV':
-            integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction=direction)
+            integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction='insert')
         elif self.integrator_type == 'GHMC':
-            integrator = NCMCGHMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction=direction)
+            integrator = NCMCGHMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction='insert')
         else:
             raise Exception("integrator_type '%s' unknown" % self.integrator_type)
         # Set the constraint tolerance if specified.
@@ -757,18 +742,14 @@ class NCMCHybridEngine(NCMCEngine):
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
 
         # Set initial context parameters.
-        if direction == 'insert':
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, 0)
-        elif direction == 'delete':
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, 1)
+        for parameter_name in available_parameters:
+            context.setParameter(parameter_name, 0)
 
         # Compute initial potential of alchemical state.
         initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
         #print("Initial potential is %s" % str(initial_potential))
         if np.isnan(initial_potential):
-            raise NaNException("Initial potential of 'insert' operation is NaN (unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda)" % (unmodified_potential, alchemical_potential))
+            raise NaNException("Initial potential of 'insert' operation is NaN")
         from perses.tests.utils import compute_potential_components
         #print("initial potential before '%s' : %f kT" % (direction, initial_potential))
         #print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
@@ -777,12 +758,8 @@ class NCMCHybridEngine(NCMCEngine):
         try:
             # Write PDB file if requested.
             if self.write_pdb_interval:
-                if direction == 'insert':
-                    topology = topology_proposal.new_topology
-                    indices = topology_proposal.unique_new_atoms
-                else:
-                    topology = topology_proposal.old_topology
-                    indices = topology_proposal.unique_old_atoms
+                topology = topology_proposal.new_topology
+                indices = topology_proposal.unique_new_atoms
 
                 # Write atom indices that are changing
                 import pickle
@@ -825,17 +802,13 @@ class NCMCHybridEngine(NCMCEngine):
                 raise e
 
         # Set final context parameters.
-        if direction == 'insert':
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, 1)
-        elif direction == 'delete':
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, 0)
+        for parameter_name in available_parameters:
+            context.setParameter(parameter_name, 1)
 
         # Compute final potential of alchemical state.
         final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
         if np.isnan(final_potential):
-            raise NaNException("Final potential of %s operation is NaN" % direction)
+            raise NaNException("Final potential of hybrid switch operation is NaN")
         #print("final potential before '%s' : %f kT" % (direction, final_potential))
         #print("final potential components: %s" % str(compute_potential_components(context))) # DEBUG
         #print('')
@@ -853,7 +826,15 @@ class NCMCHybridEngine(NCMCEngine):
         del context, integrator
 
         # Compute contribution from transforming real system to/from alchemical system.
-        logP_alchemical_correction = self._computeAlchemicalCorrection(unmodified_old_system, unmodified_new_system, alchemical_system, initial_positions, alchemical_positions, final_hybrid_positions, final_positions, direction=direction)
+        logP_alchemical_correction = self._computeAlchemicalCorrection(
+                                              unmodified_old_system,
+                                              unmodified_new_system,
+                                              alchemical_system,
+                                              initial_positions,
+                                              alchemical_positions,
+                                              final_hybrid_positions,
+                                              final_positions,
+                                          )
 
         # Compute total logP
         logP = logP_NCMC + logP_alchemical_correction
