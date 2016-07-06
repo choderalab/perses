@@ -478,21 +478,9 @@ class NCMCHybridEngine(NCMCEngine):
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
     >>> from perses.rjmc.topology_proposal import TopologyProposal
-    >>> new_to_old_atom_map = { index : index 
-    >>>                         for index in range(testsystem.system.getNumParticles())
-    >>>                         if (index > 3) } # all atoms but N-methyl
-    >>> topology_proposal = TopologyProposal(old_system=testsystem.system,
-    >>>                                      old_topology=testsystem.topology,
-    >>>                                      old_chemical_state_key='AA',
-    >>>                                      new_chemical_state_key='AA',
-    >>>                                      new_system=testsystem.system,
-    >>>                                      new_topology=testsystem.topology,
-    >>>                                      logp_proposal=0.0,
-    >>>                                      new_to_old_atom_map=new_to_old_atom_map,
-    >>>                                      metadata=dict())
-    >>> ncmc_engine = NCMCHybridEngine(temperature=300.0*unit.kelvin,
-    >>>                          functions=default_functions, nsteps=50,
-    >>>                          timestep=1.0*unit.femtoseconds)
+    >>> new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
+    >>> topology_proposal = TopologyProposal(old_system=testsystem.system, old_topology=testsystem.topology, old_chemical_state_key='AA', new_chemical_state_key='AA', new_system=testsystem.system, new_topology=testsystem.topology, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
+    >>> ncmc_engine = NCMCHybridEngine(temperature=300.0*unit.kelvin, functions=default_functions, nsteps=50, timestep=1.0*unit.femtoseconds)
 
     positions = testsystem.positions
     (need a geometry proposal in here now)
