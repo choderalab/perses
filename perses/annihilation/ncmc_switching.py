@@ -152,7 +152,7 @@ class NCMCEngine(object):
         TODO: Improve function evaluation to better match Lepton and be more flexible in exact replacement of 'lambda' tokens
 
         """
-        from parsing import NumericStringParser
+        from perses.annihilation import NumericStringParser
         nsp = NumericStringParser()
         for parameter in functions:
             function = functions[parameter]
