@@ -345,6 +345,16 @@ class NCMCEngine(object):
         context.setVelocitiesToTemperature(self.temperature)
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
 
+        # DEBUG
+        from perses.tests.utils import compute_potential
+        if direction == 'delete':
+            unmodified_potential = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+        elif direction == 'insert':
+            unmodified_potential = self.beta * compute_potential(topology_proposal.new_system, initial_positions, platform=self.platform)
+            
+        # Compute initial potential of alchemical state.
+        alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+
         # Set initial context parameters.
         if direction == 'insert':
             integrator.setGlobalVariableByName('lambda', 0)
@@ -353,6 +363,8 @@ class NCMCEngine(object):
 
         # Compute initial potential of alchemical state.
         initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        # DEBUG
+        print("Initial potential of '%s' operation: unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda, %.3f kT after changing lambda" % (direction, unmodified_potential, alchemical_potential, initial_potential))
         #print("Initial potential is %s" % str(initial_potential))
         if np.isnan(initial_potential):
             raise NaNException("Initial potential of 'insert' operation is NaN (unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda)" % (unmodified_potential, alchemical_potential))
