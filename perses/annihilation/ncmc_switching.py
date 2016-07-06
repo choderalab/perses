@@ -342,11 +342,9 @@ class NCMCEngine(object):
 
         # Set initial context parameters.
         if direction == 'insert':
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, 0)
+            integrator.setGlobalVariableByName('lambda', 0)
         elif direction == 'delete':
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, 1)
+            integrator.setGlobalVariableByName('lambda', 1)
 
         # Compute initial potential of alchemical state.
         initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
@@ -422,12 +420,11 @@ class NCMCEngine(object):
                 raise e
 
         # Set final context parameters.
+        # Set initial context parameters.
         if direction == 'insert':
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, 1)
+            integrator.setGlobalVariableByName('lambda', 1)
         elif direction == 'delete':
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, 0)
+            integrator.setGlobalVariableByName('lambda', 0)
 
         # Compute final potential of alchemical state.
         final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
