@@ -479,23 +479,24 @@ class NCMCHybridEngine(NCMCEngine):
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
     >>> from perses.rjmc.topology_proposal import TopologyProposal
     >>> new_to_old_atom_map = { index : index 
-                                for index in range(testsystem.system.getNumParticles())
-                                if (index > 3) } # all atoms but N-methyl
+    >>>                         for index in range(testsystem.system.getNumParticles())
+    >>>                         if (index > 3) } # all atoms but N-methyl
     >>> topology_proposal = TopologyProposal(old_system=testsystem.system,
-                                             old_topology=testsystem.topology,
-                                             old_chemical_state_key='AA',
-                                             new_chemical_state_key='AA',
-                                             new_system=testsystem.system,
-                                             new_topology=testsystem.topology,
-                                             logp_proposal=0.0,
-                                             new_to_old_atom_map=new_to_old_atom_map,
-                                             metadata=dict())
-    >>> ncmc_engine = NCMCEngine(temperature=300.0*unit.kelvin,
-                                 functions=default_functions, nsteps=50,
-                                 timestep=1.0*unit.femtoseconds)
-    >>> positions = testsystem.positions
-    >>> [positions, logP_delete, potential_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
-    >>> [positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
+    >>>                                      old_topology=testsystem.topology,
+    >>>                                      old_chemical_state_key='AA',
+    >>>                                      new_chemical_state_key='AA',
+    >>>                                      new_system=testsystem.system,
+    >>>                                      new_topology=testsystem.topology,
+    >>>                                      logp_proposal=0.0,
+    >>>                                      new_to_old_atom_map=new_to_old_atom_map,
+    >>>                                      metadata=dict())
+    >>> ncmc_engine = NCMCHybridEngine(temperature=300.0*unit.kelvin,
+    >>>                          functions=default_functions, nsteps=50,
+    >>>                          timestep=1.0*unit.femtoseconds)
+
+    positions = testsystem.positions
+    (need a geometry proposal in here now)
+    [positions, new_old_positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, proposed_positions)
     """
 
     def __init__(self, temperature=default_temperature, functions=None, 
@@ -693,6 +694,8 @@ class NCMCHybridEngine(NCMCEngine):
             Contains old/new Topology and System objects and atom mappings.
         initial_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
             Positions of the atoms at the beginning of the NCMC switching.
+        proposed_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the new system atoms proposed by geometry engine.
         direction : str, optional, default='insert'
             Direction of alchemical switching:
                 'insert' causes lambda to switch from 0 to 1 over nsteps steps of integration
@@ -701,8 +704,11 @@ class NCMCHybridEngine(NCMCEngine):
             If not None, this platform is used for integration.
         Returns
         -------
-        final_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
+        final_positions : simtk.unit.Quantity of dimensions [natoms, 3] with units of distance
             The final positions after `nsteps` steps of alchemical switching
+        new_old_positions : simtk.unit.Quantity of dimensions [natoms, 3] with units of distance.
+            The final positions of the atoms of the old system after `nsteps`
+            steps of alchemical switching
         logP : float
             The log acceptance probability of the switch
         potential : simtk.unit.Quantity with units compatible with kilocalories_per_mole
@@ -858,12 +864,8 @@ class NCMCHybridEngine(NCMCEngine):
         # Clean up NCMC switching integrator.
         del context, integrator
 
-########################################################################
-###### This line necessitates copy & paste instead of inheritance ######
-########################################################################
         # Compute contribution from transforming real system to/from alchemical system.
         logP_alchemical_correction = self._computeAlchemicalCorrection(unmodified_old_system, unmodified_new_system, alchemical_system, initial_positions, alchemical_positions, final_hybrid_positions, final_positions, direction=direction)
-########################################################################
 
         # Compute total logP
         logP = logP_NCMC + logP_alchemical_correction
