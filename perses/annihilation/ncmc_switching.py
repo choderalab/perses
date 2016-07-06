@@ -136,6 +136,29 @@ class NCMCEngine(object):
                         parameters.append(parameter_name)
         return parameters
 
+    def _updateAlchemicalState(self, context, functions, value):
+        """
+        Update alchemical state using the specified lambda value.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The Context
+        functions : dict
+            A dictionary of functions
+        value : float
+            The alchemical lambda value
+
+        TODO: Improve function evaluation to better match Lepton and be more flexible in exact replacement of 'lambda' tokens
+
+        """
+        from parsing import NumericStringParser
+        nsp = NumericStringParser()
+        for parameter in functions:
+            function = functions[parameter]
+            evaluated = nsp.eval(function.replace('lambda', str(value)))
+            context.setParameter(parameter, evaluated)
+
     def _computeAlchemicalCorrection(self, unmodified_system, alchemical_system, initial_positions, final_positions, direction='insert'):
         """
         Compute log probability for correction from transforming real system to/from alchemical system.
@@ -351,15 +374,15 @@ class NCMCEngine(object):
             unmodified_potential = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
         elif direction == 'insert':
             unmodified_potential = self.beta * compute_potential(topology_proposal.new_system, initial_positions, platform=self.platform)
-            
+
         # Compute initial potential of alchemical state.
         alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
 
         # Set initial context parameters.
         if direction == 'insert':
-            integrator.setGlobalVariableByName('lambda', 0)
+            self._updateAlchemicalState(context, functions, 0)
         elif direction == 'delete':
-            integrator.setGlobalVariableByName('lambda', 1)
+            self._updateAlchemicalState(context, functions, 1)
 
         # Compute initial potential of alchemical state.
         initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
@@ -446,9 +469,9 @@ class NCMCEngine(object):
         # Set final context parameters.
         # Set initial context parameters.
         if direction == 'insert':
-            integrator.setGlobalVariableByName('lambda', 1)
+            self._updateAlchemicalState(context, functions, 1)
         elif direction == 'delete':
-            integrator.setGlobalVariableByName('lambda', 0)
+            self._updateAlchemicalState(context, functions, 0)
 
         # DEBUG
         positions = context.getState(getPositions=True).getPositions(asNumpy=True)
