@@ -447,7 +447,9 @@ class NCMCEngine(object):
                     # DEBUG
                     Eold = integrator.getGlobalVariableByName("Eold")
                     Enew = integrator.getGlobalVariableByName("Enew")
-                    print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1]))
+                    xsum_old = integrator.getGlobalVariableByName("xsum_old")
+                    xsum_new = integrator.getGlobalVariableByName("xsum_new")
+                    print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e xsum_old %16.8e xsum_new %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1], xsum_old, xsum_new))
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
 
@@ -891,6 +893,9 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
+        # DEBUG
+        self.addGlobalVariable("xsum_old", 0.0)
+        self.addGlobalVariable("xsum_new", 0.0)
 
         if (nsteps > 0):
             # GHMC variables
@@ -925,7 +930,9 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             # Initial step only
             self.beginIfBlock('step = 0')
             self.beginWhileBlock('pstep < psteps')
+            self.addComputeSum("xsum_old", "x") # DEBUG
             self.addGHMCStep()
+            self.addComputeSum("xsum_new", "x") # DEBUG
             self.addComputeGlobal('pstep', 'pstep+1')
             self.endBlock()
             self.endBlock()
@@ -937,7 +944,9 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addComputeGlobal("Enew", "energy")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
             self.beginWhileBlock('pstep < psteps')
+            self.addComputeSum("xsum_old", "x") # DEBUG
             self.addGHMCStep()
+            self.addComputeSum("xsum_new", "x") # DEBUG
             self.addComputeGlobal('pstep', 'pstep+1')
             self.endBlock()
             self.addComputeGlobal('step', 'step+1')
