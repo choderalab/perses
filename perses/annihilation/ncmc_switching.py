@@ -409,8 +409,10 @@ class NCMCEngine(object):
                     # Store accumulated work
                     work[step+1] = - integrator.getLogAcceptanceProbability(context)
 
-
                     # DEBUG
+                    Eold = integrator.getGlobalVariableByName("Eold")
+                    Enew = integrator.getGlobalVariableByName("Enew")
+                    print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1]))
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
 
