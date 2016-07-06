@@ -6,6 +6,7 @@ import traceback
 from simtk import openmm, unit
 from openmmtools.integrators import GHMCIntegrator
 from perses.storage import NetCDFStorageView
+from perses.tests.utils import quantity_is_finite
 
 default_functions = {
     'lambda_sterics' : 'lambda',
@@ -19,25 +20,6 @@ default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
 default_timestep = 1.0 * unit.femtoseconds
 default_steps_per_propagation = 1
-
-def _positions_are_finite(positions):
-    """
-    Check that positions are all finite.
-
-    Parameters
-    ----------
-    positions : simtk.unit.Quantity with units compatible with angstroms
-        The positions to check
-
-    Returns
-    -------
-    positions_are_finite : bool
-        If positions are finite, returns True; otherwise False.
-
-    """
-    if np.any( np.isnan(positions / unit.angstroms) ):
-        return False
-    return True
 
 class NaNException(Exception):
     def __init__(self, *args, **kwargs):
@@ -315,7 +297,7 @@ class NCMCEngine(object):
         if direction not in ['insert', 'delete']:
             raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
-        assert _positions_are_finite(initial_positions) == True
+        assert quantity_is_finite(initial_positions) == True
 
         if (self.nsteps == 0):
             # Special case of instantaneous insertion/deletion.
@@ -328,7 +310,7 @@ class NCMCEngine(object):
                 potential = self.beta * compute_potential(topology_proposal.new_system, initial_positions, platform=self.platform)
             return [final_positions, logP, potential]
 
-        assert _positions_are_finite(initial_positions) == True
+        assert quantity_is_finite(initial_positions) == True
 
         # Create alchemical system.
         [unmodified_system, alchemical_system] = self.make_alchemical_system(topology_proposal, direction=direction)
@@ -430,7 +412,7 @@ class NCMCEngine(object):
 
                     # DEBUG
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-                    assert _positions_are_finite(positions) == True
+                    assert quantity_is_finite(positions) == True
 
                 if self._storage:
                     self._storage.write_array('work_%s' % direction, work, iteration=iteration)
@@ -456,7 +438,7 @@ class NCMCEngine(object):
 
         # DEBUG
         positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-        assert _positions_are_finite(positions) == True
+        assert quantity_is_finite(positions) == True
 
         # Compute final potential of alchemical state.
         final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
@@ -475,7 +457,7 @@ class NCMCEngine(object):
         del context, integrator
 
         # DEBUG
-        assert _positions_are_finite(final_positions) == True
+        assert quantity_is_finite(final_positions) == True
 
         # Compute contribution from transforming real system to/from alchemical system.
         logP_alchemical_correction = self._computeAlchemicalCorrection(unmodified_system, alchemical_system, initial_positions, final_positions, direction=direction)

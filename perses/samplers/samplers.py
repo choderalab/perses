@@ -26,6 +26,7 @@ import time
 
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
+from perses.tests.utils import quantity_is_finite
 
 ################################################################################
 # LOGGER
@@ -124,6 +125,10 @@ class SamplerState(object):
 
     """
     def __init__(self, system, positions, velocities=None, box_vectors=None, platform=None):
+        assert quantity_is_finite(positions)
+        if velocities is not None:
+            assert quantity_is_finite(self.velocities)
+
         self.system = copy.deepcopy(system)
         self.positions = positions
         self.velocities = velocities
@@ -197,6 +202,9 @@ class SamplerState(object):
         self.kinetic_energy = openmm_state.getKineticEnergy()
         self.total_energy = self.potential_energy + self.kinetic_energy
         self.volume = thermodynamics.volume(self.box_vectors)
+
+        assert quantity_is_finite(self.positions)
+        assert quantity_is_finite(self.velocities)
 
         return self
 
