@@ -449,7 +449,8 @@ class NCMCEngine(object):
                     Enew = integrator.getGlobalVariableByName("Enew")
                     xsum_old = integrator.getGlobalVariableByName("xsum_old")
                     xsum_new = integrator.getGlobalVariableByName("xsum_new")
-                    print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e xsum_old %16.8e xsum_new %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1], xsum_old, xsum_new))
+                    xsum = integrator.getGlobalVariableByName("xsum")
+                    print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e xsum_old %16.8e xsum_new %16.8e xsum %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1], xsum_old, xsum_new, xsum))
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
 
