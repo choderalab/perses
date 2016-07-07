@@ -931,16 +931,16 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addComputeGlobal("Enew", "energy")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
         if nsteps > 0:
-            self.addComputeGlobal('pstep', '0')
+            #self.addComputeGlobal('pstep', '0')
             # Initial step only
-            self.beginIfBlock('step = 0')
-            self.beginWhileBlock('pstep < psteps')
-            self.addComputeSum("xsum_old", "x") # DEBUG
-            self.addGHMCStep()
-            self.addComputeSum("xsum_new", "x") # DEBUG
-            self.addComputeGlobal('pstep', 'pstep+1')
-            self.endBlock()
-            self.endBlock()
+            #self.beginIfBlock('step = 0')
+            #self.beginWhileBlock('pstep < psteps')
+            #self.addComputeSum("xsum_old", "x") # DEBUG
+            #self.addGHMCStep()
+            #self.addComputeSum("xsum_new", "x") # DEBUG
+            #self.addComputeGlobal('pstep', 'pstep+1')
+            #self.endBlock()
+            #self.endBlock()
 
             # All steps
             self.beginIfBlock('step < nsteps')
@@ -948,11 +948,11 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addAlchemicalPerturbationStep()
             self.addComputeGlobal("Enew", "energy")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
-            self.beginWhileBlock('pstep < psteps')
+            #self.beginWhileBlock('pstep < psteps')
             self.addComputeSum("xsum_old", "x") # DEBUG
             self.addGHMCStep()
             self.addComputeSum("xsum_new", "x") # DEBUG
-            self.addComputeGlobal('pstep', 'pstep+1')
-            self.endBlock()
+            #self.addComputeGlobal('pstep', 'pstep+1')
+            #self.endBlock()
             self.addComputeGlobal('step', 'step+1')
             self.endBlock()
