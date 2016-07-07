@@ -1677,10 +1677,7 @@ class FusedRingsTestSystem(SmallMoleculeLibraryTestSystem):
     Simple test system containing fused rings (benzene <--> naphtalene) in explicit solvent.
     """
     def __init__(self, **kwargs):
-        # Read SMILES from CSV file of clinical kinase inhibitors.
-        from pkg_resources import resource_filename
-        self.molecules = ['c1ccccc1', 'c1ccc2ccccc2c1']
-        # Intialize
+        self.molecules = ['c1ccccc1', 'c1ccc2ccccc2c1'] # benzene, naphthalene
         super(FusedRingsTestSystem, self).__init__(**kwargs)
 
 class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):

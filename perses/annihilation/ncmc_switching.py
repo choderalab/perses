@@ -650,8 +650,9 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
         self.addConstrainVelocities()
         self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeSum("xsum", "(x-xold)^2")
         self.addComputeGlobal("Enew", "ke + energy")
-        self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
+        self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform) * step(xsum)")
         self.beginIfBlock("accept != 1")
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "-vold")
@@ -913,6 +914,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
             self.addGlobalVariable("pstep", 0) # number of propagation steps taken
             self.addGlobalVariable("psteps", steps_per_propagation) # total number of propagation steps
+            self.addGlobalVariable("xsum", 0.0) # sum of (x-xold)^2
 
         # Constrain initial positions and velocities.
         self.addConstrainPositions()
