@@ -23,7 +23,7 @@ import json
 
 import matplotlib as mpl
 mpl.use('Agg')
-import seaborn
+import seaborn as sns
 
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
@@ -126,7 +126,8 @@ class Analysis(object):
                         # Plot average work distribution in think solid line
                         nbins = 40
                         workvals = work[direction][:-1,-1]
-                        plt.hist(workvals, nbins)
+                        #plt.hist(workvals, nbins)
+                        sns.distplot(workvals, rug=True)
                         # Adjust axes to eliminate large-magnitude outliers (keep 98% of data in-range)
                         #worklim = np.percentile(workvals, 98)
                         #oldaxis = plt.axis()

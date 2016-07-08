@@ -2080,7 +2080,8 @@ def run_fused_rings():
     Vary number of NCMC steps
 
     """
-    nsteps_to_try = [1, 10, 100, 1000, 10000, 100000] # number of NCMC steps
+    #nsteps_to_try = [1, 10, 100, 1000, 10000, 100000] # number of NCMC steps
+    nsteps_to_try = [10, 100, 1000, 10000, 100000] # number of NCMC steps
     for ncmc_steps in nsteps_to_try:
         storage_filename = 'output-%d.nc' % ncmc_steps
         testsystem = FusedRingsTestSystem(storage_filename=storage_filename)

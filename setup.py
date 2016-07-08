@@ -88,6 +88,7 @@ setup(name='perses',
         'alchemy >=1.1.3',
         'numexpr',
         'netcdf4',
+        'seaborn',
         #'numba'
         ],
       )
