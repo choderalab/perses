@@ -835,6 +835,9 @@ class ExpandedEnsembleSampler(object):
         """
         Sample the thermodynamic state.
         """
+
+        initial_time = time.time()
+
         # Check that system and topology have same number of atoms.
         old_system = self.sampler.sampler_state.system
         old_topology = self.topology
@@ -968,10 +971,14 @@ class ExpandedEnsembleSampler(object):
                 self.nrejected += 1
                 if self.verbose: print("    rejected")
 
+            elapsed_time = time.time() - initial_time
+
             # Write to storage.
             if self.storage:
+                self.storage.write_quantity('update_state_elapsed_time', elapsed_time, iteration=self.iteration)
                 self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
                 self.storage.write_object('state_key', self.state_key, iteration=self.iteration)
+                self.storage.write_object('proposed_state_key', topology_proposal.new_chemical_state_key, iteration=self.iteration)
                 self.storage.write_quantity('naccepted', self.naccepted, iteration=self.iteration)
                 self.storage.write_quantity('nrejected', self.nrejected, iteration=self.iteration)
                 self.storage.write_quantity('logp_accept', logp_accept, iteration=self.iteration)

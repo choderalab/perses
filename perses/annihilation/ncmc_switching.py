@@ -152,6 +152,7 @@ class NCMCEngine(object):
             The alchemical lambda value
 
         TODO: Improve function evaluation to better match Lepton and be more flexible in exact replacement of 'lambda' tokens
+        Perhaps this could be encoded as a special integrator?
 
         """
         from perses.annihilation import NumericStringParser
@@ -326,6 +327,7 @@ class NCMCEngine(object):
 
         if (self.nsteps == 0):
             # Special case of instantaneous insertion/deletion.
+            # TODO: Check this is correct.
             logP = 0.0
             final_positions = copy.deepcopy(initial_positions)
             from perses.tests.utils import compute_potential
@@ -444,7 +446,7 @@ class NCMCEngine(object):
                     #print("and the integrator's current step is %d" % current_step)
 
                     # Store accumulated work
-                    work[step+1] = - integrator.getLogAcceptanceProbability(context)
+                    work[step+1] = integrator.getWork(context)
 
                     # DEBUG
                     Eold = integrator.getGlobalVariableByName("Eold")
@@ -683,6 +685,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.setGlobalVariableByName("total_work", 0.0)
         if (self.nsteps > 0):
             self.setGlobalVariableByName("step", 0)
+            self.setGlobalVariableByName("pstep", 0)
             if self.has_statistics:
                 self.setGlobalVariableByName("naccept", 0)
                 self.setGlobalVariableByName("ntrials", 0)
@@ -692,6 +695,11 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
             return (self.getGlobalVariableByName("naccept"), self.getGlobalVariableByName("ntrials"))
         else:
             return (0,0)
+
+    def getWork(self, context):
+        """Retrieve accumulated work (in units of kT)
+        """
+        return self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
 
     def getLogAcceptanceProbability(self, context):
         logp_accept = -1.0*self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
@@ -932,15 +940,16 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
         if nsteps > 0:
             #self.addComputeGlobal('pstep', '0')
+
             # Initial step only
-            #self.beginIfBlock('step = 0')
+            self.beginIfBlock('step = 0')
             #self.beginWhileBlock('pstep < psteps')
             #self.addComputeSum("xsum_old", "x") # DEBUG
-            #self.addGHMCStep()
+            self.addGHMCStep()
             #self.addComputeSum("xsum_new", "x") # DEBUG
             #self.addComputeGlobal('pstep', 'pstep+1')
             #self.endBlock()
-            #self.endBlock()
+            self.endBlock()
 
             # All steps
             self.beginIfBlock('step < nsteps')
