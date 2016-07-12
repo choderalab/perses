@@ -152,7 +152,7 @@ class NCMCEngine(object):
             The alchemical lambda value
 
         TODO: Improve function evaluation to better match Lepton and be more flexible in exact replacement of 'lambda' tokens
-        Perhaps this could be encoded as a special integrator?
+        Perhaps this could be done with a special integrator?
 
         """
         from perses.annihilation import NumericStringParser
@@ -945,6 +945,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.beginIfBlock('step = 0')
             #self.beginWhileBlock('pstep < psteps')
             #self.addComputeSum("xsum_old", "x") # DEBUG
+            self.addAlchemicalResetStep()
             self.addGHMCStep()
             #self.addComputeSum("xsum_new", "x") # DEBUG
             #self.addComputeGlobal('pstep', 'pstep+1')
