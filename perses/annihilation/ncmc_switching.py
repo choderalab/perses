@@ -961,7 +961,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             #self.beginWhileBlock('pstep < psteps')
             #self.addComputeSum("xsum_old", "x") # DEBUG
             self.addAlchemicalResetStep()
-            self.addGHMCStep()
+            #self.addGHMCStep()
             #self.addComputeSum("xsum_new", "x") # DEBUG
             #self.addComputeGlobal('pstep', 'pstep+1')
             #self.endBlock()
