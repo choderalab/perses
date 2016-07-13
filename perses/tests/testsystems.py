@@ -1966,7 +1966,7 @@ def test_valence_write_pdb_ncmc_switching():
     environment = 'vacuum'
     testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10
     testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
-    testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 1 # write PDB files for NCMC switching
+    testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 1 # write PDB files for NCMC switching
     testsystem.mcmc_samplers[environment].nsteps = 10
     testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
     testsystem.exen_samplers[environment].run(niterations=1)
@@ -1984,7 +1984,7 @@ def run_abl_affinity_write_pdb_ncmc_switching():
         testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10000
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
         testsystem.mcmc_samplers[environment].nsteps = 10000
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
@@ -2019,7 +2019,7 @@ def run_constph_abl():
         testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        #testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
         testsystem.mcmc_samplers[environment].nsteps = 2500
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
@@ -2061,7 +2061,7 @@ def run_imidazole():
         testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        #testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
         testsystem.mcmc_samplers[environment].nsteps = 500
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 

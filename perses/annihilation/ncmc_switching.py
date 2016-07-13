@@ -46,7 +46,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC', storage=None, verbose=False):
+    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_ncmc_interval=None, integrator_type='GHMC', storage=None, verbose=False):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -67,9 +67,9 @@ class NCMCEngine(object):
             If not None, this relative constraint tolerance is used for position and velocity constraints.
         platform : simtk.openmm.Platform, optional, default=None
             If specified, the platform to use for OpenMM simulations.
-        write_pdb_interval : int, optional, default=None
-            If a positive integer is specified, a PDB frame will be written with the specified interval on NCMC switching,
-            with a different PDB file generated for each attempt.
+        write_ncmc_interval : int, optional, default=None
+            If a positive integer is specified, a snapshot frame will be written to storage with the specified interval on NCMC switching.
+            'storage' must also be specified.
         integrator_type : str, optional, default='GHMC'
             NCMC internal integrator type ['GHMC', 'VV']
         storage : NetCDFStorageView, optional, default=None
@@ -99,14 +99,13 @@ class NCMCEngine(object):
 
         if steps_per_propagation != 1:
             raise Exception('steps_per_propagation must be 1 until CustomIntegrator is debugged')
-        
-        self.write_pdb_interval = write_pdb_interval
 
         self.nattempted = 0
 
         self._storage = None
         if storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
+        self.write_ncmc_interval = write_ncmc_interval
 
     @property
     def beta(self):
@@ -141,30 +140,6 @@ class NCMCEngine(object):
                     if parameter_name[0:(len(prefix)+1)] == (prefix + '_'):
                         parameters.append(parameter_name)
         return parameters
-
-    def _updateAlchemicalState(self, context, functions, value):
-        """
-        Update alchemical state using the specified lambda value.
-
-        Parameters
-        ----------
-        context : simtk.openmm.Context
-            The Context
-        functions : dict
-            A dictionary of functions
-        value : float
-            The alchemical lambda value
-
-        TODO: Improve function evaluation to better match Lepton and be more flexible in exact replacement of 'lambda' tokens
-        Perhaps this could be done with a special integrator?
-
-        """
-        from perses.annihilation import NumericStringParser
-        nsp = NumericStringParser()
-        for parameter in functions:
-            function = functions[parameter]
-            evaluated = nsp.eval(function.replace('lambda', str(value)))
-            context.setParameter(parameter, evaluated)
 
     def _computeAlchemicalCorrection(self, unmodified_system, alchemical_system, initial_positions, final_positions, direction='insert'):
         """
@@ -278,10 +253,6 @@ class NCMCEngine(object):
         else:
             raise Exception("direction must be one of ['delete', 'insert']; found '%s' instead" % direction)
 
-        # DEBUG
-        #print('alchemical atoms:')
-        #print(alchemical_atoms)
-
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
         alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True, alchemical_bonds=None, alchemical_angles=None, softcore_beta=0.0)
@@ -329,27 +300,28 @@ class NCMCEngine(object):
 
         assert quantity_is_finite(initial_positions) == True
 
+        # Select reference topology, indices, and system based on whether we are deleting or inserting.
+        if direction == 'delete':
+            topology = topology_proposal.old_topology
+            indices = topology_proposal.unique_old_atoms
+            system = topology_proposal.old_system
+        elif direction == 'insert':
+            topology = topology_proposal.new_topology
+            indices = topology_proposal.unique_new_atoms
+            system = topology_proposal.new_system
+
+        # Handle special case of instantaneous insertion/deletion.
         if (self.nsteps == 0):
-            # Special case of instantaneous insertion/deletion.
             # TODO: Check this is correct.
+            # TODO: Can we simplify this so there are not two code branches here?
             logP = 0.0
             final_positions = copy.deepcopy(initial_positions)
             from perses.tests.utils import compute_potential
-            if direction == 'delete':
-                potential = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
-            elif direction == 'insert':
-                potential = self.beta * compute_potential(topology_proposal.new_system, initial_positions, platform=self.platform)
+            potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
             return [final_positions, logP, potential]
-
-        assert quantity_is_finite(initial_positions) == True
 
         # Create alchemical system.
         [unmodified_system, alchemical_system] = self.make_alchemical_system(topology_proposal, direction=direction)
-
-        # DEBUG: Compute initial potential of unmodified system and alchemical system to make sure finite.
-        from perses.tests.utils import compute_potential
-        #print(compute_potential(unmodified_system, initial_positions, platform=self.platform))
-        #print(compute_potential(alchemical_system, initial_positions, platform=self.platform))
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
@@ -362,9 +334,11 @@ class NCMCEngine(object):
             integrator = NCMCGHMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, steps_per_propagation=self.steps_per_propagation, timestep=self.timestep, direction=direction)
         else:
             raise Exception("integrator_type '%s' unknown" % self.integrator_type)
+
         # Set the constraint tolerance if specified.
         if self.constraint_tolerance is not None:
             integrator.setConstraintTolerance(self.constraint_tolerance)
+
         # Create a context on the specified platform.
         if self.platform is not None:
             context = openmm.Context(alchemical_system, integrator, self.platform)
@@ -372,97 +346,41 @@ class NCMCEngine(object):
             context = openmm.Context(alchemical_system, integrator)
         context.setPositions(initial_positions)
         context.applyConstraints(integrator.getConstraintTolerance())
+
         # Set velocities to temperature and apply velocity constraints.
         context.setVelocitiesToTemperature(self.temperature)
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
 
-        # DEBUG
-        from perses.tests.utils import compute_potential
-        if direction == 'delete':
-            unmodified_potential = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
-        elif direction == 'insert':
-            unmodified_potential = self.beta * compute_potential(topology_proposal.new_system, initial_positions, platform=self.platform)
-
-        # Compute initial potential of alchemical state.
-        alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-
-        # Set initial context parameters.
-        if direction == 'insert':
-            self._updateAlchemicalState(context, functions, 0)
-        elif direction == 'delete':
-            self._updateAlchemicalState(context, functions, 1)
-
-        # Compute initial potential of alchemical state.
-        initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        # DEBUG
-        if self.verbose:
-            print("Initial potential of '%s' operation: unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda, %.3f kT after changing lambda" % (direction, unmodified_potential, alchemical_potential, initial_potential))
-        #print("Initial potential is %s" % str(initial_potential))
-        if np.isnan(initial_potential):
-            raise NaNException("Initial potential of 'insert' operation is NaN (unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda)" % (unmodified_potential, alchemical_potential))
-        from perses.tests.utils import compute_potential_components
-        #print("initial potential before '%s' : %f kT" % (direction, initial_potential))
-        #print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
-        self.write_pdb_interval = False
         # Integrate switching
         try:
-            # Write PDB file if requested.
-            if self.write_pdb_interval:
-                if direction == 'insert':
-                    topology = topology_proposal.new_topology
-                    indices = topology_proposal.unique_new_atoms
-                else:
-                    topology = topology_proposal.old_topology
-                    indices = topology_proposal.unique_old_atoms
+            # Write atom indices that are changing.
+            self._storage.write_object('atomindices', indices, iteration=iteration)
 
-                # Write atom indices that are changing
-                import pickle
-                filename = 'ncmc-%s-%d-atomindices.pkl' % (direction, self.nattempted)
-                outfile = open(filename, 'wb')
-                pickle.dump(indices, outfile)
-                outfile.close()
+            # Allocate storage for work.
+            work = np.zeros([self.nsteps+1], np.float64) # work[n] is the accumulated work up to step n
 
-                from simtk.openmm.app import PDBFile
-                filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
-                outfile = open(filename, 'w')
-                PDBFile.writeHeader(topology, file=outfile)
-                modelIndex = 0
-                PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
-                try:
-                    for step in range(self.nsteps):
-                        integrator.step(1)
-                        if (step+1)%self.write_pdb_interval == 0:
-                            modelIndex += 1
-                            # TODO: Replace with storage layer
-                            PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
-                except ValueError as e:
-                    # System is exploding and coordinates won't fit in PDB ATOM fields
-                    print(e)
+            # Write trajectory frame.
+            if self._storage and self.write_ncmc_interval:
+                positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(nsteps+1))
 
-                PDBFile.writeFooter(topology, file=outfile)
-                outfile.close()
-            else:
-                work = np.zeros([self.nsteps+1], np.float64) # work[n] is the accumulated work up to step n
-                for step in range(self.nsteps):
-                    integrator.step(1)
-                    #potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-                    #print("Potential at step %d is %s" % (step, str(potential)))
-                    #current_step = integrator.get_step()
-                    #print("and the integrator's current step is %d" % current_step)
+            # Perform NCMC integration.
+            for step in range(self.nsteps):
+                # Take a step.
+                integrator.step(1)
 
-                    # Store accumulated work
-                    work[step+1] = integrator.getWork(context)
+                # Store accumulated work
+                work[step+1] = integrator.getWork(context)
 
-                    # DEBUG
-                    Eold = integrator.getGlobalVariableByName("Eold")
-                    Enew = integrator.getGlobalVariableByName("Enew")
-                    if self.verbose:
-                        print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1]))
+                # Write trajectory frame.
+                if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
+                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(nsteps+1))
 
-                if self._storage:
-                    self._storage.write_array('work_%s' % direction, work, iteration=iteration)
+            # Store work values.
+            if self._storage:
+                self._storage.write_array('work_%s' % direction, work, iteration=iteration)
 
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
@@ -476,38 +394,32 @@ class NCMCEngine(object):
                 traceback.print_exc()
                 raise e
 
-        # Set final context parameters.
-        # Set initial context parameters.
-        if direction == 'insert':
-            self._updateAlchemicalState(context, functions, 1)
-        elif direction == 'delete':
-            self._updateAlchemicalState(context, functions, 0)
-
-        # DEBUG
-        positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-        assert quantity_is_finite(positions) == True
-
-        # Compute final potential of alchemical state.
-        final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        if np.isnan(final_potential):
-            raise NaNException("Final potential of %s operation is NaN" % direction)
-        #print("final potential before '%s' : %f kT" % (direction, final_potential))
-        #print("final potential components: %s" % str(compute_potential_components(context))) # DEBUG
-        #print('')
-
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+        assert quantity_is_finite(final_positions) == True
         logP_NCMC = integrator.getLogAcceptanceProbability(context)
-        # DEBUG
-        #logging.debug("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
-        # Clean up NCMC switching integrator.
+
+        # Get initial and final real and alchemical potentials
+        from perses.tests.utils import compute_potential
+        initial_unmodified_potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
+        initial_alchemical_potential = self.beta * integrator.getGlobalVariableByName("Einitial") * unit.kilojoules_per_mole
+        final_unmodified_potential = self.beta * compute_potential(system, final_positions, platform=self.platform)
+        final_alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+
+        # Clean up.
         del context, integrator
 
-        # DEBUG
-        assert quantity_is_finite(final_positions) == True
+        # Check potentials are finite
+        if np.isnan(initial_unmodified_potential) or np.isnan(initial_alchemical_potential) or np.isnan(final_unmodified_potential) or np.isnan(final_alchemical_potential):
+            msg = "A required potential of %s operation is NaN:\n" % direction
+            msg += "initial_unmodified_potential: %.3f kT\n" % initial_unmodified_potential
+            msg += "initial_alchemical_potential: %.3f kT\n" % initial_alchemical_potential
+            msg += "final_alchemical_potential: %.3f kT\n" % final_alchemical_potential
+            msg += "final_unmodified_potential: %.3f kT\n" % final_unmodified_potential
+            raise NaNException(msg)
 
         # Compute contribution from transforming real system to/from alchemical system.
-        logP_alchemical_correction = self._computeAlchemicalCorrection(unmodified_system, alchemical_system, initial_positions, final_positions, direction=direction)
+        logP_alchemical_correction = (final_unmodified_potential - final_alchemical_potential) + (initial_alchemical_potential - initial_unmodified_potential)
 
         # Compute total logP
         logP = logP_NCMC + logP_alchemical_correction
@@ -516,10 +428,11 @@ class NCMCEngine(object):
         del alchemical_system
 
         # Select whether to return initial or final potential.
+        # TODO: Do we really need to return the potential now?
         if direction == 'insert':
-            potential = initial_potential
+            potential = initial_unmodified_potential
         elif direction == 'delete':
-            potential = final_potential
+            potential = final_unmodified_potential
 
         # Keep track of statistics.
         self.nattempted += 1
@@ -820,6 +733,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
         self.addGlobalVariable('kinetic', 0.0) # kinetic energy
+        self.addGlobalVariable("Einitial", 0) # initial energy after setting initial alchemical state
 
         # VV variables
         if (nsteps > 0):
@@ -837,6 +751,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
 
         if nsteps == 0:
             self.addAlchemicalResetStep()
+            self.addComputeGlobal('Einitial', 'energy') # store initial energy after setting initial alchemical state
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
             self.addComputeGlobal("Enew", "energy")
@@ -845,6 +760,8 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addComputeGlobal('pstep', '0')
             # Initial step only
             self.beginIfBlock('step = 0')
+            self.addAlchemicalResetStep()
+            self.addComputeGlobal('Einitial', 'energy') # store initial energy after setting initial alchemical state
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Eold", "energy + kinetic")
             self.beginWhileBlock('pstep < psteps')
@@ -917,11 +834,12 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
-        self.addGlobalVariable("Eold_GHMC", 0)  # old energy
-        self.addGlobalVariable("Enew_GHMC", 0)  # new energy
+        self.addGlobalVariable("Einitial", 0) # initial energy after setting initial alchemical state
 
         if (nsteps > 0):
             # GHMC variables
+            self.addGlobalVariable("Eold_GHMC", 0)  # old GHMC energy
+            self.addGlobalVariable("Enew_GHMC", 0)  # new GHMC energy
             self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
             self.addGlobalVariable('step', 0) # current NCMC step number
             self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
@@ -944,6 +862,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
 
         if nsteps == 0:
             self.addAlchemicalResetStep()
+            self.addComputeGlobal('Einitial', 'energy') # store initial energy after setting initial alchemical state
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
             self.addComputeGlobal("Enew", "energy")
@@ -955,6 +874,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.beginIfBlock('step = 0')
             #self.beginWhileBlock('pstep < psteps')
             self.addAlchemicalResetStep()
+            self.addComputeGlobal('Einitial', 'energy') # store initial energy after setting initial alchemical state
             #self.addGHMCStep()
             #self.addComputeGlobal('pstep', 'pstep+1')
             #self.endBlock()

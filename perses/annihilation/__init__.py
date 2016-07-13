@@ -1,2 +1,1 @@
 from perses.annihilation.ncmc_switching import NCMCEngine, NCMCVVAlchemicalIntegrator, NCMCGHMCAlchemicalIntegrator
-from perses.annihilation.parsing import NumericStringParser
