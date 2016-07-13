@@ -581,28 +581,34 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         """
         Reset alchemical state to initial state.
         """
+        # Set the master 'lambda' alchemical parameter to the initial state
         if self.direction == 'insert':
             self.addComputeGlobal('lambda', '0.0')
         elif self.direction == 'delete':
             self.addComputeGlobal('lambda', '1.0')
 
+        # Update all slaved alchemical parameters
         self.addUpdateAlchemicalParametersStep()
 
     def addAlchemicalPerturbationStep(self):
         """
         Add alchemical perturbation step.
         """
+        # Set the master 'lambda' alchemical parameter to the current fractional state
         if self.nsteps == 0:
+            # Toggle alchemical state
             if self.direction == 'insert':
                 self.addComputeGlobal('lambda', '1.0')
             elif self.direction == 'delete':
                 self.addComputeGlobal('lambda', '0.0')
         else:
+            # Use fractional state
             if self.direction == 'insert':
                 self.addComputeGlobal('lambda', '(step+1)/nsteps')
             elif self.direction == 'delete':
                 self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
 
+        # Update all slaved alchemical parameters
         self.addUpdateAlchemicalParametersStep()
 
     def addUpdateAlchemicalParametersStep(self):
@@ -630,6 +636,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         """
         self.hasStatistics = True
 
+        # TODO: This could be precomputed to save time
         self.addComputePerDof("sigma", "sqrt(kT/m)")
 
         #
@@ -655,10 +662,13 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
         self.addConstrainVelocities()
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeSum("xsum", "(x-xold)^2")
         self.addComputeGlobal("Enew", "ke + energy")
+        # Compute acceptance probability
+        # DEBUG: Check positions are finite
+        self.addComputeSum("xsum", "(x-xold)^2") # Check positions are finite
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform) * step(xsum)")
         self.beginIfBlock("accept != 1")
+        # Reject sample, inverting velcoity
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "-vold")
         self.endBlock()
