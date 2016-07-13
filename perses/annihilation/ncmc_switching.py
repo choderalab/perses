@@ -9,12 +9,14 @@ from perses.storage import NetCDFStorageView
 from perses.tests.utils import quantity_is_finite
 
 default_functions = {
-    'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-    'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-    #'lambda_sterics' : 'lambda',
-    #'lambda_electrostatics' : 'lambda',
-    'lambda_bonds' : '0.9*lambda + 0.1', # don't fully soften bonds
-    'lambda_angles' : '0.9*lambda + 0.1', # don't fully soften angles
+    #'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+    #'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+    'lambda_sterics' : 'lambda',
+    'lambda_electrostatics' : 'lambda',
+    #'lambda_bonds' : '0.9*lambda + 0.1', # don't fully soften bonds
+    #'lambda_angles' : '0.9*lambda + 0.1', # don't fully soften angles
+    'lambda_bonds' : '1',
+    'lambda_angles' : '1',
     'lambda_torsions' : 'lambda'
     }
 
@@ -160,6 +162,7 @@ class NCMCEngine(object):
         for parameter in functions:
             function = functions[parameter]
             evaluated = nsp.eval(function.replace('lambda', str(value)))
+            print("%s -> %f" % (parameter, evaluated))
             context.setParameter(parameter, evaluated)
 
     def _computeAlchemicalCorrection(self, unmodified_system, alchemical_system, initial_positions, final_positions, direction='insert'):
