@@ -2090,6 +2090,7 @@ def run_fused_rings():
             testsystem.mcmc_samplers[environment].nsteps = 500
             testsystem.exen_samplers[environment].verbose = True
             testsystem.exen_samplers[environment].ncmc_engine.nsteps = ncmc_steps # NCMC switching steps
+            testsystem.exen_samplers[environment].ncmc_engine.verbose = True # verbose output of work
             testsystem.sams_samplers[environment].verbose = True
         testsystem.designer.verbose = True
         testsystem.designer.run(niterations=100)

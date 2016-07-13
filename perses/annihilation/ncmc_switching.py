@@ -50,7 +50,7 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC', storage=None):
+    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_pdb_interval=None, integrator_type='GHMC', storage=None, verbose=False):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -78,6 +78,8 @@ class NCMCEngine(object):
             NCMC internal integrator type ['GHMC', 'VV']
         storage : NetCDFStorageView, optional, default=None
             If specified, write data using this class.
+        verbose : bool, optional, default=False
+            If True, print debug information.
         """
         # Handle some defaults.
         if functions == None:
@@ -97,6 +99,7 @@ class NCMCEngine(object):
         self.platform = platform
         self.integrator_type = integrator_type
         self.steps_per_propagation = steps_per_propagation
+        self.verbose = verbose
 
         self.write_pdb_interval = write_pdb_interval
 
@@ -162,7 +165,6 @@ class NCMCEngine(object):
         for parameter in functions:
             function = functions[parameter]
             evaluated = nsp.eval(function.replace('lambda', str(value)))
-            print("%s -> %f" % (parameter, evaluated))
             context.setParameter(parameter, evaluated)
 
     def _computeAlchemicalCorrection(self, unmodified_system, alchemical_system, initial_positions, final_positions, direction='insert'):
@@ -394,7 +396,8 @@ class NCMCEngine(object):
         # Compute initial potential of alchemical state.
         initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
         # DEBUG
-        print("Initial potential of '%s' operation: unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda, %.3f kT after changing lambda" % (direction, unmodified_potential, alchemical_potential, initial_potential))
+        if self.verbose:
+            print("Initial potential of '%s' operation: unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda, %.3f kT after changing lambda" % (direction, unmodified_potential, alchemical_potential, initial_potential))
         #print("Initial potential is %s" % str(initial_potential))
         if np.isnan(initial_potential):
             raise NaNException("Initial potential of 'insert' operation is NaN (unmodified potential was %.3f kT, alchemical potential was %.3f kT before changing lambda)" % (unmodified_potential, alchemical_potential))
@@ -457,7 +460,8 @@ class NCMCEngine(object):
                     xsum_old = integrator.getGlobalVariableByName("xsum_old")
                     xsum_new = integrator.getGlobalVariableByName("xsum_new")
                     xsum = integrator.getGlobalVariableByName("xsum")
-                    print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e xsum_old %16.8e xsum_new %16.8e xsum %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1], xsum_old, xsum_new, xsum))
+                    if self.verbose:
+                        print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e xsum_old %16.8e xsum_new %16.8e xsum %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1], xsum_old, xsum_new, xsum))
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
 
