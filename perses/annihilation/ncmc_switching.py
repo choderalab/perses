@@ -97,6 +97,9 @@ class NCMCEngine(object):
         self.steps_per_propagation = steps_per_propagation
         self.verbose = verbose
 
+        if steps_per_propagation != 1:
+            raise Exception('steps_per_propagation must be 1 until CustomIntegrator is debugged')
+        
         self.write_pdb_interval = write_pdb_interval
 
         self.nattempted = 0
