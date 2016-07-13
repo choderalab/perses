@@ -354,7 +354,8 @@ class NCMCEngine(object):
         # Integrate switching
         try:
             # Write atom indices that are changing.
-            self._storage.write_object('atomindices', indices, iteration=iteration)
+            if self._storage:
+                self._storage.write_object('atomindices', indices, iteration=iteration)
 
             # Allocate storage for work.
             work = np.zeros([self.nsteps+1], np.float64) # work[n] is the accumulated work up to step n
