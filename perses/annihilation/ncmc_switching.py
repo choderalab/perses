@@ -457,11 +457,8 @@ class NCMCEngine(object):
                     # DEBUG
                     Eold = integrator.getGlobalVariableByName("Eold")
                     Enew = integrator.getGlobalVariableByName("Enew")
-                    xsum_old = integrator.getGlobalVariableByName("xsum_old")
-                    xsum_new = integrator.getGlobalVariableByName("xsum_new")
-                    xsum = integrator.getGlobalVariableByName("xsum")
                     if self.verbose:
-                        print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e xsum_old %16.8e xsum_new %16.8e xsum %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1], xsum_old, xsum_new, xsum))
+                        print('NCMC step %8d  / %8d %8s : Eold %16.8e Enew %16.8e work %16.8e' % (step, self.nsteps, direction, Eold, Enew, work[step+1]))
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
 
@@ -672,8 +669,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addComputeGlobal("Enew_GHMC", "ke + energy")
         # Compute acceptance probability
         # DEBUG: Check positions are finite
-        self.addComputeSum("xsum", "(x-xold)^2") # Check positions are finite
-        self.addComputeGlobal("accept", "step(exp(-(Enew_GHMC-Eold_GHMC)/kT) - uniform) * step(xsum)")
+        self.addComputeGlobal("accept", "step(exp(-(Enew_GHMC-Eold_GHMC)/kT) - uniform)")
         self.beginIfBlock("accept != 1")
         # Reject sample, inverting velcoity
         self.addComputePerDof("x", "xold")
@@ -924,9 +920,6 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         self.addGlobalVariable("Enew", 0)  # new energy
         self.addGlobalVariable("Eold_GHMC", 0)  # old energy
         self.addGlobalVariable("Enew_GHMC", 0)  # new energy
-        # DEBUG
-        self.addGlobalVariable("xsum_old", 0.0)
-        self.addGlobalVariable("xsum_new", 0.0)
 
         if (nsteps > 0):
             # GHMC variables
@@ -944,7 +937,6 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
             self.addGlobalVariable("pstep", 0) # number of propagation steps taken
             self.addGlobalVariable("psteps", steps_per_propagation) # total number of propagation steps
-            self.addGlobalVariable("xsum", 0.0) # sum of (x-xold)^2
 
         # Constrain initial positions and velocities.
         self.addConstrainPositions()
@@ -963,10 +955,8 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             # Initial step only
             self.beginIfBlock('step = 0')
             #self.beginWhileBlock('pstep < psteps')
-            #self.addComputeSum("xsum_old", "x") # DEBUG
             self.addAlchemicalResetStep()
             #self.addGHMCStep()
-            #self.addComputeSum("xsum_new", "x") # DEBUG
             #self.addComputeGlobal('pstep', 'pstep+1')
             #self.endBlock()
             self.endBlock()
@@ -978,9 +968,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addComputeGlobal("Enew", "energy")
             self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
             #self.beginWhileBlock('pstep < psteps')
-            self.addComputeSum("xsum_old", "x") # DEBUG
             self.addGHMCStep()
-            self.addComputeSum("xsum_new", "x") # DEBUG
             #self.addComputeGlobal('pstep', 'pstep+1')
             #self.endBlock()
             self.addComputeGlobal('step', 'step+1')
