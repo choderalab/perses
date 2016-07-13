@@ -652,7 +652,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addConstrainVelocities()
 
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputeGlobal("Eold_GHMC", "ke + energy")
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
         self.addComputePerDof("v", "v + 0.5*dt*f/m")
@@ -662,11 +662,11 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
         self.addConstrainVelocities()
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Enew", "ke + energy")
+        self.addComputeGlobal("Enew_GHMC", "ke + energy")
         # Compute acceptance probability
         # DEBUG: Check positions are finite
         self.addComputeSum("xsum", "(x-xold)^2") # Check positions are finite
-        self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform) * step(xsum)")
+        self.addComputeGlobal("accept", "step(exp(-(Enew_GHMC-Eold_GHMC)/kT) - uniform) * step(xsum)")
         self.beginIfBlock("accept != 1")
         # Reject sample, inverting velcoity
         self.addComputePerDof("x", "xold")
@@ -915,6 +915,8 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable("Eold_GHMC", 0)  # old energy
+        self.addGlobalVariable("Enew_GHMC", 0)  # new energy
         # DEBUG
         self.addGlobalVariable("xsum_old", 0.0)
         self.addGlobalVariable("xsum_new", 0.0)
