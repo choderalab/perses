@@ -26,6 +26,7 @@ import time
 
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
+from perses.tests.utils import quantity_is_finite
 
 ################################################################################
 # LOGGER
@@ -124,6 +125,10 @@ class SamplerState(object):
 
     """
     def __init__(self, system, positions, velocities=None, box_vectors=None, platform=None):
+        assert quantity_is_finite(positions)
+        if velocities is not None:
+            assert quantity_is_finite(self.velocities)
+
         self.system = copy.deepcopy(system)
         self.positions = positions
         self.velocities = velocities
@@ -197,6 +202,9 @@ class SamplerState(object):
         self.kinetic_energy = openmm_state.getKineticEnergy()
         self.total_energy = self.potential_energy + self.kinetic_energy
         self.volume = thermodynamics.volume(self.box_vectors)
+
+        assert quantity_is_finite(self.positions)
+        assert quantity_is_finite(self.velocities)
 
         return self
 
@@ -363,6 +371,133 @@ class SamplerState(object):
             return False
 
 ################################################################################
+# GHMC INTEGRATOR (TEMPORARY UNTIL MOVED TO OPENMMTOOLS)
+################################################################################
+
+class GHMCIntegrator(openmm.CustomIntegrator):
+
+    """
+    Generalized hybrid Monte Carlo (GHMC) integrator.
+
+    """
+
+    def __init__(self, temperature=298.0 * unit.kelvin, collision_rate=91.0 / unit.picoseconds, timestep=1.0 * unit.femtoseconds):
+        """
+        Create a generalized hybrid Monte Carlo (GHMC) integrator.
+
+        Parameters
+        ----------
+        temperature : np.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
+           The temperature.
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
+           The collision rate.
+        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
+           The integration timestep.
+
+        Notes
+        -----
+        This integrator is equivalent to a Langevin integrator in the velocity Verlet discretization with a
+        Metrpolization step to ensure sampling from the appropriate distribution.
+
+        Additional global variables 'ntrials' and  'naccept' keep track of how many trials have been attempted and
+        accepted, respectively.
+
+        TODO
+        ----
+        * Move initialization of 'sigma' to setting the per-particle variables.
+        * Generalize to use MTS inner integrator.
+
+        Examples
+        --------
+
+        Create a GHMC integrator.
+
+        >>> temperature = 298.0 * unit.kelvin
+        >>> collision_rate = 91.0 / unit.picoseconds
+        >>> timestep = 1.0 * unit.femtoseconds
+        >>> integrator = GHMCIntegrator(temperature, collision_rate, timestep)
+
+        References
+        ----------
+        Lelievre T, Stoltz G, and Rousset M. Free Energy Computations: A Mathematical Perspective
+        http://www.amazon.com/Free-Energy-Computations-Mathematical-Perspective/dp/1848162472
+
+        """
+
+        # Initialize constants.
+        kT = kB * temperature
+        gamma = collision_rate
+
+        # Create a new custom integrator.
+        super(GHMCIntegrator, self).__init__(timestep)
+
+        #
+        # Integrator initialization.
+        #
+        self.addGlobalVariable("kT", kT)  # thermal energy
+        self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
+        self.addPerDofVariable("sigma", 0) # velocity standard deviation
+        self.addGlobalVariable("ke", 0)  # kinetic energy
+        self.addPerDofVariable("vold", 0)  # old velocities
+        self.addPerDofVariable("xold", 0)  # old positions
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable("accept", 0)  # accept or reject
+        self.addGlobalVariable("naccept", 0)  # number accepted
+        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
+        self.addPerDofVariable("x1", 0)  # position before application of constraints
+
+        #
+        # Pre-computation.
+        # This only needs to be done once.
+        # TODO: Change this to setPerDofVariableByName("sigma", unit.sqrt(kT / mass).value_in_unit_system(unit.md_unit_system))
+        #
+        self.addComputePerDof("sigma", "sqrt(kT/m)")
+
+        #
+        # Velocity randomization
+        #
+        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+        self.addConstrainVelocities()
+
+        #
+        # Metropolized symplectic step.
+        #
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
+
+        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputePerDof("xold", "x")
+        self.addComputePerDof("vold", "v")
+        self.addComputePerDof("v", "v + 0.5*dt*f/m")
+        self.addComputePerDof("x", "x + v*dt")
+        self.addComputePerDof("x1", "x")
+        self.addConstrainPositions()
+        self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
+        self.addConstrainVelocities()
+        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeGlobal("Enew", "ke + energy")
+        # TODO: Check if accept/reject logic correctly handles nans
+        self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
+        self.beginIfBlock("accept != 1")
+        self.addComputePerDof("x", "xold")
+        self.addComputePerDof("v", "-vold")
+        self.endBlock()
+
+        #
+        # Velocity randomization
+        #
+        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+        self.addConstrainVelocities()
+
+        #
+        # Accumulate statistics.
+        #
+        self.addComputeGlobal("naccept", "naccept + accept")
+        self.addComputeGlobal("ntrials", "ntrials + 1")
+
+################################################################################
 # MCMC SAMPLER
 ################################################################################
 
@@ -401,7 +536,7 @@ class MCMCSampler(object):
     >>> sampler.run()
 
     """
-    def __init__(self, thermodynamic_state, sampler_state, topology=None, storage=None):
+    def __init__(self, thermodynamic_state, sampler_state, topology=None, storage=None, integrator_name='GHMC'):
         """
         Create an MCMC sampler.
 
@@ -413,9 +548,10 @@ class MCMCSampler(object):
             The initial sampler state to simulate from.
         topology : simtk.openmm.app.Topology, optional, default=None
             Topology object corresponding to system being simulated (for writing)
-
         storage : NetCDFStorage, optional, default=None
             Storage layer to use for writing.
+        integrator_name : str, optional, default='GHMC'
+            Name of the integrator to use for propagation.
 
         """
         # Keep copies of initializing arguments.
@@ -423,6 +559,7 @@ class MCMCSampler(object):
         self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.sampler_state = copy.deepcopy(sampler_state)
         self.topology = topology
+        self.integrator_name = integrator_name
 
         self.storage = None
         if storage is not None:
@@ -435,7 +572,6 @@ class MCMCSampler(object):
         self.timestep = 1.0 * unit.femtoseconds
         self.nsteps = 500 # number of steps per update
         self.verbose = True
-        self.integrator_name = 'Langevin'
 
     def update(self):
         """
@@ -447,7 +583,8 @@ class MCMCSampler(object):
 
         # Create an integrator
         if self.integrator_name == 'GHMC':
-            from openmmtools.integrators import GHMCIntegrator
+            # TODO: Migrate GHMCIntegrator back to openmmtools
+            #from openmmtools.integrators import GHMCIntegrator
             integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
             if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
         elif self.integrator_name == 'Langevin':
@@ -698,6 +835,9 @@ class ExpandedEnsembleSampler(object):
         """
         Sample the thermodynamic state.
         """
+
+        initial_time = time.time()
+
         # Check that system and topology have same number of atoms.
         old_system = self.sampler.sampler_state.system
         old_topology = self.topology
@@ -831,10 +971,14 @@ class ExpandedEnsembleSampler(object):
                 self.nrejected += 1
                 if self.verbose: print("    rejected")
 
+            elapsed_time = time.time() - initial_time
+
             # Write to storage.
             if self.storage:
+                self.storage.write_quantity('update_state_elapsed_time', elapsed_time, iteration=self.iteration)
                 self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
                 self.storage.write_object('state_key', self.state_key, iteration=self.iteration)
+                self.storage.write_object('proposed_state_key', topology_proposal.new_chemical_state_key, iteration=self.iteration)
                 self.storage.write_quantity('naccepted', self.naccepted, iteration=self.iteration)
                 self.storage.write_quantity('nrejected', self.nrejected, iteration=self.iteration)
                 self.storage.write_quantity('logp_accept', logp_accept, iteration=self.iteration)

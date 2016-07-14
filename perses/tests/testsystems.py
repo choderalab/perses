@@ -1672,6 +1672,14 @@ class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         # Intialize
         super(T4LysozymeInhibitorsTestSystem, self).__init__(**kwargs)
 
+class FusedRingsTestSystem(SmallMoleculeLibraryTestSystem):
+    """
+    Simple test system containing fused rings (benzene <--> naphtalene) in explicit solvent.
+    """
+    def __init__(self, **kwargs):
+        self.molecules = ['c1ccccc1', 'c1ccc2ccccc2c1'] # benzene, naphthalene
+        super(FusedRingsTestSystem, self).__init__(**kwargs)
+
 class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     Create a consistent set of samplers useful for testing SmallMoleculeProposalEngine on alkanes with a valence-only forcefield.
@@ -1958,7 +1966,7 @@ def test_valence_write_pdb_ncmc_switching():
     environment = 'vacuum'
     testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10
     testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
-    testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 1 # write PDB files for NCMC switching
+    testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 1 # write PDB files for NCMC switching
     testsystem.mcmc_samplers[environment].nsteps = 10
     testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
     testsystem.exen_samplers[environment].run(niterations=1)
@@ -1976,7 +1984,7 @@ def run_abl_affinity_write_pdb_ncmc_switching():
         testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10000
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
         testsystem.mcmc_samplers[environment].nsteps = 10000
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
@@ -2011,7 +2019,7 @@ def run_constph_abl():
         testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        #testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
         testsystem.mcmc_samplers[environment].nsteps = 2500
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
@@ -2053,7 +2061,7 @@ def run_imidazole():
         testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
         testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
         testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        #testsystem.exen_samplers[environment].ncmc_engine.write_pdb_interval = 100 # write PDB files for NCMC switching
+        #testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
         testsystem.mcmc_samplers[environment].nsteps = 500
         testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
 
@@ -2066,10 +2074,38 @@ def run_imidazole():
     testsystem.sams_samplers['explicit-imidazole'].verbose=True
     testsystem.sams_samplers['explicit-imidazole'].run(niterations=100)
 
+def run_fused_rings():
+    """
+    Run fused rings test system.
+    Vary number of NCMC steps
+
+    """
+    #nsteps_to_try = [1, 10, 100, 1000, 10000, 100000] # number of NCMC steps
+    nsteps_to_try = [10, 100, 1000, 10000, 100000] # number of NCMC steps
+    for ncmc_steps in nsteps_to_try:
+        storage_filename = 'output-%d.nc' % ncmc_steps
+        testsystem = FusedRingsTestSystem(storage_filename=storage_filename)
+        for environment in ['explicit', 'vacuum']:
+            testsystem.mcmc_samplers[environment].verbose = True
+            testsystem.mcmc_samplers[environment].nsteps = 500
+            testsystem.exen_samplers[environment].verbose = True
+            testsystem.exen_samplers[environment].ncmc_engine.nsteps = ncmc_steps # NCMC switching steps
+            testsystem.exen_samplers[environment].ncmc_engine.verbose = True # verbose output of work
+            testsystem.sams_samplers[environment].verbose = True
+        testsystem.designer.verbose = True
+        testsystem.designer.run(niterations=100)
+
+        # Analyze data.
+        from perses.analysis import Analysis
+        analysis = Analysis(storage_filename=storage_filename)
+        #analysis.plot_sams_weights('sams.pdf')
+        analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
+
 if __name__ == '__main__':
+    run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
-    run_imidazole()
+    #run_imidazole()
     #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()

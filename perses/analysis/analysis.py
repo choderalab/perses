@@ -23,7 +23,7 @@ import json
 
 import matplotlib as mpl
 mpl.use('Agg')
-import seaborn
+import seaborn as sns
 
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
@@ -87,7 +87,9 @@ class Analysis(object):
                     except Exception as e:
                         pass
 
-                if len(work) > 0:
+                def plot_work_trajectories(pdf, work, title=""):
+                    """Generate figures for the specified switching legs.
+                    """
                     plt.figure(figsize=(12, 8))
 
                     nrows = 2
@@ -113,7 +115,7 @@ class Analysis(object):
                         # Label plot
                         if row == 1: plt.xlabel('steps')
                         plt.ylabel('work / kT')
-                        plt.title("NCMC in environment '%s' : %s" % (envname, direction))
+                        plt.title("%s NCMC in environment '%s' : %s" % (title, envname, direction))
                         plt.legend(['average work', 'NCMC attempts'])
 
                         #
@@ -124,9 +126,10 @@ class Analysis(object):
                         plt.subplot2grid((nrows,ncols), (row, col), colspan=workcols)
 
                         # Plot average work distribution in think solid line
-                        nbins = 40
+                        #nbins = 40
                         workvals = work[direction][:-1,-1]
-                        plt.hist(workvals, nbins)
+                        #plt.hist(workvals, nbins)
+                        sns.distplot(workvals, rug=True)
                         # Adjust axes to eliminate large-magnitude outliers (keep 98% of data in-range)
                         #worklim = np.percentile(workvals, 98)
                         #oldaxis = plt.axis()
@@ -135,6 +138,15 @@ class Analysis(object):
                         if row == 1: plt.xlabel('work / kT')
                         plt.title("total %s work" % direction)
 
-
                     pdf.savefig()  # saves the current figure into a pdf page
                     plt.close()
+
+                if len(work) > 0:
+                    # Plot work for all chemical transformations.
+                    plot_work_trajectories(pdf, work, title='(all transformations)')
+
+                    # Plot work separated out for each chemical transformation
+                    #[niterations, nsteps] = work.shape
+                    #transformations = dict()
+                    #for iteration in range(niterations):
+                    #    plot_work_trajectories(pdf, work, title='(all transformations)')
