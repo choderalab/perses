@@ -723,9 +723,11 @@ class ExpandedEnsembleSampler(object):
     >>> mcmc_sampler.verbose = False
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
+    >>> from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    >>> geometry_engine = FFAllAngleGeometryEngine(metadata={})
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
     >>> proposal_engine = PointMutationEngine(test.topology, system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
-    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
+    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine, geometry_engine)
     >>> # Run the sampler
     >>> exen_sampler.run()
 
@@ -1081,11 +1083,13 @@ class SAMSSampler(object):
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
     >>> # Turn off verbosity
     >>> mcmc_sampler.verbose = False
+    >>> from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    >>> geometry_engine = FFAllAngleGeometryEngine(metadata={})
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
     >>> proposal_engine = PointMutationEngine(test.topology, system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
-    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
+    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine, geometry_engine)
     >>> # Create a SAMS sampler
     >>> sams_sampler = SAMSSampler(exen_sampler)
     >>> # Run the sampler
