@@ -730,7 +730,7 @@ class ExpandedEnsembleSampler(object):
     >>> exen_sampler.run()
 
     """
-    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None, envname=None, storage=None):
+    def __init__(self, sampler, topology, state_key, proposal_engine, geometry_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None, envname=None, storage=None):
         """
         Create an expanded ensemble sampler.
 
@@ -748,6 +748,8 @@ class ExpandedEnsembleSampler(object):
             Current chemical state
         proposal_engine : ProposalEngine
             ProposalEngine to use for proposing new chemical states
+        geometry_engine : GeometryEngine
+            GeometryEngine to use for dimension matching
         log_weights : dict of object : float
             Log weights to use for expanded ensemble biases.
         scheme : str, optional, default='ncmc-geometry-ncmc'
@@ -788,8 +790,7 @@ class ExpandedEnsembleSampler(object):
             self._switching_nsteps = 0
         from perses.annihilation.ncmc_switching import NCMCEngine
         self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
-        from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
-        self.geometry_engine = OmegaFFGeometryEngine(torsion_kappa=300.0, max_confs=10)
+        self.geometry_engine = geometry_engine
         self.naccepted = 0
         self.nrejected = 0
         self.number_of_state_visits = dict()
