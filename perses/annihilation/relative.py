@@ -88,7 +88,7 @@ class HybridTopologyFactory(object):
             positions[index] = pos_atom2
         return positions
 
-    def _harmonic_bond_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, system):
+    def _harmonic_bond_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system):
         def index_bonds(force):
             bonds = dict()
             for index in range(force.getNumBonds()):
@@ -160,7 +160,7 @@ class HybridTopologyFactory(object):
             [atom_i, atom_j, length1, K1] = force1.getBondParameters(index1)
             custom_force.addBond(atom_i, atom_j, [length1, K1, length1, 0.1*K1])
 
-    def _harmonic_angle_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, system):
+    def _harmonic_angle_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system):
         def index_angles(force):
             angles = dict()
             for index in range(force.getNumAngles()):
@@ -222,7 +222,7 @@ class HybridTopologyFactory(object):
             [atom2_i, atom2_j, atom2_k, theta2, K2] = force2.getAngleParameters(index2)
             custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta2, K2])
 
-    def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, system):
+    def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system):
         def index_torsions(force):
             torsions = dict()
             for index in range(force.getNumTorsions()):
@@ -330,7 +330,10 @@ class HybridTopologyFactory(object):
             [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
             custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity2, phase2, K2])
 
-    def _nonbonded_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, system):
+    def _nonbonded_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, system1_atoms, mapping1, mapping2, system):
+        softcore_alpha = self.softcore_alpha
+        softcore_beta = self.softcore_beta
+
         for atom in self.unique_atoms2:
             [charge, sigma, epsilon] = force2.getParticleParameters(atom)
             force.addParticle(charge, sigma, epsilon)
@@ -478,7 +481,7 @@ class HybridTopologyFactory(object):
 
         # Add exclusions between unique parts of molecule1 and molecule2 so they do not interact.
         if self.verbose: print("Add exclusions between unique parts of molecule1 and molecule2 that should not interact...")
-        for atom1_i in unique1:
+        for atom1_i in self.unique_atoms1:
             for atom2_j in self.unique_atoms2:
                 atom_i = atom1_i
                 atom_j = sys2_indices_in_system[atom2_j]
@@ -507,7 +510,7 @@ class HybridTopologyFactory(object):
             electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, charge2])
 
         # Copy over parameters for molecule1 unique atoms.
-        for atom1 in unique1:
+        for atom1 in self.unique_atoms1:
             index = atom1 # index into system
             [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
             sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma1, 0*epsilon1])
@@ -531,12 +534,6 @@ class HybridTopologyFactory(object):
         self.topology1 = topology1
         topology2 = copy.deepcopy(self.topology2)
         self.topology2 = topology2
-
-        softcore_alpha = self.softcore_alpha
-        softcore_beta = self.softcore_beta
-
-        unique1 = self.unique_atoms1
-        unique2 = self.unique_atoms2
 
         system2_atoms = self.system2_atoms
         system1_atoms = self.system1_atoms
@@ -601,13 +598,13 @@ class HybridTopologyFactory(object):
             force2 = forces2[force_name]
             if self.verbose: print(force_name)
             if force_name == 'HarmonicBondForce':
-                self._harmonic_bond_force(force, force1, force2, common1, common2, sys2_indices_in_system, system)
+                self._harmonic_bond_force(force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system)
             elif force_name == 'HarmonicAngleForce':
-                self._harmonic_angle_force(force, force1, force2, common1, common2, sys2_indices_in_system, system)
+                self._harmonic_angle_force(force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system)
             elif force_name == 'PeriodicTorsionForce':
-                self._periodic_torsion_force(force, force1, force2, common1, common2, sys2_indices_in_system, system)
+                self._periodic_torsion_force(force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system)
             elif force_name == 'NonbondedForce':
-                self._nonbonded_force(force, force1, force2, common1, common2, sys2_indices_in_system, system)
+                self._nonbonded_force(force, force1, force2, common1, common2, sys2_indices_in_system, system1_atoms, mapping1, mapping2, system)
             else:
                 pass
 
