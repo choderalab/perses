@@ -88,6 +88,60 @@ class HybridTopologyFactory(object):
             positions[index] = pos_atom2
         return positions
 
+    def _harmonic_bond_find_shared(self, common2, sys2_indices_in_system, mapping2, bonds, bonds1, bonds2):
+        if self.verbose: print("Building a list of shared bonds...")
+        shared_bonds = list()
+        for atoms2 in bonds2:
+            atoms2 = list(atoms2)
+            if set(atoms2).issubset(common2):
+                atoms  = [sys2_indices_in_system[atom2] for atom2 in atoms2]
+                atoms1 = [mapping2[atom2] for atom2 in atoms2]
+                # Find bond index terms.
+                index  = bonds[unique(atoms)]
+                index1 = bonds1[unique(atoms1)]
+                index2 = bonds2[unique(atoms2)]
+                # Store.
+                shared_bonds.append( (index, index1, index2) )
+        return shared_bonds
+
+    def _harmonic_bond_custom_force(self):
+        # Create a CustomBondForce to handle interpolated bond parameters.
+        if self.verbose: print("Creating CustomBondForce...")
+        energy_expression  = '(K/2)*(r-length)^2;'
+        energy_expression += 'K = (1-lambda_bonds)*K1 + lambda_bonds*K2;' # linearly interpolate spring constant
+        energy_expression += 'length = (1-lambda_bonds)*length1 + lambda_bonds*length2;' # linearly interpolate bond length
+        custom_force = mm.CustomBondForce(energy_expression)
+        custom_force.addGlobalParameter('lambda_bonds', 0.0)
+        custom_force.addPerBondParameter('length1') # molecule1 bond length
+        custom_force.addPerBondParameter('K1') # molecule1 spring constant
+        custom_force.addPerBondParameter('length2') # molecule2 bond length
+        custom_force.addPerBondParameter('K2') # molecule2 spring constant
+        return custom_force
+
+    def _harmonic_bond_add_core(self, shared_bonds, force, force1, force2, custom_force):
+        # Process bonds that are shared by molecule1 and molecule2.
+        if self.verbose: print("Translating shared bonds to CustomBondForce...")
+        for (index, index1, index2) in shared_bonds:
+            # Zero out standard bond force.
+            [atom_i, atom_j, length, K] = force.getBondParameters(index)
+            force.setBondParameters(index, atom_i, atom_j, length, K*0.0)
+            # Create interpolated bond parameters.
+            [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
+            [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
+            custom_force.addBond(atom_i, atom_j, [length1, K1, length2, K2])
+
+    def _harmonic_bond_add_unique(self, unique_bonds2, unique_bonds1, force2, force1, sys2_indices_in_system, custom_force):
+        if self.verbose: print("Adding custom parameters to unique bonds...")
+        for index2 in unique_bonds2:
+            [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
+            atom_i = sys2_indices_in_system[atom2_i]
+            atom_j = sys2_indices_in_system[atom2_j]
+            custom_force.addBond(atom_i, atom_j, [length2, 0.1*K2, length2, K2])
+    
+        for index1 in unique_bonds1:
+            [atom_i, atom_j, length1, K1] = force1.getBondParameters(index1)
+            custom_force.addBond(atom_i, atom_j, [length1, K1, length1, 0.1*K1])
+
     def _harmonic_bond_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system):
         def index_bonds(force):
             bonds = dict()
@@ -110,55 +164,68 @@ class HybridTopologyFactory(object):
             [atom_i, atom_j, length, K] = force.getBondParameters(index)
             force.setBondParameters(index, atom_i, atom_j, length, 0*K)
  
-        # Build list of bonds shared among all molecules.
-        if self.verbose: print("Building a list of shared bonds...")
-        shared_bonds = list()
-        for atoms2 in bonds2:
+        shared_bonds = self._harmonic_bond_find_shared(common2, sys2_indices_in_system, mapping2, bonds, bonds1, bonds2)
+    
+        custom_force = self._harmonic_bond_custom_force()
+        system.addForce(custom_force)
+
+        self._harmonic_bond_add_core(shared_bonds, force, force1, force2, custom_force)    
+        self._harmonic_bond_add_unique(unique_bonds2, unique_bonds1, force2, force1, sys2_indices_in_system, custom_force)
+
+    def _harmonic_angle_find_shared(self, common2, sys2_indices_in_system, mapping2, angles, angles1, angles2):
+        # Build list of angles shared among all molecules.
+        if self.verbose: print("Building a list of shared angles...")
+        shared_angles = list()
+        for atoms2 in angles2:
             atoms2 = list(atoms2)
             if set(atoms2).issubset(common2):
                 atoms  = [sys2_indices_in_system[atom2] for atom2 in atoms2]
                 atoms1 = [mapping2[atom2] for atom2 in atoms2]
-                # Find bond index terms.
-                index  = bonds[unique(atoms)]
-                index1 = bonds1[unique(atoms1)]
-                index2 = bonds2[unique(atoms2)]
+                # Find angle index terms.
+                index  = angles[unique(atoms)]
+                index1 = angles1[unique(atoms1)]
+                index2 = angles2[unique(atoms2)]
                 # Store.
-                shared_bonds.append( (index, index1, index2) )
-    
-        # Create a CustomBondForce to handle interpolated bond parameters.
-        if self.verbose: print("Creating CustomBondForce...")
-        energy_expression  = '(K/2)*(r-length)^2;'
-        energy_expression += 'K = (1-lambda_bonds)*K1 + lambda_bonds*K2;' # linearly interpolate spring constant
-        energy_expression += 'length = (1-lambda_bonds)*length1 + lambda_bonds*length2;' # linearly interpolate bond length
-        custom_force = mm.CustomBondForce(energy_expression)
-        custom_force.addGlobalParameter('lambda_bonds', 0.0)
-        custom_force.addPerBondParameter('length1') # molecule1 bond length
-        custom_force.addPerBondParameter('K1') # molecule1 spring constant
-        custom_force.addPerBondParameter('length2') # molecule2 bond length
-        custom_force.addPerBondParameter('K2') # molecule2 spring constant
-        system.addForce(custom_force)
-    
-        # Process bonds that are shared by molecule1 and molecule2.
-        if self.verbose: print("Translating shared bonds to CustomBondForce...")
-        for (index, index1, index2) in shared_bonds:
-            # Zero out standard bond force.
-            [atom_i, atom_j, length, K] = force.getBondParameters(index)
-            force.setBondParameters(index, atom_i, atom_j, length, K*0.0)
-            # Create interpolated bond parameters.
-            [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
-            [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
-            custom_force.addBond(atom_i, atom_j, [length1, K1, length2, K2])
+                shared_angles.append( (index, index1, index2) )
+        return shared_angles
 
-        if self.verbose: print("Adding custom parameters to unique bonds...")
-        for index2 in unique_bonds2:
-            [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
+    def _harmonic_angle_custom_force(self):
+        # Create a CustomAngleForce to handle interpolated angle parameters.
+        if self.verbose: print("Creating CustomAngleForce...")
+        energy_expression  = '(K/2)*(theta-theta0)^2;'
+        energy_expression += 'K = (1.1-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
+        energy_expression += 'theta0 = (1.1-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
+        custom_force = mm.CustomAngleForce(energy_expression)
+        custom_force.addGlobalParameter('lambda_angles', 0.0)
+        custom_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
+        custom_force.addPerAngleParameter('K_1') # molecule1 spring constant
+        custom_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
+        custom_force.addPerAngleParameter('K_2') # molecule2 spring constant
+        return custom_force
+
+    def _harmonic_angle_add_core(self, shared_angles, force, force1, force2, custom_force):
+        # Process angles that are shared by molecule1 and molecule2.
+        if self.verbose: print("Translating shared angles to CustomAngleForce...")
+        for (index, index1, index2) in shared_angles:
+            # Zero out standard angle force.
+            [atom_i, atom_j, atom_k, theta0, K] = force.getAngleParameters(index)
+            force.setAngleParameters(index, atom_i, atom_j, atom_k, theta0, K*0.0)
+            # Create interpolated angle parameters.
+            [atom1_i, atom1_j, atom1_k, theta1, K1] = force1.getAngleParameters(index1)
+            [atom2_i, atom2_j, atom2_k, theta2, K2] = force2.getAngleParameters(index2)
+            custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta2, K2])
+
+    def _harmonic_angle_add_unique(self, unique_angles2, unique_angles1, force2, force1, sys2_indices_in_system, custom_force):
+        if self.verbose: print("Adding custom parameters to unique angles...")
+        for index2 in unique_angles2:
+            [atom2_i, atom2_j, atom2_k, theta2, K2] = force2.getAngleParameters(index2)
             atom_i = sys2_indices_in_system[atom2_i]
             atom_j = sys2_indices_in_system[atom2_j]
-            custom_force.addBond(atom_i, atom_j, [length2, 0.1*K2, length2, K2])
-    
-        for index1 in unique_bonds1:
-            [atom_i, atom_j, length1, K1] = force1.getBondParameters(index1)
-            custom_force.addBond(atom_i, atom_j, [length1, K1, length1, 0.1*K1])
+            atom_k = sys2_indices_in_system[atom2_k]
+            custom_force.addAngle(atom_i, atom_j, atom_k, [theta2, 0.1*K2, theta2, K2])
+        for index1 in unique_angles1:
+            [atom_i, atom_j, atom_k, theta1, K1] = force1.getAngleParameters(index1)
+            custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta1, 0.1*K1])
 
     def _harmonic_angle_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system):
         def index_angles(force):
@@ -178,68 +245,20 @@ class HybridTopologyFactory(object):
         unique_angles1 = [ angles1[atoms] for atoms in angles1 if not set(atoms).issubset(common1) ]
         unique_angles2 = [ angles2[atoms] for atoms in angles2 if not set(atoms).issubset(common2) ]
 
-        # Build list of angles shared among all molecules.
-        if self.verbose: print("Building a list of shared angles...")
-        shared_angles = list()
-        for atoms2 in angles2:
-            atoms2 = list(atoms2)
-            if set(atoms2).issubset(common2):
-                atoms  = [sys2_indices_in_system[atom2] for atom2 in atoms2]
-                atoms1 = [mapping2[atom2] for atom2 in atoms2]
-                # Find angle index terms.
-                index  = angles[unique(atoms)]
-                index1 = angles1[unique(atoms1)]
-                index2 = angles2[unique(atoms2)]
-                # Store.
-                shared_angles.append( (index, index1, index2) )
+        shared_angles = self._harmonic_angle_find_shared(common2, sys2_indices_in_system, mapping2, angles, angles1, angles2)
 
         if self.verbose: print("Removing existing angle parameters...")
         for index in range(force.getNumAngles()):
             [atom_i, atom_j, atom_k, angle, K] = force.getAngleParameters(index)
             force.setAngleParameters(index, atom_i, atom_j, atom_k, angle, 0*K)
-    
-        # Create a CustomAngleForce to handle interpolated angle parameters.
-        if self.verbose: print("Creating CustomAngleForce...")
-        energy_expression  = '(K/2)*(theta-theta0)^2;'
-        energy_expression += 'K = (1.1-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
-        energy_expression += 'theta0 = (1.1-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
-        custom_force = mm.CustomAngleForce(energy_expression)
-        custom_force.addGlobalParameter('lambda_angles', 0.0)
-        custom_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
-        custom_force.addPerAngleParameter('K_1') # molecule1 spring constant
-        custom_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
-        custom_force.addPerAngleParameter('K_2') # molecule2 spring constant
+
+        custom_force = self._harmonic_angle_custom_force() 
         system.addForce(custom_force)
     
-        # Process angles that are shared by molecule1 and molecule2.
-        if self.verbose: print("Translating shared angles to CustomAngleForce...")
-        for (index, index1, index2) in shared_angles:
-            # Zero out standard angle force.
-            [atom_i, atom_j, atom_k, theta0, K] = force.getAngleParameters(index)
-            force.setAngleParameters(index, atom_i, atom_j, atom_k, theta0, K*0.0)
-            # Create interpolated angle parameters.
-            [atom1_i, atom1_j, atom1_k, theta1, K1] = force1.getAngleParameters(index1)
-            [atom2_i, atom2_j, atom2_k, theta2, K2] = force2.getAngleParameters(index2)
-            custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta2, K2])
+        self._harmonic_angle_add_core(shared_angles, force, force1, force2, custom_force)
+        self._harmonic_angle_add_unique(unique_angles2, unique_angles1, force2, force1, sys2_indices_in_system, custom_force)
 
-    def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system):
-        def index_torsions(force):
-            torsions = dict()
-            for index in range(force.getNumTorsions()):
-                [atom_i, atom_j, atom_k, atom_l, periodicity, phase, K] = force.getTorsionParameters(index)
-                key = unique([atom_i, atom_j, atom_k, atom_l]) # unique tuple, possibly in reverse order
-                torsions[key] = index
-            return torsions
-
-        torsions  = index_torsions(force)   # index of torsions for system
-        torsions1 = index_torsions(force1)  # index of torsions for system1
-        torsions2 = index_torsions(force2)  # index of torsions for system2
-
-        # Find torsions that are unique to each molecule.
-        if self.verbose: print("Finding torsions unique to each molecule...")
-        unique_torsions1 = [ torsions1[atoms] for atoms in torsions1 if not set(atoms).issubset(common1) ]
-        unique_torsions2 = [ torsions2[atoms] for atoms in torsions2 if not set(atoms).issubset(common2) ]
- 
+    def _periodic_torsion_find_shared(self, common2, sys2_indices_in_system, mapping2, torsions, torsions1, torsions2):
         # Build list of torsions shared among all molecules.
         if self.verbose: print("Building a list of shared torsions...")
         shared_torsions = list()
@@ -291,19 +310,10 @@ class HybridTopologyFactory(object):
                     if self.verbose: print("torsions2:  %s" % str(unique(atoms2)))
                     raise(e)
 
-                # Store.
                 shared_torsions.append( (index, index1, index2) )
- 
-        # Add torsions that are unique to molecule2.
-        if self.verbose: print("Adding torsions unique to molecule2...")
-        for index2 in unique_torsions2:
-            [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
-            atom_i = sys2_indices_in_system[atom2_i]
-            atom_j = sys2_indices_in_system[atom2_j]
-            atom_k = sys2_indices_in_system[atom2_k]
-            atom_l = sys2_indices_in_system[atom2_l]
-            force.addTorsion(atom_i, atom_j, atom_k, atom_l, periodicity2, phase2, K2)
+        return shared_torsions
 
+    def _periodic_torsion_custom_force(self):
         # Create a CustomTorsionForce to handle interpolated torsion parameters.
         if self.verbose: print("Creating CustomTorsionForce...")
         energy_expression  = '(1-lambda_torsions)*U1 + lambda_torsions*U2;'
@@ -317,8 +327,9 @@ class HybridTopologyFactory(object):
         custom_force.addPerTorsionParameter('periodicity2') # molecule2 periodicity
         custom_force.addPerTorsionParameter('phase2') # molecule2 phase
         custom_force.addPerTorsionParameter('K2') # molecule2 spring constant
-        system.addForce(custom_force)
+        return custom_force
 
+    def _periodic_torsion_add_core(self, shared_torsions, force, force1, force2, custom_force):
         # Process torsions that are shared by molecule1 and molecule2.
         if self.verbose: print("Translating shared torsions to CustomTorsionForce...")
         for (index, index1, index2) in shared_torsions:
@@ -329,6 +340,51 @@ class HybridTopologyFactory(object):
             [atom1_i, atom1_j, atom1_k, atom1_l, periodicity1, phase1, K1] = force1.getTorsionParameters(index1)
             [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
             custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity2, phase2, K2])
+
+    def _periodic_torsion_add_unique(self, unique_torsions2, unique_torsions1, force2, force1, sys2_indices_in_system, custom_force):
+        # Add torsions that are unique to molecule2.
+        if self.verbose: print("Adding torsions unique to molecule2...")
+        for index2 in unique_torsions2:
+            [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
+            atom_i = sys2_indices_in_system[atom2_i]
+            atom_j = sys2_indices_in_system[atom2_j]
+            atom_k = sys2_indices_in_system[atom2_k]
+            atom_l = sys2_indices_in_system[atom2_l]
+            custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity2, phase2, 0.0, periodicity2, phase2, K2])
+        for index1 in unique_torsions1:
+            [atom_i, atom_j, atom_k, atom_l, periodicity1, phase1, K1] = force1.getTorsionParameters(index1)
+            custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, 0.0])
+
+    def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, mapping2, system):
+        def index_torsions(force):
+            torsions = dict()
+            for index in range(force.getNumTorsions()):
+                [atom_i, atom_j, atom_k, atom_l, periodicity, phase, K] = force.getTorsionParameters(index)
+                key = unique([atom_i, atom_j, atom_k, atom_l]) # unique tuple, possibly in reverse order
+                torsions[key] = index
+            return torsions
+
+        torsions  = index_torsions(force)   # index of torsions for system
+        torsions1 = index_torsions(force1)  # index of torsions for system1
+        torsions2 = index_torsions(force2)  # index of torsions for system2
+
+        # Find torsions that are unique to each molecule.
+        if self.verbose: print("Finding torsions unique to each molecule...")
+        unique_torsions1 = [ torsions1[atoms] for atoms in torsions1 if not set(atoms).issubset(common1) ]
+        unique_torsions2 = [ torsions2[atoms] for atoms in torsions2 if not set(atoms).issubset(common2) ]
+
+        shared_torsions = self._periodic_torsion_find_shared(common2, sys2_indices_in_system, mapping2, torsions, torsions1, torsions2)
+
+        if self.verbose: print("Removing existing torsion parameters...")
+        for index in range(force.getNumTorsions()):
+            [atom_i, atom_j, atom_k, atom_l, periodicity, phase, K] = force.getTorsionParameters(index)
+            force.setTorsionParameters(index, atom_i, atom_j, atom_k, atom_l, periodicity, phase, 0*K)
+ 
+        custom_force = self._periodic_torsion_custom_force()
+        system.addForce(custom_force)
+
+        self._periodic_torsion_add_core(shared_torsions, force, force1, force2, custom_force)
+        self._periodic_torsion_add_unique(unique_torsions2, unique_torsions1, force2, force1, sys2_indices_in_system, custom_force)
 
     def _nonbonded_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, system1_atoms, mapping1, mapping2, system):
         softcore_alpha = self.softcore_alpha
