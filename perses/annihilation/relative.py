@@ -88,6 +88,9 @@ class HybridTopologyFactory(object):
             positions[index] = pos_atom2
         return positions
 
+    #######################
+    # HARMONIC BOND FORCE #
+    #######################
     def _harmonic_bond_find_shared(self, common2, sys2_indices_in_system, mapping2, bonds, bonds1, bonds2):
         if self.verbose: print("Building a list of shared bonds...")
         shared_bonds = list()
@@ -172,6 +175,9 @@ class HybridTopologyFactory(object):
         self._harmonic_bond_add_core(shared_bonds, force, force1, force2, custom_force)    
         self._harmonic_bond_add_unique(unique_bonds2, unique_bonds1, force2, force1, sys2_indices_in_system, custom_force)
 
+    ########################
+    # HARMONIC ANGLE FORCE #
+    ########################
     def _harmonic_angle_find_shared(self, common2, sys2_indices_in_system, mapping2, angles, angles1, angles2):
         # Build list of angles shared among all molecules.
         if self.verbose: print("Building a list of shared angles...")
@@ -258,6 +264,9 @@ class HybridTopologyFactory(object):
         self._harmonic_angle_add_core(shared_angles, force, force1, force2, custom_force)
         self._harmonic_angle_add_unique(unique_angles2, unique_angles1, force2, force1, sys2_indices_in_system, custom_force)
 
+    ##########################
+    # PERIODIC TORSION FORCE #
+    ##########################
     def _periodic_torsion_find_shared(self, common2, sys2_indices_in_system, mapping2, torsions, torsions1, torsions2):
         # Build list of torsions shared among all molecules.
         if self.verbose: print("Building a list of shared torsions...")
@@ -386,23 +395,153 @@ class HybridTopologyFactory(object):
         self._periodic_torsion_add_core(shared_torsions, force, force1, force2, custom_force)
         self._periodic_torsion_add_unique(unique_torsions2, unique_torsions1, force2, force1, sys2_indices_in_system, custom_force)
 
+    ###################
+    # NONBONDED FORCE #
+    ###################
+    def _nonbonded_find_shared(self, common2, sys2_indices_in_system, mapping2, exceptions, exceptions1, exceptions2):
+        # Build list of exceptions shared among all molecules.
+        if self.verbose: print("Building a list of shared exceptions...")
+        shared_exceptions = list()
+        for atoms2 in exceptions2:
+            atoms2 = list(atoms2)
+            if set(atoms2).issubset(common2):
+                atoms  = tuple(sys2_indices_in_system[atom2] for atom2 in atoms2)
+                atoms1 = tuple(mapping2[atom2] for atom2 in atoms2)
+                # Find exception index terms.
+                try:
+                    index  = exceptions[unique(atoms)]
+                    index1 = exceptions1[unique(atoms1)]
+                    index2 = exceptions2[unique(atoms2)]
+                    # Store.
+                    shared_exceptions.append( (index, index1, index2) )
+                except:
+                    pass
+        return shared_exceptions
+
+    def _nonbonded_custom_sterics_allmethods(self):
+        # Add additional definitions common to all methods.
+        sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
+        sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
+        sterics_addition += "softcore_alpha = %f;" % self.softcore_alpha
+        sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
+        sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+        return sterics_addition
+
+    def _nonbonded_custom_electro_allmethods(self):
+        # Add additional definitions common to all methods.
+        electrostatics_addition = "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
+        electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
+        electrostatics_addition += "softcore_beta = %f;" % (self.softcore_beta / self.softcore_beta.in_unit_system(unit.md_unit_system).unit)
+        electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
+        electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
+        return electrostatics_addition
+
+    def _nonbonded_custom_nocutoff(self):
+        # soft-core Lennard-Jones
+        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+        # soft-core Coulomb
+        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
+        return sterics_energy_expression, electrostatics_energy_expression
+
+    def _nonbonded_custom_cutoff(self, force):
+        # soft-core Lennard-Jones
+        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+        # reaction-field electrostatics
+        epsilon_solvent = force.getReactionFieldDielectric()
+        r_cutoff = force.getCutoffDistance()
+        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);"
+        k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
+        c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
+        electrostatics_energy_expression += "k_rf = %f;" % (k_rf / k_rf.in_unit_system(unit.md_unit_system).unit)
+        electrostatics_energy_expression += "c_rf = %f;" % (c_rf / c_rf.in_unit_system(unit.md_unit_system).unit)
+        return sterics_energy_expression, electrostatics_energy_expression
+
+    def _nonbonded_custom_ewald(self, force):
+        # soft-core Lennard-Jones
+        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+        # Ewald direct-space electrostatics
+        [alpha_ewald, nx, ny, nz] = force.getPMEParameters()
+        if alpha_ewald == 0.0:
+            # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
+            delta = force.getEwaldErrorTolerance()
+            r_cutoff = force.getCutoffDistance()
+            alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
+        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
+        electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit)
+        # TODO: Handle reciprocal-space electrostatics
+        return sterics_energy_expression, electrostatics_energy_expression
+
+    def _nonbonded_custom_mixing_rules(self):
+        # Define mixing rules.
+        sterics_mixing_rules = "epsilonA = sqrt(epsilonA1*epsilonA2);" # mixing rule for epsilon
+        sterics_mixing_rules += "epsilonB = sqrt(epsilonB1*epsilonB2);" # mixing rule for epsilon
+        sterics_mixing_rules += "sigmaA = 0.5*(sigmaA1 + sigmaA2);" # mixing rule for sigma
+        sterics_mixing_rules += "sigmaB = 0.5*(sigmaB1 + sigmaB2);" # mixing rule for sigma
+        electrostatics_mixing_rules = "chargeprodA = chargeA1*chargeA2;" # mixing rule for charges
+        electrostatics_mixing_rules += "chargeprodB = chargeB1*chargeB2;" # mixing rule for charges
+        return sterics_mixing_rules, electrostatics_mixing_rules
+
+    def _nonbonded_custom_force(self, force):
+        # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
+        # Select functional form based on nonbonded method.
+        method = force.getNonbondedMethod()
+        if method in [mm.NonbondedForce.NoCutoff]:
+            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_nocutoff()
+        elif method in [mm.NonbondedForce.CutoffPeriodic, mm.NonbondedForce.CutoffNonPeriodic]:
+            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_cutoff(force)
+        elif method in [mm.NonbondedForce.PME, mm.NonbondedForce.Ewald]:
+            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(force)
+        else:
+            raise Exception("Nonbonded method %s not supported yet." % str(method))
+        sterics_energy_expression += self._nonbonded_custom_sterics_allmethods()
+        electrostatics_energy_expression += self._nonbonded_custom_electro_allmethods()
+
+        sterics_mixing_rules, electrostatics_mixing_rules = self._nonbonded_custom_mixing_rules()
+
+        # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
+        electrostatics_custom_nonbonded_force = mm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
+        electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0);
+        electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
+        electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
+        sterics_custom_nonbonded_force = mm.CustomNonbondedForce("U_sterics;" + sterics_energy_expression + sterics_mixing_rules)
+        sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0);
+        sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
+        sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
+        sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
+        sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
+        return electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force
+
+    def _nonbonded_add_core(self, common1, mapping1, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force):
+        # Copy over all Nonbonded parameters for normal atoms to Custom*Force objects.
+        for particle_index in range(force.getNumParticles()):
+            # Retrieve parameters.
+            [charge, sigma, epsilon] = force.getParticleParameters(particle_index)
+            # Add parameters to custom force handling interactions between alchemically-modified atoms and rest of system.
+            sterics_custom_nonbonded_force.addParticle([sigma, epsilon, sigma, epsilon])
+            electrostatics_custom_nonbonded_force.addParticle([charge, charge])
+
+        # Copy over parameters for common substructure.
+        for atom1 in common1:
+            atom2 = mapping1[atom1] # index into system2
+            index = atom1 # index into system
+            [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
+            [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
+            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma2, epsilon2])
+            electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, charge2])
+
+    def _nonbonded_add_unique(self, force1, force2, sys2_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force):
+        for atom1 in self.unique_atoms1:
+            index = atom1 # index into system
+            [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
+            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma1, 0*epsilon1])
+            electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, 0*charge1])
+        for atom2 in self.unique_atoms2:
+            index = sys2_indices_in_system[atom2] # index into system
+            [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
+            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, 0*epsilon2, sigma2, epsilon2])
+            electrostatics_custom_nonbonded_force.setParticleParameters(index, [0*charge2, charge2])
+
     def _nonbonded_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, system1_atoms, mapping1, mapping2, system):
-        softcore_alpha = self.softcore_alpha
-        softcore_beta = self.softcore_beta
-
-        for atom in self.unique_atoms2:
-            [charge, sigma, epsilon] = force2.getParticleParameters(atom)
-            force.addParticle(charge, sigma, epsilon)
-
-        # Zero out nonbonded entries for molecule1.
-        for atom, atom_obj in system1_atoms.items():
-            [charge, sigma, epsilon] = force.getParticleParameters(atom)
-            force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
-        # Zero out nonbonded entries for molecule2.
-        for atom in sys2_indices_in_system.values():
-            [charge, sigma, epsilon] = force.getParticleParameters(atom)
-            force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
-
         # Create index of exceptions in system, system1, and system2.
         def index_exceptions(force):
             exceptions = dict()
@@ -421,24 +560,20 @@ class HybridTopologyFactory(object):
         unique_exceptions1 = [ exceptions1[atoms] for atoms in exceptions1 if not set(atoms).issubset(common1) ]
         unique_exceptions2 = [ exceptions2[atoms] for atoms in exceptions2 if not set(atoms).issubset(common2) ]
 
-        # Build list of exceptions shared among all molecules.
-        if self.verbose: print("Building a list of shared exceptions...")
-        shared_exceptions = list()
-        for atoms2 in exceptions2:
-            atoms2 = list(atoms2)
-            if set(atoms2).issubset(common2):
-                atoms  = tuple(sys2_indices_in_system[atom2] for atom2 in atoms2)
-                atoms1 = tuple(mapping2[atom2] for atom2 in atoms2)
-                # Find exception index terms.
-                try:
-                    index  = exceptions[unique(atoms)]
-                    index1 = exceptions1[unique(atoms1)]
-                    index2 = exceptions2[unique(atoms2)]
-                    # Store.
-                    shared_exceptions.append( (index, index1, index2) )
-                except:
-                    pass 
+        shared_exceptions = self._nonbonded_find_shared(common2, sys2_indices_in_system, mapping2, exceptions, exceptions1, exceptions2)
 
+        # why, though {
+        for atom in self.unique_atoms2:
+            [charge, sigma, epsilon] = force2.getParticleParameters(atom)
+            force.addParticle(charge, sigma, epsilon)
+        # Zero out nonbonded entries for molecule1.
+        for atom, atom_obj in system1_atoms.items():
+            [charge, sigma, epsilon] = force.getParticleParameters(atom)
+            force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
+        # Zero out nonbonded entries for molecule2.
+        for atom in sys2_indices_in_system.values():
+            [charge, sigma, epsilon] = force.getParticleParameters(atom)
+            force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
         # Add exceptions that are unique to molecule2.
         if self.verbose: print("Adding exceptions unique to molecule2...")
         for index2 in unique_exceptions2:
@@ -446,92 +581,18 @@ class HybridTopologyFactory(object):
             atom_i = sys2_indices_in_system[atom2_i]
             atom_j = sys2_indices_in_system[atom2_j]
             force.addException(atom_i, atom_j, chargeProd, sigma, epsilon)
+        # }
 
-        # Create list of alchemically modified atoms in system.
+        # Apparently core atoms == "alchemically modified"
         alchemical_atom_indices = list(set([index for index in system1_atoms.keys()]).union(set(sys2_indices_in_system.values())))
 
-        # Create atom groups.
-        natoms = system.getNumParticles()
-        atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
-        atomset2 = set(range(system.getNumParticles())) # all atoms, including alchemical region
-
-        # CustomNonbondedForce energy expression.
-        sterics_energy_expression = ""
-        electrostatics_energy_expression = ""
-
-        # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
-        # Select functional form based on nonbonded method.
-        method = force.getNonbondedMethod()
-        if method in [mm.NonbondedForce.NoCutoff]:
-            # soft-core Lennard-Jones
-            sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
-            # soft-core Coulomb
-            electrostatics_energy_expression += "U_electrostatics = ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
-        elif method in [mm.NonbondedForce.CutoffPeriodic, mm.NonbondedForce.CutoffNonPeriodic]:
-            # soft-core Lennard-Jones
-            sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
-            # reaction-field electrostatics
-            epsilon_solvent = force.getReactionFieldDielectric()
-            r_cutoff = force.getCutoffDistance()
-            electrostatics_energy_expression += "U_electrostatics = ONE_4PI_EPS0*chargeprod*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);"
-            k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
-            c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
-            electrostatics_energy_expression += "k_rf = %f;" % (k_rf / k_rf.in_unit_system(unit.md_unit_system).unit)
-            electrostatics_energy_expression += "c_rf = %f;" % (c_rf / c_rf.in_unit_system(unit.md_unit_system).unit)
-        elif method in [mm.NonbondedForce.PME, mm.NonbondedForce.Ewald]:
-            # soft-core Lennard-Jones
-            sterics_energy_expression += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
-            # Ewald direct-space electrostatics
-            [alpha_ewald, nx, ny, nz] = force.getPMEParameters()
-            if alpha_ewald == 0.0:
-                # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
-                delta = force.getEwaldErrorTolerance()
-                r_cutoff = force.getCutoffDistance()
-                alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
-            electrostatics_energy_expression += "U_electrostatics = ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
-            electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit)
-            # TODO: Handle reciprocal-space electrostatics
-        else:
-            raise Exception("Nonbonded method %s not supported yet." % str(method))
-
-        # Add additional definitions common to all methods.
-        sterics_energy_expression += "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
-        sterics_energy_expression += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
-        sterics_energy_expression += "softcore_alpha = %f;" % softcore_alpha
-        sterics_energy_expression += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
-        # TODO: We may have to ensure that softcore_degree is 1 if we are close to an alchemically-eliminated endpoint.
-        sterics_energy_expression += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
-        electrostatics_energy_expression += "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
-        electrostatics_energy_expression += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
-        electrostatics_energy_expression += "softcore_beta = %f;" % (softcore_beta / softcore_beta.in_unit_system(unit.md_unit_system).unit)
-        electrostatics_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-        # TODO: We may have to ensure that softcore_degree is 1 if we are close to an alchemically-eliminated endpoint.
-        electrostatics_energy_expression += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
-
-        # Define mixing rules.
-        sterics_mixing_rules = ""
-        sterics_mixing_rules += "epsilonA = sqrt(epsilonA1*epsilonA2);" # mixing rule for epsilon
-        sterics_mixing_rules += "epsilonB = sqrt(epsilonB1*epsilonB2);" # mixing rule for epsilon
-        sterics_mixing_rules += "sigmaA = 0.5*(sigmaA1 + sigmaA2);" # mixing rule for sigma
-        sterics_mixing_rules += "sigmaB = 0.5*(sigmaB1 + sigmaB2);" # mixing rule for sigma
-        electrostatics_mixing_rules = ""
-        electrostatics_mixing_rules += "chargeprodA = chargeA1*chargeA2;" # mixing rule for charges
-        electrostatics_mixing_rules += "chargeprodB = chargeB1*chargeB2;" # mixing rule for charges
-
-        # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
-        electrostatics_custom_nonbonded_force = mm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
-        electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0);
-        electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
-        electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
-        sterics_custom_nonbonded_force = mm.CustomNonbondedForce("U_sterics;" + sterics_energy_expression + sterics_mixing_rules)
-        sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0);
-        sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
-        sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
-        sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
-        sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
+        electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force = self._nonbonded_custom_force(force)
 
         # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
         # TODO: Exclude intra-alchemical region if we are separately handling that through a separate CustomNonbondedForce for decoupling.
+        natoms = system.getNumParticles()
+        atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
+        atomset2 = set(range(system.getNumParticles())) # all atoms, including alchemical region
         sterics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
         electrostatics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
 
@@ -548,36 +609,11 @@ class HybridTopologyFactory(object):
         system.addForce(sterics_custom_nonbonded_force)
         system.addForce(electrostatics_custom_nonbonded_force)
     
-        # Copy over all Nonbonded parameters for normal atoms to Custom*Force objects.
-        for particle_index in range(force.getNumParticles()):
-            # Retrieve parameters.
-            [charge, sigma, epsilon] = force.getParticleParameters(particle_index)
-            # Add parameters to custom force handling interactions between alchemically-modified atoms and rest of system.
-            sterics_custom_nonbonded_force.addParticle([sigma, epsilon, sigma, epsilon])
-            electrostatics_custom_nonbonded_force.addParticle([charge, charge])
-
-        # Copy over parameters for common substructure.
-        for atom1 in common1:
-            atom2 = mapping1[atom1] # index into system2
-            index = atom1 # index into system
-            [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
-            [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
-            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma2, epsilon2])
-            electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, charge2])
-
-        # Copy over parameters for molecule1 unique atoms.
-        for atom1 in self.unique_atoms1:
-            index = atom1 # index into system
-            [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
-            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma1, 0*epsilon1])
-            electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, 0*charge1])
-
-        # Copy over parameters for molecule2 unique atoms.
-        for atom2 in self.unique_atoms2:
-            index = sys2_indices_in_system[atom2] # index into system
-            [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
-            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, 0*epsilon2, sigma2, epsilon2])
-            electrostatics_custom_nonbonded_force.setParticleParameters(index, [0*charge2, charge2])
+        self._nonbonded_add_core(common1, mapping1, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force)
+        self._nonbonded_add_unique(force1, force2, sys2_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force)
+    ################################
+    # END CUSTOM FORCE DEFINITIONS #
+    ################################
 
     def createPerturbedSystem(self):
 
@@ -616,8 +652,6 @@ class HybridTopologyFactory(object):
         for index2, index in sys2_indices_in_system.items():
             atom = system_atoms[index]
             atom2 = system2_atoms[index2]
-            #if not atom.name == atom2.name:
-                #print(atom.name, atom2.name, atom.residue, atom2.residue)
             residues_2_to_sys[atom2.residue] = atom.residue
 
         for atom2idx in self.unique_atoms2:
