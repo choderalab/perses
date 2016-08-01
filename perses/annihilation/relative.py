@@ -1,6 +1,3 @@
-"""
-Place holder
-"""
 import simtk.openmm as mm
 from simtk import unit
 import simtk.openmm.app as app
@@ -482,6 +479,10 @@ class HybridTopologyFactory(object):
         return sterics_mixing_rules, electrostatics_mixing_rules
 
     def _nonbonded_custom_force(self, force):
+        """
+        Create 2 custom force instances (steric and electrostatic)
+        depending on the nonbonded method of the system
+        """
         # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
         # Select functional form based on nonbonded method.
         method = force.getNonbondedMethod()
@@ -512,14 +513,13 @@ class HybridTopologyFactory(object):
         return electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force
 
     def _nonbonded_add_core(self, common1, mapping1, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force):
-        # Copy over all Nonbonded parameters for normal atoms to Custom*Force objects.
+        """
+        Define the intra-core alchemical interactions
+        """
+        # Copy over the right number of non-interacting particles
         for particle_index in range(force.getNumParticles()):
-            # Retrieve parameters.
-            [charge, sigma, epsilon] = force.getParticleParameters(particle_index)
-            # Add parameters to custom force handling interactions between alchemically-modified atoms and rest of system.
-            sterics_custom_nonbonded_force.addParticle([sigma, epsilon, sigma, epsilon])
-            electrostatics_custom_nonbonded_force.addParticle([charge, charge])
-
+            sterics_custom_nonbonded_force.addParticle([1.0, 0.0, 1.0, 0.0])
+            electrostatics_custom_nonbonded_force.addParticle([0.0, 0.0])
         # Copy over parameters for common substructure.
         for atom1 in common1:
             atom2 = mapping1[atom1] # index into system2
@@ -528,8 +528,17 @@ class HybridTopologyFactory(object):
             [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
             sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma2, epsilon2])
             electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, charge2])
+        sterics_custom_nonbonded_force.addInteractionGroup(common1, common1)
+        electrostatics_custom_nonbonded_force.addInteractionGroup(common1, common1)
 
-    def _nonbonded_add_unique(self, force1, force2, sys2_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force):
+    def _nonbonded_add_unique(self, common1, force1, force2, sys2_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force):
+        """
+        For the custom forces, unique atoms interact only with core atoms
+        unique atoms with each other are dealt with in the original force
+        """
+        alchemicals = set(self.unique_atoms1).union(set(self.unique_atoms2))
+        sterics_custom_nonbonded_force.addInteractionGroup(common1, alchemicals)
+        electrostatics_custom_nonbonded_force.addInteractionGroup(common1, alchemicals)
         for atom1 in self.unique_atoms1:
             index = atom1 # index into system
             [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
@@ -541,7 +550,34 @@ class HybridTopologyFactory(object):
             sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, 0*epsilon2, sigma2, epsilon2])
             electrostatics_custom_nonbonded_force.setParticleParameters(index, [0*charge2, charge2])
 
+    def _nonbonded_exclude_uniques(self, force, sys2_indices_in_system):#, electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force):
+        """
+        The intra-unique bits of each molecule maintain original
+        nonbonded forces; should not see each other
+        Not needed for custom forces, because they are never
+        in the same InteractionGroup
+        """
+        # Add exclusions between unique parts of molecule1 and molecule2 so they do not interact.
+        if self.verbose: print("Add exclusions between unique parts of molecule1 and molecule2 that should not interact...")
+        for atom1_i in self.unique_atoms1:
+            for atom2_j in self.unique_atoms2:
+                atom_i = atom1_i
+                atom_j = sys2_indices_in_system[atom2_j]
+                #electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+                #sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+                force.addException(atom_i, atom_j, 0.0, 1.0, 0.0, replace=True)
+
     def _nonbonded_force(self, force, force1, force2, common1, common2, sys2_indices_in_system, system1_atoms, mapping1, mapping2, system):
+        """
+        Will add 3 forces to the system:
+            NonbondedForce --> intra-unique atoms
+                               exceptions to eliminate unique1-unique2 interactions
+            CustomNonbondedForces --> 2 interaction groups:
+                                      intra-core atoms
+                                      core to all alchemical atoms
+                Sterics
+                Electrostatics
+        """
         # Create index of exceptions in system, system1, and system2.
         def index_exceptions(force):
             exceptions = dict()
@@ -562,16 +598,11 @@ class HybridTopologyFactory(object):
 
         shared_exceptions = self._nonbonded_find_shared(common2, sys2_indices_in_system, mapping2, exceptions, exceptions1, exceptions2)
 
-        # why, though {
         for atom in self.unique_atoms2:
             [charge, sigma, epsilon] = force2.getParticleParameters(atom)
             force.addParticle(charge, sigma, epsilon)
-        # Zero out nonbonded entries for molecule1.
-        for atom, atom_obj in system1_atoms.items():
-            [charge, sigma, epsilon] = force.getParticleParameters(atom)
-            force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
-        # Zero out nonbonded entries for molecule2.
-        for atom in sys2_indices_in_system.values():
+        # Zero out nonbonded entries common to both molecules
+        for atom in common1:
             [charge, sigma, epsilon] = force.getParticleParameters(atom)
             force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
         # Add exceptions that are unique to molecule2.
@@ -581,36 +612,16 @@ class HybridTopologyFactory(object):
             atom_i = sys2_indices_in_system[atom2_i]
             atom_j = sys2_indices_in_system[atom2_j]
             force.addException(atom_i, atom_j, chargeProd, sigma, epsilon)
-        # }
-
-        # Apparently core atoms == "alchemically modified"
-        alchemical_atom_indices = list(set([index for index in system1_atoms.keys()]).union(set(sys2_indices_in_system.values())))
 
         electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force = self._nonbonded_custom_force(force)
-
-        # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
-        # TODO: Exclude intra-alchemical region if we are separately handling that through a separate CustomNonbondedForce for decoupling.
-        natoms = system.getNumParticles()
-        atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
-        atomset2 = set(range(system.getNumParticles())) # all atoms, including alchemical region
-        sterics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
-        electrostatics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
-
-        # Add exclusions between unique parts of molecule1 and molecule2 so they do not interact.
-        if self.verbose: print("Add exclusions between unique parts of molecule1 and molecule2 that should not interact...")
-        for atom1_i in self.unique_atoms1:
-            for atom2_j in self.unique_atoms2:
-                atom_i = atom1_i
-                atom_j = sys2_indices_in_system[atom2_j]
-                electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
-                sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+        self._nonbonded_exclude_uniques(force, sys2_indices_in_system)#, electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force)
 
         # Add custom forces to system.
         system.addForce(sterics_custom_nonbonded_force)
         system.addForce(electrostatics_custom_nonbonded_force)
     
         self._nonbonded_add_core(common1, mapping1, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force)
-        self._nonbonded_add_unique(force1, force2, sys2_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force)
+        self._nonbonded_add_unique(common1, force1, force2, sys2_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force)
     ################################
     # END CUSTOM FORCE DEFINITIONS #
     ################################
@@ -697,5 +708,6 @@ class HybridTopologyFactory(object):
                 self._nonbonded_force(force, force1, force2, common1, common2, sys2_indices_in_system, system1_atoms, mapping1, mapping2, system)
             else:
                 pass
-
+            if force_name != 'NonbondedForce':
+                system.removeForce(0)
         return [system, topology, positions, sys2_indices_in_system, sys1_indices_in_system]
