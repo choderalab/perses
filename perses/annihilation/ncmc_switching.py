@@ -15,6 +15,15 @@ default_functions = {
     'lambda_torsions' : 'lambda'
     }
 
+default_hybrid_functions = {
+    'lambda_sterics' : 'lambda',
+    'lambda_electrostatics' : 'lambda',
+    'lambda_bonds' : 'lambda',
+    'lambda_angles' : 'lambda',
+    'lambda_torsions' : 'lambda'
+    }
+
+
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
 default_timestep = 1.0 * unit.femtoseconds
@@ -135,6 +144,29 @@ class NCMCEngine(object):
                         parameters.append(parameter_name)
         return parameters
 
+    def _updateAlchemicalState(self, context, functions, value):
+        """
+        Update alchemical state using the specified lambda value.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The Context
+        functions : dict
+            A dictionary of functions
+        value : float
+            The alchemical lambda value
+ 
+        TODO: Improve function evaluation to better match Lepton and be more flexible in exact replacement of 'lambda' tokens
+
+        """
+        from parsing import NumericStringParser
+        nsp = NumericStringParser()
+        for parameter in functions:
+            function = functions[parameter]
+            evaluated = nsp.eval(function.replace('lambda', str(value)))
+            context.setParameter(parameter, evaluated)
+ 
     def _computeAlchemicalCorrection(self, unmodified_system, alchemical_system, initial_positions, final_positions, direction='insert'):
         """
         Compute log probability for correction from transforming real system to/from alchemical system.
@@ -522,9 +554,7 @@ class NCMCHybridEngine(NCMCEngine):
             NCMC internal integrator type ['GHMC', 'VV']
         """
         if functions is None:
-            functions = default_functions
-            functions['lambda_bonds'] = '0.8*lambda+0.2'
-            functions['lambda_angles'] = '0.8*lambda+0.2'
+            functions = default_hybrid_functions
 
         super(NCMCHybridEngine, self).__init__(temperature, functions, nsteps,
                                                timestep, constraint_tolerance,
@@ -640,10 +670,6 @@ class NCMCHybridEngine(NCMCEngine):
         old_topology = topology_proposal.old_topology
         new_topology = topology_proposal.new_topology
 
-        # DEBUG
-        #print('alchemical atoms:')
-        #print(alchemical_atoms)
-
         # Create an alchemical factory.
         from perses.annihilation.relative import HybridTopologyFactory
         alchemical_factory = HybridTopologyFactory(unmodified_old_system,
@@ -742,8 +768,8 @@ class NCMCHybridEngine(NCMCEngine):
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
 
         # Set initial context parameters.
-        for parameter_name in available_parameters:
-            context.setParameter(parameter_name, 0)
+        #self._updateAlchemicalState(context, functions, 0)
+        integrator.setGlobalVariableByName('lambda', 0)
 
         # Compute initial potential of alchemical state.
         initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
@@ -802,8 +828,8 @@ class NCMCHybridEngine(NCMCEngine):
                 raise e
 
         # Set final context parameters.
-        for parameter_name in available_parameters:
-            context.setParameter(parameter_name, 1)
+#        self._updateAlchemicalState(context, functions, 1)
+        integrator.setGlobalVariableByName('lambda', 1)
 
         # Compute final potential of alchemical state.
         final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
