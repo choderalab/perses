@@ -631,27 +631,34 @@ class NCMCHybridEngine(NCMCEngine):
             context.applyConstraints(integrator.getConstraintTolerance())
             # Compute potential energy.
             potential = context.getState(getEnergy=True).getPotentialEnergy()
+            print('Potential: %s' % potential)
             # Clean up context and integrator.
             del context, integrator
             # Return potential energy.
             return -self.beta * potential
 
         # julie debugging 8/3/16
-#        for unmodified_system in [unmodified_old_system, unmodified_new_system]:
-#            while unmodified_system.getNumForces() > 1:
-#                for k, force in enumerate(unmodified_system.getForces()):
-#                    force_name = force.__class__.__name__
-#                    if not force_name == 'HarmonicBondForce':
-                    #if not force_name == 'HarmonicAngleForce':
-                    #if not force_name == 'PeriodicTorsionForce':
-                    #if not force_name == 'NonbondedForce':
-                    #if not force_name == 'CMMotionRemover':
-#                        unmodified_system.removeForce(k)
-#                        break
+        unmodified_old_system = copy.deepcopy(unmodified_old_system)
+        unmodified_new_system = copy.deepcopy(unmodified_new_system)
+        alchemical_system = copy.deepcopy(alchemical_system)
+        for unmodified_system in [unmodified_old_system, unmodified_new_system, alchemical_system]:
+            while unmodified_system.getNumForces() > 1:
+                for k, force in enumerate(unmodified_system.getForces()):
+                    force_name = force.__class__.__name__
+                    if not force_name in ['HarmonicBondForce', 'CustomBondForce']:
+                    #if not force_name in ['HarmonicAngleForce', 'CustomAngleForce']:
+                    #if not force_name in ['PeriodicTorsionForce', 'CustomTorsionForce']:
+                    #if not force_name in ['NonbondedForce', 'CustomNonbondedForce']:
+                    #if not force_name == ['CMMotionRemover':
+                        unmodified_system.removeForce(k)
+                        break
         # end debugging
 
+        
         # Compute correction from transforming real system to/from alchemical system
+        print('Inital, hybrid - physical')
         initial_logP_correction = compute_logP(alchemical_system, alchemical_positions) - compute_logP(unmodified_old_system, initial_positions)
+        print('Final, physical - hybrid')
         final_logP_correction = compute_logP(unmodified_new_system, final_positions) - compute_logP(alchemical_system, final_hybrid_positions)
         print('Initial logP alchemical correction:')
         print(initial_logP_correction)
@@ -693,10 +700,10 @@ class NCMCHybridEngine(NCMCEngine):
 #            while unmodified_system.getNumForces() > 1:
 #                for k, force in enumerate(unmodified_system.getForces()):
 #                    force_name = force.__class__.__name__
-#                    if not force_name == 'HarmonicBondForce':
+                    #if not force_name == 'HarmonicBondForce':
                     #if not force_name == 'HarmonicAngleForce':
                     #if not force_name == 'PeriodicTorsionForce':
-                    #if not force_name == 'NonbondedForce':
+#                    if not force_name == 'NonbondedForce':
                     #if not force_name == 'CMMotionRemover':
 #                        unmodified_system.removeForce(k)
 #                        break
@@ -881,6 +888,10 @@ class NCMCHybridEngine(NCMCEngine):
         final_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, final_to_hybrid_atom_map)
         new_old_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, initial_to_hybrid_atom_map)
 
+        # debugging
+        PDBFile.writeFile(alchemical_topology, final_hybrid_positions, open('final-hybrid.pdb','w'))
+        PDBFile.writeFile(topology_proposal.new_topology, final_positions, open('final-real.pdb','w'))
+        #end debugging
         logP_NCMC = integrator.getLogAcceptanceProbability(context)
         # DEBUG
         #logging.debug("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
