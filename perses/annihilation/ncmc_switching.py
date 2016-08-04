@@ -522,7 +522,7 @@ class NCMCHybridEngine(NCMCEngine):
     def __init__(self, temperature=default_temperature, functions=None, 
                  nsteps=default_nsteps, timestep=default_timestep, 
                  constraint_tolerance=None, platform=None, 
-                 write_pdb_interval=None, integrator_type='GHMC'):
+                 write_pdb_interval=1, integrator_type='GHMC'):
         """
         Subclass of NCMCEngine which switches directly between two different
         systems using an alchemical hybrid topology.
@@ -556,10 +556,10 @@ class NCMCHybridEngine(NCMCEngine):
         if functions is None:
             functions = default_hybrid_functions
 
-        super(NCMCHybridEngine, self).__init__(temperature, functions, nsteps,
-                                               timestep, constraint_tolerance,
-                                               platform, write_pdb_interval,
-                                               integrator_type)
+        super(NCMCHybridEngine, self).__init__(temperature=temperature, functions=functions, nsteps=nsteps,
+                                               timestep=timestep, constraint_tolerance=constraint_tolerance,
+                                               platform=platform, write_pdb_interval=write_pdb_interval,
+                                               integrator_type=integrator_type)
 
     def _computeAlchemicalCorrection(self, unmodified_old_system,
                                      unmodified_new_system, alchemical_system,
@@ -636,9 +636,27 @@ class NCMCHybridEngine(NCMCEngine):
             # Return potential energy.
             return -self.beta * potential
 
+        # julie debugging 8/3/16
+#        for unmodified_system in [unmodified_old_system, unmodified_new_system]:
+#            while unmodified_system.getNumForces() > 1:
+#                for k, force in enumerate(unmodified_system.getForces()):
+#                    force_name = force.__class__.__name__
+#                    if not force_name == 'HarmonicBondForce':
+                    #if not force_name == 'HarmonicAngleForce':
+                    #if not force_name == 'PeriodicTorsionForce':
+                    #if not force_name == 'NonbondedForce':
+                    #if not force_name == 'CMMotionRemover':
+#                        unmodified_system.removeForce(k)
+#                        break
+        # end debugging
+
         # Compute correction from transforming real system to/from alchemical system
         initial_logP_correction = compute_logP(alchemical_system, alchemical_positions) - compute_logP(unmodified_old_system, initial_positions)
         final_logP_correction = compute_logP(unmodified_new_system, final_positions) - compute_logP(alchemical_system, final_hybrid_positions)
+        print('Initial logP alchemical correction:')
+        print(initial_logP_correction)
+        print('Final logP alchemical correction:')
+        print(final_logP_correction)
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
         return logP_alchemical_correction
 
@@ -665,10 +683,24 @@ class NCMCHybridEngine(NCMCEngine):
         atom_map = topology_proposal.old_to_new_atom_map
 
         #take the unique atoms as those not in the {new_atom : old_atom} atom map
-        unmodified_old_system = topology_proposal.old_system
-        unmodified_new_system = topology_proposal.new_system
+        unmodified_old_system = copy.deepcopy(topology_proposal.old_system)
+        unmodified_new_system = copy.deepcopy(topology_proposal.new_system)
         old_topology = topology_proposal.old_topology
         new_topology = topology_proposal.new_topology
+
+        # julie debugging 8/3/16
+#        for unmodified_system in [unmodified_old_system, unmodified_new_system]:
+#            while unmodified_system.getNumForces() > 1:
+#                for k, force in enumerate(unmodified_system.getForces()):
+#                    force_name = force.__class__.__name__
+#                    if not force_name == 'HarmonicBondForce':
+                    #if not force_name == 'HarmonicAngleForce':
+                    #if not force_name == 'PeriodicTorsionForce':
+                    #if not force_name == 'NonbondedForce':
+                    #if not force_name == 'CMMotionRemover':
+#                        unmodified_system.removeForce(k)
+#                        break
+        # end debugging
 
         # Create an alchemical factory.
         from perses.annihilation.relative import HybridTopologyFactory
@@ -679,9 +711,10 @@ class NCMCHybridEngine(NCMCEngine):
                                                    new_positions, atom_map)
 
         # Return the alchemically-modified system in fully-interacting form.
-        alchemical_system, _, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
+#        alchemical_system, _, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
+        alchemical_system, alchemical_topology, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
         return [unmodified_old_system, unmodified_new_system,
-                alchemical_system, alchemical_positions, final_atom_map,
+                alchemical_system, alchemical_topology, alchemical_positions, final_atom_map,
                 initial_atom_map]
 
     def _convert_hybrid_positions_to_final(self, positions, atom_map):
@@ -733,12 +766,17 @@ class NCMCHybridEngine(NCMCEngine):
         [unmodified_old_system,
          unmodified_new_system,
          alchemical_system,
+         alchemical_topology,
          alchemical_positions,
          final_to_hybrid_atom_map,
          initial_to_hybrid_atom_map] = self.make_alchemical_system(
                                             topology_proposal, initial_positions,
                                             proposed_positions)
 ########################################################################
+        from simtk.openmm.app import PDBFile
+        PDBFile.writeFile(topology_proposal.old_topology, initial_positions, open('old-%s.pdb' % self.nattempted, 'w'))
+        PDBFile.writeFile(alchemical_topology, alchemical_positions, open('alchemical-%s.pdb' % self.nattempted, 'w'))
+        PDBFile.writeFile(topology_proposal.new_topology, proposed_positions, open('new-%s.pdb' % self.nattempted, 'w'))
 
         from perses.tests.utils import compute_potential
 
@@ -779,38 +817,36 @@ class NCMCHybridEngine(NCMCEngine):
         from perses.tests.utils import compute_potential_components
         #print("initial potential before '%s' : %f kT" % (direction, initial_potential))
         #print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
-        self.write_pdb_interval = False
         # Take a single integrator step since all switching steps are unrolled in NCMCVVAlchemicalIntegrator.
         try:
             # Write PDB file if requested.
-            if self.write_pdb_interval:
-                topology = topology_proposal.new_topology
-                indices = topology_proposal.unique_new_atoms
+            if self.write_pdb_interval is not None:
+                #indices = topology_proposal.unique_new_atoms
 
-                # Write atom indices that are changing
-                import pickle
-                filename = 'ncmc-%s-%d-atomindices.pkl' % (direction, self.nattempted)
-                outfile = open(filename, 'wb')
-                pickle.dump(indices, outfile)
-                outfile.close()
+                ## Write atom indices that are changing
+                #import pickle
+                #filename = 'ncmc-%s-%d-atomindices.pkl' % (direction, self.nattempted)
+                #outfile = open(filename, 'wb')
+                #pickle.dump(indices, outfile)
+                #outfile.close()
 
                 from simtk.openmm.app import PDBFile
                 filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
                 outfile = open(filename, 'w')
-                PDBFile.writeHeader(topology, file=outfile)
+                PDBFile.writeHeader(alchemical_topology, file=outfile)
                 modelIndex = 0
-                PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
+                PDBFile.writeModel(alchemical_topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
                 try:
                     for step in range(self.nsteps):
                         integrator.step(1)
                         if (step+1)%self.write_pdb_interval == 0:
                             modelIndex += 1
-                            PDBFile.writeModel(topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
+                            PDBFile.writeModel(alchemical_topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
                 except ValueError as e:
                     # System is exploding and coordinates won't fit in PDB ATOM fields
                     print(e)
 
-                PDBFile.writeFooter(topology, file=outfile)
+                PDBFile.writeFooter(alchemical_topology, file=outfile)
                 outfile.close()
             else:
                 for step in range(self.nsteps):
@@ -861,6 +897,11 @@ class NCMCHybridEngine(NCMCEngine):
                                               final_hybrid_positions,
                                               final_positions,
                                           )
+
+        # julie debugging 8/3/16
+        from simtk.openmm.app import PDBFile
+        PDBFile.writeFile(topology_proposal.new_topology, final_positions, open('newnew-%s.pdb' % self.nattempted,'w'))
+        # end debugging
 
         # Compute total logP
         logP = logP_NCMC + logP_alchemical_correction
