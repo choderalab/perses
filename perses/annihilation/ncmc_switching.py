@@ -598,7 +598,7 @@ class NCMCHybridEngine(NCMCEngine):
             The log acceptance probability of the switch
         """
 
-        def compute_logP(system, positions):
+        def compute_logP(system, positions, parameter=None):
             """
             Compute potential energy of the specified system object at the specified positions.
 
@@ -629,6 +629,10 @@ class NCMCHybridEngine(NCMCEngine):
                 context = openmm.Context(system, integrator)
             context.setPositions(positions)
             context.applyConstraints(integrator.getConstraintTolerance())
+            if parameter is not None:
+                available_parameters = self._getAvailableParameters(alchemical_system)
+                for parameter_name in available_parameters:
+                    context.setParameter(parameter_name, parameter)
             # Compute potential energy.
             potential = context.getState(getEnergy=True).getPotentialEnergy()
             print('Potential: %s' % potential)
@@ -657,9 +661,9 @@ class NCMCHybridEngine(NCMCEngine):
         
         # Compute correction from transforming real system to/from alchemical system
         print('Inital, hybrid - physical')
-        initial_logP_correction = compute_logP(alchemical_system, alchemical_positions) - compute_logP(unmodified_old_system, initial_positions)
+        initial_logP_correction = compute_logP(alchemical_system, alchemical_positions, parameter=0) - compute_logP(unmodified_old_system, initial_positions)
         print('Final, physical - hybrid')
-        final_logP_correction = compute_logP(unmodified_new_system, final_positions) - compute_logP(alchemical_system, final_hybrid_positions)
+        final_logP_correction = compute_logP(unmodified_new_system, final_positions) - compute_logP(alchemical_system, final_hybrid_positions, parameter=1)
         print('Initial logP alchemical correction:')
         print(initial_logP_correction)
         print('Final logP alchemical correction:')
