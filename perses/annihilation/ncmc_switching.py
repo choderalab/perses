@@ -497,7 +497,7 @@ class NCMCHybridEngine(NCMCEngine):
     def __init__(self, temperature=default_temperature, functions=None, 
                  nsteps=default_nsteps, timestep=default_timestep, 
                  constraint_tolerance=None, platform=None, 
-                 write_pdb_interval=1, integrator_type='GHMC'):
+                 write_ncmc_interval=1, integrator_type='GHMC'):
         """
         Subclass of NCMCEngine which switches directly between two different
         systems using an alchemical hybrid topology.
@@ -521,7 +521,7 @@ class NCMCHybridEngine(NCMCEngine):
             position and velocity constraints.
         platform : simtk.openmm.Platform, optional, default=None
             If specified, the platform to use for OpenMM simulations.
-        write_pdb_interval : int, optional, default=None
+        write_ncmc_interval : int, optional, default=None
             If a positive integer is specified, a PDB frame will be written
             with the specified interval on NCMC switching, with a different
             PDB file generated for each attempt.
@@ -533,7 +533,7 @@ class NCMCHybridEngine(NCMCEngine):
 
         super(NCMCHybridEngine, self).__init__(temperature=temperature, functions=functions, nsteps=nsteps,
                                                timestep=timestep, constraint_tolerance=constraint_tolerance,
-                                               platform=platform, write_pdb_interval=write_pdb_interval,
+                                               platform=platform, write_ncmc_interval=write_ncmc_interval,
                                                integrator_type=integrator_type)
 
     def _computeAlchemicalCorrection(self, unmodified_old_system,
@@ -627,7 +627,6 @@ class NCMCHybridEngine(NCMCEngine):
                     #if not force_name in ['HarmonicBondForce', 'CustomBondForce']:
                     if not force_name in ['HarmonicAngleForce', 'CustomAngleForce']:
                     #if not force_name in ['PeriodicTorsionForce', 'CustomTorsionForce']:
-                    #if not force_name in ['NonbondedForce', 'CustomNonbondedForce']:
                     #if not force_name == 'CMMotionRemover':
                         unmodified_system.removeForce(k)
                         break
@@ -806,7 +805,7 @@ class NCMCHybridEngine(NCMCEngine):
         # Take a single integrator step since all switching steps are unrolled in NCMCVVAlchemicalIntegrator.
         try:
             # Write PDB file if requested.
-            if self.write_pdb_interval is not None:
+            if self.write_ncmc_interval is not None:
                 #indices = topology_proposal.unique_new_atoms
 
                 ## Write atom indices that are changing
@@ -825,7 +824,7 @@ class NCMCHybridEngine(NCMCEngine):
                 try:
                     for step in range(self.nsteps):
                         integrator.step(1)
-                        if (step+1)%self.write_pdb_interval == 0:
+                        if (step+1)%self.write_ncmc_interval == 0:
                             modelIndex += 1
                             PDBFile.writeModel(alchemical_topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
                 except ValueError as e:

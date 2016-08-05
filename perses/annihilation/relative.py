@@ -550,9 +550,42 @@ class HybridTopologyFactory(object):
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
-        return electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force
 
-    def _nonbonded_add_core(self, common1, mapping1, sys1_indices_in_system, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force):
+        bond_custom_nonbonded_force = self._nonbonded_custom_bond_force(sterics_energy_expression, electrostatics_energy_expression)
+        return electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force, bond_custom_nonbonded_force
+
+
+    def _nonbonded_custom_bond_force(self, sterics_energy_expression, electrostatics_energy_expression):
+        custom_bond_force = mm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
+        custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0);
+        custom_bond_force.addGlobalParameter("lambda_sterics", 0.0);
+        custom_bond_force.addPerBondParameter("chargeprodA")
+        custom_bond_force.addPerBondParameter("sigmaA")
+        custom_bond_force.addPerBondParameter("epsilonA")
+        custom_bond_force.addPerBondParameter("chargeprodB")
+        custom_bond_force.addPerBondParameter("sigmaB")
+        custom_bond_force.addPerBondParameter("epsilonB")
+        return custom_bond_force
+
+    def _nonbonded_add_exceptions_to_bond(self, shared_exceptions, unique_to_core_exceptions1, unique_to_core_exceptions2, sys1_indices_in_system, sys2_indices_in_system, force1, force2, bond_custom_nonbonded_force):
+        for (index, index1, index2) in shared_exceptions:
+            [atom1_i, atom1_j, chargeProd1, sigma1, epsilon1] = force1.getExceptionParameters(index1)
+            [atom2_i, atom2_j, chargeProd2, sigma2, epsilon2] = force2.getExceptionParameters(index2)
+            atom_i = sys1_indices_in_system[atom1_i]
+            atom_j = sys1_indices_in_system[atom1_j]
+            bond_custom_nonbonded_force.addBond(atom_i, atom_j, [chargeProd1, sigma1, epsilon1, chargeProd2, sigma2, epsilon2]) # so not changing from parms 1 to parms 2 ... ??? bc idk how, so
+        for index1 in unique_to_core_exceptions1:
+            [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force1.getExceptionParameters(index1)
+            atom_i = sys1_indices_in_system[atom1_i]
+            atom_j = sys1_indices_in_system[atom1_j]
+            bond_custom_nonbonded_force.addBond(atom_i, atom_j, [chargeProd, sigma, epsilon, 0.0, sigma, 0.0])
+        for index2 in unique_to_core_exceptions2:
+            [atom2_i, atom2_j, chargeProd, sigma, epsilon] = force2.getExceptionParameters(index2)
+            atom_i = sys2_indices_in_system[atom2_i]
+            atom_j = sys2_indices_in_system[atom2_j]
+            bond_custom_nonbonded_force.addBond(atom_i, atom_j, [0.0, sigma, 0.0, chargeProd, sigma, epsilon])
+
+    def _nonbonded_add_core(self, common1, mapping1, sys1_indices_in_system, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, shared_exceptions):
         """
         Define the intra-core alchemical interactions
         """
@@ -571,8 +604,14 @@ class HybridTopologyFactory(object):
         core = [sys1_indices_in_system[atom1] for atom1 in common1]
         sterics_custom_nonbonded_force.addInteractionGroup(core, core)
         electrostatics_custom_nonbonded_force.addInteractionGroup(core, core)
+        for (index, index1, index2) in shared_exceptions:
+            [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force1.getExceptionParameters(index1)
+            atom_i = sys1_indices_in_system[atom1_i]
+            atom_j = sys1_indices_in_system[atom1_j]
+            sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+            electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
 
-    def _nonbonded_add_unique(self, common1, force1, force2, sys2_indices_in_system, sys1_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force):
+    def _nonbonded_add_unique(self, common1, force1, force2, sys2_indices_in_system, sys1_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, unique_to_core_exceptions1, unique_to_core_exceptions2):
         """
         For the custom forces, unique atoms interact only with core atoms
         unique atoms with each other are dealt with in the original force
@@ -593,6 +632,18 @@ class HybridTopologyFactory(object):
             [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
             sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, 0*epsilon2, sigma2, epsilon2])
             electrostatics_custom_nonbonded_force.setParticleParameters(index, [0*charge2, charge2])
+        for index1 in unique_to_core_exceptions1:
+            [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force1.getExceptionParameters(index1)
+            atom_i = sys1_indices_in_system[atom1_i]
+            atom_j = sys1_indices_in_system[atom1_j]
+            sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+            electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+        for index2 in unique_to_core_exceptions2:
+            [atom2_i, atom2_j, chargeProd, sigma, epsilon] = force2.getExceptionParameters(index2)
+            atom_i = sys2_indices_in_system[atom2_i]
+            atom_j = sys2_indices_in_system[atom2_j]
+            sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
+            electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
 
     def _nonbonded_exclude_uniques(self, force, sys2_indices_in_system, sys1_indices_in_system):#, electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force):
         """
@@ -654,7 +705,7 @@ class HybridTopologyFactory(object):
 
     def _nonbonded_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping1, mapping2, system):
         """
-        Will add 3 forces to the system:
+        Will result in 3 NB forces in the system:
             NonbondedForce --> intra-unique atoms
                                exceptions to eliminate unique1-unique2 interactions
             CustomNonbondedForces --> 2 interaction groups:
@@ -681,19 +732,28 @@ class HybridTopologyFactory(object):
         unique_exceptions1 = [ exceptions1[atoms] for atoms in exceptions1 if not set(atoms).issubset(common1) ]
         unique_exceptions2 = [ exceptions2[atoms] for atoms in exceptions2 if not set(atoms).issubset(common2) ]
 
+        unique_to_core_exceptions1 = [ exceptions1[atoms] for atoms in exceptions1 if (exceptions1[atoms] in unique_exceptions1 and any([x in common1 for x in atoms])) ]
+        unique_to_core_exceptions2 = [ exceptions2[atoms] for atoms in exceptions2 if (exceptions2[atoms] in unique_exceptions2 and any([x in common2 for x in atoms])) ]
+
+        unique_exceptions1 = [ index for index in unique_exceptions1 if index not in unique_to_core_exceptions1 ]
+        unique_exceptions2 = [ index for index in unique_exceptions2 if index not in unique_to_core_exceptions2 ]
+
         shared_exceptions = self._nonbonded_find_shared(common2, sys2_indices_in_system, mapping2, exceptions, exceptions1, exceptions2)
 
         self._nonbonded_fix_noncustom(force, force1, force2, unique_exceptions1, unique_exceptions2, sys1_indices_in_system, sys2_indices_in_system)
 
-        electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force = self._nonbonded_custom_force(force)
+        electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force, bond_custom_nonbonded_force = self._nonbonded_custom_force(force)
         self._nonbonded_exclude_uniques(force, sys2_indices_in_system, sys1_indices_in_system)#, electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force)
 
         # Add custom forces to system.
         system.addForce(sterics_custom_nonbonded_force)
         system.addForce(electrostatics_custom_nonbonded_force)
-    
-        self._nonbonded_add_core(common1, mapping1, sys1_indices_in_system, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force)
-        self._nonbonded_add_unique(common1, force1, force2, sys2_indices_in_system, sys1_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force)
+        system.addForce(bond_custom_nonbonded_force)
+
+        self._nonbonded_add_core(common1, mapping1, sys1_indices_in_system, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, shared_exceptions)
+        self._nonbonded_add_unique(common1, force1, force2, sys2_indices_in_system, sys1_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, unique_to_core_exceptions1, unique_to_core_exceptions2)
+
+        self._nonbonded_add_exceptions_to_bond(shared_exceptions, unique_to_core_exceptions1, unique_to_core_exceptions2, sys1_indices_in_system, sys2_indices_in_system, force1, force2, bond_custom_nonbonded_force)
     ################################
     # END CUSTOM FORCE DEFINITIONS #
     ################################

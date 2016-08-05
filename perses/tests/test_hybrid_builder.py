@@ -210,16 +210,19 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         'Angle' : ['HarmonicAngleForce', 'CustomAngleForce'],
         'Torsion' : ['PeriodicTorsionForce', 'CustomTorsionForce'],
         'Nonbonded' : ['NonbondedForce', 'CustomNonbondedForce'],
-        'CMMotion' : ['CMMotionRemover']
+        'CMMotion' : ['CMMotionRemover'],
+        'All' : []
     }
 
     for saved_force, force_names in forces_to_save.items():
-        print('\nPotential using only %s Force:' % saved_force)
+        print('\nPotential using %s Force:' % saved_force)
         unmodified_old_sys = copy.deepcopy(unmodified_old_system)
         unmodified_new_sys = copy.deepcopy(unmodified_new_system)
         alchemical_sys = copy.deepcopy(alchemical_system)
         for unmodified_system in [unmodified_old_sys, unmodified_new_sys, alchemical_sys]:
             if unmodified_system == alchemical_sys and saved_force == 'Nonbonded': max_forces = 3
+            elif unmodified_system == alchemical_sys and saved_force == 'Bond' : max_forces = 2
+            elif saved_force == 'All': max_forces = unmodified_system.getNumForces() + 10
             else: max_forces = 1
             while unmodified_system.getNumForces() > max_forces:
                 for k, force in enumerate(unmodified_system.getForces()):
