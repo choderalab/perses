@@ -76,9 +76,6 @@ class HybridTopologyFactory(object):
             system.addConstraint(atom_i, atom_j, distance)
         return system
 
-
-#    def _create_new_positions_array(self, positions, sys2_indices_in_system):
-    # julie debugging 8/3/16
     def _create_new_positions_array(self, topology, positions, sys1_indices_in_system, sys2_indices_in_system):
         natoms = positions.shape[0] + len(self.unique_atoms2) # new number of atoms
         positions = unit.Quantity(np.resize(positions/positions.unit, [natoms,3]), positions.unit)
@@ -217,8 +214,8 @@ class HybridTopologyFactory(object):
         # Create a CustomAngleForce to handle interpolated angle parameters.
         if self.verbose: print("Creating CustomAngleForce...")
         energy_expression  = '(K/2)*(theta-theta0)^2;'
-        energy_expression += 'K = (1.1-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
-        energy_expression += 'theta0 = (1.1-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
+        energy_expression += 'K = (1.0-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
+        energy_expression += 'theta0 = (1.0-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
         custom_force = mm.CustomAngleForce(energy_expression)
         custom_force.addGlobalParameter('lambda_angles', 0.0)
         custom_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
