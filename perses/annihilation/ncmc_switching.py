@@ -630,7 +630,7 @@ class NCMCHybridEngine(NCMCEngine):
             context.setPositions(positions)
             context.applyConstraints(integrator.getConstraintTolerance())
             if parameter is not None:
-                available_parameters = self._getAvailableParameters(alchemical_system)
+                available_parameters = self._getAvailableParameters(system)
                 for parameter_name in available_parameters:
                     context.setParameter(parameter_name, parameter)
             # Compute potential energy.
@@ -649,11 +649,11 @@ class NCMCHybridEngine(NCMCEngine):
             while unmodified_system.getNumForces() > 1:
                 for k, force in enumerate(unmodified_system.getForces()):
                     force_name = force.__class__.__name__
-                    if not force_name in ['HarmonicBondForce', 'CustomBondForce']:
-                    #if not force_name in ['HarmonicAngleForce', 'CustomAngleForce']:
+                    #if not force_name in ['HarmonicBondForce', 'CustomBondForce']:
+                    if not force_name in ['HarmonicAngleForce', 'CustomAngleForce']:
                     #if not force_name in ['PeriodicTorsionForce', 'CustomTorsionForce']:
                     #if not force_name in ['NonbondedForce', 'CustomNonbondedForce']:
-                    #if not force_name == ['CMMotionRemover':
+                    #if not force_name == 'CMMotionRemover':
                         unmodified_system.removeForce(k)
                         break
         # end debugging

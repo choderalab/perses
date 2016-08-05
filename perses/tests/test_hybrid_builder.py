@@ -204,18 +204,27 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         del context, integrator
         return potential
 
+
+    forces_to_save = {
+        'Bond' : ['HarmonicBondForce', 'CustomBondForce'],
+        'Angle' : ['HarmonicAngleForce', 'CustomAngleForce'],
+        'Torsion' : ['PeriodicTorsionForce', 'CustomTorsionForce'],
+        'Nonbonded' : ['NonbondedForce', 'CustomNonbondedForce'],
+        'CMMotion' : ['CMMotionRemover']
+    }
+    saved_force = 'Torsion'
+
+
     unmodified_old_system = copy.deepcopy(unmodified_old_system)
     unmodified_new_system = copy.deepcopy(unmodified_new_system)
     alchemical_system = copy.deepcopy(alchemical_system)
     for unmodified_system in [unmodified_old_system, unmodified_new_system, alchemical_system]:
-        while unmodified_system.getNumForces() > 1:
+        if unmodified_system == alchemical_system and saved_force == 'Nonbonded': max_forces = 3
+        else: max_forces = 1
+        while unmodified_system.getNumForces() > max_forces:
             for k, force in enumerate(unmodified_system.getForces()):
                 force_name = force.__class__.__name__
-                #if not force_name in ['HarmonicBondForce', 'CustomBondForce']:
-                #if not force_name in ['HarmonicAngleForce', 'CustomAngleForce']:
-                if not force_name in ['PeriodicTorsionForce', 'CustomTorsionForce']:
-                #if not force_name in ['NonbondedForce', 'CustomNonbondedForce']:
-                #if not force_name == ['CMMotionRemover':
+                if not force_name in forces_to_save[saved_force]:
                     unmodified_system.removeForce(k)
                     break
         # Compute correction from transforming real system to/from alchemical system
