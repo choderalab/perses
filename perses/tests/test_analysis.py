@@ -72,5 +72,5 @@ def test_analysis():
         analysis.plot_ncmc_work('ncmc.pdf')
 
 if __name__ == '__main__':
-    analysis = Analysis('output.nc')
-    analysis.plot_ncmc_work('ncmc.pdf')
+    analysis = Analysis('output-10000.nc')
+    analysis.plot_ncmc_work('ncmc-10000.pdf')

@@ -39,6 +39,25 @@ beta = 1.0/kT
 
 # TODO: Move some of these utility routines to openmoltools.
 
+def quantity_is_finite(quantity):
+    """
+    Check that elements in quantity are all finite.
+
+    Parameters
+    ----------
+    quantity : simtk.unit.Quantity
+        The quantity to check
+
+    Returns
+    -------
+    is_finite : bool
+        If quantity is finite, returns True; otherwise False.
+
+    """
+    if np.any( np.isnan( np.array(quantity / quantity.unit) ) ):
+        return False
+    return True
+
 def show_topology(topology):
     output = ""
     for atom in topology.atoms():

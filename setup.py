@@ -80,14 +80,16 @@ setup(name='perses',
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        'openmm >=7.0',
+        'openmm >=7.0.1',
         'numpy',
         'scipy',
         'numexpr',
         'openmoltools',
-        'alchemy >=1.1.3',
+        'alchemy >=1.2.0',
+        'openmmtools',
         'numexpr',
         'netcdf4',
+        'seaborn',
         #'numba'
         ],
       )
