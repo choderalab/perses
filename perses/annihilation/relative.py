@@ -109,7 +109,6 @@ class HybridTopologyFactory(object):
         for atoms2 in bonds2:
             atoms2 = list(atoms2)
             if set(atoms2).issubset(common2):
-#                atoms  = [sys2_indices_in_system[atom2] for atom2 in atoms2]
                 atoms1 = [mapping2[atom2] for atom2 in atoms2]
                 # Find bond index terms.
                 index  = bonds[unique(atoms1)]
@@ -288,7 +287,7 @@ class HybridTopologyFactory(object):
     ##########################
     # PERIODIC TORSION FORCE #
     ##########################
-    def _periodic_torsion_find_shared(self, common2, sys2_indices_in_system, mapping2, torsions, torsions1, torsions2):
+    def _periodic_torsion_find_shared(self, common2, unique_torsions1, unique_torsions2, sys1_indices_in_system, mapping2, torsions, torsions1, torsions2, system_atoms):
         # Build list of torsions shared among all molecules.
         if self.verbose: print("Building a list of shared torsions...")
         shared_torsions = list()
@@ -315,7 +314,6 @@ class HybridTopologyFactory(object):
                             index2 = torsions2[unique(atoms2)]
                             unique_torsions2.append(torsions2[unique(atoms2)]) # so this will never catch unique torsions from 1 that use core atoms?
                             continue
-#                            if self.verbose: print("ERROR: torsion present in SYSTEM 2 but not in SYSTEM 1.")
                         except:
                             if self.verbose: print("ERROR: the torsion does not exist.")
                             if self.verbose: print("torsions :  %s" % str(unique(atoms1)))
@@ -340,7 +338,7 @@ class HybridTopologyFactory(object):
                     raise(e)
 
                 shared_torsions.append( (index, index1, index2) )
-        return shared_torsions
+        return shared_torsions, unique_torsions1, unique_torsions2
 
     def _periodic_torsion_custom_force(self):
         # Create a CustomTorsionForce to handle interpolated torsion parameters.
@@ -362,40 +360,48 @@ class HybridTopologyFactory(object):
         # Process torsions that are shared by molecule1 and molecule2.
         if self.verbose: print("Translating shared torsions to CustomTorsionForce...")
         for (index, index1, index2) in shared_torsions:
+            for ix1 in index1:
             # Create interpolated torsion parameters.
-            [atom1_i, atom1_j, atom1_k, atom1_l, periodicity1, phase1, K1] = force1.getTorsionParameters(index1)
-            [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
-            atom_i = sys1_indices_in_system[atom1_i]
-            atom_j = sys1_indices_in_system[atom1_j]
-            atom_k = sys1_indices_in_system[atom1_k]
-            atom_l = sys1_indices_in_system[atom1_l]
-            custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity2, phase2, K2])
+                [atom1_i, atom1_j, atom1_k, atom1_l, periodicity1, phase1, K1] = force1.getTorsionParameters(ix1)
+                # only have to do this once -- it's the same set of atoms for both lists
+                atom_i = sys1_indices_in_system[atom1_i]
+                atom_j = sys1_indices_in_system[atom1_j]
+                atom_k = sys1_indices_in_system[atom1_k]
+                atom_l = sys1_indices_in_system[atom1_l]
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, 0.0*K1])
+            for ix2 in index2:
+                [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(ix2)
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity2, phase2, 0.0*K2, periodicity2, phase2, K2])
 
     def _periodic_torsion_add_unique(self, unique_torsions2, unique_torsions1, force2, force1, sys2_indices_in_system, sys1_indices_in_system, custom_force):
         # Add torsions that are unique to molecule2.
         if self.verbose: print("Adding torsions unique to molecule2...")
         for index2 in unique_torsions2:
-            [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(index2)
-            atom_i = sys2_indices_in_system[atom2_i]
-            atom_j = sys2_indices_in_system[atom2_j]
-            atom_k = sys2_indices_in_system[atom2_k]
-            atom_l = sys2_indices_in_system[atom2_l]
-            custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity2, phase2, 0.0, periodicity2, phase2, K2])
+            for ix2 in index2:
+                [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(ix2)
+                atom_i = sys2_indices_in_system[atom2_i]
+                atom_j = sys2_indices_in_system[atom2_j]
+                atom_k = sys2_indices_in_system[atom2_k]
+                atom_l = sys2_indices_in_system[atom2_l]
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity2, phase2, 0.0, periodicity2, phase2, K2])
         for index1 in unique_torsions1:
-            [atom1_i, atom1_j, atom1_k, atom1_l, periodicity1, phase1, K1] = force1.getTorsionParameters(index1)
-            atom_i = sys1_indices_in_system[atom1_i]
-            atom_j = sys1_indices_in_system[atom1_j]
-            atom_k = sys1_indices_in_system[atom1_k]
-            atom_l = sys1_indices_in_system[atom1_l]
-            custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, 0.0])
+            for ix1 in index1:
+                [atom1_i, atom1_j, atom1_k, atom1_l, periodicity1, phase1, K1] = force1.getTorsionParameters(ix1)
+                atom_i = sys1_indices_in_system[atom1_i]
+                atom_j = sys1_indices_in_system[atom1_j]
+                atom_k = sys1_indices_in_system[atom1_k]
+                atom_l = sys1_indices_in_system[atom1_l]
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, 0.0])
 
-    def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system):
+    def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, system_atoms):
         def index_torsions(force):
             torsions = dict()
             for index in range(force.getNumTorsions()):
                 [atom_i, atom_j, atom_k, atom_l, periodicity, phase, K] = force.getTorsionParameters(index)
                 key = unique([atom_i, atom_j, atom_k, atom_l]) # unique tuple, possibly in reverse order
-                torsions[key] = index
+                if key not in torsions.keys():
+                    torsions[key] = list()
+                torsions[key].append(index)
             return torsions
 
         torsions  = index_torsions(force)   # index of torsions for system
@@ -407,13 +413,19 @@ class HybridTopologyFactory(object):
         unique_torsions1 = [ torsions1[atoms] for atoms in torsions1 if not set(atoms).issubset(common1) ]
         unique_torsions2 = [ torsions2[atoms] for atoms in torsions2 if not set(atoms).issubset(common2) ]
 
-        shared_torsions = self._periodic_torsion_find_shared(common2, sys2_indices_in_system, mapping2, torsions, torsions1, torsions2)
+        shared_torsions, unique_torsions1, unique_torsions2 = self._periodic_torsion_find_shared(common2, unique_torsions1, unique_torsions2, sys1_indices_in_system, mapping2, torsions, torsions1, torsions2, system_atoms)
+
+        assert len(shared_torsions) + len(unique_torsions1) == len(torsions1.keys())
+        assert len(shared_torsions) + len(unique_torsions2) == len(torsions2.keys())
 
         if self.verbose: print("Removing existing torsion parameters...")
         for index in range(force.getNumTorsions()):
-            [atom_i, atom_j, atom_k, atom_l, periodicity, phase, K] = force.getTorsionParameters(index)
+            [atom1_i, atom1_j, atom1_k, atom1_l, periodicity, phase, K] = force.getTorsionParameters(index)
+            atom_i = sys1_indices_in_system[atom1_i]
+            atom_j = sys1_indices_in_system[atom1_j]
+            atom_k = sys1_indices_in_system[atom1_k]
+            atom_l = sys1_indices_in_system[atom1_l]
             force.setTorsionParameters(index, atom_i, atom_j, atom_k, atom_l, periodicity, phase, 0*K)
- 
         custom_force = self._periodic_torsion_custom_force()
         system.addForce(custom_force)
 
@@ -777,7 +789,7 @@ class HybridTopologyFactory(object):
             elif force_name == 'HarmonicAngleForce':
                 self._harmonic_angle_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system)
             elif force_name == 'PeriodicTorsionForce':
-                self._periodic_torsion_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system)
+                self._periodic_torsion_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, system_atoms)
             elif force_name == 'NonbondedForce':
                 self._nonbonded_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping1, mapping2, system)
             else:
