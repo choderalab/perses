@@ -212,32 +212,31 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         'Nonbonded' : ['NonbondedForce', 'CustomNonbondedForce'],
         'CMMotion' : ['CMMotionRemover']
     }
-    saved_force = 'Torsion'
 
-
-    unmodified_old_system = copy.deepcopy(unmodified_old_system)
-    unmodified_new_system = copy.deepcopy(unmodified_new_system)
-    alchemical_system = copy.deepcopy(alchemical_system)
-    for unmodified_system in [unmodified_old_system, unmodified_new_system, alchemical_system]:
-        if unmodified_system == alchemical_system and saved_force == 'Nonbonded': max_forces = 3
-        else: max_forces = 1
-        while unmodified_system.getNumForces() > max_forces:
-            for k, force in enumerate(unmodified_system.getForces()):
-                force_name = force.__class__.__name__
-                if not force_name in forces_to_save[saved_force]:
-                    unmodified_system.removeForce(k)
-                    break
+    for saved_force, force_names in forces_to_save.items():
+        print('\nPotential using only %s Force:' % saved_force)
+        unmodified_old_sys = copy.deepcopy(unmodified_old_system)
+        unmodified_new_sys = copy.deepcopy(unmodified_new_system)
+        alchemical_sys = copy.deepcopy(alchemical_system)
+        for unmodified_system in [unmodified_old_sys, unmodified_new_sys, alchemical_sys]:
+            if unmodified_system == alchemical_sys and saved_force == 'Nonbonded': max_forces = 3
+            else: max_forces = 1
+            while unmodified_system.getNumForces() > max_forces:
+                for k, force in enumerate(unmodified_system.getForces()):
+                    force_name = force.__class__.__name__
+                    if not force_name in force_names:
+                        unmodified_system.removeForce(k)
+                        break
         # Compute correction from transforming real system to/from alchemical system
-    print('Inital, hybrid - physical')
-    initial_logP_correction = compute_logP(alchemical_system, alchemical_positions, parameter=0) - compute_logP(unmodified_old_system, initial_positions)
-    print('Final, physical - hybrid')
-    final_logP_correction = compute_logP(unmodified_new_system, final_positions) - compute_logP(alchemical_system, final_hybrid_positions, parameter=1)
-    print('Difference in Initial potentials:')
-    print(initial_logP_correction)
-    print('Difference in Final potentials:')
-    print(final_logP_correction)
-    logP_alchemical_correction = initial_logP_correction + final_logP_correction
-    return logP_alchemical_correction
+        print('Inital, hybrid - physical')
+        initial_logP_correction = compute_logP(alchemical_sys, alchemical_positions, parameter=0) - compute_logP(unmodified_old_sys, initial_positions)
+        print('Final, physical - hybrid')
+        final_logP_correction = compute_logP(unmodified_new_sys, final_positions) - compute_logP(alchemical_sys, final_hybrid_positions, parameter=1)
+        print('Difference in Initial potentials:')
+        print(initial_logP_correction)
+        print('Difference in Final potentials:')
+        print(final_logP_correction)
+        logP_alchemical_correction = initial_logP_correction + final_logP_correction
 
 
 def setup_hybrid_system():
