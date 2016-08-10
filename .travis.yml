@@ -39,7 +39,7 @@ script:
   #- conda remove --yes openmm openmm-dev && conda install --yes openmm-dev
   # Run tests
   #- cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
-  - cd devtools && nosetests $NOSETESTS --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
+  - cd devtools && nosetests $NOSETESTS --nocapture --verbosity=3 --with-timer && cd ..
 env:
   matrix:
     # Allfast tests for python 2.7
