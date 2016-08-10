@@ -1093,7 +1093,7 @@ class SAMSSampler(object):
     >>> # Create a SAMS sampler
     >>> sams_sampler = SAMSSampler(exen_sampler)
     >>> # Run the sampler
-    >>> sams_sampler.run()
+    >>> sams_sampler.run() # doctest: +ELLIPSIS
     ...
     """
     def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='default', storage=None):
