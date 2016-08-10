@@ -159,7 +159,7 @@ class HybridTopologyFactory(object):
             #custom_force.addBond(atom_i, atom_j, [length1, K1, length1, 0.1*K1])
             custom_force.addBond(atom_i, atom_j, [length1, K1, length1, 0.0*K1])
 
-    def _harmonic_bond_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system):
+    def _harmonic_bond_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, this_index):
         def index_bonds(force):
             bonds = dict()
             for index in range(force.getNumBonds()):
@@ -188,7 +188,7 @@ class HybridTopologyFactory(object):
 
         self._harmonic_bond_add_core(shared_bonds, sys2_indices_in_system, force1, force2, custom_force)    
         self._harmonic_bond_add_unique(unique_bonds2, unique_bonds1, force2, force1, sys2_indices_in_system, sys1_indices_in_system, custom_force)
-        system.removeForce(0)
+        system.removeForce(this_index)
 
     ########################
     # HARMONIC ANGLE FORCE #
@@ -252,7 +252,7 @@ class HybridTopologyFactory(object):
 #            custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta1, 0.1*K1])
             custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta1, 0.0*K1])
 
-    def _harmonic_angle_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system):
+    def _harmonic_angle_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, this_index):
         def index_angles(force):
             angles = dict()
             for index in range(force.getNumAngles()):
@@ -282,7 +282,7 @@ class HybridTopologyFactory(object):
     
         self._harmonic_angle_add_core(shared_angles, sys1_indices_in_system, force1, force2, custom_force)
         self._harmonic_angle_add_unique(unique_angles2, unique_angles1, force2, force1, sys2_indices_in_system, sys1_indices_in_system, custom_force)
-        system.removeForce(0)
+        system.removeForce(this_index)
 
     ##########################
     # PERIODIC TORSION FORCE #
@@ -393,7 +393,7 @@ class HybridTopologyFactory(object):
                 atom_l = sys1_indices_in_system[atom1_l]
                 custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, 0.0])
 
-    def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, system_atoms):
+    def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, system_atoms, this_index):
         def index_torsions(force):
             torsions = dict()
             for index in range(force.getNumTorsions()):
@@ -431,7 +431,7 @@ class HybridTopologyFactory(object):
 
         self._periodic_torsion_add_core(shared_torsions, sys1_indices_in_system, force1, force2, custom_force)
         self._periodic_torsion_add_unique(unique_torsions2, unique_torsions1, force2, force1, sys2_indices_in_system, sys1_indices_in_system, custom_force)
-        system.removeForce(0)
+        system.removeForce(this_index)
 
     ###################
     # NONBONDED FORCE #
@@ -565,6 +565,7 @@ class HybridTopologyFactory(object):
         custom_bond_force.addPerBondParameter("chargeprodB")
         custom_bond_force.addPerBondParameter("sigmaB")
         custom_bond_force.addPerBondParameter("epsilonB")
+
         return custom_bond_force
 
     def _nonbonded_add_exceptions_to_bond(self, shared_exceptions, unique_to_core_exceptions1, unique_to_core_exceptions2, sys1_indices_in_system, sys2_indices_in_system, force1, force2, bond_custom_nonbonded_force):
@@ -573,7 +574,7 @@ class HybridTopologyFactory(object):
             [atom2_i, atom2_j, chargeProd2, sigma2, epsilon2] = force2.getExceptionParameters(index2)
             atom_i = sys1_indices_in_system[atom1_i]
             atom_j = sys1_indices_in_system[atom1_j]
-            bond_custom_nonbonded_force.addBond(atom_i, atom_j, [chargeProd1, sigma1, epsilon1, chargeProd2, sigma2, epsilon2]) # so not changing from parms 1 to parms 2 ... ??? bc idk how, so
+            bond_custom_nonbonded_force.addBond(atom_i, atom_j, [chargeProd1, sigma1, epsilon1, chargeProd2, sigma2, epsilon2])
         for index1 in unique_to_core_exceptions1:
             [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force1.getExceptionParameters(index1)
             atom_i = sys1_indices_in_system[atom1_i]
@@ -604,7 +605,7 @@ class HybridTopologyFactory(object):
         core = [sys1_indices_in_system[atom1] for atom1 in common1]
         sterics_custom_nonbonded_force.addInteractionGroup(core, core)
         electrostatics_custom_nonbonded_force.addInteractionGroup(core, core)
-        for (index, index1, index2) in shared_exceptions:
+        for (index, index1, index2) in shared_exceptions: # exceptions are zeroed out, incorporated as custom bond force
             [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force1.getExceptionParameters(index1)
             atom_i = sys1_indices_in_system[atom1_i]
             atom_j = sys1_indices_in_system[atom1_j]
@@ -661,6 +662,7 @@ class HybridTopologyFactory(object):
                 #electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
                 #sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
                 force.addException(atom_i, atom_j, 0.0, 1.0, 0.0, replace=True)
+                force.addException(atom_j, atom_i, 0.0, 1.0, 0.0, replace=True)
 
     def _nonbonded_fix_noncustom(self, force, force1, force2, unique_exceptions1, unique_exceptions2, sys1_indices_in_system, sys2_indices_in_system):
         """
@@ -669,10 +671,25 @@ class HybridTopologyFactory(object):
         particles, then zero out everything and re-add the unique
         parameters to correct for the re-indexing
         """
+        new_force = mm.NonbondedForce()
+        method = force.getNonbondedMethod()
+        new_force.setNonbondedMethod(method)
+        if method in [mm.NonbondedForce.CutoffPeriodic, mm.NonbondedForce.CutoffNonPeriodic]:
+            epsilon_solvent = force.getReactionFieldDielectric()
+            r_cutoff = force.getCutoffDistance()
+            new_force.setReactionFieldDielectric(epsilon_solvent)
+            new_force.setCutoffDistance(r_cutoff)
+        elif method in [mm.NonbondedForce.PME, mm.NonbondedForce.Ewald]:
+            [alpha_ewald, nx, ny, nz] = force.getPMEParameters()
+            new_force.setPMEParameters(alpha_ewald, nx, ny, nz)
         # add additional particles for unique atoms in sys2
+        for atom in sys1_indices_in_system.keys():
+            [charge, sigma, epsilon] = force1.getParticleParameters(atom)
+            new_force.addParticle(0*charge, sigma, 0*epsilon)
         for atom in self.unique_atoms2:
             [charge, sigma, epsilon] = force2.getParticleParameters(atom)
-            force.addParticle(charge, sigma, epsilon)
+            new_force.addParticle(0*charge, sigma, 0*epsilon)
+            force.addParticle(0*charge, sigma, 0*epsilon)
         # Zero out everything
         for atom in range(force.getNumParticles()):
             [charge, sigma, epsilon] = force.getParticleParameters(atom)
@@ -684,26 +701,27 @@ class HybridTopologyFactory(object):
         for atom1 in self.unique_atoms1:
             [charge, sigma, epsilon] = force1.getParticleParameters(atom1)
             atom = sys1_indices_in_system[atom1]
-            force.setParticleParameters(atom, charge, sigma, epsilon)
+            new_force.setParticleParameters(atom, charge, sigma, epsilon)
         for atom2 in self.unique_atoms2:
             [charge, sigma, epsilon] = force2.getParticleParameters(atom2)
             atom = sys2_indices_in_system[atom2]
-            force.setParticleParameters(atom, charge, sigma, epsilon)
+            new_force.setParticleParameters(atom, charge, sigma, epsilon)
         # Add exceptions.
         if self.verbose: print("Adding exceptions unique to molecule1...")
         for index1 in unique_exceptions1:
             [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force1.getExceptionParameters(index1)
             atom_i = sys1_indices_in_system[atom1_i]
             atom_j = sys1_indices_in_system[atom1_j]
-            force.addException(atom_i, atom_j, chargeProd, sigma, epsilon, replace=True)
+            new_force.addException(atom_i, atom_j, chargeProd, sigma, epsilon, replace=True)
         if self.verbose: print("Adding exceptions unique to molecule2...")
         for index2 in unique_exceptions2:
             [atom2_i, atom2_j, chargeProd, sigma, epsilon] = force2.getExceptionParameters(index2)
             atom_i = sys2_indices_in_system[atom2_i]
             atom_j = sys2_indices_in_system[atom2_j]
-            force.addException(atom_i, atom_j, chargeProd, sigma, epsilon, replace=True)
+            new_force.addException(atom_i, atom_j, chargeProd, sigma, epsilon, replace=True)
+        return new_force
 
-    def _nonbonded_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping1, mapping2, system):
+    def _nonbonded_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping1, mapping2, system, this_index):
         """
         Will result in 3 NB forces in the system:
             NonbondedForce --> intra-unique atoms
@@ -740,20 +758,23 @@ class HybridTopologyFactory(object):
 
         shared_exceptions = self._nonbonded_find_shared(common2, sys2_indices_in_system, mapping2, exceptions, exceptions1, exceptions2)
 
-        self._nonbonded_fix_noncustom(force, force1, force2, unique_exceptions1, unique_exceptions2, sys1_indices_in_system, sys2_indices_in_system)
+        new_force = self._nonbonded_fix_noncustom(force, force1, force2, unique_exceptions1, unique_exceptions2, sys1_indices_in_system, sys2_indices_in_system)
+        system.addForce(new_force)
 
-        electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force, bond_custom_nonbonded_force = self._nonbonded_custom_force(force)
-        self._nonbonded_exclude_uniques(force, sys2_indices_in_system, sys1_indices_in_system)#, electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force)
+        electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force, bond_custom_nonbonded_force = self._nonbonded_custom_force(new_force)
+        self._nonbonded_exclude_uniques(new_force, sys2_indices_in_system, sys1_indices_in_system)#, electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force)
 
         # Add custom forces to system.
         system.addForce(sterics_custom_nonbonded_force)
         system.addForce(electrostatics_custom_nonbonded_force)
         system.addForce(bond_custom_nonbonded_force)
 
-        self._nonbonded_add_core(common1, mapping1, sys1_indices_in_system, force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, shared_exceptions)
+        self._nonbonded_add_core(common1, mapping1, sys1_indices_in_system, new_force, force1, force2, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, shared_exceptions)
         self._nonbonded_add_unique(common1, force1, force2, sys2_indices_in_system, sys1_indices_in_system, sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, unique_to_core_exceptions1, unique_to_core_exceptions2)
 
         self._nonbonded_add_exceptions_to_bond(shared_exceptions, unique_to_core_exceptions1, unique_to_core_exceptions2, sys1_indices_in_system, sys2_indices_in_system, force1, force2, bond_custom_nonbonded_force)
+        system.removeForce(this_index)
+
     ################################
     # END CUSTOM FORCE DEFINITIONS #
     ################################
@@ -828,8 +849,6 @@ class HybridTopologyFactory(object):
         system = self._handle_constraints(system, system2, sys2_indices_in_system)
 
         # Create new positions array.
-        # julie debugging 8/3/16
-#        positions = self._create_new_positions_array(positions, sys2_indices_in_system)
         positions = self._create_new_positions_array(topology, positions, sys1_indices_in_system, sys2_indices_in_system)
  
         # Build a list of Force objects in system.
@@ -845,15 +864,20 @@ class HybridTopologyFactory(object):
             force2 = forces2[force_name]
             if self.verbose: print(force_name)
             if force_name == 'HarmonicBondForce':
-                self._harmonic_bond_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system)
+                force_to_idx = { system.getForce(index).__class__.__name__ : index for index in range(system.getNumForces()) }
+                self._harmonic_bond_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, force_to_idx[force_name])
             elif force_name == 'HarmonicAngleForce':
-                self._harmonic_angle_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system)
+                force_to_idx = { system.getForce(index).__class__.__name__ : index for index in range(system.getNumForces()) }
+                self._harmonic_angle_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, force_to_idx[force_name])
             elif force_name == 'PeriodicTorsionForce':
-                self._periodic_torsion_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, system_atoms)
+                force_to_idx = { system.getForce(index).__class__.__name__ : index for index in range(system.getNumForces()) }
+                self._periodic_torsion_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, system_atoms, force_to_idx[force_name])
             elif force_name == 'NonbondedForce':
-                self._nonbonded_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping1, mapping2, system)
+                force_to_idx = { system.getForce(index).__class__.__name__ : index for index in range(system.getNumForces()) }
+                self._nonbonded_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping1, mapping2, system, force_to_idx[force_name])
             else:
                 pass
+
 
         # juile debugging 8/3/16
         print('Forces remaining in the hybrid system:')
