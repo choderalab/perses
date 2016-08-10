@@ -1094,7 +1094,7 @@ class SAMSSampler(object):
     >>> sams_sampler = SAMSSampler(exen_sampler)
     >>> # Run the sampler
     >>> sams_sampler.run()
-
+    ...
     """
     def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='default', storage=None):
         """
