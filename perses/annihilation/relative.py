@@ -13,7 +13,7 @@ def unique(atom_list):
         return tuple(atom_list)
 
 class HybridTopologyFactory(object):
-    def __init__(self, system1, system2, topology1, topology2, positions1, positions2, atom_mapping_1to2):
+    def __init__(self, system1, system2, topology1, topology2, positions1, positions2, atom_mapping_1to2, softening=0.1):
         """
         Arguments:
             system1
@@ -23,11 +23,17 @@ class HybridTopologyFactory(object):
             positions1
             positions2
             atom_mapping_1to2 : dict[atom_index_in_system1] = atom_index_in_system2
+            softening: float, 0 - 1
+                       minimum fraction of bond angle, and torsion forces
         """
         self.softcore_alpha=0.5
         self.softcore_beta=12*unit.angstrom**2
         self.system1 = copy.deepcopy(system1)
         self.system2 = copy.deepcopy(system2)
+
+        if softening < 0.0 or softening > 1.0:
+            softening = 0.1
+        self.softening = softening
 
         self.return_self = False
         if topology1 == topology2:
@@ -91,13 +97,6 @@ class HybridTopologyFactory(object):
             else:
                 raise Exception('Atom not found to assign position')
             positions[atom.index] = position
-        # julie debugging 8/3/16
-        with open('alchemy.txt','w') as fo:
-            for atom in topology.atoms():
-                position = positions[atom.index]
-                fo.write('%s, %s, %s\n' % (atom.residue, atom.name, position))
-        app.PDBFile.writeFile(topology, positions, open('alchemy.pdb','w'))
-        # end debug
         return positions
 
     #######################
@@ -149,15 +148,13 @@ class HybridTopologyFactory(object):
             [atom2_i, atom2_j, length2, K2] = force2.getBondParameters(index2)
             atom_i = sys2_indices_in_system[atom2_i]
             atom_j = sys2_indices_in_system[atom2_j]
-            #custom_force.addBond(atom_i, atom_j, [length2, 0.1*K2, length2, K2])
-            custom_force.addBond(atom_i, atom_j, [length2, 0.0*K2, length2, K2])
+            custom_force.addBond(atom_i, atom_j, [length2, self.softening*K2, length2, K2])
     
         for index1 in unique_bonds1:
             [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
             atom_i = sys1_indices_in_system[atom1_i]
             atom_j = sys1_indices_in_system[atom1_j]
-            #custom_force.addBond(atom_i, atom_j, [length1, K1, length1, 0.1*K1])
-            custom_force.addBond(atom_i, atom_j, [length1, K1, length1, 0.0*K1])
+            custom_force.addBond(atom_i, atom_j, [length1, K1, length1, self.softening*K1])
 
     def _harmonic_bond_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, this_index):
         def index_bonds(force):
@@ -242,15 +239,13 @@ class HybridTopologyFactory(object):
             atom_i = sys2_indices_in_system[atom2_i]
             atom_j = sys2_indices_in_system[atom2_j]
             atom_k = sys2_indices_in_system[atom2_k]
-#            custom_force.addAngle(atom_i, atom_j, atom_k, [theta2, 0.1*K2, theta2, K2])
-            custom_force.addAngle(atom_i, atom_j, atom_k, [theta2, 0.0*K2, theta2, K2])
+            custom_force.addAngle(atom_i, atom_j, atom_k, [theta2, self.softening*K2, theta2, K2])
         for index1 in unique_angles1:
             [atom1_i, atom1_j, atom1_k, theta1, K1] = force1.getAngleParameters(index1)
             atom_i = sys1_indices_in_system[atom1_i]
             atom_j = sys1_indices_in_system[atom1_j]
             atom_k = sys1_indices_in_system[atom1_k]
-#            custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta1, 0.1*K1])
-            custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta1, 0.0*K1])
+            custom_force.addAngle(atom_i, atom_j, atom_k, [theta1, K1, theta1, self.softening*K1])
 
     def _harmonic_angle_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, this_index):
         def index_angles(force):
@@ -368,10 +363,10 @@ class HybridTopologyFactory(object):
                 atom_j = sys1_indices_in_system[atom1_j]
                 atom_k = sys1_indices_in_system[atom1_k]
                 atom_l = sys1_indices_in_system[atom1_l]
-                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, 0.0*K1])
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, self.softening*K1])
             for ix2 in index2:
                 [atom2_i, atom2_j, atom2_k, atom2_l, periodicity2, phase2, K2] = force2.getTorsionParameters(ix2)
-                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity2, phase2, 0.0*K2, periodicity2, phase2, K2])
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity2, phase2, self.softening*K2, periodicity2, phase2, K2])
 
     def _periodic_torsion_add_unique(self, unique_torsions2, unique_torsions1, force2, force1, sys2_indices_in_system, sys1_indices_in_system, custom_force):
         # Add torsions that are unique to molecule2.
@@ -383,7 +378,7 @@ class HybridTopologyFactory(object):
                 atom_j = sys2_indices_in_system[atom2_j]
                 atom_k = sys2_indices_in_system[atom2_k]
                 atom_l = sys2_indices_in_system[atom2_l]
-                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity2, phase2, 0.0, periodicity2, phase2, K2])
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity2, phase2, self.softening*K2, periodicity2, phase2, K2])
         for index1 in unique_torsions1:
             for ix1 in index1:
                 [atom1_i, atom1_j, atom1_k, atom1_l, periodicity1, phase1, K1] = force1.getTorsionParameters(ix1)
@@ -391,7 +386,7 @@ class HybridTopologyFactory(object):
                 atom_j = sys1_indices_in_system[atom1_j]
                 atom_k = sys1_indices_in_system[atom1_k]
                 atom_l = sys1_indices_in_system[atom1_l]
-                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, 0.0])
+                custom_force.addTorsion(atom_i, atom_j, atom_k, atom_l, [periodicity1, phase1, K1, periodicity1, phase1, self.softening*K1])
 
     def _periodic_torsion_force(self, force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping2, system, system_atoms, this_index):
         def index_torsions(force):
@@ -505,7 +500,6 @@ class HybridTopologyFactory(object):
             alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
         electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
         electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit)
-        # TODO: Handle reciprocal-space electrostatics
         return sterics_energy_expression, electrostatics_energy_expression
 
     def _nonbonded_custom_mixing_rules(self):
@@ -646,7 +640,7 @@ class HybridTopologyFactory(object):
             sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
             electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
 
-    def _nonbonded_exclude_uniques(self, force, sys2_indices_in_system, sys1_indices_in_system):#, electrostatics_custom_nonbonded_force, sterics_custom_nonbonded_force):
+    def _nonbonded_exclude_uniques(self, force, sys2_indices_in_system, sys1_indices_in_system):
         """
         The intra-unique bits of each molecule maintain original
         nonbonded forces; should not see each other
@@ -659,8 +653,6 @@ class HybridTopologyFactory(object):
             for atom2_j in self.unique_atoms2:
                 atom_i = sys1_indices_in_system[atom1_i]
                 atom_j = sys2_indices_in_system[atom2_j]
-                #electrostatics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
-                #sterics_custom_nonbonded_force.addExclusion(atom_i, atom_j)
                 force.addException(atom_i, atom_j, 0.0, 1.0, 0.0, replace=True)
                 force.addException(atom_j, atom_i, 0.0, 1.0, 0.0, replace=True)
 
@@ -690,13 +682,6 @@ class HybridTopologyFactory(object):
             [charge, sigma, epsilon] = force2.getParticleParameters(atom)
             new_force.addParticle(0*charge, sigma, 0*epsilon)
             force.addParticle(0*charge, sigma, 0*epsilon)
-        # Zero out everything
-        for atom in range(force.getNumParticles()):
-            [charge, sigma, epsilon] = force.getParticleParameters(atom)
-            force.setParticleParameters(atom, 0*charge, sigma, 0*epsilon)
-        for index in range(force.getNumExceptions()):
-            [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
-            force.addException(atom1_i, atom1_j, 0*chargeProd, sigma, 0*epsilon, replace=True)
         # Add unique atom parameters back
         for atom1 in self.unique_atoms1:
             [charge, sigma, epsilon] = force1.getParticleParameters(atom1)
@@ -877,13 +862,5 @@ class HybridTopologyFactory(object):
                 self._nonbonded_force(force, force1, force2, common1, common2, sys1_indices_in_system, sys2_indices_in_system, mapping1, mapping2, system, force_to_idx[force_name])
             else:
                 pass
-
-
-        # juile debugging 8/3/16
-        print('Forces remaining in the hybrid system:')
-        for force in [ system.getForce(index) for index in range(system.getNumForces()) ]:
-            force_name = force.__class__.__name__
-            print(force_name)
-
 
         return [system, topology, positions, sys2_indices_in_system, sys1_indices_in_system]

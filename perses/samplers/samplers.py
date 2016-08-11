@@ -730,7 +730,7 @@ class ExpandedEnsembleSampler(object):
     >>> exen_sampler.run()
 
     """
-    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None, envname=None, storage=None):
+    def __init__(self, sampler, topology, state_key, proposal_engine, geometry_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None, envname=None, storage=None):
         """
         Create an expanded ensemble sampler.
 
@@ -794,8 +794,7 @@ class ExpandedEnsembleSampler(object):
             self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
-        from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
-        self.geometry_engine = FFAllAngleGeometryEngine(metadata=dict())
+        self.geometry_engine = geometry_engine
         self.naccepted = 0
         self.nrejected = 0
         self.number_of_state_visits = dict()
@@ -1059,9 +1058,8 @@ class ExpandedEnsembleSampler(object):
                 self.geometry_pdbfile.flush()
 
             if self.verbose: print("Performing NCMC switching")
-            # Alchemically introduce new atoms.
             initial_time = time.time()
-            [ncmc_new_positions, ncmc_old_positions, ncmc_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, positions, geometry_new_positions) # , direction='insert') --> can I do this?
+            [ncmc_new_positions, ncmc_old_positions, ncmc_logp, neg_switch_logp] = self.ncmc_engine.integrate(topology_proposal, positions, geometry_new_positions)
             if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
@@ -1069,14 +1067,12 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Geometry engine logP_reverse calculation...")
             initial_time = time.time()
-############################### --> Pending Patrick's approval: correct use of positions
-############################### --> NEED NCMC TO RETURN "NEW OLD POSITIONS" AND THAT'S WHAT GOES HERE -----------v
             geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, ncmc_new_positions, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
             geometry_logp = geometry_logp_reverse - geometry_logp_propose
             if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
 
             # Compute change in eliminated potential contribution.
-            switch_logp = - potential_insert
+            switch_logp = - neg_switch_logp
             if self.verbose:
                 #print('potential before geometry  : %12.3f kT' % potential_delete)
                 #print('potential after geometry   : %12.3f kT' % potential_insert)

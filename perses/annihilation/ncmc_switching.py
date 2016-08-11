@@ -610,42 +610,16 @@ class NCMCHybridEngine(NCMCEngine):
                     context.setParameter(parameter_name, parameter)
             # Compute potential energy.
             potential = context.getState(getEnergy=True).getPotentialEnergy()
-            print('Potential: %s' % potential)
             # Clean up context and integrator.
             del context, integrator
             # Return potential energy.
             return -self.beta * potential
 
-        # julie debugging 8/3/16
-        unmodified_old_system = copy.deepcopy(unmodified_old_system)
-        unmodified_new_system = copy.deepcopy(unmodified_new_system)
-        alchemical_system = copy.deepcopy(alchemical_system)
-        for unmodified_system in [unmodified_old_system, unmodified_new_system, alchemical_system]:
-            while unmodified_system.getNumForces() > 1:
-                for k, force in enumerate(unmodified_system.getForces()):
-                    force_name = force.__class__.__name__
-                    #if not force_name in ['HarmonicBondForce', 'CustomBondForce']:
-                    if not force_name in ['HarmonicAngleForce', 'CustomAngleForce']:
-                    #if not force_name in ['PeriodicTorsionForce', 'CustomTorsionForce']:
-                    #if not force_name == 'CMMotionRemover':
-                        unmodified_system.removeForce(k)
-                        break
-        # end debugging
-
-        
         # Compute correction from transforming real system to/from alchemical system
-        print('Inital, hybrid - physical')
         initial_logP_correction = compute_logP(alchemical_system, alchemical_positions, parameter=0) - compute_logP(unmodified_old_system, initial_positions)
-        print('Final, physical - hybrid')
         final_logP_correction = compute_logP(unmodified_new_system, final_positions) - compute_logP(alchemical_system, final_hybrid_positions, parameter=1)
-        print('Initial logP alchemical correction:')
-        print(initial_logP_correction)
-        print('Final logP alchemical correction:')
-        print(final_logP_correction)
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
         return logP_alchemical_correction
-
-
 
     def make_alchemical_system(self, topology_proposal, old_positions,
                                new_positions):
@@ -672,20 +646,6 @@ class NCMCHybridEngine(NCMCEngine):
         unmodified_new_system = copy.deepcopy(topology_proposal.new_system)
         old_topology = topology_proposal.old_topology
         new_topology = topology_proposal.new_topology
-
-        # julie debugging 8/3/16
-#        for unmodified_system in [unmodified_old_system, unmodified_new_system]:
-#            while unmodified_system.getNumForces() > 1:
-#                for k, force in enumerate(unmodified_system.getForces()):
-#                    force_name = force.__class__.__name__
-                    #if not force_name == 'HarmonicBondForce':
-                    #if not force_name == 'HarmonicAngleForce':
-                    #if not force_name == 'PeriodicTorsionForce':
-#                    if not force_name == 'NonbondedForce':
-                    #if not force_name == 'CMMotionRemover':
-#                        unmodified_system.removeForce(k)
-#                        break
-        # end debugging
 
         # Create an alchemical factory.
         from perses.annihilation.relative import HybridTopologyFactory
@@ -791,29 +751,17 @@ class NCMCHybridEngine(NCMCEngine):
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
 
         # Set initial context parameters.
-        #self._updateAlchemicalState(context, functions, 0)
         integrator.setGlobalVariableByName('lambda', 0)
 
         # Compute initial potential of alchemical state.
-        initial_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        #print("Initial potential is %s" % str(initial_potential))
-        if np.isnan(initial_potential):
+        initial_logP = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        if np.isnan(initial_logP):
             raise NaNException("Initial potential of 'insert' operation is NaN")
         from perses.tests.utils import compute_potential_components
-        #print("initial potential before '%s' : %f kT" % (direction, initial_potential))
-        #print("initial potential components:   %s" % str(compute_potential_components(context))) # DEBUG
         # Take a single integrator step since all switching steps are unrolled in NCMCVVAlchemicalIntegrator.
         try:
             # Write PDB file if requested.
             if self.write_ncmc_interval is not None:
-                #indices = topology_proposal.unique_new_atoms
-
-                ## Write atom indices that are changing
-                #import pickle
-                #filename = 'ncmc-%s-%d-atomindices.pkl' % (direction, self.nattempted)
-                #outfile = open(filename, 'wb')
-                #pickle.dump(indices, outfile)
-                #outfile.close()
 
                 from simtk.openmm.app import PDBFile
                 filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
@@ -837,9 +785,7 @@ class NCMCHybridEngine(NCMCEngine):
                 for step in range(self.nsteps):
                     integrator.step(1)
                     potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-                    #print("Potential at step %d is %s" % (step, str(potential)))
                     current_step = integrator.get_step()
-                    #print("and the integrator's current step is %d" % current_step)
 
         except Exception as e:
             # Trap NaNs as a special exception (allowing us to reject later, if desired)
@@ -849,16 +795,12 @@ class NCMCHybridEngine(NCMCEngine):
                 raise e
 
         # Set final context parameters.
-#        self._updateAlchemicalState(context, functions, 1)
         integrator.setGlobalVariableByName('lambda', 1)
 
         # Compute final potential of alchemical state.
-        final_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        if np.isnan(final_potential):
+        final_logP = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        if np.isnan(final_logP):
             raise NaNException("Final potential of hybrid switch operation is NaN")
-        #print("final potential before '%s' : %f kT" % (direction, final_potential))
-        #print("final potential components: %s" % str(compute_potential_components(context))) # DEBUG
-        #print('')
 
         # Store final positions and log acceptance probability.
         final_hybrid_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
@@ -866,13 +808,7 @@ class NCMCHybridEngine(NCMCEngine):
         final_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, final_to_hybrid_atom_map)
         new_old_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, initial_to_hybrid_atom_map)
 
-        # debugging
-        PDBFile.writeFile(alchemical_topology, final_hybrid_positions, open('final-hybrid.pdb','w'))
-        PDBFile.writeFile(topology_proposal.new_topology, final_positions, open('final-real.pdb','w'))
-        #end debugging
         logP_NCMC = integrator.getLogAcceptanceProbability(context)
-        # DEBUG
-        #logging.debug("NCMC logP %+10.1f | initial_total_energy %+10.1f kT | final_total_energy %+10.1f kT." % (logP_NCMC, integrator.getGlobalVariableByName('initial_total_energy'), integrator.getGlobalVariableByName('final_total_energy')))
         # Clean up NCMC switching integrator.
         del context, integrator
 
@@ -887,25 +823,20 @@ class NCMCHybridEngine(NCMCEngine):
                                               final_positions,
                                           )
 
-        # julie debugging 8/3/16
-        from simtk.openmm.app import PDBFile
-        PDBFile.writeFile(topology_proposal.new_topology, final_positions, open('newnew-%s.pdb' % self.nattempted,'w'))
-        # end debugging
-
         # Compute total logP
-        logP = logP_NCMC + logP_alchemical_correction
+        logP_ncmc = logP_NCMC + logP_alchemical_correction
 
         # Clean up alchemical system.
         del alchemical_system
 
         # Select whether to return initial or final potential.
-        potential = final_potential - initial_potential
+        logP = final_logP - initial_logP
 
         # Keep track of statistics.
         self.nattempted += 1
 
         # Return
-        return [final_positions, new_old_positions, logP, potential]
+        return [final_positions, new_old_positions, logP_ncmc, logP]
 
 
 class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):

@@ -206,7 +206,7 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
 
 
     forces_to_save = {
-        'BondandNonbond' : ['HarmonicBondForce', 'CustomBondForce', 'NonbondedForce', 'CustomNonbondedForce'],
+        'Bond and Nonbonded' : ['HarmonicBondForce', 'CustomBondForce', 'NonbondedForce', 'CustomNonbondedForce'],
         'Angle' : ['HarmonicAngleForce', 'CustomAngleForce'],
         'Torsion' : ['PeriodicTorsionForce', 'CustomTorsionForce'],
         'CMMotion' : ['CMMotionRemover'],
@@ -219,8 +219,8 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         unmodified_new_sys = copy.deepcopy(unmodified_new_system)
         alchemical_sys = copy.deepcopy(alchemical_system)
         for unmodified_system in [unmodified_old_sys, unmodified_new_sys, alchemical_sys]:
-            if unmodified_system == alchemical_sys and saved_force == 'BondandNonbond': max_forces = 5
-            elif saved_force == 'BondandNonbond': max_forces = 2
+            if unmodified_system == alchemical_sys and saved_force == 'Bond and Nonbonded': max_forces = 5
+            elif saved_force == 'Bond and Nonbonded': max_forces = 2
             elif saved_force == 'All': max_forces = unmodified_system.getNumForces() + 10
             else: max_forces = 1
             while unmodified_system.getNumForces() > max_forces:
@@ -241,16 +241,17 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
 
 
-def setup_hybrid_system():
+def test_setup_hybrid_system():
     alanine_topology, alanine_positions, leucine_topology, leucine_positions, atom_map = build_two_residues()
 
     alanine_system = forcefield.createSystem(alanine_topology)
     leucine_system = forcefield.createSystem(leucine_topology)
 
-    hybrid = HybridTopologyFactory(alanine_system, leucine_system, alanine_topology, leucine_topology, alanine_positions, leucine_positions, atom_map)
+    atom_map = {value : key for key, value in atom_map.items()}
+    hybrid = HybridTopologyFactory(leucine_system, alanine_system, leucine_topology, alanine_topology, leucine_positions, alanine_positions, atom_map, softening=0.0)
     [system, topology, positions, sys2_indices_in_system, sys1_indices_in_system] = hybrid.createPerturbedSystem()
 
-    compute_alchemical_correction(alanine_system, leucine_system, system, alanine_positions, positions, positions, leucine_positions)
+    compute_alchemical_correction(leucine_system, alanine_system, system, leucine_positions, positions, positions, alanine_positions)
 
 if __name__ == '__main__':
-    setup_hybrid_system()
+    test_setup_hybrid_system()
