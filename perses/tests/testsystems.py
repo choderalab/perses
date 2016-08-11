@@ -1724,7 +1724,8 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     def __init__(self, **kwargs):
         super(ValenceSmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
-        molecules = ['CCCCC','CC(C)CC', 'CCC(C)C', 'CCCCC', 'C(CC)CCC']
+        initial_molecules = ['CCCCC','CC(C)CC', 'CCC(C)C', 'CCCCC', 'C(CC)CCC']
+        molecules = self._canonicalize_smiles(initial_molecules)
         environments = ['vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -1811,6 +1812,29 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
         self.designer = designer
+
+    def _canonicalize_smiles(self, list_of_smiles):
+        """
+        Turn a list of smiles strings into openeye canonical
+        isomeric smiles.
+
+        Parameters
+        ----------
+        list_of_smiles : list of str
+            input smiles
+
+        Returns
+        -------
+        list_of_canonicalized_smiles : list of str
+            canonical isomeric smiles
+        """
+        list_of_canonicalized_smiles = []
+        for smiles in list_of_smiles:
+            mol = oechem.OEMol()
+            oechem.OESmilesToMol(mol, smiles)
+            can_smi = oechem.OECreateIsoSmiString(mol)
+            list_of_canonicalized_smiles.append(can_smi)
+        return list_of_canonicalized_smiles
 
 def check_topologies(testsystem):
     """
