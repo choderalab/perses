@@ -1082,6 +1082,7 @@ class ExpandedEnsembleSampler(object):
                 #print('potential after geometry   : %12.3f kT' % potential_insert)
                 print('---------------------------------------------------------')
                 print('switch_logp                : %12.3f' % switch_logp)
+                print('ncmc_logp                  : %12.3f' % ncmc_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
                 print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
 
