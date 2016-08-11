@@ -1724,7 +1724,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     def __init__(self, **kwargs):
         super(ValenceSmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
-        molecules = ['CCCCC','CC(C)CC', 'CC(CC)CC', 'C(C)CCC', 'C(CC)CCC']
+        molecules = ['CCCCC','CC(C)CC', 'CCC(C)C', 'CCCCC', 'C(CC)CCC']
         environments = ['vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -2104,8 +2104,8 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_fused_rings()
-    #run_valence_system()
+    #run_fused_rings()
+    run_valence_system()
     #run_t4_inhibitors()
     #run_imidazole()
     #run_constph_imidazole()
