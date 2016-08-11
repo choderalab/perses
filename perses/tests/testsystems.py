@@ -35,6 +35,7 @@ from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
 from perses.tests.utils import sanitizeSMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
+from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
 
@@ -100,6 +101,7 @@ class PersesTestSystem(object):
         self.exen_samplers = dict()
         self.sams_samplers = dict()
         self.designer = None
+        self.geometry_engine = FFAllAngleGeometryEngine(metadata={})
 
 class AlanineDipeptideTestSystem(PersesTestSystem):
     """
@@ -217,7 +219,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -447,7 +449,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -607,7 +609,7 @@ class MybTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5})
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
             sams_samplers[environment].verbose = True
@@ -779,7 +781,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, self.geometry_engine, proposal_engines[environment], options={'nsteps':5}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
@@ -985,7 +987,7 @@ class AblAffinityTestSystem(PersesTestSystem):
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
@@ -1203,7 +1205,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
@@ -1424,7 +1426,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5}, storage=storage)
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
@@ -1595,7 +1597,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':500}, storage=storage)
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':500}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -1722,7 +1724,8 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     def __init__(self, **kwargs):
         super(ValenceSmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
-        molecules = ['CCCCC','CC(C)CC', 'CC(CC)CC', 'C(C)CCC', 'C(CC)CCC']
+        initial_molecules = ['CCCCC','CC(C)CC', 'CCC(C)C', 'CCCCC', 'C(CC)CCC']
+        molecules = self._canonicalize_smiles(initial_molecules)
         environments = ['vacuum']
 
         # Create a system generator for our desired forcefields.
@@ -1787,7 +1790,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 500 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':0}, storage=storage)
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':0}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -1809,6 +1812,29 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         self.exen_samplers = exen_samplers
         self.sams_samplers = sams_samplers
         self.designer = designer
+
+    def _canonicalize_smiles(self, list_of_smiles):
+        """
+        Turn a list of smiles strings into openeye canonical
+        isomeric smiles.
+
+        Parameters
+        ----------
+        list_of_smiles : list of str
+            input smiles
+
+        Returns
+        -------
+        list_of_canonicalized_smiles : list of str
+            canonical isomeric smiles
+        """
+        list_of_canonicalized_smiles = []
+        for smiles in list_of_smiles:
+            mol = oechem.OEMol()
+            oechem.OESmilesToMol(mol, smiles)
+            can_smi = oechem.OECreateIsoSmiString(mol)
+            list_of_canonicalized_smiles.append(can_smi)
+        return list_of_canonicalized_smiles
 
 def check_topologies(testsystem):
     """
@@ -2102,8 +2128,8 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_fused_rings()
-    #run_valence_system()
+    #run_fused_rings()
+    run_valence_system()
     #run_t4_inhibitors()
     #run_imidazole()
     #run_constph_imidazole()

@@ -723,14 +723,16 @@ class ExpandedEnsembleSampler(object):
     >>> mcmc_sampler.verbose = False
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
+    >>> from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    >>> geometry_engine = FFAllAngleGeometryEngine(metadata={})
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
     >>> proposal_engine = PointMutationEngine(test.topology, system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
-    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
+    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine, geometry_engine)
     >>> # Run the sampler
     >>> exen_sampler.run()
 
     """
-    def __init__(self, sampler, topology, state_key, proposal_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None, envname=None, storage=None):
+    def __init__(self, sampler, topology, state_key, proposal_engine, geometry_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None, envname=None, storage=None):
         """
         Create an expanded ensemble sampler.
 
@@ -748,6 +750,8 @@ class ExpandedEnsembleSampler(object):
             Current chemical state
         proposal_engine : ProposalEngine
             ProposalEngine to use for proposing new chemical states
+        geometry_engine : GeometryEngine
+            GeometryEngine to use for dimension matching
         log_weights : dict of object : float
             Log weights to use for expanded ensemble biases.
         scheme : str, optional, default='ncmc-geometry-ncmc'
@@ -788,8 +792,7 @@ class ExpandedEnsembleSampler(object):
             self._switching_nsteps = 0
         from perses.annihilation.ncmc_switching import NCMCEngine
         self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
-        from perses.rjmc.geometry import FFAllAngleGeometryEngine, OmegaFFGeometryEngine
-        self.geometry_engine = OmegaFFGeometryEngine(torsion_kappa=300.0, max_confs=10)
+        self.geometry_engine = geometry_engine
         self.naccepted = 0
         self.nrejected = 0
         self.number_of_state_visits = dict()
@@ -1080,16 +1083,18 @@ class SAMSSampler(object):
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state)
     >>> # Turn off verbosity
     >>> mcmc_sampler.verbose = False
+    >>> from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    >>> geometry_engine = FFAllAngleGeometryEngine(metadata={})
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
     >>> proposal_engine = PointMutationEngine(test.topology, system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
-    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine)
+    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine, geometry_engine)
     >>> # Create a SAMS sampler
     >>> sams_sampler = SAMSSampler(exen_sampler)
     >>> # Run the sampler
-    >>> sams_sampler.run()
-
+    >>> sams_sampler.run() # doctest: +ELLIPSIS
+    ...
     """
     def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='default', storage=None):
         """

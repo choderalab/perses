@@ -73,6 +73,7 @@ def test_samplers():
     Test samplers on multiple test systems.
     """
     testsystem_names = ['ImidazoleProtonationStateTestSystem', 'T4LysozymeMutationTestSystem', 'ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem', 'AblImatinibResistanceTestSystem', 'AblAffinityTestSystem']
+    #testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem']
     niterations = 5 # number of iterations to run
 
     # If TESTSYSTEMS environment variable is specified, test those systems.
@@ -111,5 +112,4 @@ def test_samplers():
 if __name__=="__main__":
     for t in test_samplers():
         print(t.description)
-        if(t.description) == "Testing SAMS sampler with T4LysozymeInhibitorsTestSystem 'vacuum'":
-            t()
+        t()
