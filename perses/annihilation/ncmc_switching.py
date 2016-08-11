@@ -497,7 +497,7 @@ class NCMCHybridEngine(NCMCEngine):
     def __init__(self, temperature=default_temperature, functions=None, 
                  nsteps=default_nsteps, timestep=default_timestep, 
                  constraint_tolerance=None, platform=None, 
-                 write_ncmc_interval=1, integrator_type='GHMC'):
+                 write_ncmc_interval=None, integrator_type='GHMC'):
         """
         Subclass of NCMCEngine which switches directly between two different
         systems using an alchemical hybrid topology.
@@ -718,12 +718,6 @@ class NCMCHybridEngine(NCMCEngine):
                                             topology_proposal, initial_positions,
                                             proposed_positions)
 ########################################################################
-        from simtk.openmm.app import PDBFile
-        PDBFile.writeFile(topology_proposal.old_topology, initial_positions, open('old-%s.pdb' % self.nattempted, 'w'))
-        PDBFile.writeFile(alchemical_topology, alchemical_positions, open('alchemical-%s.pdb' % self.nattempted, 'w'))
-        PDBFile.writeFile(topology_proposal.new_topology, proposed_positions, open('new-%s.pdb' % self.nattempted, 'w'))
-
-        from perses.tests.utils import compute_potential
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
