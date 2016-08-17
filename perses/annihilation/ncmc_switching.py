@@ -434,25 +434,26 @@ class NCMCEngine(object):
 
         # Get initial and final real and alchemical potentials
         from perses.tests.utils import compute_potential
-        initial_unmodified_potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
         initial_alchemical_potential = self.beta * integrator.getGlobalVariableByName("Einitial") * unit.kilojoules_per_mole
-        final_unmodified_potential = self.beta * compute_potential(system, final_positions, platform=self.platform)
         final_alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        if direction == 'insert':
+            final_unmodified_potential = self.beta * compute_potential(system, final_positions, platform=self.platform)
+            logP_alchemical_correction = final_unmodified_potential - final_alchemical_potential
+            switch_logp = initial_alchemical_potential
+        elif direction == 'delete':
+            initial_unmodified_potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
+            logP_alchemical_correction = initial_alchemical_potential - initial_unmodified_potential
+            switch_logp = final_alchemical_potential
 
         # Clean up.
         del context, integrator
 
         # Check potentials are finite
-        if np.isnan(initial_unmodified_potential) or np.isnan(initial_alchemical_potential) or np.isnan(final_unmodified_potential) or np.isnan(final_alchemical_potential):
+        if np.isnan(initial_alchemical_potential) or np.isnan(final_alchemical_potential):
             msg = "A required potential of %s operation is NaN:\n" % direction
-            msg += "initial_unmodified_potential: %.3f kT\n" % initial_unmodified_potential
             msg += "initial_alchemical_potential: %.3f kT\n" % initial_alchemical_potential
             msg += "final_alchemical_potential: %.3f kT\n" % final_alchemical_potential
-            msg += "final_unmodified_potential: %.3f kT\n" % final_unmodified_potential
             raise NaNException(msg)
-
-        # Compute contribution from transforming real system to/from alchemical system.
-        logP_alchemical_correction = (final_unmodified_potential - final_alchemical_potential) + (initial_alchemical_potential - initial_unmodified_potential)
 
         # Compute total logP
         logP = logP_NCMC + logP_alchemical_correction
@@ -460,18 +461,11 @@ class NCMCEngine(object):
         # Clean up alchemical system.
         del alchemical_system
 
-        # Select whether to return initial or final potential.
-        # TODO: Do we really need to return the potential now?
-        if direction == 'insert':
-            potential = initial_unmodified_potential
-        elif direction == 'delete':
-            potential = final_unmodified_potential
-
         # Keep track of statistics.
         self.nattempted += 1
 
         # Return
-        return [final_positions, logP, potential]
+        return [final_positions, logP, switch_logp]
 
 class NCMCHybridEngine(NCMCEngine):
     """
@@ -536,6 +530,48 @@ class NCMCHybridEngine(NCMCEngine):
                                                platform=platform, write_ncmc_interval=write_ncmc_interval,
                                                integrator_type=integrator_type)
 
+    def compute_logP(self, system, positions, parameter=None):
+        """
+        Compute potential energy of the specified system object at the specified positions.
+
+        Constraints are applied before the energy is computed.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The System object for which the potential energy is to be computed.
+        positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the atoms for which energy is to be computed.
+
+        Returns
+        -------
+        potential : simtk.unit.Quantity with units of energy
+            The computed potential energy
+            
+        """
+        # Create dummy integrator.
+        integrator = openmm.VerletIntegrator(self.timestep)
+        # Set the constraint tolerance if specified.
+        if self.constraint_tolerance is not None:
+            integrator.setConstraintTolerance(self.constraint_tolerance)
+        # Create a context on the specified platform.
+        if self.platform is not None:
+            context = openmm.Context(system, integrator, self.platform)
+        else:
+            context = openmm.Context(system, integrator)
+        context.setPositions(positions)
+        context.applyConstraints(integrator.getConstraintTolerance())
+        if parameter is not None:
+            available_parameters = self._getAvailableParameters(system)
+            for parameter_name in available_parameters:
+                context.setParameter(parameter_name, parameter)
+        # Compute potential energy.
+        potential = context.getState(getEnergy=True).getPotentialEnergy()
+        # Clean up context and integrator.
+        del context, integrator
+        # Return potential energy.
+        return -self.beta * potential
+
     def _computeAlchemicalCorrection(self, unmodified_old_system,
                                      unmodified_new_system, alchemical_system,
                                      initial_positions, alchemical_positions,
@@ -573,53 +609,14 @@ class NCMCHybridEngine(NCMCEngine):
             The log acceptance probability of the switch
         """
 
-        def compute_logP(system, positions, parameter=None):
-            """
-            Compute potential energy of the specified system object at the specified positions.
-
-            Constraints are applied before the energy is computed.
-
-            Parameters
-            ----------
-            system : simtk.openmm.System
-                The System object for which the potential energy is to be computed.
-            positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-                Positions of the atoms for which energy is to be computed.
-
-            Returns
-            -------
-            potential : simtk.unit.Quantity with units of energy
-                The computed potential energy
-            
-            """
-            # Create dummy integrator.
-            integrator = openmm.VerletIntegrator(self.timestep)
-            # Set the constraint tolerance if specified.
-            if self.constraint_tolerance is not None:
-                integrator.setConstraintTolerance(self.constraint_tolerance)
-            # Create a context on the specified platform.
-            if self.platform is not None:
-                context = openmm.Context(system, integrator, self.platform)
-            else:
-                context = openmm.Context(system, integrator)
-            context.setPositions(positions)
-            context.applyConstraints(integrator.getConstraintTolerance())
-            if parameter is not None:
-                available_parameters = self._getAvailableParameters(system)
-                for parameter_name in available_parameters:
-                    context.setParameter(parameter_name, parameter)
-            # Compute potential energy.
-            potential = context.getState(getEnergy=True).getPotentialEnergy()
-            # Clean up context and integrator.
-            del context, integrator
-            # Return potential energy.
-            return -self.beta * potential
-
         # Compute correction from transforming real system to/from alchemical system
-        initial_logP_correction = compute_logP(alchemical_system, alchemical_positions, parameter=0) - compute_logP(unmodified_old_system, initial_positions)
-        final_logP_correction = compute_logP(unmodified_new_system, final_positions) - compute_logP(alchemical_system, final_hybrid_positions, parameter=1)
+        initial_logP_correction = self.compute_logP(alchemical_system, alchemical_positions, parameter=0) - self.compute_logP(unmodified_old_system, initial_positions)
+        final_logP_correction = self.compute_logP(unmodified_new_system, final_positions) - self.compute_logP(alchemical_system, final_hybrid_positions, parameter=1)
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
         return logP_alchemical_correction
+
+    def _compute_switch_logP(self, unmodified_old_system, unmodified_new_system, initial_positions, final_positions):
+        return self.compute_logP(unmodified_new_system, final_positions) - self.compute_logP(unmodified_old_system, initial_positions)
 
     def make_alchemical_system(self, topology_proposal, old_positions,
                                new_positions):
@@ -823,14 +820,11 @@ class NCMCHybridEngine(NCMCEngine):
         # Clean up alchemical system.
         del alchemical_system
 
-        # Select whether to return initial or final potential.
-        logP = final_logP - initial_logP
-
         # Keep track of statistics.
         self.nattempted += 1
 
         # Return
-        return [final_positions, new_old_positions, logP_ncmc, logP]
+        return [final_positions, new_old_positions, logP_ncmc]
 
 
 class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):

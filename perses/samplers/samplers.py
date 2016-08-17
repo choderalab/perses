@@ -1018,16 +1018,6 @@ class ExpandedEnsembleSampler(object):
             topology_proposal = self.proposal_engine.propose(system, topology)
             if self.verbose: print("Proposed transformation: %s => %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
 
-            # DEBUG: Check current topology can be built.
-            if self.verbose: print("Generating new system...")
-            try:
-                self.proposal_engine._system_generator.build_system(topology_proposal.new_topology)
-            except Exception as e:
-                msg = str(e)
-                msg += '\n'
-                msg += 'ExpandedEnsembleSampler.update_sampler: toology_proposal.new_topology before ProposalEngine call cannot be built into a system'
-                raise Exception(msg)
-
             # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
             natoms_old = topology_proposal.old_system.getNumParticles()
             natoms_new = topology_proposal.new_system.getNumParticles()
@@ -1063,7 +1053,7 @@ class ExpandedEnsembleSampler(object):
 
             if self.verbose: print("Performing NCMC switching")
             initial_time = time.time()
-            [ncmc_new_positions, ncmc_old_positions, ncmc_logp, neg_switch_logp] = self.ncmc_engine.integrate(topology_proposal, positions, geometry_new_positions)
+            [ncmc_new_positions, ncmc_old_positions, ncmc_logp] = self.ncmc_engine.integrate(topology_proposal, positions, geometry_new_positions)
             if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
             # Check that positions are not NaN
             if np.any(np.isnan(ncmc_new_positions)):
@@ -1073,24 +1063,23 @@ class ExpandedEnsembleSampler(object):
             initial_time = time.time()
             geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, ncmc_new_positions, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
             geometry_logp = geometry_logp_reverse - geometry_logp_propose
+            # why wtf
             if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
 
             # Compute change in eliminated potential contribution.
-            switch_logp = - neg_switch_logp
             if self.verbose:
                 #print('potential before geometry  : %12.3f kT' % potential_delete)
                 #print('potential after geometry   : %12.3f kT' % potential_insert)
                 print('---------------------------------------------------------')
-                print('switch_logp                : %12.3f' % switch_logp)
                 print('ncmc_logp                  : %12.3f' % ncmc_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
                 print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
 
             # Compute total log acceptance probability, including all components.
-            logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_logp + new_log_weight - old_log_weight
+            logp_accept = topology_proposal.logp_proposal + geometry_logp + ncmc_logp + new_log_weight - old_log_weight
             if self.verbose:
-                print("logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
-                    % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_logp, old_log_weight, new_log_weight))
+                print("logp_accept = %+10.4e [logp_proposal = %+10.4e, geometry_logp = %+10.4e, ncmc_logp = %+10.4e, old_log_weight = %+10.4e, new_log_weight = %+10.4e]"
+                    % (logp_accept, topology_proposal.logp_proposal, geometry_logp, ncmc_logp, old_log_weight, new_log_weight))
 
             # Accept or reject.
             if np.isnan(logp_accept):
