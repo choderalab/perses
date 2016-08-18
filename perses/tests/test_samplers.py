@@ -127,36 +127,16 @@ def test_hybrid_scheme():
         testsystem = testsystem_class()
         # Test MCMCSampler samplers.
         testsystem.environments = ['vacuum']
-        for environment in testsystem.environments:
-            mcmc_sampler = testsystem.mcmc_samplers[environment]
-            f = partial(mcmc_sampler.run, niterations)
-            f.description = "Testing MCMC sampler with %s '%s'" % (testsystem_name, environment)
-            #yield f
         # Test ExpandedEnsembleSampler samplers.
         from perses.samplers.samplers import ExpandedEnsembleSampler
         for environment in testsystem.environments:
             chemical_state_key = testsystem.proposal_engines[environment].compute_state_key(testsystem.topologies[environment])
-            testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], geometry.FFAllAngleGeometryEngine(metadata={}), scheme='geometry-ncmc', options={'nsteps':100})
+            testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], geometry.FFAllAngleGeometryEngine(metadata={}), scheme='geometry-ncmc', options={'nsteps':1})
             exen_sampler = testsystem.exen_samplers[environment]
             exen_sampler.verbose = True
             f = partial(exen_sampler.run, niterations)
             f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
             yield f
-        # Test SAMSSampler samplers.
-        for environment in testsystem.environments:
-            sams_sampler = testsystem.sams_samplers[environment]
-            f = partial(sams_sampler.run, niterations)
-            f.description = "Testing SAMS sampler with %s '%s'" % (testsystem_name, environment)
-            #yield f
-        # Test MultiTargetDesign sampler for implicit hydration free energy
-        from perses.samplers.samplers import MultiTargetDesign
-        # Construct a target function for identifying mutants that maximize the peptide implicit solvent hydration free energy
-        for environment in testsystem.environments:
-            target_samplers = { testsystem.sams_samplers[environment] : 1.0, testsystem.sams_samplers['vacuum'] : -1.0 }
-            designer = MultiTargetDesign(target_samplers)
-            f = partial(designer.run, niterations)
-            f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
-            #yield f
 
 
 if __name__=="__main__":
