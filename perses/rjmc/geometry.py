@@ -1742,7 +1742,7 @@ class GeometrySystemGenerator(object):
 
 
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -1765,6 +1765,8 @@ class GeometrySystemGenerator(object):
         growth_system : simtk.openmm.System object
             System with the appropriate modifications
         """
+        if use_sterics:
+            raise Exception("Sterics implementation not complete.")
         reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
         growth_system = openmm.System()
         #create the forces:
