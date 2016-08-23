@@ -80,7 +80,7 @@ setup(name='perses',
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        'openmm >=7.0.1',
+        'openmm',
         'numpy',
         'scipy',
         'numexpr',
@@ -90,6 +90,7 @@ setup(name='perses',
         'numexpr',
         'netcdf4',
         'seaborn',
+        'mdtraj',
         #'numba'
         ],
       )

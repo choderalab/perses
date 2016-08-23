@@ -23,6 +23,8 @@ import time
 import netCDF4 as netcdf
 import pickle
 import json
+import mdtraj
+from simtk import unit
 
 ################################################################################
 # LOGGER
@@ -58,6 +60,8 @@ class NetCDFStorage(object):
         # Create standard dimensions.
         if 'iterations' not in self._ncfile.dimensions:
             self._ncfile.createDimension('iterations', size=None)
+        if 'spatial' not in self._ncfile.dimensions:
+            self._ncfile.createDimension('spatial', size=3)
 
     def _find_group(self):
         """Retrieve the specified group, creating it if it does not exist.
@@ -108,7 +112,58 @@ class NetCDFStorage(object):
             If these coordinates are part of multiple frames in a sequence, the total number of frames in the sequence
 
         """
-        pass
+        ncgrp = self._find_group()
+
+        if ((nframes is not None) and (frame is None)) or ((nframes is None) and (frame is not None)):
+            raise Exception("Both 'nfranes' and 'frame' must be used together.")
+
+        def dimension_name(iteration, suffix):
+            dimension_name = ''
+            if self._envname: dimension_name += self._envname + '_'
+            if self._modname: dimension_name += self._modname + '_'
+            dimension_name += varname + '_' + suffix + '_' + str(iteration)
+            return dimension_name
+
+        if iteration is not None:
+            varname += '_' + str(iteration)
+
+        if varname not in ncgrp.variables:
+            # Create dimensions
+            if (frame is not None):
+                frames_dimension_name = dimension_name(varname, 'frames')
+                ncdim = self._ncfile.createDimension(frames_dimension_name, nframes)
+
+            natoms = sum([ 1 for atom in topology.atoms() ])
+            atoms_dimension_name = dimension_name(varname, 'atoms')
+            ncdim = self._ncfile.createDimension(atoms_dimension_name, natoms)
+
+            # Create variables
+            # TODO: Handle cases with no iteration but with specified frames
+            if (iteration is not None) and (frame is not None):
+                ncgrp.createVariable(varname, np.float32, dimensions=('iterations', frames_dimension_name, atoms_dimension_name, 'spatial'), chunksizes=(1,1,natoms,3))
+            elif (iteration is not None):
+                ncgrp.createVariable(varname, np.float32, dimensions=('iterations', atoms_dimension_name, 'spatial'), chunksizes=(1,natoms,3))
+            else:
+                ncgrp.createVariable(varname, np.float32, dimensions=(atoms_dimension_name, 'spatial'), chunksizes=(natoms,3))
+
+        # Write Topology
+        if (frame is None) or (frame == 0):
+            topology_varname = varname + '_topology'
+            if (iteration is not None):
+                topology_varname += '_' + str(iteration)
+            # simtk.openmm.app.Topology is not serializable, but MDTraj Topology is
+            topology = mdtraj.Topology.from_openmm(topology)
+            self.write_object(topology_varname, topology, iteration=iteration)
+
+        # Write positions
+        # TODO: Handle cases with no iteration but with specified frames
+        positions_unit = unit.angstroms
+        if (iteration is not None) and (frame is not None):
+            ncgrp.variables[varname][iteration,frame,:,:] = positions[:,:] / positions_unit
+        elif (iteration is not None):
+            ncgrp.variables[varname][iteration,:,:] = positions[:,:] / positions_unit
+        else:
+            ncgrp.variables[varname] = positions[:,:] / positions_unit
 
     def write_object(self, varname, obj, iteration=None):
         """Serialize a Python object, encoding as JSON when storing as string in NetCDF.
@@ -120,7 +175,7 @@ class NetCDFStorage(object):
         obj : object
             The object to be serialized
         iteration : int, optional, default=None
-            The local iteration for the module, or `None` if this is a singleton        
+            The local iteration for the module, or `None` if this is a singleton
 
         """
         ncgrp = self._find_group()
@@ -131,7 +186,8 @@ class NetCDFStorage(object):
             else:
                 ncgrp.createVariable(varname, str, dimensions=(), chunksizes=(1,))
 
-        encoded = json.dumps(obj)
+        #encoded = json.dumps(obj)
+        encoded = pickle.dumps(obj)
         if iteration is not None:
             ncgrp.variables[varname][iteration] = encoded
         else:
