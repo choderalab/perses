@@ -140,9 +140,9 @@ class NetCDFStorage(object):
             # Create variables
             # TODO: Handle cases with no iteration but with specified frames
             if (iteration is not None) and (frame is not None):
-                ncgrp.createVariable(varname, np.float32, dimensions=('iterations', frames_dimension_name, atoms_dimension_name, 'spatial'), chunksizes=(1,1,natoms,3))
+                ncgrp.createVariable(varname, np.float32, dimensions=(frames_dimension_name, atoms_dimension_name, 'spatial'), chunksizes=(1,natoms,3))
             elif (iteration is not None):
-                ncgrp.createVariable(varname, np.float32, dimensions=('iterations', atoms_dimension_name, 'spatial'), chunksizes=(1,natoms,3))
+                ncgrp.createVariable(varname, np.float32, dimensions=(atoms_dimension_name, 'spatial'), chunksizes=(natoms,3))
             else:
                 ncgrp.createVariable(varname, np.float32, dimensions=(atoms_dimension_name, 'spatial'), chunksizes=(natoms,3))
 
@@ -158,10 +158,8 @@ class NetCDFStorage(object):
         # Write positions
         # TODO: Handle cases with no iteration but with specified frames
         positions_unit = unit.angstroms
-        if (iteration is not None) and (frame is not None):
-            ncgrp.variables[varname][iteration,frame,:,:] = positions[:,:] / positions_unit
-        elif (iteration is not None):
-            ncgrp.variables[varname][iteration,:,:] = positions[:,:] / positions_unit
+        if (frame is not None):
+            ncgrp.variables[varname][frame,:,:] = positions[:,:] / positions_unit
         else:
             ncgrp.variables[varname] = positions[:,:] / positions_unit
 
