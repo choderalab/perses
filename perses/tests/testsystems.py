@@ -2107,14 +2107,18 @@ def run_valence_system():
     testsystem.mcmc_samplers[environment].nsteps = 5
     testsystem.sams_samplers[environment].run(niterations=50)
 
-def run_alanine_valence_system():
+def run_alanine_system(sterics=True):
     """
-    Run valence molecules test system.
+    Run alanine dipeptide in vacuum test system.
 
-    This system only has one environment (vacuum), so SAMS is used.
+    If `sterics == True`, then sterics will be included.
+    Otherwise, only valence terms are used.
 
     """
-    testsystem = AlanineDipeptideValenceTestSystem(storage_filename='output.nc')
+    if sterics:
+        testsystem = AlanineDipeptideTestSystem(storage_filename='output.nc')
+    else:
+        testsystem = AlanineDipeptideValenceTestSystem(storage_filename='output.nc')
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
     testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
@@ -2265,9 +2269,10 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
+    #run_alanine_system(sterics=True)
+    run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
-    run_alanine_valence_system()
     #run_t4_inhibitors()
     #run_imidazole()
     #run_constph_imidazole()
