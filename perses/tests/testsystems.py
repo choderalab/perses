@@ -283,12 +283,13 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
 
     """
     def __init__(self, **kwargs):
-        super(AlanineDipeptideTestSystem, self).__init__(**kwargs)
+        super(AlanineDipeptideValenceTestSystem, self).__init__(**kwargs)
         environments = ['vacuum']
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         system_generators = dict()
+        from pkg_resources import resource_filename
         valence_xml_filename = resource_filename('perses', 'data/amber99sbildn-valence-only.xml')
         system_generators['vacuum'] = SystemGenerator([valence_xml_filename],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
@@ -2113,7 +2114,7 @@ def run_alanine_valence_system():
     This system only has one environment (vacuum), so SAMS is used.
 
     """
-    testsystem = ValenceSmallMoleculeLibraryTestSystem(storage_filename='output.nc')
+    testsystem = AlanineDipeptideValenceTestSystem(storage_filename='output.nc')
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
     testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
