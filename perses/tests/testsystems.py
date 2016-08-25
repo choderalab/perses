@@ -180,7 +180,10 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
         # Set up the proposal engines.
         from perses.rjmc.topology_proposal import PointMutationEngine
-        proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
+        proposal_metadata = {
+            'ffxmls' : ['amber99sbildn.xml'], # take sidechain definitions from this ffxml file
+            'always_change' : True # don't propose self-transitions
+            }
         proposal_engines = dict()
         chain_id = '1'
         allowed_mutations = [[('2','ALA')],[('2','VAL')],[('2','LEU')],[('2','PHE')]]
@@ -308,7 +311,10 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
 
         # Set up the proposal engines.
         from perses.rjmc.topology_proposal import PointMutationEngine
-        proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
+        proposal_metadata = {
+            'ffxmls' : ['amber99sbildn.xml'], # take sidechain definitions from this ffxml file
+            'always_change' : True # don't propose self-transitions
+            }
         proposal_engines = dict()
         chain_id = '1'
         allowed_mutations = [[('2','ALA')],[('2','VAL')],[('2','LEU')],[('2','PHE')]]
