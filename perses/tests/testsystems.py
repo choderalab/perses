@@ -243,6 +243,128 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         self.sams_samplers = sams_samplers
         self.designer = designer
 
+class AlanineDipeptideValenceTestSystem(PersesTestSystem):
+    """
+    Create a consistent set of SAMS samplers useful for testing PointMutationEngine on alanine dipeptide in various solvents.
+    Only valence terms are included---no sterics.
+
+    Properties
+    ----------
+    environments : list of str
+        Available environments: ['vacuum']
+    topologies : dict of simtk.openmm.app.Topology
+        Initial system Topology objects; topologies[environment] is the topology for `environment`
+    positions : dict of simtk.unit.Quantity of [nparticles,3] with units compatible with nanometers
+        Initial positions corresponding to initial Topology objects
+    system_generators : dict of SystemGenerator objects
+        SystemGenerator objects for environments
+    proposal_engines : dict of ProposalEngine
+        Proposal engines
+    themodynamic_states : dict of thermodynamic_states
+        Themodynamic states for each environment
+    mcmc_samplers : dict of MCMCSampler objects
+        MCMCSampler objects for environments
+    exen_samplers : dict of ExpandedEnsembleSampler objects
+        ExpandedEnsembleSampler objects for environments
+    sams_samplers : dict of SAMSSampler objects
+        SAMSSampler objects for environments
+    designer : MultiTargetDesign sampler
+        Example MultiTargetDesign sampler for implicit solvent hydration free energies
+
+    Examples
+    --------
+
+    >>> from perses.tests.testsystems import AlanineDipeptideValenceTestSystem
+    >>> testsystem = AlanineDipeptideValenceTestSystem()
+    # Build a system
+    >>> system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
+    # Retrieve a SAMSSampler
+    >>> sams_sampler = testsystem.sams_samplers['vacuum']
+
+    """
+    def __init__(self, **kwargs):
+        super(AlanineDipeptideTestSystem, self).__init__(**kwargs)
+        environments = ['vacuum']
+
+        # Create a system generator for our desired forcefields.
+        from perses.rjmc.topology_proposal import SystemGenerator
+        system_generators = dict()
+        valence_xml_filename = resource_filename('perses', 'data/amber99sbildn-valence-only.xml')
+        system_generators['vacuum'] = SystemGenerator([valence_xml_filename],
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+            use_antechamber=False)
+
+        # Create peptide in solvent.
+        from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
+        from pkg_resources import resource_filename
+        pdb_filename = resource_filename('openmmtools', 'data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
+        from simtk.openmm.app import PDBFile
+        topologies = dict()
+        positions = dict()
+        pdbfile = PDBFile(pdb_filename)
+        topologies['vacuum'] = pdbfile.getTopology()
+        positions['vacuum'] = pdbfile.getPositions(asNumpy=True)
+
+        # Set up the proposal engines.
+        from perses.rjmc.topology_proposal import PointMutationEngine
+        proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
+        proposal_engines = dict()
+        chain_id = '1'
+        allowed_mutations = [[('2','ALA')],[('2','VAL')],[('2','LEU')],[('2','PHE')]]
+        for environment in environments:
+            proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+
+        # Generate systems
+        systems = dict()
+        for environment in environments:
+            systems[environment] = system_generators[environment].build_system(topologies[environment])
+
+        # Define thermodynamic state of interest.
+        from perses.samplers.thermodynamics import ThermodynamicState
+        thermodynamic_states = dict()
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
+        thermodynamic_states['vacuum'] = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
+
+        # Create SAMS samplers
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+        sams_samplers = dict()
+        for environment in environments:
+            storage = None
+            if self.storage:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+
+            chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
+            sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
+            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+            mcmc_samplers[environment].verbose = True
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
+            exen_samplers[environment].verbose = True
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
+            sams_samplers[environment].verbose = True
+
+        # Create test MultiTargetDesign sampler.
+        from perses.samplers.samplers import MultiTargetDesign
+        target_samplers = { sams_samplers['vacuum'] : 1.0 }
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
+        designer.verbose = True
+
+        # Store things.
+        self.environments = environments
+        self.topologies = topologies
+        self.positions = positions
+        self.systems = systems
+        self.system_generators = system_generators
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+        self.sams_samplers = sams_samplers
+        self.designer = designer
+
 def load_via_pdbfixer(filename=None, pdbid=None):
     """
     Load a PDB file via PDBFixer, keeping all heterogens and building in protons for any crystallographic waters.
@@ -1984,6 +2106,20 @@ def run_valence_system():
     testsystem.mcmc_samplers[environment].nsteps = 5
     testsystem.sams_samplers[environment].run(niterations=50)
 
+def run_alanine_valence_system():
+    """
+    Run valence molecules test system.
+
+    This system only has one environment (vacuum), so SAMS is used.
+
+    """
+    testsystem = ValenceSmallMoleculeLibraryTestSystem(storage_filename='output.nc')
+    environment = 'vacuum'
+    testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
+    testsystem.mcmc_samplers[environment].nsteps = 500
+    testsystem.sams_samplers[environment].run(niterations=500)
+
 def test_valence_write_pdb_ncmc_switching():
     """
     Run abl test system.
@@ -2129,7 +2265,8 @@ def run_fused_rings():
 
 if __name__ == '__main__':
     #run_fused_rings()
-    run_valence_system()
+    #run_valence_system()
+    run_alanine_valence_system()
     #run_t4_inhibitors()
     #run_imidazole()
     #run_constph_imidazole()
