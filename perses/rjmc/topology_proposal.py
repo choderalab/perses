@@ -596,7 +596,7 @@ class PolymerProposalEngine(ProposalEngine):
             new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(modified_residues[index])
             _ , local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res)
 
-            for backbone_name in ['CA','HA','N']:
+            for backbone_name in ['CA','N']:
                 new_index, old_index = match_backbone(old_residues[index], modified_residues[index], backbone_name)
                 local_atom_map[new_index] = old_index
 
