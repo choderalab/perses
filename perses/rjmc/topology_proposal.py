@@ -625,9 +625,7 @@ class PolymerProposalEngine(ProposalEngine):
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
 
         atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
-        atomexpr = oechem.OEExprOpts_AtomicNumber
         bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-        bondexpr = oechem.OEExprOpts_BondOrder
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
 
         def forcibly_matched(mcs, proposed, atom_name):
@@ -641,7 +639,7 @@ class PolymerProposalEngine(ProposalEngine):
             return old_atom, new_atom
 
         force_matches = list()
-        for matched_atom_name in ['C','O']:#,'CA']:#,'HA']:#,'N']:
+        for matched_atom_name in ['C','O']:
             force_matches.append(oechem.OEHasAtomName(matched_atom_name))
 
         for force_match in force_matches:
