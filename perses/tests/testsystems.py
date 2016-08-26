@@ -289,6 +289,10 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         super(AlanineDipeptideValenceTestSystem, self).__init__(**kwargs)
         environments = ['vacuum']
 
+        # Write atom-by-atom geometry output.
+        self.geometry_engine.write_proposal_pdb = True
+        self.geometry_engine.pdb_filename_prefix = 'geometry'
+
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         system_generators = dict()
@@ -2126,6 +2130,7 @@ def run_alanine_system(sterics=True):
     else:
         testsystem = AlanineDipeptideValenceTestSystem(storage_filename='output.nc')
     environment = 'vacuum'
+    print(testsystem.__class__.__name__)
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
     testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
     testsystem.mcmc_samplers[environment].nsteps = 500
