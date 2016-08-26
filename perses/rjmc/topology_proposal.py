@@ -557,19 +557,19 @@ class PolymerProposalEngine(ProposalEngine):
         # atom : simtk.openmm.app.topology.Atom
         def match_backbone(old_residue, new_residue, atom_name):
             """
-            Forcibly including CA, HA, and N in the map even if they don't meet
+            Forcibly including CA and N in the map even if they don't meet
             matching criteria
             """
             found_old_atom = False
             for atom in old_residue.atoms():
-                if atom.name.startswith(atom_name):
+                if atom.name == atom_name:
                     old_atom = atom
                     found_old_atom = True
                     break
             assert found_old_atom
             found_new_atom = False
             for atom in new_residue.atoms():
-                if atom.name.startswith(atom_name):
+                if atom.name == atom_name:
                     new_atom = atom
                     found_new_atom = True
                     break
