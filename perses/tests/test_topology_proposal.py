@@ -243,6 +243,51 @@ def test_run_point_mutation_propose():
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
 
+def test_alanine_dipeptide_map():
+    pdb_filename = resource_filename('openmmtools', 'data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
+    from simtk.openmm.app import PDBFile
+    pdbfile = PDBFile(pdb_filename)
+    import perses.rjmc.topology_proposal as topology_proposal
+    modeller = app.Modeller(pdbfile.topology, pdbfile.positions)
+
+    ff_filename = "amber99sbildn.xml"
+    allowed_mutations = [[('2', 'PHE')]]
+
+    ff = app.ForceField(ff_filename)
+    system = ff.createSystem(modeller.topology)
+    chain_id = ' '
+
+    metadata = dict()
+    metadata['always_change'] = True
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, allowed_mutations=allowed_mutations)
+
+    proposal = pm_top_engine.propose(system, modeller.topology)
+
+    new_topology = proposal.new_topology
+    new_system = proposal.new_system
+    old_topology = proposal.old_topology
+    old_system = proposal.old_system
+    atom_map = proposal.old_to_new_atom_map
+
+    for k, atom in enumerate(old_topology.atoms()):
+        atom_idx = atom.index
+        if atom_idx in atom_map.keys():
+            atom2_idx = atom_map[atom_idx]
+            for l, atom2 in enumerate(new_topology.atoms()):
+                if atom2.index == atom2_idx:
+                    new_atom = atom2
+                    break
+            old_name = atom.name
+            new_name = new_atom.name
+            print('\n%s to %s' % (str(atom.residue), str(new_atom.residue)))
+            print('old_atom.index vs index in topology: %s %s' % (atom_idx, k))
+            print('new_atom.index vs index in topology: %s %s' % (atom2_idx, l))
+            print('Who was matched: old %s to new %s' % (old_name, new_name))
+            if atom2_idx != l:
+                mass_by_map = system.getParticleMass(atom2_idx)
+                mass_by_sys = system.getParticleMass(l)
+                print('Should have matched %.2f actually got %.2f' % (mass_by_map, mass_by_sys))
 
 def test_mutate_from_every_amino_to_every_other():
     """
@@ -440,11 +485,12 @@ def test_run_peptide_library_engine():
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
-    test_run_point_mutation_propose()
-    test_mutate_from_every_amino_to_every_other()
-    test_specify_allowed_mutants()
-    test_propose_self()
-    test_limiting_allowed_residues()
-    test_run_peptide_library_engine()
-#    test_small_molecule_proposals()
 
+#    test_run_point_mutation_propose()
+#    test_mutate_from_every_amino_to_every_other()
+#    test_specify_allowed_mutants()
+#    test_propose_self()
+#    test_limiting_allowed_residues()
+#    test_run_peptide_library_engine()
+#    test_small_molecule_proposals()
+    test_alanine_dipeptide_map()

@@ -624,7 +624,7 @@ class PolymerProposalEngine(ProposalEngine):
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
 
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_AtomicNumber
         bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
 
@@ -771,9 +771,14 @@ class PointMutationEngine(PolymerProposalEngine):
         """
 
         # chain : simtk.openmm.app.topology.Chain
+        chain_found = False
         for chain in modeller.topology.chains():
             if chain.id == chain_id:
+                chain_found = True
                 break
+        if not chain_found:
+            chains = [ chain.id for chain in modeller.topology.chains() ]
+            raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
         residue_id_to_index = [residue.id for residue in chain._residues]
         # location_prob : np.array, probability value for each residue location (uniform)
         if 'always_change' in self._metadata and self._metadata['always_change']:
