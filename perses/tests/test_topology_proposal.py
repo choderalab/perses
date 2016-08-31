@@ -287,7 +287,7 @@ def test_alanine_dipeptide_map():
             if atom2_idx != l:
                 mass_by_map = system.getParticleMass(atom2_idx)
                 mass_by_sys = system.getParticleMass(l)
-                print('Should have matched %.2f actually got %.2f' % (mass_by_map, mass_by_sys))
+                print('Should have matched %s actually got %s' % (mass_by_map, mass_by_sys))
 
 def test_mutate_from_every_amino_to_every_other():
     """
