@@ -28,7 +28,7 @@ install:
 
 script:
   - conda config --add channels ${ORGNAME}
-  - conda build devtools/conda-recipe
+  - conda build  --keep-old-work devtools/conda-recipe
   - source activate _test
   # Install test dependencies in test environment.
   - conda install --yes --quiet pip nose nose-timer
