@@ -27,16 +27,16 @@ install:
   - if [ "$TRAVIS_SECURE_ENV_VARS" == false ]; then echo "OpenEye license will not be installed in forks."; fi
 
 script:
+  # Add channels
   - conda config --add channels ${ORGNAME}
-  - conda build  --keep-old-work devtools/conda-recipe
-  - source activate _test
-  # Install test dependencies in test environment.
+  # Build recipe
+  - conda build devtools/conda-recipe
+  # Install locally-built package
+  - conda install --use-local perses-dev
+  # Install test dependencies
   - conda install --yes --quiet pip nose nose-timer
-  #- pip install --upgrade pip
+  # Install and test openeye tools
   - pip install $OPENEYE_CHANNEL openeye-toolkits && python -c "import openeye; print(openeye.__version__)"
-  # Fix openmm and parmed double dependencies
-  #- conda remove --yes parmed parmed-dev && conda install --yes parmed-dev
-  #- conda remove --yes openmm openmm-dev && conda install --yes openmm-dev
   # Run tests
   #- cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=3 --with-doctest --with-timer && cd ..
   - cd devtools && nosetests $NOSETESTS --nocapture --verbosity=3 --with-timer && cd ..
