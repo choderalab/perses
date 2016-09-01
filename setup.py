@@ -80,7 +80,8 @@ setup(name='perses',
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        'openmm >=7.0.1',
+        #'openmm >=7.0.1', # This fails if the omnia 'dev' channel is included (JDC)
+        'openmm',
         'numpy',
         'scipy',
         'numexpr',
