@@ -32,7 +32,7 @@ script:
   # Build recipe
   - conda build devtools/conda-recipe
   # Install locally-built package
-  - conda install --use-local perses-dev
+  - conda install --yes --use-local perses-dev
   # Install test dependencies
   - conda install --yes --quiet pip nose nose-timer
   # Install and test openeye tools
