@@ -1730,9 +1730,9 @@ class GeometrySystemGenerator(object):
     with only valence terms and special parameters to assist in
     geometry proposals.
     """
-    _HarmonicBondForceEnergy = "select(step({} - growth_idx), (K/2)*(r-r0)^2, 0);"
-    _HarmonicAngleForceEnergy = "select(step({} - growth_idx), (K/2)*(theta-theta0)^2, 0);"
-    _PeriodicTorsionForceEnergy = "select(step({} - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
+    _HarmonicBondForceEnergy = "select(step({} - growth_idx + 0.5), (K/2)*(r-r0)^2, 0);"
+    _HarmonicAngleForceEnergy = "select(step({} - growth_idx + 0.5), (K/2)*(theta-theta0)^2, 0);"
+    _PeriodicTorsionForceEnergy = "select(step({} - growth_idx + 0.5), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self):
         self._stericsNonbondedEnergy = "select(step({}-max(growth_idx1, growth_idx2)), U_sterics_active, 0);"
