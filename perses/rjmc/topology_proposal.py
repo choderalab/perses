@@ -911,9 +911,11 @@ class PointMutationEngine(PolymerProposalEngine):
                 break
         for wt_res, res in zip(wt_chain._residues, chain._residues):
             if wt_res.name != res.name:
-                if chemical_state_key != '':
+                if chemical_state_key:
                     chemical_state_key+='-'
                 chemical_state_key+= str(wt_res.name)+str(res.id)+str(res.name)
+        if not chemical_state_key:
+            chemical_state_key = 'WT'
         return chemical_state_key
 
 class PeptideLibraryEngine(PolymerProposalEngine):
