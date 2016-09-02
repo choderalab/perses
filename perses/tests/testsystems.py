@@ -182,8 +182,8 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         from perses.rjmc.topology_proposal import PointMutationEngine
         proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
         proposal_engines = dict()
-        chain_id = '1'
-        allowed_mutations = [[('2','ALA')],[('2','VAL')],[('2','LEU')],[('2','PHE')]]
+        chain_id = ' '
+        allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','PHE')]]
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 

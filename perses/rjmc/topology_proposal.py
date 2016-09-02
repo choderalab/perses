@@ -737,7 +737,7 @@ class PointMutationEngine(PolymerProposalEngine):
     def _undo_old_mutants(self, modeller, chain_id):
         index_to_new_residues = dict()
         old_key = self.compute_state_key(modeller.topology)
-        if old_key == '':
+        if old_key == 'WT':
             return index_to_new_residues
         for chain in modeller.topology.chains():
             if chain.id == chain_id:
@@ -784,7 +784,7 @@ class PointMutationEngine(PolymerProposalEngine):
         if 'always_change' in self._metadata and self._metadata['always_change']:
             old_key = self.compute_state_key(modeller.topology)
             location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations)+1)])
-            if old_key == '':
+            if old_key == 'WT':
                 location_prob[len(allowed_mutations)] = 0.0
             else:
                 current_mutation = list()
