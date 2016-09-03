@@ -1792,12 +1792,6 @@ class GeometrySystemGenerator(object):
         modified_torsion_force.addPerTorsionParameter("growth_idx")
         modified_torsion_force.addGlobalParameter(parameter_name, 0)
 
-        modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
-        modified_sterics_force.addPerParticleParameter("sigma")
-        modified_sterics_force.addPerParticleParameter("epsilon")
-        modified_sterics_force.addPerParticleParameter("growth_idx")
-        modified_sterics_force.addGlobalParameter(parameter_name, 0)
-
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
         growth_system.addForce(modified_torsion_force)
