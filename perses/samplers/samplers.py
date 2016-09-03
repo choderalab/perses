@@ -1096,7 +1096,7 @@ class SAMSSampler(object):
     >>> sams_sampler.run() # doctest: +ELLIPSIS
     ...
     """
-    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='default', storage=None):
+    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='two-stage', storage=None):
         """
         Create a SAMS Sampler.
 
@@ -1157,12 +1157,21 @@ class SAMSSampler(object):
             self.log_target_probabilities[state_key] = 0.0
 
         # Update estimates of logZ.
-        if self.update_method == 'default':
+        if self.update_method == 'one-stage':
             # Based on Eq. 9 of Ref. [1]
             gamma = 1.0 / float(self.iteration+1)
-            self.logZ[state_key] += gamma / np.exp(self.log_target_probabilities[state_key])
+        elif self.update_method == 'two-stage':
+            # Keep gamma large until second stage is activated.
+            if not hasattr(self, 'second_stage_start'):
+                # First stage.
+                gamma = 1.0
+                # TODO: Determine when to switch to second stage
+            else:
+                # Second stage.
+                gamma = 1.0 / float(self.iteration - self.second_stage_start + 1)
         else:
             raise Exception("SAMS update method '%s' unknown." % self.update_method)
+        self.logZ[state_key] += gamma / np.exp(self.log_target_probabilities[state_key])
 
         # Update log weights for sampler.
         self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }

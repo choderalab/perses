@@ -146,6 +146,9 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         super(AlanineDipeptideTestSystem, self).__init__(**kwargs)
         environments = ['explicit', 'implicit', 'vacuum']
 
+        # Use sterics in proposals
+        self.geometry_engine.use_sterics = True
+
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         system_generators = dict()
@@ -291,8 +294,8 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         environments = ['vacuum']
 
         # Write atom-by-atom geometry output.
-        self.geometry_engine.write_proposal_pdb = True
-        self.geometry_engine.pdb_filename_prefix = 'geometry'
+        #self.geometry_engine.write_proposal_pdb = True
+        #self.geometry_engine.pdb_filename_prefix = 'geometry'
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -2135,7 +2138,9 @@ def run_alanine_system(sterics=True):
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
     testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
     testsystem.mcmc_samplers[environment].nsteps = 500
-    testsystem.sams_samplers[environment].run(niterations=100)
+    testsystem.sams_samplers[environment].update_method = 'two-stage'
+    testsystem.sams_samplers[environment].second_stage_start = 100 # iteration to start second stage
+    testsystem.sams_samplers[environment].run(niterations=200)
 
 def test_valence_write_pdb_ncmc_switching():
     """

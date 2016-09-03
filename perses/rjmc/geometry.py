@@ -73,8 +73,15 @@ class GeometryEngine(object):
 class FFAllAngleGeometryEngine(GeometryEngine):
     """
     This is an implementation of GeometryEngine which uses all valence terms and OpenMM
+
+    Parameters
+    ----------
+    use_sterics : bool, optional, default=False
+        If True, sterics will be used in proposals to minimize clashes.
+        This may significantly slow down the simulation, however.
+
     """
-    def __init__(self, metadata=None):
+    def __init__(self, metadata=None, use_sterics=False):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
@@ -83,6 +90,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._torsion_coordinate_time = 0.0
         self._position_set_time = 0.0
         self.verbose = False
+        self.use_sterics = use_sterics
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -200,7 +208,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system_time = time.time() - system_init
         elif direction=='reverse':
             if new_positions is None:
@@ -208,7 +216,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
