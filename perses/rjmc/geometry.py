@@ -1845,7 +1845,9 @@ class GeometrySystemGenerator(object):
                 growth_idx_1 = growth_indices.index(particle_index_1) + 1 if particle_index_1 in growth_indices else 0
                 growth_idx_2 = growth_indices.index(particle_index_2) + 1 if particle_index_2 in growth_indices else 0
                 growth_idx = max(growth_idx_1, growth_idx_2)
-                custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
+                # Only need to add terms that are nonzero
+                if (chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0):
+                    custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
 
         #copy parameters for sterics parameters in nonbonded force
         if 'NonbondedForce' in reference_forces.keys() and use_sterics:
