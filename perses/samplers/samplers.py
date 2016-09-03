@@ -120,7 +120,12 @@ class SamplerState(object):
     >>> # Create a sampler state manually.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
 
-    TODO:
+    Notes
+    -----
+    CMMotionRemover forces are automatically removed from the system.
+
+    TODO
+    ----
     * Can we remove the need to create a Context in initializing the sampler state by using the Reference platform and skipping energy calculations?
 
     """
@@ -130,6 +135,12 @@ class SamplerState(object):
             assert quantity_is_finite(self.velocities)
 
         self.system = copy.deepcopy(system)
+
+        # Remove CMMotionRemover, since it can cause problems with GHMC and NCMC.
+        forces_to_remove = [ force_index for force_index in range(self.system.getNumForces()) if (self.system.getForce(force_index).__class__.__name__ == 'CMMotionRemover') ]
+        for force_index in reversed(forces_to_remove):
+            system.removeForce(force_index)
+
         self.positions = positions
         self.velocities = velocities
         self.box_vectors = box_vectors

@@ -1743,20 +1743,26 @@ class GeometrySystemGenerator(object):
     _PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self):
-        self._stericsNonbondedEnergy = "select(step({}+0.1 - growth_idx), U_sterics_active, 0);"
-        self._stericsNonbondedEnergy += "growth_idx = max(growth_idx1, growth_idx2);"
-        self._stericsNonbondedEnergy += "U_sterics_active = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
-        self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
-
         ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                                   # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
+        # Nonbonded sterics and electrostatics.
+        # TODO: Allow user to select whether electrostatics or sterics components are included in the nonbonded interaction energy.
+        self._nonbondedEnergy = "select(step({}+0.1 - growth_idx), U_sterics + U_electrostatics, 0);"
+        self._nonbondedEnergy += "growth_idx = max(growth_idx1, growth_idx2);"
+        # Sterics
+        self._nonbondedEnergy += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
+        self._nonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
+        # Electrostatics
+        self._nonbondedEnergy += "U_electrostatics = ONE_4PI_EPS0*charge1*charge2/r;"
+        self._nonbondedEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
+
+        # Exceptions (always included)
         self._nonbondedExceptionEnergy = "select(step({}+0.1 - growth_idx), U_exception, 0);"
-        #self._nonbondedExceptionEnergy += "U_exception = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._nonbondedExceptionEnergy += "U_exception = ONE_4PI_EPS0*chargeprod/r + 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._nonbondedExceptionEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
 
-        self.sterics_cutoff_distance = 6.0 * units.angstroms # cutoff for sterics
+        self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
 
     def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
@@ -1867,8 +1873,8 @@ class GeometrySystemGenerator(object):
 
         #copy parameters for sterics parameters in nonbonded force
         if 'NonbondedForce' in reference_forces.keys() and use_sterics:
-            modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
-
+            modified_sterics_force = openmm.CustomNonbondedForce(self._nonbondedEnergy.format(parameter_name))
+            modified_sterics_force.addPerParticleParameter("charge")
             modified_sterics_force.addPerParticleParameter("sigma")
             modified_sterics_force.addPerParticleParameter("epsilon")
             modified_sterics_force.addPerParticleParameter("growth_idx")
@@ -1885,12 +1891,16 @@ class GeometrySystemGenerator(object):
             for particle_index in range(reference_nonbonded_force.getNumParticles()):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
                 growth_idx = new_particle_indices.index(particle_index) + 1 if particle_index in new_particle_indices else 0
-                modified_sterics_force.addParticle([sigma, epsilon, growth_idx])
+                modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
+                if growth_idx > 0:
+                    print('Adding NonbondedForce particle %5d : %8.3f elementary charge, %.3f A, %.3f kcal/mol, growth_idx %d' % (particle_index, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
                 [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
                 modified_sterics_force.addExclusion(particle_index_1, particle_index_2)
+            # Only compute interactions of new particles with all other particles
+            # TODO: Allow inteactions to be resticted to only the residue being grown.
             modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(old_particle_indices))
             modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(new_particle_indices))
 
