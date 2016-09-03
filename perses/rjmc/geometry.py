@@ -1739,9 +1739,6 @@ class GeometrySystemGenerator(object):
         self._stericsNonbondedEnergy += "U_sterics_active = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
 
-
-
-
     def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
