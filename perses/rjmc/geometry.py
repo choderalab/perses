@@ -1996,6 +1996,8 @@ class ProposalOrderTools(object):
     It encapsulates funcionality needed by the geometry engine. Atoms can be proposed without
     torsions or even angles, though this may not be recommended. Default is to require torsions.
 
+    Hydrogens are added last in growth order.
+
     Parameters
     ----------
     topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
@@ -2023,23 +2025,25 @@ class ProposalOrderTools(object):
         logp_torsion_choice : float
             log probability of the chosen torsions
         """
-        logp_torsion_choice = 0.0
-        atoms_torsions = collections.OrderedDict()
         if direction=='forward':
             topology = self._topology_proposal.new_topology
             system = self._topology_proposal.new_system
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
-            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
+            unique_atoms = self._topology_proposal.unique_new_atoms
             #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
         elif direction=='reverse':
             topology = self._topology_proposal.old_topology
             system = self._topology_proposal.old_system
             structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
-            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
+            unique_atoms = self._topology_proposal.unique_old_atoms
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
         else:
             raise ValueError("direction parameter must be either forward or reverse.")
+
+        # Determine list of atoms to be added.
+        new_hydrogen_atoms = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number == 1 ]
+        new_heavy_atoms    = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number != 1 ]
 
         # DEBUG
         #print('STRUCTURE')
@@ -2048,16 +2052,43 @@ class ProposalOrderTools(object):
         #    print(atom, atom.bonds, atom.angles, atom.dihedrals)
         #print('')
 
-        while(len(new_atoms))>0:
-            eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-            if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
-                raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
-            for atom in eligible_atoms:
-                chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
-                atoms_torsions[atom] = chosen_torsion
-                logp_torsion_choice += logp_choice
-                new_atoms.remove(atom)
-                atoms_with_positions.append(atom)
+        def add_atoms(new_atoms, atoms_torsions):
+            """
+            Add the specified atoms to the ordered list of torsions to be drawn.
+
+            Parameters
+            ----------
+            new_atoms : list
+                List of atoms to be added.
+            atoms_torsions : OrderedDict
+                List of torsions to be added.
+
+            Returns
+            -------
+            logp_torsion_choice : float
+                The log torsion cchoice probability associated with these added torsions.
+
+            """
+            logp_torsion_choice = 0.0
+            while(len(new_atoms))>0:
+                eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
+                if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
+                    raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
+                for atom in eligible_atoms:
+                    chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
+                    atoms_torsions[atom] = chosen_torsion
+                    logp_torsion_choice += logp_choice
+                    new_atoms.remove(atom)
+                    atoms_with_positions.append(atom)
+
+            return logp_torsion_choice
+
+        # Handle heavy atoms before hydrogen atoms
+        logp_torsion_choice = 0.0
+        atoms_torsions = collections.OrderedDict()
+        logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
+        logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
+
         return atoms_torsions, logp_torsion_choice
 
 
