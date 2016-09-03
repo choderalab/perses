@@ -1730,17 +1730,21 @@ class GeometrySystemGenerator(object):
     with only valence terms and special parameters to assist in
     geometry proposals.
     """
-    _HarmonicBondForceEnergy = "select(step({} - growth_idx), (K/2)*(r-r0)^2, 0);"
-    _HarmonicAngleForceEnergy = "select(step({} - growth_idx), (K/2)*(theta-theta0)^2, 0);"
-    _PeriodicTorsionForceEnergy = "select(step({} - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
+    _HarmonicBondForceEnergy = "select(step({}+0.5 - growth_idx), (K/2)*(r-r0)^2, 0);"
+    _HarmonicAngleForceEnergy = "select(step({}+0.5 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
+    _PeriodicTorsionForceEnergy = "select(step({}+0.5 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self):
-        self._stericsNonbondedEnergy = "select(step({}-max(growth_idx1, growth_idx2)), U_sterics_active, 0);"
+        self._stericsNonbondedEnergy = "select(step({}+0.5-max(growth_idx1, growth_idx2)), U_sterics_active, 0);"
         self._stericsNonbondedEnergy += "U_sterics_active = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
 
+        ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
+                                  # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
-
+        self._nonbondedExceptionEnergy = "select(step({}+0.5-growth_idx), U_exception, 0);"
+        self._nonbondedExceptionEnergy += "U_exception = ONE_4PI_EPS0*chargeprod/r + 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
+        self._nonbondedExceptionEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
 
     def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
@@ -1789,12 +1793,6 @@ class GeometrySystemGenerator(object):
         modified_torsion_force.addPerTorsionParameter("growth_idx")
         modified_torsion_force.addGlobalParameter(parameter_name, 0)
 
-        modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
-        modified_sterics_force.addPerParticleParameter("sigma")
-        modified_sterics_force.addPerParticleParameter("epsilon")
-        modified_sterics_force.addPerParticleParameter("growth_idx")
-        modified_sterics_force.addGlobalParameter(parameter_name, 0)
-
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
         growth_system.addForce(modified_torsion_force)
@@ -1830,6 +1828,28 @@ class GeometrySystemGenerator(object):
                 continue
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
+        # Add (1,4) exceptions, regardless of whether 'use_sterics' is specified, because these are part of the valence forces.
+        if 'NonbondedForce' in reference_forces.keys():
+            custom_bond_force = openmm.CustomBondForce(self._nonbondedExceptionEnergy.format(parameter_name))
+            custom_bond_force.addPerBondParameter("chargeprod")
+            custom_bond_force.addPerBondParameter("sigma")
+            custom_bond_force.addPerBondParameter("epsilon")
+            custom_bond_force.addPerBondParameter("growth_idx")
+            custom_bond_force.addGlobalParameter(parameter_name, 0)
+            growth_system.addForce(custom_bond_force)
+            # Add exclusions, which are active at all times.
+            # (1,4) exceptions are always included, since they are part of the valence terms.
+            reference_nonbonded_force = reference_forces['NonbondedForce']
+            for exception_index in range(reference_nonbonded_force.getNumExceptions()):
+                [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
+                growth_idx_1 = growth_indices.index(particle_index_1) + 1 if particle_index_1 in growth_indices else 0
+                growth_idx_2 = growth_indices.index(particle_index_2) + 1 if particle_index_2 in growth_indices else 0
+                growth_idx = max(growth_idx_1, growth_idx_2)
+                # Only need to add terms that are nonzero
+                if (chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0):
+                    #print('Adding CustomBondForce: %5d %5d %8.3f elementary charge, %.3f A, %.3f kcal/mol, growth_idx %d' % (chargeprod/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
+                    custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
+
         #copy parameters for sterics parameters in nonbonded force
         if 'NonbondedForce' in reference_forces.keys() and use_sterics:
             modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
@@ -1839,10 +1859,16 @@ class GeometrySystemGenerator(object):
             modified_sterics_force.addGlobalParameter(parameter_name, 0)
             growth_system.addForce(modified_sterics_force)
             reference_nonbonded_force = reference_forces['NonbondedForce']
+            # Add particle parameters.
             for particle_index in range(reference_nonbonded_force.getNumParticles()):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
                 growth_idx = growth_indices.index(particle_index) + 1 if particle_index in growth_indices else 0
                 modified_sterics_force.addParticle([sigma, epsilon, growth_idx])
+            # Add exclusions, which are active at all times.
+            # (1,4) exceptions are always included, since they are part of the valence terms.
+            for exception_index in range(reference_nonbonded_force.getNumExceptions()):
+                [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
+                modified_sterics_force.addExclusion(particle_index_1, particle_index_2)
             new_particle_indices = [atom.idx for atom in growth_indices]
             old_particle_indices = [idx for idx in range(reference_nonbonded_force.getNumParticles()) if idx not in new_particle_indices]
             modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(old_particle_indices))
@@ -1901,22 +1927,22 @@ class GeometrySystemGenerator(object):
         omega(oemol)
 
         #get the list of torsions in the molecule that are not about a rotatable bond
+        # Note that only torsions involving heavy atoms are enumerated here.
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
         non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
         relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
 
-
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 40.0*units.kilojoule_per_mole
+        k = 120.0*units.kilocalories_per_mole # stddev of 12 degrees
         #print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
             # Determine phase in [-pi,+pi) interval
             #phase = (np.pi)*units.radians+angle
-            phase = torsion.radians + np.pi
+            phase = torsion.radians + np.pi # TODO: Check that this is the correct convention?
             while (phase >= np.pi):
                 phase -= 2*np.pi
             while (phase < -np.pi):
@@ -1926,7 +1952,7 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
             #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
-            torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, 0])
+            torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
 
         return torsion_force
 
@@ -1995,6 +2021,8 @@ class ProposalOrderTools(object):
     It encapsulates funcionality needed by the geometry engine. Atoms can be proposed without
     torsions or even angles, though this may not be recommended. Default is to require torsions.
 
+    Hydrogens are added last in growth order.
+
     Parameters
     ----------
     topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
@@ -2022,23 +2050,25 @@ class ProposalOrderTools(object):
         logp_torsion_choice : float
             log probability of the chosen torsions
         """
-        logp_torsion_choice = 0.0
-        atoms_torsions = collections.OrderedDict()
         if direction=='forward':
             topology = self._topology_proposal.new_topology
             system = self._topology_proposal.new_system
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
-            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
+            unique_atoms = self._topology_proposal.unique_new_atoms
             #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
         elif direction=='reverse':
             topology = self._topology_proposal.old_topology
             system = self._topology_proposal.old_system
             structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
-            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
+            unique_atoms = self._topology_proposal.unique_old_atoms
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
         else:
             raise ValueError("direction parameter must be either forward or reverse.")
+
+        # Determine list of atoms to be added.
+        new_hydrogen_atoms = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number == 1 ]
+        new_heavy_atoms    = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number != 1 ]
 
         # DEBUG
         #print('STRUCTURE')
@@ -2047,16 +2077,43 @@ class ProposalOrderTools(object):
         #    print(atom, atom.bonds, atom.angles, atom.dihedrals)
         #print('')
 
-        while(len(new_atoms))>0:
-            eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-            if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
-                raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
-            for atom in eligible_atoms:
-                chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
-                atoms_torsions[atom] = chosen_torsion
-                logp_torsion_choice += logp_choice
-                new_atoms.remove(atom)
-                atoms_with_positions.append(atom)
+        def add_atoms(new_atoms, atoms_torsions):
+            """
+            Add the specified atoms to the ordered list of torsions to be drawn.
+
+            Parameters
+            ----------
+            new_atoms : list
+                List of atoms to be added.
+            atoms_torsions : OrderedDict
+                List of torsions to be added.
+
+            Returns
+            -------
+            logp_torsion_choice : float
+                The log torsion cchoice probability associated with these added torsions.
+
+            """
+            logp_torsion_choice = 0.0
+            while(len(new_atoms))>0:
+                eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
+                if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
+                    raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
+                for atom in eligible_atoms:
+                    chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
+                    atoms_torsions[atom] = chosen_torsion
+                    logp_torsion_choice += logp_choice
+                    new_atoms.remove(atom)
+                    atoms_with_positions.append(atom)
+
+            return logp_torsion_choice
+
+        # Handle heavy atoms before hydrogen atoms
+        logp_torsion_choice = 0.0
+        atoms_torsions = collections.OrderedDict()
+        logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
+        logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
+
         return atoms_torsions, logp_torsion_choice
 
 
