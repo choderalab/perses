@@ -1861,7 +1861,7 @@ class GeometrySystemGenerator(object):
                 growth_idx_2 = new_particle_indices.index(particle_index_2) + 1 if particle_index_2 in new_particle_indices else 0
                 growth_idx = max(growth_idx_1, growth_idx_2)
                 # Only need to add terms that are nonzero and involve newly added atoms.
-                if (growth_idx > 0) and (chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0):
+                if (growth_idx > 0) and ((chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0)):
                     print('Adding CustomBondForce: %5d %5d : %8.3f elementary charge, %.3f A, %.3f kcal/mol, growth_idx %d' % (particle_index_1, particle_index_2, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
                     custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
 
