@@ -1730,9 +1730,9 @@ class GeometrySystemGenerator(object):
     with only valence terms and special parameters to assist in
     geometry proposals.
     """
-    _HarmonicBondForceEnergy = "select(step({} - growth_idx), (K/2)*(r-r0)^2, 0);"
-    _HarmonicAngleForceEnergy = "select(step({} - growth_idx), (K/2)*(theta-theta0)^2, 0);"
-    _PeriodicTorsionForceEnergy = "select(step({} - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
+    _HarmonicBondForceEnergy = "select(step({}+0.5 - growth_idx), (K/2)*(r-r0)^2, 0);"
+    _HarmonicAngleForceEnergy = "select(step({}+0.5 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
+    _PeriodicTorsionForceEnergy = "select(step({}+0.5 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self):
         self._stericsNonbondedEnergy = "select(step({}-max(growth_idx1, growth_idx2)), U_sterics_active, 0);"
@@ -1901,6 +1901,7 @@ class GeometrySystemGenerator(object):
         omega(oemol)
 
         #get the list of torsions in the molecule that are not about a rotatable bond
+        # Note that only torsions involving heavy atoms are enumerated here.
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
         non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
@@ -1916,7 +1917,7 @@ class GeometrySystemGenerator(object):
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
             # Determine phase in [-pi,+pi) interval
             #phase = (np.pi)*units.radians+angle
-            phase = torsion.radians + np.pi
+            phase = torsion.radians + np.pi # TODO: Check that this is the correct convention?
             while (phase >= np.pi):
                 phase -= 2*np.pi
             while (phase < -np.pi):
