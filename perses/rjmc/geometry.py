@@ -1735,14 +1735,14 @@ class GeometrySystemGenerator(object):
     _PeriodicTorsionForceEnergy = "select(step({}+0.5 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self):
-        self._stericsNonbondedEnergy = "select(step({}-max(growth_idx1, growth_idx2)), U_sterics_active, 0);"
+        self._stericsNonbondedEnergy = "select(step({}+0.5-max(growth_idx1, growth_idx2)), U_sterics_active, 0);"
         self._stericsNonbondedEnergy += "U_sterics_active = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
 
         ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                                   # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
-        self._nonbondedExceptionEnergy = "select(step({}-growth_idx), U_exception, 0);"
+        self._nonbondedExceptionEnergy = "select(step({}+0.5-growth_idx), U_exception, 0);"
         self._nonbondedExceptionEnergy += "U_exception = ONE_4PI_EPS0*chargeprod/r + 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._nonbondedExceptionEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
 
@@ -1847,6 +1847,7 @@ class GeometrySystemGenerator(object):
                 growth_idx = max(growth_idx_1, growth_idx_2)
                 # Only need to add terms that are nonzero
                 if (chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0):
+                    #print('Adding CustomBondForce: %5d %5d %8.3f elementary charge, %.3f A, %.3f kcal/mol, growth_idx %d' % (chargeprod/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
                     custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
 
         #copy parameters for sterics parameters in nonbonded force
@@ -1932,10 +1933,9 @@ class GeometrySystemGenerator(object):
         non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
         relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
 
-
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 40.0*units.kilojoule_per_mole
+        k = 120.0*units.kilocalories_per_mole # stddev of 12 degrees
         #print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
