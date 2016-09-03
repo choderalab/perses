@@ -239,7 +239,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 pdbfile = open("%s-stages.pdb" % prefix, 'w')
                 self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
 
-        platform = openmm.Platform.getPlatformByName('Reference')
+        if self.use_sterics:
+            platform_name = 'CPU'
+        else:
+            platform_name = 'Reference'
+        platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         debug = False
@@ -1742,7 +1746,14 @@ class GeometrySystemGenerator(object):
     _HarmonicAngleForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
     _PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
-    def __init__(self):
+    def __init__(self, verbose=False):
+        """
+        Parameters
+        ----------
+        verbose : bool, optional, default=False
+            If True, will print verbose output.
+
+        """
         ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                                   # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
@@ -1763,6 +1774,8 @@ class GeometrySystemGenerator(object):
         self._nonbondedExceptionEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
 
         self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
+
+        self.verbose = verbose
 
     def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
@@ -1868,7 +1881,7 @@ class GeometrySystemGenerator(object):
                 growth_idx = max(growth_idx_1, growth_idx_2)
                 # Only need to add terms that are nonzero and involve newly added atoms.
                 if (growth_idx > 0) and ((chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0)):
-                    print('Adding CustomBondForce: %5d %5d : %8.3f elementary charge, %.3f A, %.3f kcal/mol, growth_idx %d' % (particle_index_1, particle_index_2, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
+                    if self.verbose: print('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index_1, particle_index_2, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
                     custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
 
         #copy parameters for sterics parameters in nonbonded force
@@ -1892,8 +1905,8 @@ class GeometrySystemGenerator(object):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
                 growth_idx = new_particle_indices.index(particle_index) + 1 if particle_index in new_particle_indices else 0
                 modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
-                if growth_idx > 0:
-                    print('Adding NonbondedForce particle %5d : %8.3f elementary charge, %.3f A, %.3f kcal/mol, growth_idx %d' % (particle_index, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
+                if self.verbose and (growth_idx > 0):
+                    print('Adding NonbondedForce particle %5d : charge %8.3f |e|, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index, charge/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
@@ -1948,6 +1961,20 @@ class GeometrySystemGenerator(object):
         except Exception as e:
             print("Could not generate an oemol from the residue.")
             print(e)
+
+        # DEBUG: Write mol2 file.
+        debug = False
+        if debug:
+            if not hasattr(self, 'omega_index'):
+                self.omega_index = 0
+            filename = 'omega-%05d.mol2' % self.omega_index
+            print("Writing %s" % filename)
+            self.omega_index += 1
+            oemol_copy = oechem.OEMol(oemol)
+            ofs = oechem.oemolostream(filename)
+            oechem.OETriposAtomTypeNames(oemol_copy)
+            oechem.OEWriteMol2File(ofs, oemol_copy) # Preserve atom naming
+            ofs.close()
 
         #get the omega geometry of the molecule:
         omega = oeomega.OEOmega()

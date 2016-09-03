@@ -230,7 +230,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps': 0}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -656,6 +656,13 @@ class MybTestSystem(PersesTestSystem):
         super(MybTestSystem, self).__init__(**kwargs)
         environments = ['explicit-complex', 'explicit-peptide', 'implicit-complex', 'implicit-peptide', 'vacuum-complex', 'vacuum-peptide']
 
+        # Use sterics in proposals
+        self.geometry_engine.use_sterics = True
+
+        # Write atom-by-atom geometry output.
+        self.geometry_engine.write_proposal_pdb = True
+        self.geometry_engine.pdb_filename_prefix = 'geometry'
+
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         system_generators = dict()
@@ -711,9 +718,12 @@ class MybTestSystem(PersesTestSystem):
             for resname in ['ALA', 'LEU', 'VAL', 'PHE', 'CYS', 'THR', 'TRP', 'TYR', 'GLU', 'ASP', 'LYS', 'ARG', 'ASN']:
                 allowed_mutations.append([(resid, resname)])
         from perses.rjmc.topology_proposal import PointMutationEngine
-        proposal_metadata = { 'ffxmls' : ['amber99sbildn.xml'] }
+        proposal_metadata = {
+            'ffxmls' : ['amber99sbildn.xml'], # take sidechain definitions from this ffxml file
+            'always_change' : True # don't propose self-transitions
+            }
         proposal_engines = dict()
-        chain_id
+        chain_id = 'B'
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment], system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
@@ -747,17 +757,17 @@ class MybTestSystem(PersesTestSystem):
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], envname=environment)
-            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
+            mcmc_samplers[environment].nsteps = 500 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5})
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':0}, storage=storage)
             exen_samplers[environment].verbose = True
-            sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+            sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
 
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
-        target_samplers = { sams_samplers['implicit-complex'] : 1.0, sams_samplers['implicit-peptide'] : -1.0 }
+        target_samplers = { sams_samplers['vacuum-complex'] : 1.0, sams_samplers['vacuum-peptide'] : -1.0 }
         designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
@@ -2063,6 +2073,7 @@ def run_myb():
     """
     testsystem = MybTestSystem()
     solvent = 'implicit'
+
     testsystem.exen_samplers[solvent + '-peptide'].pdbfile = open('myb-vacuum.pdb', 'w')
     testsystem.exen_samplers[solvent + '-complex'].pdbfile = open('myb-complex.pdb', 'w')
     testsystem.exen_samplers[solvent + '-complex'].options={'nsteps':0}
@@ -2290,8 +2301,8 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    #run_alanine_system(sterics=True)
     run_alanine_system(sterics=True)
+    #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()

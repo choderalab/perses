@@ -93,5 +93,6 @@ setup(name='perses',
         'seaborn',
         'numba ==0.27.0',
         'parmed',
+        'pdbfixer',
         ],
       )

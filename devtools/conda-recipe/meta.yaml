@@ -29,6 +29,7 @@ requirements:
     - seaborn
     - pdbfixer
     - parmed # for testing/debugging
+    - pdbfixer
 
   run:
     - python
@@ -49,6 +50,7 @@ requirements:
     - seaborn
     - pdbfixer
     - parmed # for testing/debugging
+    - pdbfixer
 
 test:
   requires:

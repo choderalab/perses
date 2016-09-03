@@ -951,7 +951,7 @@ class ExpandedEnsembleSampler(object):
                 structure = load_topology(topology, system=system, xyz=positions)
                 energies = energy_decomposition_system(structure, system, nrg=unit.kilocalories_per_mole)
                 for (name, energy) in energies:
-                    print('%48s %12.3f kcal/mol' % (name, energy))
+                    print('%40s %12.3f kcal/mol' % (name, energy))
 
             # Compute change in eliminated potential contribution.
             switch_logp = - (potential_insert - potential_delete)
@@ -960,6 +960,7 @@ class ExpandedEnsembleSampler(object):
                 print_energy_components(topology_proposal.old_topology, topology_proposal.old_system, geometry_old_positions)
                 print('potential after geometry   : %12.3f kT' % potential_insert)
                 print_energy_components(topology_proposal.new_topology, topology_proposal.new_system, geometry_new_positions)
+                print('  GEOMETRY ENERGY CHANGE   : %+12.3f kT' % (potential_insert - potential_delete))
                 print('---------------------------------------------------------')
                 print('switch_logp                : %12.3f' % switch_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
@@ -1182,7 +1183,7 @@ class SAMSSampler(object):
             gamma = 1.0 / float(self.iteration+1)
         elif self.update_method == 'two-stage':
             # Keep gamma large until second stage is activated.
-            if not hasattr(self, 'second_stage_start'):
+            if not hasattr(self, 'second_stage_start') or (self.iteration < self.second_stage_start):
                 # First stage.
                 gamma = 1.0
                 # TODO: Determine when to switch to second stage
