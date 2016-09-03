@@ -91,6 +91,7 @@ setup(name='perses',
         'numexpr',
         'netcdf4',
         'seaborn',
-        'numba ==0.27.0'
+        'numba ==0.27.0',
+        'parmed',
         ],
       )

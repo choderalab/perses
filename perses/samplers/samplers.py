@@ -935,11 +935,20 @@ class ExpandedEnsembleSampler(object):
             if np.any(np.isnan(ncmc_new_positions)):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
 
+            def print_energy_components(topology, system, positions):
+                from parmed.openmm import load_topology, energy_decomposition_system
+                structure = load_topology(topology, system=system, xyz=positions)
+                energies = energy_decomposition_system(structure, system, nrg=unit.kilocalories_per_mole)
+                for (name, energy) in energies:
+                    print('%48s %12.3f kcal/mol' % (name, energy))
+
             # Compute change in eliminated potential contribution.
             switch_logp = - (potential_insert - potential_delete)
             if self.verbose:
                 print('potential before geometry  : %12.3f kT' % potential_delete)
+                print_energy_components(topology_proposal.old_topology, topology_proposal.old_system, geometry_old_positions)
                 print('potential after geometry   : %12.3f kT' % potential_insert)
+                print_energy_components(topology_proposal.new_topology, topology_proposal.new_system, geometry_new_positions)
                 print('---------------------------------------------------------')
                 print('switch_logp                : %12.3f' % switch_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
