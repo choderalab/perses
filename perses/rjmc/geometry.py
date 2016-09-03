@@ -1739,8 +1739,11 @@ class GeometrySystemGenerator(object):
         self._stericsNonbondedEnergy += "U_sterics_active = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
 
+        ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
+                                  # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
-
+        self._nonbondedExceptionEnergy = "select(step({}-growth_idx), U_exception, 0);"
+        self._nonbondedExceptionEnergy += "U_exception = ONE_4PI_EPS0*chargeprod/r + 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
 
     def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
@@ -1830,6 +1833,26 @@ class GeometrySystemGenerator(object):
                 continue
             modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
 
+        # Add (1,4) exceptions, regardless of whether 'use_sterics' is specified, because these are part of the valence forces.
+        if 'NonbondedForce' in reference_forces.keys():
+            custom_bond_force = openmm.CustomBondForce(self._nonbondedExceptionEnergy.format(parameter_name))
+            custom_bond_force.addPerParticleParameter("chargeprod")
+            custom_bond_force.addPerParticleParameter("sigma")
+            custom_bond_force.addPerParticleParameter("epsilon")
+            custom_bond_force.addPerParticleParameter("growth_idx")
+            custom_bond_force.addGlobalParameter(parameter_name, 0)
+            growth_system.addForce(custom_bond_force)
+            reference_nonbonded_force = reference_forces['NonbondedForce']
+            # Add exclusions, which are active at all times.
+            # (1,4) exceptions are always included, since they are part of the valence terms.
+            reference_nonbonded_force = reference_forces['NonbondedForce']
+            for exception_index in range(reference_nonbonded_force.getNumExceptions()):
+                [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
+                growth_idx_1 = growth_indices.index(particle_index_1) + 1 if particle_index_1 in growth_indices else 0
+                growth_idx_2 = growth_indices.index(particle_index_2) + 1 if particle_index_2 in growth_indices else 0
+                growth_idx = max(growth_idx_1, growth_idx_2)
+                custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon])
+
         #copy parameters for sterics parameters in nonbonded force
         if 'NonbondedForce' in reference_forces.keys() and use_sterics:
             modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
@@ -1839,10 +1862,16 @@ class GeometrySystemGenerator(object):
             modified_sterics_force.addGlobalParameter(parameter_name, 0)
             growth_system.addForce(modified_sterics_force)
             reference_nonbonded_force = reference_forces['NonbondedForce']
+            # Add particle parameters.
             for particle_index in range(reference_nonbonded_force.getNumParticles()):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
                 growth_idx = growth_indices.index(particle_index) + 1 if particle_index in growth_indices else 0
                 modified_sterics_force.addParticle([sigma, epsilon, growth_idx])
+            # Add exclusions, which are active at all times.
+            # (1,4) exceptions are always included, since they are part of the valence terms.
+            for exception_index in range(reference_nonbonded_force.getNumExceptions()):
+                [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
+                modified_sterics_force.addExclusion(particle_index_1, particle_index_2)
             new_particle_indices = [atom.idx for atom in growth_indices]
             old_particle_indices = [idx for idx in range(reference_nonbonded_force.getNumParticles()) if idx not in new_particle_indices]
             modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(old_particle_indices))
