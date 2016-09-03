@@ -1744,6 +1744,7 @@ class GeometrySystemGenerator(object):
 
         self._nonbondedExceptionEnergy = "select(step({}-growth_idx), U_exception, 0);"
         self._nonbondedExceptionEnergy += "U_exception = ONE_4PI_EPS0*chargeprod/r + 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
+        self._nonbondedExceptionEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
 
     def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
@@ -1830,13 +1831,12 @@ class GeometrySystemGenerator(object):
         # Add (1,4) exceptions, regardless of whether 'use_sterics' is specified, because these are part of the valence forces.
         if 'NonbondedForce' in reference_forces.keys():
             custom_bond_force = openmm.CustomBondForce(self._nonbondedExceptionEnergy.format(parameter_name))
-            custom_bond_force.addPerParticleParameter("chargeprod")
-            custom_bond_force.addPerParticleParameter("sigma")
-            custom_bond_force.addPerParticleParameter("epsilon")
-            custom_bond_force.addPerParticleParameter("growth_idx")
+            custom_bond_force.addPerBondParameter("chargeprod")
+            custom_bond_force.addPerBondParameter("sigma")
+            custom_bond_force.addPerBondParameter("epsilon")
+            custom_bond_force.addPerBondParameter("growth_idx")
             custom_bond_force.addGlobalParameter(parameter_name, 0)
             growth_system.addForce(custom_bond_force)
-            reference_nonbonded_force = reference_forces['NonbondedForce']
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
             reference_nonbonded_force = reference_forces['NonbondedForce']
@@ -1845,7 +1845,7 @@ class GeometrySystemGenerator(object):
                 growth_idx_1 = growth_indices.index(particle_index_1) + 1 if particle_index_1 in growth_indices else 0
                 growth_idx_2 = growth_indices.index(particle_index_2) + 1 if particle_index_2 in growth_indices else 0
                 growth_idx = max(growth_idx_1, growth_idx_2)
-                custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon])
+                custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
 
         #copy parameters for sterics parameters in nonbonded force
         if 'NonbondedForce' in reference_forces.keys() and use_sterics:
