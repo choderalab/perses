@@ -149,6 +149,10 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Use sterics in proposals
         self.geometry_engine.use_sterics = True
 
+        # Write atom-by-atom geometry output.
+        self.geometry_engine.write_proposal_pdb = True
+        self.geometry_engine.pdb_filename_prefix = 'geometry'
+
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         system_generators = dict()
@@ -2121,7 +2125,7 @@ def run_valence_system():
     testsystem.mcmc_samplers[environment].nsteps = 5
     testsystem.sams_samplers[environment].run(niterations=50)
 
-def run_alanine_system(sterics=True):
+def run_alanine_system(sterics=False):
     """
     Run alanine dipeptide in vacuum test system.
 
@@ -2287,7 +2291,7 @@ def run_fused_rings():
 
 if __name__ == '__main__':
     #run_alanine_system(sterics=True)
-    run_alanine_system(sterics=False)
+    run_alanine_system(sterics=True)
     #run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
