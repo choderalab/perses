@@ -80,6 +80,7 @@ setup(name='perses',
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
+        #'openmm >=7.0.1', # doesn't work with conda openmm >=7.0.1 (JDC)
         'openmm',
         'numpy',
         'scipy',
@@ -91,6 +92,8 @@ setup(name='perses',
         'netcdf4',
         'seaborn',
         'mdtraj',
-        #'numba'
+        'numba ==0.27.0',
+        'parmed',
+        'pdbfixer',
         ],
       )
