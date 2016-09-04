@@ -28,6 +28,8 @@ requirements:
     - matplotlib
     - seaborn
     - pdbfixer
+    - parmed # for testing/debugging
+    - pdbfixer
 
   run:
     - python
@@ -46,6 +48,8 @@ requirements:
     - netcdf4
     - matplotlib
     - seaborn
+    - pdbfixer
+    - parmed # for testing/debugging
     - pdbfixer
 
 test:

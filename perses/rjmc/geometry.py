@@ -73,8 +73,15 @@ class GeometryEngine(object):
 class FFAllAngleGeometryEngine(GeometryEngine):
     """
     This is an implementation of GeometryEngine which uses all valence terms and OpenMM
+
+    Parameters
+    ----------
+    use_sterics : bool, optional, default=False
+        If True, sterics will be used in proposals to minimize clashes.
+        This may significantly slow down the simulation, however.
+
     """
-    def __init__(self, metadata=None):
+    def __init__(self, metadata=None, use_sterics=False):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
@@ -83,6 +90,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._torsion_coordinate_time = 0.0
         self._position_set_time = 0.0
         self.verbose = False
+        self.use_sterics = use_sterics
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -200,7 +208,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system_time = time.time() - system_init
         elif direction=='reverse':
             if new_positions is None:
@@ -208,7 +216,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -231,7 +239,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 pdbfile = open("%s-stages.pdb" % prefix, 'w')
                 self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
 
-        platform = openmm.Platform.getPlatformByName('Reference')
+        if self.use_sterics:
+            platform_name = 'CPU'
+        else:
+            platform_name = 'Reference'
+        platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         debug = False
@@ -1730,21 +1742,40 @@ class GeometrySystemGenerator(object):
     with only valence terms and special parameters to assist in
     geometry proposals.
     """
-    _HarmonicBondForceEnergy = "select(step({}+0.5 - growth_idx), (K/2)*(r-r0)^2, 0);"
-    _HarmonicAngleForceEnergy = "select(step({}+0.5 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
-    _PeriodicTorsionForceEnergy = "select(step({}+0.5 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
+    _HarmonicBondForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(r-r0)^2, 0);"
+    _HarmonicAngleForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
+    _PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
-    def __init__(self):
-        self._stericsNonbondedEnergy = "select(step({}+0.5-max(growth_idx1, growth_idx2)), U_sterics_active, 0);"
-        self._stericsNonbondedEnergy += "U_sterics_active = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
-        self._stericsNonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
+    def __init__(self, verbose=False):
+        """
+        Parameters
+        ----------
+        verbose : bool, optional, default=False
+            If True, will print verbose output.
 
+        """
         ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                                   # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
-        self._nonbondedExceptionEnergy = "select(step({}+0.5-growth_idx), U_exception, 0);"
+        # Nonbonded sterics and electrostatics.
+        # TODO: Allow user to select whether electrostatics or sterics components are included in the nonbonded interaction energy.
+        self._nonbondedEnergy = "select(step({}+0.1 - growth_idx), U_sterics + U_electrostatics, 0);"
+        self._nonbondedEnergy += "growth_idx = max(growth_idx1, growth_idx2);"
+        # Sterics
+        self._nonbondedEnergy += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
+        self._nonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
+        # Electrostatics
+        self._nonbondedEnergy += "U_electrostatics = ONE_4PI_EPS0*charge1*charge2/r;"
+        self._nonbondedEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
+
+        # Exceptions (always included)
+        self._nonbondedExceptionEnergy = "select(step({}+0.1 - growth_idx), U_exception, 0);"
         self._nonbondedExceptionEnergy += "U_exception = ONE_4PI_EPS0*chargeprod/r + 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._nonbondedExceptionEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
+
+        self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
+
+        self.verbose = verbose
 
     def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
@@ -1769,8 +1800,10 @@ class GeometrySystemGenerator(object):
         growth_system : simtk.openmm.System object
             System with the appropriate modifications
         """
-        if use_sterics:
-            raise Exception("Sterics implementation not complete.")
+        # Get list of particle indices for new and old atoms.
+        new_particle_indices = [ atom.idx for atom in growth_indices ]
+        old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in new_particle_indices]
+
         reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
         growth_system = openmm.System()
         #create the forces:
@@ -1839,43 +1872,52 @@ class GeometrySystemGenerator(object):
             growth_system.addForce(custom_bond_force)
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
+            print('growth_indices:', growth_indices)
             reference_nonbonded_force = reference_forces['NonbondedForce']
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
                 [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
-                growth_idx_1 = growth_indices.index(particle_index_1) + 1 if particle_index_1 in growth_indices else 0
-                growth_idx_2 = growth_indices.index(particle_index_2) + 1 if particle_index_2 in growth_indices else 0
+                growth_idx_1 = new_particle_indices.index(particle_index_1) + 1 if particle_index_1 in new_particle_indices else 0
+                growth_idx_2 = new_particle_indices.index(particle_index_2) + 1 if particle_index_2 in new_particle_indices else 0
                 growth_idx = max(growth_idx_1, growth_idx_2)
-                # Only need to add terms that are nonzero
-                if (chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0):
-                    #print('Adding CustomBondForce: %5d %5d %8.3f elementary charge, %.3f A, %.3f kcal/mol, growth_idx %d' % (chargeprod/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
+                # Only need to add terms that are nonzero and involve newly added atoms.
+                if (growth_idx > 0) and ((chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0)):
+                    if self.verbose: print('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index_1, particle_index_2, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
                     custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
 
         #copy parameters for sterics parameters in nonbonded force
         if 'NonbondedForce' in reference_forces.keys() and use_sterics:
-            modified_sterics_force = openmm.CustomNonbondedForce(self._stericsNonbondedEnergy.format(parameter_name))
+            modified_sterics_force = openmm.CustomNonbondedForce(self._nonbondedEnergy.format(parameter_name))
+            modified_sterics_force.addPerParticleParameter("charge")
             modified_sterics_force.addPerParticleParameter("sigma")
             modified_sterics_force.addPerParticleParameter("epsilon")
             modified_sterics_force.addPerParticleParameter("growth_idx")
             modified_sterics_force.addGlobalParameter(parameter_name, 0)
             growth_system.addForce(modified_sterics_force)
+            # Translate nonbonded method to cutoff methods.
             reference_nonbonded_force = reference_forces['NonbondedForce']
+            if reference_nonbonded_force in [openmm.NonbondedForce.NoCutoff, openmm.NonbondedForce.CutoffNonPeriodic]:
+                modified_sterics_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffNonPeriodic)
+            elif reference_nonbonded_force in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+                modified_sterics_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+            modified_sterics_force.setCutoffDistance(self.sterics_cutoff_distance)
             # Add particle parameters.
             for particle_index in range(reference_nonbonded_force.getNumParticles()):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
-                growth_idx = growth_indices.index(particle_index) + 1 if particle_index in growth_indices else 0
-                modified_sterics_force.addParticle([sigma, epsilon, growth_idx])
+                growth_idx = new_particle_indices.index(particle_index) + 1 if particle_index in new_particle_indices else 0
+                modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
+                if self.verbose and (growth_idx > 0):
+                    print('Adding NonbondedForce particle %5d : charge %8.3f |e|, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index, charge/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
                 [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
                 modified_sterics_force.addExclusion(particle_index_1, particle_index_2)
-            new_particle_indices = [atom.idx for atom in growth_indices]
-            old_particle_indices = [idx for idx in range(reference_nonbonded_force.getNumParticles()) if idx not in new_particle_indices]
+            # Only compute interactions of new particles with all other particles
+            # TODO: Allow inteactions to be resticted to only the residue being grown.
             modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(old_particle_indices))
             modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(new_particle_indices))
 
-
-
+        # Add extra ring-closing torsions, if requested.
         if add_extra_torsions:
             if reference_topology==None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
@@ -1919,6 +1961,20 @@ class GeometrySystemGenerator(object):
         except Exception as e:
             print("Could not generate an oemol from the residue.")
             print(e)
+
+        # DEBUG: Write mol2 file.
+        debug = False
+        if debug:
+            if not hasattr(self, 'omega_index'):
+                self.omega_index = 0
+            filename = 'omega-%05d.mol2' % self.omega_index
+            print("Writing %s" % filename)
+            self.omega_index += 1
+            oemol_copy = oechem.OEMol(oemol)
+            ofs = oechem.oemolostream(filename)
+            oechem.OETriposAtomTypeNames(oemol_copy)
+            oechem.OEWriteMol2File(ofs, oemol_copy) # Preserve atom naming
+            ofs.close()
 
         #get the omega geometry of the molecule:
         omega = oeomega.OEOmega()

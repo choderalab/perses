@@ -80,7 +80,7 @@ setup(name='perses',
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        #'openmm >=7.0.1', # This fails if the omnia 'dev' channel is included (JDC)
+        #'openmm >=7.0.1', # doesn't work with conda openmm >=7.0.1 (JDC)
         'openmm',
         'numpy',
         'scipy',
@@ -91,6 +91,8 @@ setup(name='perses',
         'numexpr',
         'netcdf4',
         'seaborn',
-        'numba ==0.27.0'
+        'numba ==0.27.0',
+        'parmed',
+        'pdbfixer',
         ],
       )
