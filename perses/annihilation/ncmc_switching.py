@@ -16,6 +16,15 @@ default_functions = {
     'lambda_torsions' : 'lambda'
     }
 
+default_hybrid_functions = {
+    'lambda_sterics' : 'lambda',
+    'lambda_electrostatics' : 'lambda',
+    'lambda_bonds' : 'lambda',
+    'lambda_angles' : 'lambda',
+    'lambda_torsions' : 'lambda'
+    }
+
+
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
 default_timestep = 1.0 * unit.femtoseconds
@@ -141,6 +150,29 @@ class NCMCEngine(object):
                         parameters.append(parameter_name)
         return parameters
 
+    def _updateAlchemicalState(self, context, functions, value):
+        """
+        Update alchemical state using the specified lambda value.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The Context
+        functions : dict
+            A dictionary of functions
+        value : float
+            The alchemical lambda value
+ 
+        TODO: Improve function evaluation to better match Lepton and be more flexible in exact replacement of 'lambda' tokens
+
+        """
+        from parsing import NumericStringParser
+        nsp = NumericStringParser()
+        for parameter in functions:
+            function = functions[parameter]
+            evaluated = nsp.eval(function.replace('lambda', str(value)))
+            context.setParameter(parameter, evaluated)
+ 
     def _computeAlchemicalCorrection(self, unmodified_system, alchemical_system, initial_positions, final_positions, direction='insert'):
         """
         Compute log probability for correction from transforming real system to/from alchemical system.
@@ -402,25 +434,26 @@ class NCMCEngine(object):
 
         # Get initial and final real and alchemical potentials
         from perses.tests.utils import compute_potential
-        initial_unmodified_potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
         initial_alchemical_potential = self.beta * integrator.getGlobalVariableByName("Einitial") * unit.kilojoules_per_mole
-        final_unmodified_potential = self.beta * compute_potential(system, final_positions, platform=self.platform)
         final_alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        if direction == 'insert':
+            final_unmodified_potential = self.beta * compute_potential(system, final_positions, platform=self.platform)
+            logP_alchemical_correction = final_unmodified_potential - final_alchemical_potential
+            switch_logp = initial_alchemical_potential
+        elif direction == 'delete':
+            initial_unmodified_potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
+            logP_alchemical_correction = initial_alchemical_potential - initial_unmodified_potential
+            switch_logp = final_alchemical_potential
 
         # Clean up.
         del context, integrator
 
         # Check potentials are finite
-        if np.isnan(initial_unmodified_potential) or np.isnan(initial_alchemical_potential) or np.isnan(final_unmodified_potential) or np.isnan(final_alchemical_potential):
+        if np.isnan(initial_alchemical_potential) or np.isnan(final_alchemical_potential):
             msg = "A required potential of %s operation is NaN:\n" % direction
-            msg += "initial_unmodified_potential: %.3f kT\n" % initial_unmodified_potential
             msg += "initial_alchemical_potential: %.3f kT\n" % initial_alchemical_potential
             msg += "final_alchemical_potential: %.3f kT\n" % final_alchemical_potential
-            msg += "final_unmodified_potential: %.3f kT\n" % final_unmodified_potential
             raise NaNException(msg)
-
-        # Compute contribution from transforming real system to/from alchemical system.
-        logP_alchemical_correction = (final_unmodified_potential - final_alchemical_potential) + (initial_alchemical_potential - initial_unmodified_potential)
 
         # Compute total logP
         logP = logP_NCMC + logP_alchemical_correction
@@ -428,18 +461,371 @@ class NCMCEngine(object):
         # Clean up alchemical system.
         del alchemical_system
 
-        # Select whether to return initial or final potential.
-        # TODO: Do we really need to return the potential now?
-        if direction == 'insert':
-            potential = initial_unmodified_potential
-        elif direction == 'delete':
-            potential = final_unmodified_potential
+        # Keep track of statistics.
+        self.nattempted += 1
+
+        # Return
+        return [final_positions, logP, switch_logp]
+
+class NCMCHybridEngine(NCMCEngine):
+    """
+    NCMC switching engine which switches directly from old to new systems
+    via a hybrid alchemical topology
+
+    Examples
+    --------
+    ## EXAMPLE UNCHANGED FROM BASE CLASS ##
+    Create a transformation for an alanine dipeptide test system where the N-methyl group is eliminated.
+    >>> from openmmtools import testsystems
+    >>> testsystem = testsystems.AlanineDipeptideVacuum()
+    >>> from perses.rjmc.topology_proposal import TopologyProposal
+    >>> new_to_old_atom_map = { index : index for index in range(testsystem.system.getNumParticles()) if (index > 3) } # all atoms but N-methyl
+    >>> topology_proposal = TopologyProposal(old_system=testsystem.system, old_topology=testsystem.topology, old_chemical_state_key='AA', new_chemical_state_key='AA', new_system=testsystem.system, new_topology=testsystem.topology, logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=dict())
+    >>> ncmc_engine = NCMCHybridEngine(temperature=300.0*unit.kelvin, functions=default_functions, nsteps=50, timestep=1.0*unit.femtoseconds)
+
+    positions = testsystem.positions
+    (need a geometry proposal in here now)
+    [positions, new_old_positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, proposed_positions)
+    """
+
+    def __init__(self, temperature=default_temperature, functions=None, 
+                 nsteps=default_nsteps, timestep=default_timestep, 
+                 constraint_tolerance=None, platform=None, 
+                 write_ncmc_interval=None, integrator_type='GHMC'):
+        """
+        Subclass of NCMCEngine which switches directly between two different
+        systems using an alchemical hybrid topology.
+
+        Arguments
+        ---------
+        temperature : simtk.unit.Quantity with units compatible with kelvin
+            The temperature at which switching is to be run
+        functions : dict of str:str, optional, default=default_functions
+            functions[parameter] is the function (parameterized by 't' which
+            switched from 0 to 1) that controls how alchemical context
+            parameter 'parameter' is switched
+        nsteps : int, optional, default=1
+            The number of steps to use for switching.
+        timestep : simtk.unit.Quantity with units compatible with femtoseconds,
+            optional, default=1*femtosecond
+            The timestep to use for integration of switching velocity
+            Verlet steps.
+        constraint_tolerance : float, optional, default=None
+            If not None, this relative constraint tolerance is used for
+            position and velocity constraints.
+        platform : simtk.openmm.Platform, optional, default=None
+            If specified, the platform to use for OpenMM simulations.
+        write_ncmc_interval : int, optional, default=None
+            If a positive integer is specified, a PDB frame will be written
+            with the specified interval on NCMC switching, with a different
+            PDB file generated for each attempt.
+        integrator_type : str, optional, default='GHMC'
+            NCMC internal integrator type ['GHMC', 'VV']
+        """
+        if functions is None:
+            functions = default_hybrid_functions
+
+        super(NCMCHybridEngine, self).__init__(temperature=temperature, functions=functions, nsteps=nsteps,
+                                               timestep=timestep, constraint_tolerance=constraint_tolerance,
+                                               platform=platform, write_ncmc_interval=write_ncmc_interval,
+                                               integrator_type=integrator_type)
+
+    def compute_logP(self, system, positions, parameter=None):
+        """
+        Compute potential energy of the specified system object at the specified positions.
+
+        Constraints are applied before the energy is computed.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The System object for which the potential energy is to be computed.
+        positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the atoms for which energy is to be computed.
+
+        Returns
+        -------
+        potential : simtk.unit.Quantity with units of energy
+            The computed potential energy
+            
+        """
+        # Create dummy integrator.
+        integrator = openmm.VerletIntegrator(self.timestep)
+        # Set the constraint tolerance if specified.
+        if self.constraint_tolerance is not None:
+            integrator.setConstraintTolerance(self.constraint_tolerance)
+        # Create a context on the specified platform.
+        if self.platform is not None:
+            context = openmm.Context(system, integrator, self.platform)
+        else:
+            context = openmm.Context(system, integrator)
+        context.setPositions(positions)
+        context.applyConstraints(integrator.getConstraintTolerance())
+        if parameter is not None:
+            available_parameters = self._getAvailableParameters(system)
+            for parameter_name in available_parameters:
+                context.setParameter(parameter_name, parameter)
+        # Compute potential energy.
+        potential = context.getState(getEnergy=True).getPotentialEnergy()
+        # Clean up context and integrator.
+        del context, integrator
+        # Return potential energy.
+        return -self.beta * potential
+
+    def _computeAlchemicalCorrection(self, unmodified_old_system,
+                                     unmodified_new_system, alchemical_system,
+                                     initial_positions, alchemical_positions,
+                                     final_hybrid_positions, final_positions,
+                                     direction='insert'):
+        """
+        Compute log probability for correction from transforming real system
+        to AND from alchemical system.
+
+        Parameters
+        ----------
+        unmodified_old_system : simtk.unit.System
+            Real fully-interacting system.
+        unmodified_new_system : simtk.unit.System
+            Real fully-interacting system.
+        alchemical_system : simtk.unit.System
+            Alchemically modified system in fully-interacting form.
+        initial_positions : simtk.unit.Quantity of dimensions [nparticles,3]
+            with units compatible with angstroms
+            The initial positions before NCMC switching.
+        alchemical_positions : simtk.unit.Quantity of dimensions [nparticles,3]
+            with units compatible with angstroms
+            The initial positions of hybrid topology before NCMC switching.
+        final_hybrid_positions : simtk.unit.Quantity of dimensions
+            [nparticles,3] with units compatible with angstroms
+            The final positions of hybrid topology after NCMC switching.
+        final_positions : simtk.unit.Quantity of dimensions [nparticles,3]
+            with units compatible with angstroms
+            The final positions after NCMC switching.
+        direction : str, optional, default='insert'
+            Not used in calculation
+        Returns
+        -------
+        logP_alchemical_correction : float
+            The log acceptance probability of the switch
+        """
+
+        # Compute correction from transforming real system to/from alchemical system
+        initial_logP_correction = self.compute_logP(alchemical_system, alchemical_positions, parameter=0) - self.compute_logP(unmodified_old_system, initial_positions)
+        final_logP_correction = self.compute_logP(unmodified_new_system, final_positions) - self.compute_logP(alchemical_system, final_hybrid_positions, parameter=1)
+        logP_alchemical_correction = initial_logP_correction + final_logP_correction
+        return logP_alchemical_correction
+
+    def _compute_switch_logP(self, unmodified_old_system, unmodified_new_system, initial_positions, final_positions):
+        return self.compute_logP(unmodified_new_system, final_positions) - self.compute_logP(unmodified_old_system, initial_positions)
+
+    def make_alchemical_system(self, topology_proposal, old_positions,
+                               new_positions):
+        """
+        Generate an alchemically-modified system at the correct atoms
+        based on the topology proposal
+        Arguments
+        ---------
+        topology_proposal : TopologyProposal namedtuple
+            Contains old topology, proposed new topology, and atom mapping
+        Returns
+        -------
+        unmodified_system : simtk.openmm.System
+            Unmodified real system corresponding to appropriate leg of
+            transformation.
+        alchemical_system : simtk.openmm.System
+            The system with appropriate atoms alchemically modified
+        """
+
+        atom_map = topology_proposal.old_to_new_atom_map
+
+        #take the unique atoms as those not in the {new_atom : old_atom} atom map
+        unmodified_old_system = copy.deepcopy(topology_proposal.old_system)
+        unmodified_new_system = copy.deepcopy(topology_proposal.new_system)
+        old_topology = topology_proposal.old_topology
+        new_topology = topology_proposal.new_topology
+
+        # Create an alchemical factory.
+        from perses.annihilation.relative import HybridTopologyFactory
+        alchemical_factory = HybridTopologyFactory(unmodified_old_system,
+                                                   unmodified_new_system,
+                                                   old_topology, new_topology,
+                                                   old_positions,
+                                                   new_positions, atom_map)
+
+        # Return the alchemically-modified system in fully-interacting form.
+#        alchemical_system, _, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
+        alchemical_system, alchemical_topology, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
+        return [unmodified_old_system, unmodified_new_system,
+                alchemical_system, alchemical_topology, alchemical_positions, final_atom_map,
+                initial_atom_map]
+
+    def _convert_hybrid_positions_to_final(self, positions, atom_map):
+        final_positions = unit.Quantity(np.zeros([len(atom_map.keys()),3]), unit=unit.nanometers)
+        for finalatom, hybridatom in atom_map.items():
+            final_positions[finalatom] = positions[hybridatom]
+        return final_positions
+
+    def integrate(self, topology_proposal, initial_positions, proposed_positions, platform=None):
+        """
+        Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
+        The contribution of transforming the real system to/from an alchemical system is included.
+        Parameters
+        ----------
+        topology_proposal : TopologyProposal
+            Contains old/new Topology and System objects and atom mappings.
+        initial_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the atoms at the beginning of the NCMC switching.
+        proposed_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the new system atoms proposed by geometry engine.
+        platform : simtk.openmm.Platform, optional, default=None
+            If not None, this platform is used for integration.
+        Returns
+        -------
+        final_positions : simtk.unit.Quantity of dimensions [natoms, 3] with units of distance
+            The final positions after `nsteps` steps of alchemical switching
+        new_old_positions : simtk.unit.Quantity of dimensions [natoms, 3] with units of distance.
+            The final positions of the atoms of the old system after `nsteps`
+            steps of alchemical switching
+        logP : float
+            The log acceptance probability of the switch
+        potential : simtk.unit.Quantity with units compatible with kilocalories_per_mole
+            For `delete`, the potential energy of the final (alchemically eliminated) conformation.
+            For `insert`, the potential energy of the initial (alchemically eliminated) conformation.
+        """
+        direction = 'insert'
+        if (self.nsteps == 0):
+            # Special case of instantaneous insertion/deletion.
+            logP = 0.0
+            final_positions = copy.deepcopy(proposed_positions)
+            from perses.tests.utils import compute_potential
+            potential_del = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+            potential_ins = self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
+            potential = potential_del - potential_ins
+            return [final_positions, logP, potential]
+
+########################################################################
+        # Create alchemical system.
+        [unmodified_old_system,
+         unmodified_new_system,
+         alchemical_system,
+         alchemical_topology,
+         alchemical_positions,
+         final_to_hybrid_atom_map,
+         initial_to_hybrid_atom_map] = self.make_alchemical_system(
+                                            topology_proposal, initial_positions,
+                                            proposed_positions)
+########################################################################
+
+        # Select subset of switching functions based on which alchemical parameters are present in the system.
+        available_parameters = self._getAvailableParameters(alchemical_system)
+        functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
+
+        # Create an NCMC velocity Verlet integrator.
+        if self.integrator_type == 'VV':
+            integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction='insert')
+        elif self.integrator_type == 'GHMC':
+            integrator = NCMCGHMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction='insert')
+        else:
+            raise Exception("integrator_type '%s' unknown" % self.integrator_type)
+        # Set the constraint tolerance if specified.
+        if self.constraint_tolerance is not None:
+            integrator.setConstraintTolerance(self.constraint_tolerance)
+        # Create a context on the specified platform.
+        if self.platform is not None:
+            context = openmm.Context(alchemical_system, integrator, self.platform)
+        else:
+            context = openmm.Context(alchemical_system, integrator)
+        context.setPositions(alchemical_positions)
+        context.applyConstraints(integrator.getConstraintTolerance())
+        # Set velocities to temperature and apply velocity constraints.
+        context.setVelocitiesToTemperature(self.temperature)
+        context.applyVelocityConstraints(integrator.getConstraintTolerance())
+
+        # Set initial context parameters.
+        integrator.setGlobalVariableByName('lambda', 0)
+
+        # Compute initial potential of alchemical state.
+        initial_logP = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        if np.isnan(initial_logP):
+            raise NaNException("Initial potential of 'insert' operation is NaN")
+        from perses.tests.utils import compute_potential_components
+        # Take a single integrator step since all switching steps are unrolled in NCMCVVAlchemicalIntegrator.
+        try:
+            # Write PDB file if requested.
+            if self.write_ncmc_interval is not None:
+
+                from simtk.openmm.app import PDBFile
+                filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
+                outfile = open(filename, 'w')
+                PDBFile.writeHeader(alchemical_topology, file=outfile)
+                modelIndex = 0
+                PDBFile.writeModel(alchemical_topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
+                try:
+                    for step in range(self.nsteps):
+                        integrator.step(1)
+                        if (step+1)%self.write_ncmc_interval == 0:
+                            modelIndex += 1
+                            PDBFile.writeModel(alchemical_topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
+                except ValueError as e:
+                    # System is exploding and coordinates won't fit in PDB ATOM fields
+                    print(e)
+
+                PDBFile.writeFooter(alchemical_topology, file=outfile)
+                outfile.close()
+            else:
+                for step in range(self.nsteps):
+                    integrator.step(1)
+                    potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+                    current_step = integrator.get_step()
+
+        except Exception as e:
+            # Trap NaNs as a special exception (allowing us to reject later, if desired)
+            if str(e) == "Particle coordinate is nan":
+                raise NaNException(str(e))
+            else:
+                raise e
+
+        # Set final context parameters.
+        integrator.setGlobalVariableByName('lambda', 1)
+
+        # Compute final potential of alchemical state.
+        final_logP = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
+        if np.isnan(final_logP):
+            raise NaNException("Final potential of hybrid switch operation is NaN")
+
+        # Store final positions and log acceptance probability.
+        final_hybrid_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+
+        final_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, final_to_hybrid_atom_map)
+        new_old_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, initial_to_hybrid_atom_map)
+
+        logP_NCMC = integrator.getLogAcceptanceProbability(context)
+        # Clean up NCMC switching integrator.
+        del context, integrator
+
+        # Compute contribution from transforming real system to/from alchemical system.
+        logP_alchemical_correction = self._computeAlchemicalCorrection(
+                                              unmodified_old_system,
+                                              unmodified_new_system,
+                                              alchemical_system,
+                                              initial_positions,
+                                              alchemical_positions,
+                                              final_hybrid_positions,
+                                              final_positions,
+                                          )
+
+        # Compute total logP
+        logP_ncmc = logP_NCMC + logP_alchemical_correction
+
+        # Clean up alchemical system.
+        del alchemical_system
 
         # Keep track of statistics.
         self.nattempted += 1
 
         # Return
-        return [final_positions, logP, potential]
+        return [final_positions, new_old_positions, logP_ncmc]
+
 
 class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     """

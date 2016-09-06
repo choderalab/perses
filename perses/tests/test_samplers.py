@@ -109,7 +109,37 @@ def test_samplers():
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
 
+def test_hybrid_scheme():
+    """
+    Test ncmc hybrid switching
+    """
+    from perses.tests.testsystems import AlanineDipeptideTestSystem
+    niterations = 5 # number of iterations to run
+
+    if 'TESTSYSTEMS' in os.environ:
+        testsystem_names = os.environ['TESTSYSTEMS'].split(' ')
+        if 'AlanineDipeptideTestSystem' not in testsystem_names:
+            return
+
+    # Instantiate test system.
+    testsystem = AlanineDipeptideTestSystem()
+    # Test MCMCSampler samplers.
+    testsystem.environments = ['vacuum']
+    # Test ExpandedEnsembleSampler samplers.
+    from perses.samplers.samplers import ExpandedEnsembleSampler
+    for environment in testsystem.environments:
+        chemical_state_key = testsystem.proposal_engines[environment].compute_state_key(testsystem.topologies[environment])
+        testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], geometry.FFAllAngleGeometryEngine(metadata={}), scheme='geometry-ncmc', options={'nsteps':1})
+        exen_sampler = testsystem.exen_samplers[environment]
+        exen_sampler.verbose = True
+        f = partial(exen_sampler.run, niterations)
+        f.description = "Testing expanded ensemble sampler with AlanineDipeptideTestSystem '%s'" % environment
+        yield f
+
+
 if __name__=="__main__":
-    for t in test_samplers():
-        print(t.description)
+    for t in test_hybrid_scheme():
         t()
+#    for t in test_samplers():
+#        print(t.description)
+#        t()
