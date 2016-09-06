@@ -114,7 +114,12 @@ def test_hybrid_scheme():
     Test ncmc hybrid switching
     """
     from perses.tests.testsystems import AlanineDipeptideTestSystem
-    niterations = 50 # number of iterations to run
+    niterations = 5 # number of iterations to run
+
+    if 'TESTSYSTEMS' in os.environ:
+        testsystem_names = os.environ['TESTSYSTEMS'].split(' ')
+        if 'AlanineDipeptideTestSystem' not in testsystem_names:
+            return
 
     # Instantiate test system.
     testsystem = AlanineDipeptideTestSystem()
