@@ -26,6 +26,7 @@ class GeometryEngine(object):
     """
 
     def __init__(self, metadata=None):
+        # TODO: Either this base constructor should be called by subclasses, or we should remove its arguments.
         pass
 
     def propose(self, top_proposal, current_positions, beta):
@@ -81,7 +82,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
-    def __init__(self, metadata=None, use_sterics=False):
+    def __init__(self, metadata=None, use_sterics=False, verbose=False):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
@@ -89,7 +90,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._energy_time = 0.0
         self._torsion_coordinate_time = 0.0
         self._position_set_time = 0.0
-        self.verbose = False
+        self.verbose = verbose
         self.use_sterics = use_sterics
 
     def propose(self, top_proposal, current_positions, beta):
@@ -260,7 +261,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
-            print("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
+            if self.verbose: print("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
 
             if atom != torsion.atom1:
                 raise Exception('atom != torsion.atom1')
