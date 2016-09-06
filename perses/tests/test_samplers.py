@@ -113,30 +113,23 @@ def test_hybrid_scheme():
     """
     Test ncmc hybrid switching
     """
-    testsystem_names = ['AlanineDipeptideTestSystem']
+    from perses.tests.testsystems import AlanineDipeptideTestSystem
     niterations = 50 # number of iterations to run
 
-    # If TESTSYSTEMS environment variable is specified, test those systems.
-    if 'TESTSYSTEMS' in os.environ:
-        testsystem_names = os.environ['TESTSYSTEMS'].split(' ')
-
-    for testsystem_name in testsystem_names:
-        import perses.tests.testsystems
-        testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
-        # Instantiate test system.
-        testsystem = testsystem_class()
-        # Test MCMCSampler samplers.
-        testsystem.environments = ['vacuum']
-        # Test ExpandedEnsembleSampler samplers.
-        from perses.samplers.samplers import ExpandedEnsembleSampler
-        for environment in testsystem.environments:
-            chemical_state_key = testsystem.proposal_engines[environment].compute_state_key(testsystem.topologies[environment])
-            testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], geometry.FFAllAngleGeometryEngine(metadata={}), scheme='geometry-ncmc', options={'nsteps':1})
-            exen_sampler = testsystem.exen_samplers[environment]
-            exen_sampler.verbose = True
-            f = partial(exen_sampler.run, niterations)
-            f.description = "Testing expanded ensemble sampler with %s '%s'" % (testsystem_name, environment)
-            yield f
+    # Instantiate test system.
+    testsystem = AlanineDipeptideTestSystem()
+    # Test MCMCSampler samplers.
+    testsystem.environments = ['vacuum']
+    # Test ExpandedEnsembleSampler samplers.
+    from perses.samplers.samplers import ExpandedEnsembleSampler
+    for environment in testsystem.environments:
+        chemical_state_key = testsystem.proposal_engines[environment].compute_state_key(testsystem.topologies[environment])
+        testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], geometry.FFAllAngleGeometryEngine(metadata={}), scheme='geometry-ncmc', options={'nsteps':1})
+        exen_sampler = testsystem.exen_samplers[environment]
+        exen_sampler.verbose = True
+        f = partial(exen_sampler.run, niterations)
+        f.description = "Testing expanded ensemble sampler with AlanineDipeptideTestSystem '%s'" % environment
+        yield f
 
 
 if __name__=="__main__":
