@@ -164,7 +164,7 @@ class NetCDFStorage(object):
             ncgrp.variables[varname] = positions[:,:] / positions_unit
 
     def write_object(self, varname, obj, iteration=None):
-        """Serialize a Python object, encoding as JSON when storing as string in NetCDF.
+        """Serialize a Python object, encoding as pickle when storing as string in NetCDF.
 
         Parameters
         ----------
