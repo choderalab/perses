@@ -120,7 +120,12 @@ class SamplerState(object):
     >>> # Create a sampler state manually.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
 
-    TODO:
+    Notes
+    -----
+    CMMotionRemover forces are automatically removed from the system.
+
+    TODO
+    ----
     * Can we remove the need to create a Context in initializing the sampler state by using the Reference platform and skipping energy calculations?
 
     """
@@ -130,6 +135,12 @@ class SamplerState(object):
             assert quantity_is_finite(self.velocities)
 
         self.system = copy.deepcopy(system)
+
+        # Remove CMMotionRemover, since it can cause problems with GHMC and NCMC.
+        forces_to_remove = [ force_index for force_index in range(self.system.getNumForces()) if (self.system.getForce(force_index).__class__.__name__ == 'CMMotionRemover') ]
+        for force_index in reversed(forces_to_remove):
+            system.removeForce(force_index)
+
         self.positions = positions
         self.velocities = velocities
         self.box_vectors = box_vectors
@@ -941,11 +952,21 @@ class ExpandedEnsembleSampler(object):
             if np.any(np.isnan(ncmc_new_positions)):
                 raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
 
+            def print_energy_components(topology, system, positions):
+                from parmed.openmm import load_topology, energy_decomposition_system
+                structure = load_topology(topology, system=system, xyz=positions)
+                energies = energy_decomposition_system(structure, system, nrg=unit.kilocalories_per_mole)
+                for (name, energy) in energies:
+                    print('%40s %12.3f kcal/mol' % (name, energy))
+
             # Compute change in eliminated potential contribution.
             switch_logp = - (potential_insert - potential_delete)
             if self.verbose:
                 print('potential before geometry  : %12.3f kT' % potential_delete)
+                print_energy_components(topology_proposal.old_topology, topology_proposal.old_system, geometry_old_positions)
                 print('potential after geometry   : %12.3f kT' % potential_insert)
+                print_energy_components(topology_proposal.new_topology, topology_proposal.new_system, geometry_new_positions)
+                print('  GEOMETRY ENERGY CHANGE   : %+12.3f kT' % (potential_insert - potential_delete))
                 print('---------------------------------------------------------')
                 print('switch_logp                : %12.3f' % switch_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
@@ -1219,7 +1240,7 @@ class SAMSSampler(object):
     >>> sams_sampler.run() # doctest: +ELLIPSIS
     ...
     """
-    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='default', storage=None):
+    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='two-stage', storage=None):
         """
         Create a SAMS Sampler.
 
@@ -1280,12 +1301,21 @@ class SAMSSampler(object):
             self.log_target_probabilities[state_key] = 0.0
 
         # Update estimates of logZ.
-        if self.update_method == 'default':
+        if self.update_method == 'one-stage':
             # Based on Eq. 9 of Ref. [1]
             gamma = 1.0 / float(self.iteration+1)
-            self.logZ[state_key] += gamma / np.exp(self.log_target_probabilities[state_key])
+        elif self.update_method == 'two-stage':
+            # Keep gamma large until second stage is activated.
+            if not hasattr(self, 'second_stage_start') or (self.iteration < self.second_stage_start):
+                # First stage.
+                gamma = 1.0
+                # TODO: Determine when to switch to second stage
+            else:
+                # Second stage.
+                gamma = 1.0 / float(self.iteration - self.second_stage_start + 1)
         else:
             raise Exception("SAMS update method '%s' unknown." % self.update_method)
+        self.logZ[state_key] += gamma / np.exp(self.log_target_probabilities[state_key])
 
         # Update log weights for sampler.
         self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }

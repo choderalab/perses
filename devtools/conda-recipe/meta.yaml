@@ -23,10 +23,12 @@ requirements:
     - openmoltools
     - alchemy >=1.2.0
     - openmmtools
-    - numba
+    - numba ==0.27.0
     - netcdf4
     - matplotlib
     - seaborn
+    - pdbfixer
+    - parmed # for testing/debugging
     - pdbfixer
 
   run:
@@ -42,10 +44,12 @@ requirements:
     - openmoltools
     - alchemy >=1.2.0
     - openmmtools
-    - numba
+    - numba ==0.27.0
     - netcdf4
     - matplotlib
     - seaborn
+    - pdbfixer
+    - parmed # for testing/debugging
     - pdbfixer
 
 test:
