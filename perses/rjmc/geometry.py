@@ -228,6 +228,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             from simtk.openmm.app import PDBFile
             prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
             self._proposal_pdbfile = open("%s-proposal.pdb" % prefix, 'w') # PDB file for proposal probabilities
+            self._proposal_pdbfile.write('MODEL\n')
+            self._proposal_pdbfile.write('TER\n')
+            self._proposal_pdbfile.write('ENDMDL\n')
+
             if direction == 'forward':
                 pdbfile = open('%s-initial.pdb' % prefix, 'w')
                 PDBFile.writeFile(top_proposal.old_topology, old_positions, file=pdbfile)
@@ -833,9 +837,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # Write proposal probabilities to PDB file as B-factors for inert atoms
             f_i = -logp_torsions
             f_i -= f_i.min() # minimum free energy is zero
+            f_i[f_i > 999.99] = 999.99
+            self._proposal_pdbfile.write('MODEL\n')
             for i, xyz in enumerate(xyzs):
                 self._proposal_pdbfile.write('ATOM  %5d %4s %3s %c%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n' % (i+1, ' Ar ', 'Ar ', ' ', atom_idx+1, 10*xyz[0], 10*xyz[1], 10*xyz[2], np.exp(logp_torsions[i]), f_i[i]))
-            self._proposal_pdbfile.write('TER')
+            self._proposal_pdbfile.write('TER\n')
+            self._proposal_pdbfile.write('ENDMDL\n')
             # TODO: Write proposal PMFs to storage
             # atom_proposal_indices[order]
             # atom_positions[order,k]
