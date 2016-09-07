@@ -65,6 +65,20 @@ class Analysis(object):
             environments.append( str(group) )
         return environments
 
+    def write_trajectory(self, environmnent, pdb_filename):
+        """Write the trajectory of sampled configurations and chemical states.
+
+        Returns
+        -------
+        environment : str
+           Environment name to write trajectory for
+        pdbfile : str
+           Name of PDB file to generate.
+
+        """
+        # TODO
+        pass
+
     def plot_ncmc_work(self, filename):
         """Generate plots of NCMC work.
 

@@ -297,8 +297,8 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         environments = ['vacuum']
 
         # Write atom-by-atom geometry output.
-        #self.geometry_engine.write_proposal_pdb = True
-        #self.geometry_engine.pdb_filename_prefix = 'geometry'
+        self.geometry_engine.write_proposal_pdb = True
+        self.geometry_engine.pdb_filename_prefix = 'geometry'
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -2300,8 +2300,8 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_alanine_system(sterics=True)
-    #run_alanine_system(sterics=False)
+    #run_alanine_system(sterics=True)
+    run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
