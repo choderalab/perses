@@ -34,7 +34,7 @@ def test_analysis():
     """Test analysis tools.
     """
     testsystem_names = ['ImidazoleProtonationStateTestSystem']
-    niterations = 5 # number of iterations to run
+    niterations = 20 # number of iterations to run
 
     for testsystem_name in testsystem_names:
         # Create storage.
