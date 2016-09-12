@@ -55,7 +55,7 @@ def test_analysis():
             testsystem.sams_samplers[environment].verbose = False
 
         # Run test simulations.
-        niterations = 20 # just a few iterations
+        niterations = 5 # just a few iterations
         if testsystem.designer is not None:
             # Run the designer
             testsystem.designer.verbose = False
