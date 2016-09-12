@@ -129,7 +129,11 @@ class Analysis(object):
                         #nbins = 40
                         workvals = work[direction][:-1,-1]
                         #plt.hist(workvals, nbins)
-                        sns.distplot(workvals, rug=True)
+                        if workvals.std() != 0.0:
+                            sns.distplot(workvals, rug=True)
+                        else:
+                            print('workvals has stddev of zero')
+                            print(workvals)
                         # Adjust axes to eliminate large-magnitude outliers (keep 98% of data in-range)
                         #worklim = np.percentile(workvals, 98)
                         #oldaxis = plt.axis()

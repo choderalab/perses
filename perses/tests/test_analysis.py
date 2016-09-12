@@ -33,8 +33,7 @@ from perses.analysis import Analysis
 def test_analysis():
     """Test analysis tools.
     """
-    testsystem_names = ['ImidazoleProtonationStateTestSystem']
-    niterations = 20 # number of iterations to run
+    testsystem_names = ['AlanineDipeptideTestSystem']
 
     for testsystem_name in testsystem_names:
         # Create storage.
@@ -56,7 +55,7 @@ def test_analysis():
             testsystem.sams_samplers[environment].verbose = False
 
         # Run test simulations.
-        niterations = 5 # just a few iterations
+        niterations = 20 # just a few iterations
         if testsystem.designer is not None:
             # Run the designer
             testsystem.designer.verbose = False
@@ -72,5 +71,6 @@ def test_analysis():
         analysis.plot_ncmc_work('ncmc.pdf')
 
 if __name__ == '__main__':
-    analysis = Analysis('output-10000.nc')
-    analysis.plot_ncmc_work('ncmc-10000.pdf')
+    #analysis = Analysis('output-10000.nc')
+    #analysis.plot_ncmc_work('ncmc-10000.pdf')
+    test_analysis()
