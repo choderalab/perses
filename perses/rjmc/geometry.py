@@ -2031,6 +2031,64 @@ class GeometrySystemGenerator(object):
                 heavy_torsions.append(torsion)
         return heavy_torsions
 
+    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices):
+        """
+        Determine extra angles to be placed on aromatic ring members. Sometimes,
+        the native angle force is too weak to efficiently close the ring. As with the
+        torsion force, this method assumes that only one residue is changing at a time.
+
+        Parameters
+        ----------
+        angle_force : simtk.openmm.CustomAngleForce
+            the force to which additional terms will be added
+        reference_topology : simtk.openmm.app.Topology
+            new/old topology if forward/backward
+        growth_indices : list of parmed.atom
+
+        Returns
+        -------
+        angle_force : simtk.openmm.CustomAngleForce
+            The modified angle force
+        """
+        import itertools
+        if len(growth_indices)==0:
+            return
+
+        atoms = list(reference_topology.atoms())
+        growth_indices = list(growth_indices)
+        #get residue from first atom
+        residue = atoms[growth_indices[0].idx].residue
+        try:
+            oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
+        except Exception as e:
+            print("Could not generate an oemol from the residue.")
+            print(e)
+
+        #get the omega geometry of the molecule:
+        omega = oeomega.OEOmega()
+        omega.SetMaxConfs(1)
+        omega.SetStrictStereo(False) #TODO: fix stereochem
+        omega(oemol)
+
+        #we now have the residue as an oemol. Time to find the relevant angles.
+        #There's no equivalent to OEGetTorsions, so first find atoms that are relevant
+        aromatic_pred = oechem.OEIsAromaticAtom()
+        heavy_pred = oechem.OEIsHeavy()
+        angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
+
+        #get all heavy aromatic atoms:
+        heavy_aromatics = list(oemol.GetAtoms(angle_criteria))
+        for atom in heavy_aromatics:
+            bonded_atoms = [bonded_atom for bonded_atom in list(atom.GetBonds()) if bonded_atom in heavy_aromatics]
+            for angle_atoms in itertools.combinations(bonded_atoms, 2):
+                try:
+                    angle = oechem.OEGetAngle(angle_atoms[0], atom, angle_atoms[1])
+                    atom_indices = [angle_atoms[0].GetData("topology_index"), atom.GetData("topology_index"), angle_atoms[1].GetData("topology_index")]
+
+                except:
+                    continue
+
+
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
         """
