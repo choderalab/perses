@@ -1777,7 +1777,7 @@ class GeometrySystemGenerator(object):
 
         self.verbose = verbose
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -1922,6 +1922,10 @@ class GeometrySystemGenerator(object):
             if reference_topology==None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
             self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
+        if add_extra_angles:
+            if reference_topology==None:
+                raise ValueError("Need to specify topology in order to add extra angles")
+            self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
 
         return growth_system
 
@@ -2053,7 +2057,7 @@ class GeometrySystemGenerator(object):
         import itertools
         if len(growth_indices)==0:
             return
-
+        angle_force_constant = 10.0*units.kilojoules_per_mole/units.radians**2
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
         #get residue from first atom
@@ -2072,11 +2076,13 @@ class GeometrySystemGenerator(object):
 
         #we now have the residue as an oemol. Time to find the relevant angles.
         #There's no equivalent to OEGetTorsions, so first find atoms that are relevant
+        #TODO: find out if that's really true
         aromatic_pred = oechem.OEIsAromaticAtom()
         heavy_pred = oechem.OEIsHeavy()
         angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
 
         #get all heavy aromatic atoms:
+        #TODO: do this more efficiently
         heavy_aromatics = list(oemol.GetAtoms(angle_criteria))
         for atom in heavy_aromatics:
             bonded_atoms = [bonded_atom for bonded_atom in list(atom.GetBonds()) if bonded_atom in heavy_aromatics]
@@ -2084,10 +2090,14 @@ class GeometrySystemGenerator(object):
                 try:
                     angle = oechem.OEGetAngle(angle_atoms[0], atom, angle_atoms[1])
                     atom_indices = [angle_atoms[0].GetData("topology_index"), atom.GetData("topology_index"), angle_atoms[1].GetData("topology_index")]
-
+                    angle_radians = angle*units.radian
+                    growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
+                    angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], [angle_radians,angle_force_constant, growth_idx])
                 except:
+                    #exception--no angle was there
                     continue
 
+        return angle_force
 
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
