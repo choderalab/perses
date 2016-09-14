@@ -428,10 +428,10 @@ def test_run_geometry_engine(index=0):
     import logging
     logging.basicConfig(level=logging.DEBUG)
     import copy
-    #molecule_name_1 = 'glycine'
-    #molecule_name_2 = 'tryptophan'
-    molecule_name_1 = 'imatinib'
-    molecule_name_2 = 'erlotinib'
+    molecule_name_1 = 'benzene'
+    molecule_name_2 = 'biphenyl'
+    #molecule_name_1 = 'imatinib'
+    #molecule_name_2 = 'erlotinib'
 
     molecule1 = generate_initial_molecule(molecule_name_1)
     molecule2 = generate_initial_molecule(molecule_name_2)
@@ -449,7 +449,7 @@ def test_run_geometry_engine(index=0):
     sm_top_proposal._beta = beta
     geometry_engine = geometry.OmegaFFGeometryEngine(torsion_kappa=8.0, max_confs=10, n_trials=360, strict_stereo=False)
     # Turn on PDB file writing.
-    geometry_engine.write_proposal_pdb = False
+    geometry_engine.write_proposal_pdb = True
     geometry_engine.pdb_filename_prefix = 't13geometry-proposal'
     test_pdb_file = open("%s_to_%s_%d.pdb" % (molecule_name_1, molecule_name_2, index), 'w')
 
