@@ -960,7 +960,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=False, add_extra_torsions=False, reference_topology=top_proposal.new_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=True, add_extra_torsions=True, add_extra_angles=True, reference_topology=top_proposal.new_topology)
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
@@ -974,7 +974,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=False, add_extra_torsions=False, reference_topology=top_proposal.old_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=True, add_extra_torsions=True, add_extra_angles=True, reference_topology=top_proposal.old_topology)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -1777,7 +1777,7 @@ class GeometrySystemGenerator(object):
 
         self.verbose = verbose
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -2057,7 +2057,7 @@ class GeometrySystemGenerator(object):
         import itertools
         if len(growth_indices)==0:
             return
-        angle_force_constant = 400.0*units.kilojoules_per_mole/units.radians**2
+        angle_force_constant = 200.0*units.kilojoules_per_mole/units.radians**2
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
         #get residue from first atom
