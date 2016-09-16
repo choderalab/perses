@@ -2087,15 +2087,12 @@ class GeometrySystemGenerator(object):
         for atom in heavy_aromatics:
             bonded_atoms = [bonded_atom for bonded_atom in list(atom.GetAtoms()) if bonded_atom in heavy_aromatics]
             for angle_atoms in itertools.combinations(bonded_atoms, 2):
-                try:
                     angle = oechem.OEGetAngle(oemol, angle_atoms[0], atom, angle_atoms[1])
                     atom_indices = [angle_atoms[0].GetData("topology_index"), atom.GetData("topology_index"), angle_atoms[1].GetData("topology_index")]
                     angle_radians = angle*units.radian
                     growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
                     angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], [angle_radians,angle_force_constant, growth_idx])
-                except:
-                    #exception--no angle was there
-                    continue
+
 
         return angle_force
 
