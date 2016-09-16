@@ -2057,7 +2057,7 @@ class GeometrySystemGenerator(object):
         import itertools
         if len(growth_indices)==0:
             return
-        angle_force_constant = 200.0*units.kilojoules_per_mole/units.radians**2
+        angle_force_constant = 400.0*units.kilojoules_per_mole/units.radians**2
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
         #get residue from first atom

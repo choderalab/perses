@@ -971,6 +971,15 @@ class ExpandedEnsembleSampler(object):
                 print('switch_logp                : %12.3f' % switch_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
                 print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
+                integrator = openmm.VerletIntegrator(1.0)
+                ctx = openmm.Context(topology_proposal.new_system, integrator)
+                ctx.setPositions(geometry_new_positions)
+                openmm.LocalEnergyMinimizer.minimize(ctx)
+                minimized_positions = ctx.getState(getPositions=True).getPositions(asNumpy=True)
+                print('---------------------------------------------------------')
+                print('Energy after minimizing the new configuration')
+                print_energy_components(topology_proposal.new_topology, topology_proposal.new_system, minimized_positions)
+                del ctx, integrator
 
             # Compute total log acceptance probability, including all components.
             logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
