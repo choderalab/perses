@@ -971,9 +971,17 @@ class ExpandedEnsembleSampler(object):
                 print('switch_logp                : %12.3f' % switch_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
                 print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
+                #integrator = openmm.VerletIntegrator(1.0)
+                from openmmtools.integrators import GradientDescentMinimizationIntegrator
+                #integrator = GradientDescentMinimizationIntegrator()
                 integrator = openmm.VerletIntegrator(1.0)
-                ctx = openmm.Context(topology_proposal.new_system, integrator)
+                #get a deep copy of the system and set the masses to zero
+                test_sys = copy.deepcopy(topology_proposal.new_system)
+                for common_atom in topology_proposal.new_to_old_atom_map.keys():
+                    test_sys.setParticleMass(common_atom, 0.0)
+                ctx = openmm.Context(test_sys, integrator)
                 ctx.setPositions(geometry_new_positions)
+                #integrator.step(100)
                 openmm.LocalEnergyMinimizer.minimize(ctx)
                 minimized_positions = ctx.getState(getPositions=True).getPositions(asNumpy=True)
                 print('---------------------------------------------------------')
