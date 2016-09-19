@@ -140,7 +140,7 @@ class abl_src_affinity(PersesTestSystem):
         proposal_metadata = { }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment])
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL')
 
         # Generate systems
         systems = dict()

@@ -777,7 +777,6 @@ class ExpandedEnsembleSampler(object):
         """
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
-        self._geometry_energy_changes = []
         self.sampler = sampler
         self.topology = topology
         self.state_key = state_key
@@ -968,15 +967,10 @@ class ExpandedEnsembleSampler(object):
                 print('potential after geometry   : %12.3f kT' % potential_insert)
                 print_energy_components(topology_proposal.new_topology, topology_proposal.new_system, geometry_new_positions)
                 print('  GEOMETRY ENERGY CHANGE   : %+12.3f kT' % (potential_insert - potential_delete))
-                if topology_proposal.old_chemical_state_key == 'WT' and topology_proposal.new_chemical_state_key == 'ALA2PHE':
-                    energy_change = potential_insert-potential_delete
-                    self._geometry_energy_changes.append(energy_change)
                 print('---------------------------------------------------------')
                 print('switch_logp                : %12.3f' % switch_logp)
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
                 print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
-                if self._geometry_energy_changes:
-                    print("The average energy change of ALA->PHE is %f, and the variance is %f" % (np.mean(self._geometry_energy_changes), np.var(self._geometry_energy_changes)))
                 #integrator = openmm.VerletIntegrator(1.0)
                 from openmmtools.integrators import GradientDescentMinimizationIntegrator
                 #integrator = GradientDescentMinimizationIntegrator()

@@ -164,8 +164,7 @@ class ProposalEngine(object):
 
     """
 
-    def __init__(self, system_generator, proposal_metadata=None, verbose=False, always_change=True):
-        self._always_change = always_change
+    def __init__(self, system_generator, proposal_metadata=None, verbose=False):
         self._system_generator = system_generator
         self.verbose = verbose
 
@@ -208,9 +207,8 @@ class ProposalEngine(object):
         pass
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self, system_generator, proposal_metadata=None, verbose=False, always_change=True):
-        super(PolymerProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata,
-                                                    verbose=verbose)
+    def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False):
+        super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose)
         self._chain_id = chain_id
 
     def propose(self, current_system, current_topology, current_metadata=None):
@@ -703,9 +701,8 @@ class PointMutationEngine(PolymerProposalEngine):
             ]
     """
 
-    def __init__(self, system_generator, proposal_metadata=None, verbose=False, always_change=True):
-        super(PointMutationEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata,
-                                                  verbose=verbose)
+    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False):
+        super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose)
         self._wildtype = wildtype_topology
         self._max_point_mutants = max_point_mutants
         self._ff = system_generator.forcefield
@@ -936,9 +933,8 @@ class PeptideLibraryEngine(PolymerProposalEngine):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, system_generator, proposal_metadata=None, verbose=False, always_change=True):
-        super(PeptideLibraryEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata,
-                                                   verbose=verbose)
+    def __init__(self, system_generator, library, chain_id, proposal_metadata=None, verbose=False):
+        super(PeptideLibraryEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose)
         self._library = library
         self._ff = system_generator.forcefield
         self._templates = self._ff._templates
@@ -1124,7 +1120,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         If specified, write statistics to this storage layer.
     """
 
-    def __init__(self, system_generator, proposal_metadata=None, verbose=False, always_change=True):
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None):
         if not atom_expr:
             self.atom_expr = oechem.OEExprOpts_AtomicNumber #oechem.OEExprOpts_Aromaticity #| oechem.OEExprOpts_RingMember
         else:
