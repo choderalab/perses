@@ -228,6 +228,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
                 sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+            mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
             mcmc_samplers[environment].verbose = True
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps': 0}, storage=storage)
             exen_samplers[environment].verbose = True
@@ -2300,12 +2301,12 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_alanine_system(sterics=True)
+    #run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
-    #run_imidazole()
+    run_imidazole()
     #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
