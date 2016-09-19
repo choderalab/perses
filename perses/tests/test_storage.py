@@ -17,6 +17,7 @@ import numpy as np
 import logging
 import tempfile
 from functools import partial
+import pickle
 import json
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
@@ -120,9 +121,12 @@ def test_write_object():
 
     for iteration in range(10):
         encoded = storage._ncfile['/envname/modname/varname'][iteration]
-        obj = json.loads(encoded)
+        obj = pickle.loads(encoded)
         assert ('iteration' in obj)
         assert (obj['iteration'] == iteration)
+
+def run_sampler(sampler, niterations):
+    sampler.run(niterations)
 
 def test_storage_with_samplers():
     """Test storage layer inside all samplers.
@@ -144,18 +148,26 @@ def test_storage_with_samplers():
         for environment in testsystem.environments:
             mcmc_sampler = testsystem.mcmc_samplers[environment]
             mcmc_sampler.verbose = False
-            mcmc_sampler.run(niterations)
+            f = partial(run_sampler, mcmc_sampler, niterations)
+            f.description = "Testing MCMCSampler for %s with environment %s" % (testsystem_name, environment)
+            yield f
         # Test ExpandedEnsembleSampler samplers.
         for environment in testsystem.environments:
             exen_sampler = testsystem.exen_samplers[environment]
             exen_sampler.verbose = False
-            exen_sampler.run(niterations)
+            f = partial(run_sampler, exen_sampler, niterations)
+            f.description = "Testing ExpandedEnsembleSampler for %s with environment %s" % (testsystem_name, environment)
+            yield f
         # Test SAMSSampler samplers.
         for environment in testsystem.environments:
             sams_sampler = testsystem.sams_samplers[environment]
             sams_sampler.verbose = False
-            sams_sampler.run(niterations)
+            f = partial(run_sampler, sams_sampler, niterations)
+            f.description = "Testing SAMSSampler for %s with environment %s" % (testsystem_name, environment)
+            yield f
         # Test MultiTargetDesign sampler, if present.
         if hasattr(testsystem, 'designer') and (testsystem.designer is not None):
             testsystem.designer.verbose = False
-            testsystem.designer.run(niterations)
+            f = partial(run_sampler, testsystem.designer, niterations)
+            f.description = "Testing designer for %s with environment %s" % (testsystem_name, environment)
+            yield f
