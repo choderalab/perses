@@ -164,9 +164,10 @@ class ProposalEngine(object):
 
     """
 
-    def __init__(self, system_generator, proposal_metadata=None, verbose=False):
+    def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False):
         self._system_generator = system_generator
         self.verbose = verbose
+        self._always_change = always_change
 
     def propose(self, current_system, current_topology, current_metadata=None):
         """
@@ -207,8 +208,8 @@ class ProposalEngine(object):
         pass
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False):
-        super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose)
+    def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True):
+        super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._chain_id = chain_id
 
     def propose(self, current_system, current_topology, current_metadata=None):
@@ -685,7 +686,6 @@ class PointMutationEngine(PolymerProposalEngine):
         (using the first chain with the id, if there are multiple)
     proposal_metadata : dict -- OPTIONAL
         Contains information necessary to initialize proposal engine
-        in use: ['always_change'] = False (default)
     max_point_mutants : int -- OPTIONAL
         default = None
     residues_allowed_to_mutate : list(str) -- OPTIONAL
@@ -699,10 +699,12 @@ class PointMutationEngine(PolymerProposalEngine):
                 [('99','ALA')],
                 [('99','ALA'),('102','GLN')]
             ]
+    always_change : Boolean -- OPTIONAL, default True
+        Have the proposal engine always propose another mutation
     """
 
-    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False):
-        super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose)
+    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True):
+        super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._wildtype = wildtype_topology
         self._max_point_mutants = max_point_mutants
         self._ff = system_generator.forcefield
@@ -781,7 +783,7 @@ class PointMutationEngine(PolymerProposalEngine):
             raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
         residue_id_to_index = [residue.id for residue in chain._residues]
         # location_prob : np.array, probability value for each residue location (uniform)
-        if 'always_change' in self._metadata and self._metadata['always_change']:
+        if self._always_change:
             old_key = self.compute_state_key(modeller.topology)
             location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations)+1)])
             if old_key == 'WT':
@@ -862,7 +864,7 @@ class PointMutationEngine(PolymerProposalEngine):
             if original_residue.name in ['HIE','HID']:
                 original_residue.name = 'HIS'
             # amino_prob : np.array, probability value for each amino acid option (uniform)
-            if 'always_change' in self._metadata and self._metadata['always_change']:
+            if self._always_change:
                 amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
                 amino_prob[aminos.index(original_residue.name)] = 0.0
             else:
@@ -933,8 +935,8 @@ class PeptideLibraryEngine(PolymerProposalEngine):
         Contains information necessary to initialize proposal engine
     """
 
-    def __init__(self, system_generator, library, chain_id, proposal_metadata=None, verbose=False):
-        super(PeptideLibraryEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose)
+    def __init__(self, system_generator, library, chain_id, proposal_metadata=None, verbose=False, always_change=True):
+        super(PeptideLibraryEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._library = library
         self._ff = system_generator.forcefield
         self._templates = self._ff._templates
@@ -1120,7 +1122,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         If specified, write statistics to this storage layer.
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None):
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
         if not atom_expr:
             self.atom_expr = oechem.OEExprOpts_AtomicNumber #oechem.OEExprOpts_Aromaticity #| oechem.OEExprOpts_RingMember
         else:
@@ -1145,7 +1147,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         self._probability_matrix = self._calculate_probability_matrix(self._smiles_list)
 
-        super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata)
+        super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
 
     def propose(self, current_system, current_topology, current_metadata=None):
         """
