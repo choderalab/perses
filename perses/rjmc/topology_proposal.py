@@ -724,21 +724,21 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _choose_mutant(self, modeller, metadata):
         chain_id = self._chain_id
-        index_to_new_residues = self._undo_old_mutants(modeller, chain_id)
+        old_key = self.compute_state_key(modeller.topology)
+        index_to_new_residues = self._undo_old_mutants(modeller, chain_id, old_key)
         if self._allowed_mutations is not None:
             allowed_mutations = self._allowed_mutations
-            index_to_new_residues = self._choose_mutation_from_allowed(modeller, chain_id, allowed_mutations, index_to_new_residues)
+            index_to_new_residues = self._choose_mutation_from_allowed(modeller, chain_id, allowed_mutations, index_to_new_residues, old_key)
         else:
             # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
-            index_to_new_residues = self._propose_mutations(modeller, chain_id, index_to_new_residues)
+            index_to_new_residues = self._propose_mutations(modeller, chain_id, index_to_new_residues, old_key)
         # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
         metadata['mutations'] = self._save_mutations(modeller, index_to_new_residues)
 
         return index_to_new_residues, metadata
 
-    def _undo_old_mutants(self, modeller, chain_id):
+    def _undo_old_mutants(self, modeller, chain_id, old_key):
         index_to_new_residues = dict()
-        old_key = self.compute_state_key(modeller.topology)
         if old_key == 'WT':
             return index_to_new_residues
         for chain in modeller.topology.chains():
@@ -749,10 +749,10 @@ class PointMutationEngine(PolymerProposalEngine):
             old_res = mutant[:3]
             residue_id = mutant[3:-3]
             new_res = mutant[-3:]
-            index_to_new_residues[residue_id_to_index.index(residue_id)] = new_res
+            index_to_new_residues[residue_id_to_index.index(residue_id)] = old_res
         return index_to_new_residues
 
-    def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations, index_to_new_residues):
+    def _choose_mutation_from_allowed(self, modeller, chain_id, allowed_mutations, index_to_new_residues, old_key):
         """
         Used when allowed mutations have been specified
         Assume (for now) uniform probability of selecting each specified mutant
@@ -784,7 +784,6 @@ class PointMutationEngine(PolymerProposalEngine):
         residue_id_to_index = [residue.id for residue in chain._residues]
         # location_prob : np.array, probability value for each residue location (uniform)
         if self._always_change:
-            old_key = self.compute_state_key(modeller.topology)
             location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations)+1)])
             if old_key == 'WT':
                 location_prob[len(allowed_mutations)] = 0.0
@@ -823,7 +822,7 @@ class PointMutationEngine(PolymerProposalEngine):
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues
 
-    def _propose_mutations(self, modeller, chain_id, index_to_new_residues):
+    def _propose_mutations(self, modeller, chain_id, index_to_new_residues, old_key):
         """
         Arguments
         ---------
