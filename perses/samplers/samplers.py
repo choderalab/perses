@@ -783,6 +783,7 @@ class ExpandedEnsembleSampler(object):
         self.proposal_engine = proposal_engine
         self.log_weights = log_weights
         self.scheme = scheme
+        self._geometry_energies = []
         if self.log_weights is None: self.log_weights = dict()
 
         self.storage = None
@@ -972,6 +973,11 @@ class ExpandedEnsembleSampler(object):
                 print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
                 print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
                 #integrator = openmm.VerletIntegrator(1.0)
+                if topology_proposal.old_chemical_state_key == 'WT' and topology_proposal.new_chemical_state_key =='ALA2PHE':
+                    geometry_energy_difference = potential_insert - potential_delete
+                    self._geometry_energies.append(geometry_energy_difference)
+                if self._geometry_energies:
+                    print("The average geometry energy change is %f and the standard deviation is %f" % (np.mean(self._geometry_energies), np.std(self._geometry_energies)))
                 from openmmtools.integrators import GradientDescentMinimizationIntegrator
                 #integrator = GradientDescentMinimizationIntegrator()
                 integrator = openmm.VerletIntegrator(1.0)

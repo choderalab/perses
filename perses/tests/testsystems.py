@@ -298,8 +298,8 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         environments = ['vacuum']
 
         # Write atom-by-atom geometry output.
-        self.geometry_engine.write_proposal_pdb = True
-        self.geometry_engine.pdb_filename_prefix = 'geometry2'
+        self.geometry_engine.write_proposal_pdb = False
+        #self.geometry_engine.pdb_filename_prefix = 'geometry2'
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -332,7 +332,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         allowed_mutations = [[('2','PHE')]]
         proposal_metadata = {"always_change":True}
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+            proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations, always_change=True)
 
         # Generate systems
         systems = dict()
