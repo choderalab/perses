@@ -258,9 +258,8 @@ def test_alanine_dipeptide_map():
     chain_id = ' '
 
     metadata = dict()
-    metadata['always_change'] = True
     system_generator = topology_proposal.SystemGenerator([ff_filename])
-    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, allowed_mutations=allowed_mutations)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, allowed_mutations=allowed_mutations, always_change=True)
 
     proposal = pm_top_engine.propose(system, modeller.topology)
 
@@ -317,11 +316,10 @@ def test_mutate_from_every_amino_to_every_other():
     chain_id = 'A'
 
     metadata = dict()
-    metadata['always_change'] = True
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants)
+    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants, always_change=True)
 
     current_system = system
     current_topology = modeller.topology
@@ -450,6 +448,52 @@ def test_limiting_allowed_residues():
     pl_top_library = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residues_allowed_to_mutate)
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
+def test_always_change():
+    """
+    Test example system with certain mutations allowed to mutate
+    """
+    import perses.rjmc.topology_proposal as topology_proposal
+
+    failed_mutants = 0
+
+    pdbid = "1G3F"
+    topology, positions = load_pdbid_to_openmm(pdbid)
+    modeller = app.Modeller(topology, positions)
+
+    chain_id = 'B'
+    to_delete = list()
+    for chain in modeller.topology.chains():
+        if chain.id != chain_id:
+            to_delete.append(chain)
+    modeller.delete(to_delete)
+    modeller.addHydrogens()
+
+    ff_filename = "amber99sbildn.xml"
+
+    ff = app.ForceField(ff_filename)
+    system = ff.createSystem(modeller.topology)
+
+    system_generator = topology_proposal.SystemGenerator([ff_filename])
+
+    max_point_mutants = 1
+    residues_allowed_to_mutate = ['903']
+
+    for residue in modeller.topology.residues():
+        if residue.id in residues_allowed_to_mutate:
+            print('Old residue: %s' % residue.name)
+            old_res_name = residue.name
+    pl_top_library = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residues_allowed_to_mutate, always_change=True)
+    topology = modeller.topology
+    for i in range(50):
+        pl_top_proposal = pl_top_library.propose(system, topology)
+        for residue in pl_top_proposal.new_topology.residues():
+            if residue.id in residues_allowed_to_mutate:
+                print('Iter %s New residue: %s' % (i, residue.name))
+                new_res_name = residue.name
+        assert(old_res_name != new_res_name)
+        old_res_name = new_res_name
+        topology = pl_top_proposal.new_topology
+        system = pl_top_proposal.new_system
 
 def test_run_peptide_library_engine():
     """
@@ -493,4 +537,5 @@ if __name__ == "__main__":
 #    test_limiting_allowed_residues()
 #    test_run_peptide_library_engine()
 #    test_small_molecule_proposals()
-    test_alanine_dipeptide_map()
+#    test_alanine_dipeptide_map()
+    test_always_change()
