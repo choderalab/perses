@@ -307,7 +307,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         from pkg_resources import resource_filename
         valence_xml_filename = resource_filename('perses', 'data/amber99sbildn-valence-only.xml')
         system_generators['vacuum'] = SystemGenerator([valence_xml_filename],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : app.HBonds },
             use_antechamber=False)
 
         # Create peptide in solvent.
