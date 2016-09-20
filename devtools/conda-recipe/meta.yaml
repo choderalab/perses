@@ -28,6 +28,7 @@ requirements:
     - matplotlib
     - seaborn
     - pdbfixer
+    - mdtraj
     - parmed # for testing/debugging
     - pdbfixer
 
@@ -49,6 +50,7 @@ requirements:
     - matplotlib
     - seaborn
     - pdbfixer
+    - mdtraj
     - parmed # for testing/debugging
     - pdbfixer
 

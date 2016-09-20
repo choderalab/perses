@@ -26,6 +26,7 @@ class GeometryEngine(object):
     """
 
     def __init__(self, metadata=None):
+        # TODO: Either this base constructor should be called by subclasses, or we should remove its arguments.
         pass
 
     def propose(self, top_proposal, current_positions, beta):
@@ -81,7 +82,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
-    def __init__(self, metadata=None, use_sterics=True):
+    def __init__(self, metadata=None, use_sterics=False, verbose=False):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
@@ -89,7 +90,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._energy_time = 0.0
         self._torsion_coordinate_time = 0.0
         self._position_set_time = 0.0
-        self.verbose = False
+        self.verbose = verbose
         self.use_sterics = use_sterics
 
     def propose(self, top_proposal, current_positions, beta):
@@ -226,6 +227,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # DEBUG: Write growth stages
             from simtk.openmm.app import PDBFile
             prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
+            self._proposal_pdbfile = open("%s-proposal.pdb" % prefix, 'w') # PDB file for proposal probabilities
+            self._proposal_pdbfile.write('MODEL\n')
+            self._proposal_pdbfile.write('TER\n')
+            self._proposal_pdbfile.write('ENDMDL\n')
+
             if direction == 'forward':
                 pdbfile = open('%s-initial.pdb' % prefix, 'w')
                 PDBFile.writeFile(top_proposal.old_topology, old_positions, file=pdbfile)
@@ -260,7 +266,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
-            print("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
+            if self.verbose: print("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
 
             if atom != torsion.atom1:
                 raise Exception('atom != torsion.atom1')
@@ -323,7 +329,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         if self.write_proposal_pdb:
             pdbfile.close()
-
+            # Close proposal probability PDB file
+            self._proposal_pdbfile.close()
+            self._proposal_pdbfile = None
             prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
             if direction == 'forward':
                 pdbfile = open('%s-final.pdb' % prefix, 'w')
@@ -816,6 +824,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             self._energy_time += energy_computation_time
             logq_i = -beta*state.getPotentialEnergy()
             logq[i] = logq_i
+
         if np.sum(np.isnan(logq)) == n_divisions:
             raise Exception("All %d torsion energies in torsion PMF are NaN." % n_divisions)
         logq[np.isnan(logq)] = -np.inf
@@ -823,6 +832,22 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         q = np.exp(logq)
         Z = np.sum(q)
         logp_torsions = logq - np.log(Z)
+
+        if hasattr(self, '_proposal_pdbfile'):
+            # Write proposal probabilities to PDB file as B-factors for inert atoms
+            f_i = -logp_torsions
+            f_i -= f_i.min() # minimum free energy is zero
+            f_i[f_i > 999.99] = 999.99
+            self._proposal_pdbfile.write('MODEL\n')
+            for i, xyz in enumerate(xyzs):
+                self._proposal_pdbfile.write('ATOM  %5d %4s %3s %c%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n' % (i+1, ' Ar ', 'Ar ', ' ', atom_idx+1, 10*xyz[0], 10*xyz[1], 10*xyz[2], np.exp(logp_torsions[i]), f_i[i]))
+            self._proposal_pdbfile.write('TER\n')
+            self._proposal_pdbfile.write('ENDMDL\n')
+            # TODO: Write proposal PMFs to storage
+            # atom_proposal_indices[order]
+            # atom_positions[order,k]
+            # torsion_pmf[order, division_index]
+
         return logp_torsions, phis
 
 
@@ -960,7 +985,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=True, add_extra_torsions=True, add_extra_angles=True, reference_topology=top_proposal.new_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=False, add_extra_torsions=False, reference_topology=top_proposal.new_topology)
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
@@ -1082,7 +1107,6 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
 
         if self.write_proposal_pdb:
             pdbfile.close()
-
             prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
             if direction == 'forward':
                 pdbfile = open('%s-final.pdb' % prefix, 'w')
