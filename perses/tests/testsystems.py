@@ -1672,7 +1672,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['explicit']
 
     """
-    def __init__(self, **kwargs):
+    def __init__(self, constraints=app.HBonds, **kwargs):
         super(SmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
@@ -1684,9 +1684,9 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None })
+            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints })
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
-            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None })
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
 
         #
         # Create topologies and positions

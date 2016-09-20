@@ -291,8 +291,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
                 logp_r = self._bond_logq(r, bond, beta) - logZ_r
             else:
-                constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
-                r = constraint #set bond length to exactly constraint
+                if direction == 'forward':
+                    constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
+                    if constraint is None:
+                        raise ValueError("Structure contains a topological bond [%s - %s] with no constraint or bond information." % (str(atom), str(bond_atom)))
+                    r = constraint #set bond length to exactly constraint
                 logp_r = 0.0
 
             #propose an angle and calculate its probability
