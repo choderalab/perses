@@ -701,6 +701,13 @@ class PointMutationEngine(PolymerProposalEngine):
             ]
     always_change : Boolean -- OPTIONAL, default True
         Have the proposal engine always propose another mutation
+        If allowed_mutations is not specified, always_change will require ALL
+        point mutations to be different
+        The proposal engine will choose number of locations specified by 
+        max_point_mutants, and will require all of those residues to change
+        eg: if old topology included L99A and M102Q, the new proposal cannot
+            include L99A OR M102Q
+        (This is only relevant in cases where max_point_mutants > 1)
     """
 
     def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True):
@@ -828,6 +835,10 @@ class PointMutationEngine(PolymerProposalEngine):
         ---------
         modeller : simtk.openmm.app.Modeller
         chain_id : str
+        index_to_new_residues : dict
+            contains information to mutate back to WT as starting point for new mutants
+        old_key : str
+            chemical_state_key for old topology
 
         Returns
         -------
@@ -846,6 +857,7 @@ class PointMutationEngine(PolymerProposalEngine):
                     num_residues = len(chain._residues)
                     chain_residues = chain._residues
                 chain_found = True
+                residue_id_to_index = [residue.id for residue in chain._residues]
                 break
         if not chain_found:
             chains = [ chain.id for chain in modeller.topology.chains() ]
@@ -855,6 +867,15 @@ class PointMutationEngine(PolymerProposalEngine):
             chain_residues = self._mutable_residues(chain)
         # location_prob : np.array, probability value for each residue location (uniform)
         location_prob = np.array([1.0/num_residues for i in range(num_residues)])
+        if self._always_change:
+            residue_id_to_index = [residue.id for residue in chain._residues]
+            current_mutation = dict()
+            if old_key != 'WT':
+                for mutant in old_key.split('-'):
+                    residue_id = mutant[3:-3]
+                    new_res = mutant[-3:]
+                    current_mutation[residue_id] = new_res
+
         for i in range(self._max_point_mutants):
             # proposed_location : int, index of chosen entry in location_prob
             proposed_location = np.random.choice(range(num_residues), p=location_prob)
@@ -864,17 +885,22 @@ class PointMutationEngine(PolymerProposalEngine):
                 original_residue.name = 'HIS'
             # amino_prob : np.array, probability value for each amino acid option (uniform)
             if self._always_change:
-                amino_prob = np.array([1.0/(len(aminos)-1) for i in range(len(aminos))])
-                amino_prob[aminos.index(original_residue.name)] = 0.0
+                amino_prob = np.array([1.0/(len(aminos)-1) for l in range(len(aminos))])
+                if proposed_location in [residue_id_to_index.index(residue_id) for residue_id in current_mutation]:
+                    amino_prob[aminos.index(current_mutation[proposed_location])] = 0.0
+                else:
+                    amino_prob[aminos.index(original_residue.name)] = 0.0
             else:
-                amino_prob = np.array([1.0/(len(aminos)) for i in range(len(aminos))])
+                amino_prob = np.array([1.0/(len(aminos)) for k in range(len(aminos))])
             # proposed_amino_index : int, index of three letter residue name in aminos list
             proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+            if self._residues_allowed_to_mutate is not None:
+                proposed_location = residue_id_to_index.index(self._residues_allowed_to_mutate[proposed_location])
             index_to_new_residues[proposed_location] = aminos[proposed_amino_index]
             if aminos[proposed_amino_index] == 'HIS':
                 his_state = ['HIE','HID']
-                his_prob = np.array([0.5 for i in range(len(his_state))])
+                his_prob = np.array([0.5 for j in range(len(his_state))])
                 his_choice = np.random.choice(range(len(his_state)),p=his_prob)
                 index_to_new_residues[proposed_location] = his_state[his_choice]
         return index_to_new_residues
