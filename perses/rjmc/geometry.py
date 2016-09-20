@@ -293,6 +293,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
+                    if constraint is None:
+                        raise ValueError("Structure contains a topological bond [%s - %s] with no constraint or bond information." % (str(atom), str(bond_atom)))
                     r = constraint #set bond length to exactly constraint
                 logp_r = 0.0
 
