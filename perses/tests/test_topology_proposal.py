@@ -450,11 +450,11 @@ def test_limiting_allowed_residues():
 
 def test_always_change():
     """
-    Test example system with certain mutations allowed to mutate
+    Test 'always_change' argument in topology proposal
+    Allowing one residue to mutate, must change to a different residue each
+    of 50 iterations
     """
     import perses.rjmc.topology_proposal as topology_proposal
-
-    failed_mutants = 0
 
     pdbid = "1G3F"
     topology, positions = load_pdbid_to_openmm(pdbid)
