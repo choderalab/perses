@@ -120,8 +120,7 @@ def test_write_object():
         view.write_object('varname', obj, iteration=iteration)
 
     for iteration in range(10):
-        encoded = storage._ncfile['/envname/modname/varname'][iteration]
-        obj = pickle.loads(encoded)
+        obj = storage.get_object('/envname/modname/varname', iteration=iteration)
         assert ('iteration' in obj)
         assert (obj['iteration'] == iteration)
 

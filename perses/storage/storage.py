@@ -25,6 +25,7 @@ import pickle
 import json
 import mdtraj
 from simtk import unit
+import codecs
 
 ################################################################################
 # LOGGER
@@ -184,12 +185,35 @@ class NetCDFStorage(object):
             else:
                 ncgrp.createVariable(varname, str, dimensions=(), chunksizes=(1,))
 
-        #encoded = json.dumps(obj)
-        encoded = pickle.dumps(obj)
+        pickled = codecs.encode(pickle.dumps(obj), "base64").decode()
         if iteration is not None:
-            ncgrp.variables[varname][iteration] = encoded
+            ncgrp.variables[varname][iteration] = pickled
         else:
-            ncgrp.variables[varname] = encoded
+            ncgrp.variables[varname] = pickled
+
+    def get_object(self, varname, iteration=None):
+        """Get the serialized Python object.
+
+        Parameters
+        ----------
+        varname : str
+            The variable name to be stored
+        iteration : int, optional, default=None
+            The local iteration for the module, or `None` if this is a singleton
+
+        Returns
+        -------
+        obj : object
+            The retrieved object
+
+        """
+        if iteration is not None:
+            pickled = self._ncfile['/envname/modname/varname'][iteration]
+        else:
+            pickled = self._ncfile['/envname/modname/varname'][0]
+
+        obj = pickle.loads(codecs.decode(pickled.encode(), "base64"))
+        return obj
 
     def write_quantity(self, varname, value, iteration=None):
         """Write a floating-point number
