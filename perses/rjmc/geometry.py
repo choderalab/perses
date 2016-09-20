@@ -999,7 +999,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=False, add_extra_torsions=False, reference_topology=top_proposal.old_topology)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=True, add_extra_torsions=True, add_extra_angles=True, reference_topology=top_proposal.old_topology)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -1801,7 +1801,7 @@ class GeometrySystemGenerator(object):
 
         self.verbose = verbose
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None):
+    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
         for each integer above 0, an additional atom is made interacting, with order determined by growth_index
@@ -1896,7 +1896,7 @@ class GeometrySystemGenerator(object):
             growth_system.addForce(custom_bond_force)
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
-            print('growth_indices:', growth_indices)
+            #print('growth_indices:', growth_indices)
             reference_nonbonded_force = reference_forces['NonbondedForce']
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
                 [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
@@ -1946,6 +1946,10 @@ class GeometrySystemGenerator(object):
             if reference_topology==None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
             self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
+        if add_extra_angles:
+            if reference_topology==None:
+                raise ValueError("Need to specify topology in order to add extra angles")
+            self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
 
         return growth_system
 
@@ -2054,6 +2058,66 @@ class GeometrySystemGenerator(object):
             if not is_h_present:
                 heavy_torsions.append(torsion)
         return heavy_torsions
+
+    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices):
+        """
+        Determine extra angles to be placed on aromatic ring members. Sometimes,
+        the native angle force is too weak to efficiently close the ring. As with the
+        torsion force, this method assumes that only one residue is changing at a time.
+
+        Parameters
+        ----------
+        angle_force : simtk.openmm.CustomAngleForce
+            the force to which additional terms will be added
+        reference_topology : simtk.openmm.app.Topology
+            new/old topology if forward/backward
+        growth_indices : list of parmed.atom
+
+        Returns
+        -------
+        angle_force : simtk.openmm.CustomAngleForce
+            The modified angle force
+        """
+        import itertools
+        if len(growth_indices)==0:
+            return
+        angle_force_constant = 400.0*units.kilojoules_per_mole/units.radians**2
+        atoms = list(reference_topology.atoms())
+        growth_indices = list(growth_indices)
+        #get residue from first atom
+        residue = atoms[growth_indices[0].idx].residue
+        try:
+            oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
+        except Exception as e:
+            print("Could not generate an oemol from the residue.")
+            print(e)
+
+        #get the omega geometry of the molecule:
+        omega = oeomega.OEOmega()
+        omega.SetMaxConfs(1)
+        omega.SetStrictStereo(False) #TODO: fix stereochem
+        omega(oemol)
+
+        #we now have the residue as an oemol. Time to find the relevant angles.
+        #There's no equivalent to OEGetTorsions, so first find atoms that are relevant
+        #TODO: find out if that's really true
+        aromatic_pred = oechem.OEIsAromaticAtom()
+        heavy_pred = oechem.OEIsHeavy()
+        angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
+
+        #get all heavy aromatic atoms:
+        #TODO: do this more efficiently
+        heavy_aromatics = list(oemol.GetAtoms(angle_criteria))
+        for atom in heavy_aromatics:
+            #bonded_atoms = [bonded_atom for bonded_atom in list(atom.GetAtoms()) if bonded_atom in heavy_aromatics]
+            bonded_atoms = list(atom.GetAtoms())
+            for angle_atoms in itertools.combinations(bonded_atoms, 2):
+                    angle = oechem.OEGetAngle(oemol, angle_atoms[0], atom, angle_atoms[1])
+                    atom_indices = [angle_atoms[0].GetData("topology_index"), atom.GetData("topology_index"), angle_atoms[1].GetData("topology_index")]
+                    angle_radians = angle*units.radian
+                    growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
+                    angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], [angle_radians,angle_force_constant, growth_idx])
+        return angle_force
 
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):

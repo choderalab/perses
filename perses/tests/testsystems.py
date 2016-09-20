@@ -298,8 +298,8 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         environments = ['vacuum']
 
         # Write atom-by-atom geometry output.
-        self.geometry_engine.write_proposal_pdb = True
-        self.geometry_engine.pdb_filename_prefix = 'geometry'
+        self.geometry_engine.write_proposal_pdb = False
+        #self.geometry_engine.pdb_filename_prefix = 'geometry2'
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -329,9 +329,10 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
             }
         proposal_engines = dict()
         chain_id = ' '
-        allowed_mutations = [[('2','ALA')],[('2','VAL')],[('2','LEU')],[('2','PHE')]]
+        allowed_mutations = [[('2','PHE')]]
+        proposal_metadata = {"always_change":True}
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+            proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations, always_change=True)
 
         # Generate systems
         systems = dict()
@@ -2301,7 +2302,7 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    #run_alanine_system(sterics=True)
+    run_alanine_system(sterics=False)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
