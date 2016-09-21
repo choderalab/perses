@@ -6,6 +6,14 @@
 
 Experiments with expanded ensemble simulation to explore chemical and mutational space.
 
+## Notice
+
+Please be aware that this code is made available in the spirit of open science, but is currently pre-alpha--that is,
+**it is not guaranteed to be completely tested or provide the correct results**, and the API can change at any time
+without warning. If you do use this code, do so at your own risk. We appreciate your input, including raising issues
+about potential problems with the code, but may not be able to address your issue until other development activities
+have concluded.
+
 ## Manifest
 
 * `perses/` - Package containing code for performing expanded ensemble simulations
