@@ -49,23 +49,61 @@ class GeometryTestSystem(object):
         a parmed structure object with all parameters of the system
     growth_order : list of int
         list of indices for the growth order
+    positions : [n,3] ndarray of float
+        positions of atoms
     """
 
     @property
     def topology(self):
-        pass
+        return self._topology
 
     @property
     def system(self):
-        pass
+        return self._system
 
     @property
     def structure(self):
-        pass
+        return self._structure
 
     @property
     def growth_order(self):
-        pass
+        return self._growth_order
+
+    @property
+    def positions(self):
+        return self._positions
+
+class BondTestSystem(GeometryTestSystem):
+    """
+    This test system has a system containing only two particles and a single bond. Taken from particles 1 and 4 of the
+    AlanineDipeptideImplicit test system (both carbon).
+    """
+
+    def __init__(self):
+        #make a simple topology
+        self._topology = app.Topology()
+        new_chain = self._topology.addChain("0")
+        new_res = self._topology.addResidue("MOL", new_chain)
+        atom1 = self._topology.addAtom("C1", app.Element.getByAtomicNumber(6), new_res, 0)
+        atom2 = self._topology.addAtom("C2", app.Element.getByAtomicNumber(6), new_res, 1)
+        self._topology.addBond(atom1, atom2)
+
+        #make a simple system:
+        self._system = openmm.System()
+        self._system.addParticle(12.01)
+        self._system.addParticle(12.01)
+        bond_force = openmm.HarmonicBondForce()
+        self._system.addForce(bond_force)
+        bond_force.addBond(0,1, unit.Quantity(value=0.1522, unit=unit.nanometer), unit.Quantity(value=265265.60000000003, unit=unit.kilojoule/(unit.nanometer**2*unit.mole)))
+
+        #make a parmed structure:
+        self._structure = parmed.openmm.load_topology(self._topology, system=self._system)
+
+        #make some growth indices:
+        self._growth_order = [0,1]
+
+        #set some positions:
+        self._positions = unit.Quantity([[2.00000100e-01,   2.09000000e-01,   1.00000000e-08], [3.42742000e-01,   2.64079500e-01,  -3.00000000e-07]], unit=unit.nanometers)
 
 
 def get_data_filename(relative_path):
