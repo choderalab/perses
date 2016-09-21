@@ -23,7 +23,7 @@ requirements:
     - openmoltools
     - alchemy >=1.2.0
     - openmmtools
-    - numba ==0.27.0
+    - numba >=0.27
     - netcdf4
     - matplotlib
     - seaborn
@@ -45,7 +45,7 @@ requirements:
     - openmoltools
     - alchemy >=1.2.0
     - openmmtools
-    - numba ==0.27.0
+    - numba >=0.27
     - netcdf4
     - matplotlib
     - seaborn
