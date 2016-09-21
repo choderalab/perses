@@ -71,6 +71,7 @@ class GeometryEngine(object):
         """
         return 0.0
 
+
 class FFAllAngleGeometryEngine(GeometryEngine):
     """
     This is an implementation of GeometryEngine which uses all valence terms and OpenMM
@@ -929,6 +930,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
     """
 
     def __init__(self, torsion_kappa=8.0, max_confs=1, n_trials=10, strict_stereo=False):
+        raise NotImplementedError("This GeometryEngine is not currently supported.")
         self._kappa = torsion_kappa
         self._oemols = {}
         self._max_confs = max_confs
@@ -1351,6 +1353,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         """
         pass
 
+
 class PredAtomTopologyIndex(oechem.OEUnaryAtomPred):
 
     def __init__(self, topology_index):
@@ -1394,7 +1397,7 @@ class BootstrapParticleFilter(object):
             How often to resample particles. default 10
         """
 
-        raise NotImplementedError
+        raise NotImplementedError("The implementation of this GeometryEngine is not complete")
         self._system = growth_context.getSystem()
         self._beta = beta
         self._growth_stage = 0
@@ -1722,7 +1725,7 @@ class OmegaGeometryEngine(GeometryEngine):
         self._proposal_sigma = 1.0
         self._reference_oemols = {}
         self._metadata = metadata
-        raise NotImplementedError
+        raise NotImplementedError("This GeometryEngine is not currently supported.")
 
     def propose(self, top_proposal, current_positions, beta):
         """
