@@ -34,6 +34,40 @@ beta = 1.0/kT
 
 proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
 
+class GeometryTestSystem(object):
+    """
+    A base class for a special set of test systems for the GeometryEngines.
+    These systems should, unlike PersesTestSystem, expose certain features.
+
+    Properties
+    ----------
+    topology : simtk.openmm.app.Topology
+        the openmm Topology of the relevant system
+    system : simtk.openmm.System
+        the openmm system, containing relevant forces
+    structure : parmed.Structure
+        a parmed structure object with all parameters of the system
+    growth_order : list of int
+        list of indices for the growth order
+    """
+
+    @property
+    def topology(self):
+        pass
+
+    @property
+    def system(self):
+        pass
+
+    @property
+    def structure(self):
+        pass
+
+    @property
+    def growth_order(self):
+        pass
+
+
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
     In the source distribution, these files are in ``perses/data/*/``,
@@ -781,19 +815,3 @@ def _generate_ffxmls():
     ffxml_out_kinase.write(ffxml_str_kinase)
     ffxml_out_t4.close()
 
-
-if __name__=="__main__":
-    #test_coordinate_conversion()
-    niter = 10
-    energies = np.zeros(niter)
-    for i in range(niter):
-        energies[i] = test_run_geometry_engine(index=i)
-    print("The average energy was %f" % np.average(energies))
-    #test_existing_coordinates()
-    #test_openmm_dihedral()
-    #test_try_random_itoc()
-    #test_logp_reverse()
-    #_tleap_all()
-    #test_mutate_from_all_to_all()
-    #_generate_ffxmls()
-    #test_propose_kinase_inhibitors()
