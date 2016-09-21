@@ -2149,18 +2149,6 @@ class GeometrySystemGenerator(object):
         new_atom_growth_order = [growth_indices_list.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
 
-class PredHBond(oechem.OEUnaryBondPred):
-    """
-    Example elaborating usage on:
-    https://docs.eyesopen.com/toolkits/python/oechemtk/predicates.html#section-predicates-match
-    """
-    def __call__(self, bond):
-        atom1 = bond.GetBgn()
-        atom2 = bond.GetEnd()
-        if atom1.IsHydrogen() or atom2.IsHydrogen():
-            return True
-        else:
-            return False
 
 class ProposalOrderTools(object):
     """
@@ -2357,73 +2345,6 @@ class ProposalOrderTools(object):
         # Recode topological torsions as parmed Dihedral objects
         topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
         return topological_torsions
-
-class BondOnlyProposalOrder(ProposalOrderTools):
-    """
-    A class similar to ProposalOrderTools, but only uses bonds (no angles or torsions)
-    to decide proposal order and bond choice.
-    """
-
-    def determine_proposal_order(self, direction='forward'):
-        """
-        Determine the proposal order of this system pair.
-        This includes the choice of a bond As such, a logp is returned,
-        but this is typically 0 except in rings
-
-        Parameters
-        ----------
-        direction : str, optional
-            whether to determine the forward or reverse proposal order
-
-        Returns
-        -------
-        atoms_bonds : OrderedDict
-            parmed.Atom : parmed.Atom atom : chosen_bonded_atom
-        logp_bond_choice : float
-            log probability of the chosen torsions
-        """
-        atoms_bonds = collections.OrderedDict()
-        logp_bond_choice = 0.0
-        if direction=='forward':
-            structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
-            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
-        elif direction=='reverse':
-            structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
-            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
-        else:
-            raise ValueError("direction parameter must be either forward or reverse.")
-
-        while(len(new_atoms))>0:
-            eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-            if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
-                raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
-            for atom in eligible_atoms:
-                chosen_bond_atom, logp_choice = self._choose_bond_partner(atoms_with_positions, atom)
-                atoms_bonds[atom] = chosen_bond_atom
-                logp_bond_choice += logp_choice
-                new_atoms.remove(atom)
-                atoms_with_positions.append(atom)
-        return atoms_bonds, logp_bond_choice
-
-    def _choose_bond_partner(self, atoms_with_positions, atom):
-        """
-        Choose a bond partner to atom that has positions.
-
-        Parameters
-        ----------
-        atoms_with_positoins
-        atom
-
-        Returns
-        -------
-
-        """
-        potential_bond_partners = [a for a in atom.bond_partners if a in atoms_with_positions]
-        logp_choice = np.log(1.0/len(potential_bond_partners))
-        chosen_bonded_atom = np.random.choice(potential_bond_partners)
-        return chosen_bonded_atom, logp_choice
 
 
 class NoTorsionError(Exception):
