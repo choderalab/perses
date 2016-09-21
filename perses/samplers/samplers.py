@@ -1356,6 +1356,7 @@ class SAMSSampler(object):
             print("SAMS sampler iteration %5d" % self.iteration)
         self.update_sampler()
         self.update_logZ_estimates()
+        if self.storage: self.storage.sync()
         self.iteration += 1
         if self.verbose:
             print("=" * 80)
@@ -1488,6 +1489,7 @@ class MultiTargetDesign(object):
         self.update_samplers()
         self.update_target_probabilities()
         self.iteration += 1
+        if self.storage: self.storage.sync()
         if self.verbose:
             print("*" * 80)
 
@@ -1589,6 +1591,7 @@ class ProtonationStateSampler(object):
             print("ProtonationStateSampler iteration %8d" % self.iteration)
         self.update_samplers()
         self.update_target_probabilities()
+        if self.storage: self.storage.sync()
         self.iteration += 1
         if self.verbose:
             print("*" * 80)
