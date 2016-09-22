@@ -80,6 +80,22 @@ def torsion_scan(bond_position, angle_position, torsion_position, internal_coord
         xyzs[i] = internal_to_cartesian(bond_position, angle_position, torsion_position, internal_coordinates)
     return xyzs
 
+@jit(float64[:](float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
+def calculate_angle(atom_position, bond_position, angle_position):
+            a = atom_position - bond_position
+            b = angle_position - bond_position
+            a_u = a / _norm(a)
+            b_u = b / _norm(b)
+
+            #bond angle
+            cos_theta = np.dot(a_u, b_u)
+            if cos_theta > 1.0:
+                cos_theta = 1.0
+            elif cos_theta < -1.0:
+                cos_theta = -1.0
+            theta = np.arccos(cos_theta)
+            return theta
+
 @jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position):
 

@@ -26,11 +26,13 @@ try:
 except ImportError:
     from commands import getoutput  # If python 2
 
+from perses.rjmc import coordinate_numba
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
+CARBON_MASS = 12.01
 
 proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
 
@@ -75,6 +77,7 @@ class GeometryTestSystem(object):
 
     @property
     def energy(self):
+        self._context.setPositions(self._positions)
         return self._context.getState(getEnergy=True).getPotentialEnergy()
 
 class BondTestSystem(GeometryTestSystem):
@@ -85,6 +88,9 @@ class BondTestSystem(GeometryTestSystem):
 
     def __init__(self):
         #make a simple topology
+        self._default_positions = unit.Quantity([[2.00000100e-01,   2.09000000e-01,   1.00000000e-08], [3.42742000e-01,   2.64079500e-01,  -3.00000000e-07]], unit=unit.nanometers)
+        self._default_r0 = unit.Quantity(value=0.1522, unit=unit.nanometer)
+        self._default_bond_k = unit.Quantity(value=265265.60000000003, unit=unit.kilojoule/(unit.nanometer**2*unit.mole))
         self._topology = app.Topology()
         new_chain = self._topology.addChain("0")
         new_res = self._topology.addResidue("MOL", new_chain)
@@ -94,11 +100,11 @@ class BondTestSystem(GeometryTestSystem):
 
         #make a simple system:
         self._system = openmm.System()
-        self._system.addParticle(12.01)
-        self._system.addParticle(12.01)
+        self._system.addParticle(CARBON_MASS)
+        self._system.addParticle(CARBON_MASS)
         bond_force = openmm.HarmonicBondForce()
         self._system.addForce(bond_force)
-        bond_force.addBond(0,1, unit.Quantity(value=0.1522, unit=unit.nanometer), unit.Quantity(value=265265.60000000003, unit=unit.kilojoule/(unit.nanometer**2*unit.mole)))
+        bond_force.addBond(0, 1, self._default_r0, self._default_bond_k)
 
         #make a parmed structure:
         self._structure = parmed.openmm.load_topology(self._topology, system=self._system)
@@ -107,7 +113,12 @@ class BondTestSystem(GeometryTestSystem):
         self._growth_order = [0,1]
 
         #set some positions:
-        self._positions = unit.Quantity([[2.00000100e-01,   2.09000000e-01,   1.00000000e-08], [3.42742000e-01,   2.64079500e-01,  -3.00000000e-07]], unit=unit.nanometers)
+        self._positions = self._default_positions
+
+        self._integrator = openmm.VerletIntegrator(1)
+        self._platform = openmm.Platform.getPlatformByName("Reference")
+        self._context = openmm.Context(self._system, self._integrator, self._platform)
+        self._context.setPositions(self._positions)
 
     @property
     def bond_length(self):
@@ -122,11 +133,52 @@ class BondTestSystem(GeometryTestSystem):
         coordinate_value = length_without_units / np.sqrt(3.0)
         self._positions[1] = unit.Quantity(np.full(3, coordinate_value), unit=unit.nanometer)
 
+    @property
+    def parameters(self):
+        return (self._default_r0, self._default_bond_k)
+
+
 
 class AngleTestSystem(GeometryTestSystem):
     """
     This testsystem has a system containing only 3 particles and a single angle term.
     """
+
+    def __init__(self):
+        #make a simple topology
+        self._topology = app.Topology()
+        self._default_angle_theta0 = unit.Quantity(value=1.91113635, unit=unit.radian)
+        self._default_angle_k = unit.Quantity(value=418.40000000000003, unit=unit.kilojoule/(unit.mole*unit.radian**2))
+        self._default_positions = unit.Quantity(np.array([[0.1486259,  0.2453852, -0.088982], [3.42742000e-01,   2.64079500e-01,  -3.00000000e-07], [ 3.42742000e-01,   2.64079500e-01,  -3.00000000e-07]]), unit=unit.nanometer)
+        new_chain = self._topology.addChain("0")
+        new_res = self._topology.addResidue("MOL", new_chain)
+        atom1 = self._topology.addAtom("C1", app.Element.getByAtomicNumber(6), new_res, 0)
+        atom2 = self._topology.addAtom("C2", app.Element.getByAtomicNumber(6), new_res, 1)
+        atom3 = self._topology.addAtom("C3", app.Element.getByAtomicNumber(6), new_res, 2)
+
+        self._topology.addBond(atom1, atom2)
+        self._topology.addBond(atom2, atom3)
+
+        self._system = openmm.System()
+        self._system.addParticle(CARBON_MASS)
+        self._system.addParticle(CARBON_MASS)
+        self._system.addParticle(CARBON_MASS)
+
+        angle_force = openmm.HarmonicAngleForce()
+        angle_force.addAngle(0, 1, 2, self._default_angle_theta0, self._default_angle_k)
+
+        self._positions = self._default_positions
+        self._integrator = openmm.VerletIntegrator(1)
+        self._platform = openmm.Platform.getPlatformByName("Reference")
+        self._context = openmm.Context(self._system, self._integrator, self._platform)
+        self._context.setPositions(self._positions)
+
+    @property
+    def angle(self):
+        positions_without_units = self._positions.value_in_unit(unit.nanometers)
+        theta = coordinate_numba.calculate_angle(positions_without_units[0], positions_without_units[1], positions_without_units[2])
+        return unit.Quantity(theta, unit=unit.radian)
+
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
     In the source distribution, these files are in ``perses/data/*/``,
