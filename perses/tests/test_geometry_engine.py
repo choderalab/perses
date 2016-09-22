@@ -73,6 +73,10 @@ class GeometryTestSystem(object):
     def positions(self):
         return self._positions
 
+    @property
+    def energy(self):
+        return self._context.getState(getEnergy=True).getPotentialEnergy()
+
 class BondTestSystem(GeometryTestSystem):
     """
     This test system has a system containing only two particles and a single bond. Taken from particles 1 and 4 of the
@@ -105,7 +109,24 @@ class BondTestSystem(GeometryTestSystem):
         #set some positions:
         self._positions = unit.Quantity([[2.00000100e-01,   2.09000000e-01,   1.00000000e-08], [3.42742000e-01,   2.64079500e-01,  -3.00000000e-07]], unit=unit.nanometers)
 
+    @property
+    def bond_length(self):
+        positions_without_units = self._positions.value_in_unit(unit.nanometer)
+        length = np.linalg.norm(positions_without_units[0]-positions_without_units[1])
+        return unit.Quantity(length, unit=unit.nanometer)
 
+    @bond_length.setter
+    def bond_length(self, length):
+        self._positions[0] = unit.Quantity(np.zeros([3]), unit=unit.nanometer)
+        length_without_units = length.value_in_unit(unit.nanometers)
+        coordinate_value = length_without_units / np.sqrt(3.0)
+        self._positions[1] = unit.Quantity(np.full(3, coordinate_value), unit=unit.nanometer)
+
+
+class AngleTestSystem(GeometryTestSystem):
+    """
+    This testsystem has a system containing only 3 particles and a single angle term.
+    """
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
     In the source distribution, these files are in ``perses/data/*/``,
