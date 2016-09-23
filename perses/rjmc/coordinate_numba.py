@@ -40,7 +40,6 @@ def _rotation_matrix(axis, angle):
 
 @jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def internal_to_cartesian(bond_position, angle_position, torsion_position, internal_coordinates):
-
     r = internal_coordinates[0]
     theta = internal_coordinates[1]
     phi = internal_coordinates[2]
@@ -70,6 +69,7 @@ def internal_to_cartesian(bond_position, angle_position, torsion_position, inter
     #add the positions of the bond atom
     xyz = bond_position + d_torsion
     return xyz
+
 
 @jit(float64[:,:](float64[:], float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def torsion_scan(bond_position, angle_position, torsion_position, internal_coordinates, phi_set):

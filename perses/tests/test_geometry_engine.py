@@ -80,93 +80,63 @@ class GeometryTestSystem(object):
         self._context.setPositions(self._positions)
         return self._context.getState(getEnergy=True).getPotentialEnergy()
 
-class BondTestSystem(GeometryTestSystem):
+
+class FourAtomValenceTestSystem(GeometryTestSystem):
     """
-    This test system has a system containing only two particles and a single bond. Taken from particles 1 and 4 of the
-    AlanineDipeptideImplicit test system (both carbon).
+    This testsystem has 4 particles, and the potential for a bond, angle, torsion term.
+    The particles are 0-1-2-3 atom-bond-angle-torsion
     """
 
-    def __init__(self):
+    def __init__(self, bond=True, angle=True, torsion=True):
         #make a simple topology
-        self._default_positions = unit.Quantity([[2.00000100e-01,   2.09000000e-01,   1.00000000e-08], [3.42742000e-01,   2.64079500e-01,  -3.00000000e-07]], unit=unit.nanometers)
+        self._default_positions = unit.Quantity(np.zeros([4,3]), unit=unit.nanometer)
+        self._default_positions[0] = unit.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
+        self._default_positions[1] = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
+        self._default_positions[2] = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
+        self._default_positions[3] = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
+
         self._default_r0 = unit.Quantity(value=0.1522, unit=unit.nanometer)
         self._default_bond_k = unit.Quantity(value=265265.60000000003, unit=unit.kilojoule/(unit.nanometer**2*unit.mole))
-        self._topology = app.Topology()
-        new_chain = self._topology.addChain("0")
-        new_res = self._topology.addResidue("MOL", new_chain)
-        atom1 = self._topology.addAtom("C1", app.Element.getByAtomicNumber(6), new_res, 0)
-        atom2 = self._topology.addAtom("C2", app.Element.getByAtomicNumber(6), new_res, 1)
-        self._topology.addBond(atom1, atom2)
-
-        #make a simple system:
-        self._system = openmm.System()
-        self._system.addParticle(CARBON_MASS)
-        self._system.addParticle(CARBON_MASS)
-        bond_force = openmm.HarmonicBondForce()
-        self._system.addForce(bond_force)
-        bond_force.addBond(0, 1, self._default_r0, self._default_bond_k)
-
-        #make a parmed structure:
-        self._structure = parmed.openmm.load_topology(self._topology, system=self._system)
-
-        #make some growth indices:
-        self._growth_order = [0,1]
-
-        #set some positions:
-        self._positions = self._default_positions
-
-        self._integrator = openmm.VerletIntegrator(1)
-        self._platform = openmm.Platform.getPlatformByName("Reference")
-        self._context = openmm.Context(self._system, self._integrator, self._platform)
-        self._context.setPositions(self._positions)
-
-    @property
-    def bond_length(self):
-        positions_without_units = self._positions.value_in_unit(unit.nanometer)
-        length = np.linalg.norm(positions_without_units[0]-positions_without_units[1])
-        return unit.Quantity(length, unit=unit.nanometer)
-
-    @bond_length.setter
-    def bond_length(self, length):
-        self._positions[0] = unit.Quantity(np.zeros([3]), unit=unit.nanometer)
-        length_without_units = length.value_in_unit(unit.nanometers)
-        coordinate_value = length_without_units / np.sqrt(3.0)
-        self._positions[1] = unit.Quantity(np.full(3, coordinate_value), unit=unit.nanometer)
-
-    @property
-    def parameters(self):
-        return (self._default_r0, self._default_bond_k)
-
-
-
-class AngleTestSystem(GeometryTestSystem):
-    """
-    This testsystem has a system containing only 3 particles and a single angle term.
-    """
-
-    def __init__(self):
-        #make a simple topology
-        self._topology = app.Topology()
         self._default_angle_theta0 = unit.Quantity(value=1.91113635, unit=unit.radian)
         self._default_angle_k = unit.Quantity(value=418.40000000000003, unit=unit.kilojoule/(unit.mole*unit.radian**2))
-        self._default_positions = unit.Quantity(np.array([[0.1486259,  0.2453852, -0.088982], [3.42742000e-01,   2.64079500e-01,  -3.00000000e-07], [ 3.42742000e-01,   2.64079500e-01,  -3.00000000e-07]]), unit=unit.nanometer)
+        self._default_torsion_periodicity = 2
+        self._default_torsion_phase = unit.Quantity(value=0.0, unit=unit.radians)
+        self._default_torsion_k = unit.Quantity(value=0.0, unit=unit.kilojoule/unit.mole)
+
+        self._topology = app.Topology()
         new_chain = self._topology.addChain("0")
         new_res = self._topology.addResidue("MOL", new_chain)
         atom1 = self._topology.addAtom("C1", app.Element.getByAtomicNumber(6), new_res, 0)
         atom2 = self._topology.addAtom("C2", app.Element.getByAtomicNumber(6), new_res, 1)
         atom3 = self._topology.addAtom("C3", app.Element.getByAtomicNumber(6), new_res, 2)
+        atom4 = self._topology.addAtom("C4", app.Element.getByAtomicNumber(6), new_res, 3)
+
 
         self._topology.addBond(atom1, atom2)
         self._topology.addBond(atom2, atom3)
+        self._topology.addBond(atom3, atom4)
 
         self._system = openmm.System()
-        self._system.addParticle(CARBON_MASS)
-        self._system.addParticle(CARBON_MASS)
-        self._system.addParticle(CARBON_MASS)
+        indices = [self._system.addParticle(CARBON_MASS) for i in range(4)]
 
-        angle_force = openmm.HarmonicAngleForce()
-        angle_force.addAngle(0, 1, 2, self._default_angle_theta0, self._default_angle_k)
+        self._growth_order = [0]
 
+        if bond:
+            bond_force = openmm.HarmonicBondForce()
+            self._system.addForce(bond_force)
+            bond_force.addBond(0, 1, self._default_r0, self._default_bond_k)
+
+        if angle:
+            angle_force = openmm.HarmonicAngleForce()
+            self._system.addForce(angle_force)
+            angle_force.addAngle(0, 1, 2, self._default_angle_theta0, self._default_angle_k)
+
+        if torsion:
+            torsion_force = openmm.PeriodicTorsionForce()
+            self._system.addForce(torsion_force)
+            torsion_force.addTorsion(0, 1, 2, 3, self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
+
+        self._structure = parmed.openmm.load_topology(self._topology, self._system)
         self._positions = self._default_positions
         self._integrator = openmm.VerletIntegrator(1)
         self._platform = openmm.Platform.getPlatformByName("Reference")
@@ -174,10 +144,20 @@ class AngleTestSystem(GeometryTestSystem):
         self._context.setPositions(self._positions)
 
     @property
-    def angle(self):
-        positions_without_units = self._positions.value_in_unit(unit.nanometers)
-        theta = coordinate_numba.calculate_angle(positions_without_units[0], positions_without_units[1], positions_without_units[2])
-        return unit.Quantity(theta, unit=unit.radian)
+    def internal_coordinates(self):
+        positions_without_units = self._positions.value_in_unit(unit.nanometer)
+        return coordinate_numba.cartesian_to_internal(positions_without_units[0], positions_without_units[1], positions_without_units[2], positions_without_units[3])
+
+    @internal_coordinates.setter
+    def internal_coordinates(self, internal_coordinates):
+        internals_without_units = np.zeros(3, dtype=np.float64)
+        internals_without_units[0] = internal_coordinates[0].value_in_unit(unit.nanometer)
+        internals_without_units[1] = internal_coordinates[1].value_in_unit(unit.radians)
+        internals_without_units[2] = internal_coordinates[2].value_in_unit(unit.radians)
+        positions_without_units = self._positions.value_in_unit(unit.nanometer)
+        new_cartesian_coordinates = coordinate_numba.internal_to_cartesian(positions_without_units[1], positions_without_units[2], positions_without_units[3], internals_without_units)
+        self._positions = unit.Quantity(new_cartesian_coordinates, unit=unit.nanometer)
+
 
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
