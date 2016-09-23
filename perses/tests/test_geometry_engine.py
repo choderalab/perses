@@ -158,6 +158,17 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         new_cartesian_coordinates = coordinate_numba.internal_to_cartesian(positions_without_units[1], positions_without_units[2], positions_without_units[3], internals_without_units)
         self._positions = unit.Quantity(new_cartesian_coordinates, unit=unit.nanometer)
 
+    @property
+    def bond_parameters(self):
+        return (self._default_r0, self._default_bond_k)
+
+    @property
+    def angle_parameters(self):
+        return (self._default_angle_theta0, self._default_angle_k)
+
+    @property
+    def torsion_parameters(self):
+        return (self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
 
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
