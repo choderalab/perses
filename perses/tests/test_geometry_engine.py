@@ -170,6 +170,32 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
     def torsion_parameters(self):
         return (self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
 
+def test_propose_angle():
+    """
+    Test the proposal of angles by GeometryEngine
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    import scipy.stats as stats
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=False, angle=True, torsion=False)
+    angle = testsystem.structure.angles[0]
+    angle_with_units = geometry_engine._add_angle_units(angle)
+    (theta0, k) = testsystem.angle_parameters
+    sigma = unit.sqrt(1.0/(beta*k))
+    sigma_without_units = sigma.value_in_unit(unit.radian)
+    theta0_without_units = theta0.value_in_unit(unit.radian)
+    angle_array = np.zeros(1000)
+    for i in range(1000):
+        proposed_angle_with_units = geometry_engine._propose_angle(angle_with_units, beta)
+        angle_array[i] = proposed_angle_with_units.value_in_unit(unit.radians)
+    (dval, pval) = stats.kstest(angle_array,'norm',args=(theta0_without_units, sigma_without_units))
+    if pval < 0.05:
+        raise Exception("The angle may be drawn from the wrong distribution")
+
+
+
+
+
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
     In the source distribution, these files are in ``perses/data/*/``,
@@ -917,3 +943,5 @@ def _generate_ffxmls():
     ffxml_out_kinase.write(ffxml_str_kinase)
     ffxml_out_t4.close()
 
+if __name__ == "__main__":
+    test_propose_angle()
