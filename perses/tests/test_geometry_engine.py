@@ -188,11 +188,31 @@ def test_propose_angle():
     for i in range(1000):
         proposed_angle_with_units = geometry_engine._propose_angle(angle_with_units, beta)
         angle_array[i] = proposed_angle_with_units.value_in_unit(unit.radians)
-    (dval, pval) = stats.kstest(angle_array,'norm',args=(theta0_without_units, sigma_without_units))
+    (dval, pval) = stats.kstest(angle_array,'norm', args=(theta0_without_units, sigma_without_units))
     if pval < 0.05:
-        raise Exception("The angle may be drawn from the wrong distribution")
+        raise Exception("The angle may be drawn from the wrong distribution. p= %f" % pval)
 
-
+def test_propose_bond():
+    """
+    Test the proposal of bonds by GeometryEngine
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    import scipy.stats as stats
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=True, angle=False, torsion=False)
+    bond = testsystem.structure.bonds[0] #this bond has parameters
+    bond_with_units = geometry_engine._add_bond_units(bond)
+    (r0, k) = testsystem.bond_parameters
+    sigma = unit.sqrt(1.0/(beta*k))
+    sigma_without_units = sigma.value_in_unit(unit.nanometers)
+    r0_without_units = r0.value_in_unit(unit.nanometers)
+    bond_array = np.zeros(1000)
+    for i in range(1000):
+        proposed_bond_with_units = geometry_engine._propose_bond(bond_with_units, beta)
+        bond_array[i] = proposed_bond_with_units.value_in_unit(unit.nanometer)
+    (dval, pval) = stats.kstest(bond_array, 'norm', args=(r0_without_units, sigma_without_units))
+    if pval < 0.05:
+        raise Exception("The bond may be drawn from the wrong distribution. p= %f" % pval)
 
 
 
@@ -944,4 +964,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_propose_angle()
+    test_propose_bond()
