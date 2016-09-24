@@ -241,11 +241,33 @@ def test_bond_logq():
         internals_with_units[0] = bond_length
         testsystem.internal_coordinates = internals_with_units
         bond_logq_omm = -beta*testsystem.energy
-        if (bond_logq_omm-bond_logq_ge) > 1.0e-6:
+        if (np.abs(bond_logq_omm-bond_logq_ge)) > 1.0e-6:
             raise Exception("Bond logq did not match openmm")
 
+def test_angle_logq():
+    """
+    Make sure the angle logq calculation matches the openmm one
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=False, angle=True, torsion=False)
+    angle = testsystem.structure.angles[0]
+    angle_with_units = geometry_engine._add_angle_units(angle)
+    angle_test_range = np.linspace(0.0, np.pi, num=100)
+    angle_test_range_with_units = unit.Quantity(angle_test_range, unit=unit.radians)
+    internal_coordinates = testsystem.internal_coordinates
+    r = unit.Quantity(internal_coordinates[0], unit=unit.nanometer)
+    theta = unit.Quantity(internal_coordinates[1], unit=unit.radians)
+    phi = unit.Quantity(internal_coordinates[2], unit=unit.radians)
+    internals_with_units = [r, theta, phi]
 
-
+    for test_angle in angle_test_range_with_units:
+        angle_logq_ge = geometry_engine._angle_logq(test_angle, angle_with_units, beta)
+        internals_with_units[1] = test_angle
+        testsystem.internal_coordinates = internals_with_units
+        angle_logq_omm = -beta*testsystem.energy
+        if (np.abs(angle_logq_ge - angle_logq_omm)) > 1.0e-6:
+            raise Exception("Angle logq did not match openmm")
 
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
@@ -995,4 +1017,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_bond_logq()
+    test_angle_logq()
