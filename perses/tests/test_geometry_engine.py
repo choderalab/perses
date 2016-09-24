@@ -266,7 +266,7 @@ def test_angle_logq():
         internals_with_units[1] = test_angle
         testsystem.internal_coordinates = internals_with_units
         angle_logq_omm = -beta*testsystem.energy
-        if (np.abs(angle_logq_ge - angle_logq_omm)) > 1.0e-6:
+        if (np.abs(angle_logq_ge - angle_logq_omm)) > 1.0e-4:
             raise Exception("Angle logq did not match openmm")
 
 def get_data_filename(relative_path):
