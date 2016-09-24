@@ -299,7 +299,23 @@ def test_add_angle_units():
     angle_difference = angle_with_units.type.theteq - theta0
     force_constant_difference = angle_with_units.type.k - k
     if np.abs(angle_difference.value_in_unit(unit.radians)) > 1.0e-6 or np.abs(force_constant_difference.value_in_unit(k_units)) > 1.0e-6:
-        raise Exception("Did not add units correctly to bond.")
+        raise Exception("Did not add units correctly to angle.")
+
+def test_add_torsion_units():
+    """
+    Make sure torsion units are added correctly to the torsion term
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=False, angle=False, torsion=True)
+    torsion = testsystem.structure.dihedrals[0]
+    torsion_with_units = geometry_engine._add_torsion_units(torsion)
+    (periodicity, phase, k) = testsystem.torsion_parameters
+    periodicity_difference = np.abs(periodicity - torsion_with_units.type.per)
+    phase_difference = np.abs(phase - torsion_with_units.type.phase)
+    force_difference = np.abs(k - torsion_with_units.type.phi_k)
+    if periodicity_difference > 1.0e-6 or phase_difference.value_in_unit(unit.radians) > 1.0e-6 or force_difference.value_in_unit(k.unit) > 1.0e-6:
+        raise Exception("Did not add units correctly to torsion.")
 
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
