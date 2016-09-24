@@ -269,6 +269,38 @@ def test_angle_logq():
         if (np.abs(angle_logq_ge - angle_logq_omm)) > 1.0e-4:
             raise Exception("Angle logq did not match openmm")
 
+def test_add_bond_units():
+    """
+    Make sure bond units are added correctly to the bond term
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=True, angle=False, torsion=False)
+    bond = testsystem.structure.bonds[0] #this bond has parameters
+    bond_with_units = geometry_engine._add_bond_units(bond)
+    (r0, k) = testsystem.bond_parameters
+    k_units = k.unit
+    bond_difference = bond_with_units.type.req - r0
+    force_constant_difference = bond_with_units.type.k - k
+    if np.abs(bond_difference.value_in_unit(unit.nanometers)) > 1.0e-6 or np.abs(force_constant_difference.value_in_unit(k_units)) > 1.0e-6:
+        raise Exception("Did not add units correctly to bond.")
+
+def test_add_angle_units():
+    """
+    Make sure that angle units are added correctly to the angle term
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=False, angle=True, torsion=False)
+    angle = testsystem.structure.angles[0]
+    angle_with_units = geometry_engine._add_angle_units(angle)
+    (theta0, k) = testsystem.angle_parameters
+    k_units = k.unit
+    angle_difference = angle_with_units.type.theteq - theta0
+    force_constant_difference = angle_with_units.type.k - k
+    if np.abs(angle_difference.value_in_unit(unit.radians)) > 1.0e-6 or np.abs(force_constant_difference.value_in_unit(k_units)) > 1.0e-6:
+        raise Exception("Did not add units correctly to bond.")
+
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files shipped for testing
     In the source distribution, these files are in ``perses/data/*/``,
@@ -1017,4 +1049,5 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_angle_logq()
+    test_add_angle_units()
+    test_add_bond_units()
