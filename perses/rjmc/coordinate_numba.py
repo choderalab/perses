@@ -2,7 +2,7 @@ from numba import jit, float64
 import numpy as np
 
 #@jit(float64[:](float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-@jit
+@jit(nogil=True)
 def _cross_vec3(a, b):
     c = np.zeros(3)
     c[0] = a[1]*b[2] - a[2]*b[1]
@@ -11,13 +11,13 @@ def _cross_vec3(a, b):
     return c
 
 #@jit(float64(float64[:]), nopython=True, nogil=True, cache=True)
-@jit
+@jit(nogil=True)
 def _norm(a):
     n_2 = np.dot(a, a)
     return np.sqrt(n_2)
 
 #@jit(float64[:,:](float64[:], float64), nopython=True, nogil=True, cache=True)
-@jit
+@jit(nogil=True)
 def _rotation_matrix(axis, angle):
     """
     This method produces a rotation matrix given an axis and an angle.
@@ -43,7 +43,7 @@ def _rotation_matrix(axis, angle):
     return rotation_matrix
 
 #@jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-@jit
+@jit(nogil=True)
 def internal_to_cartesian(bond_position, angle_position, torsion_position, internal_coordinates):
 
     r = internal_coordinates[0]
@@ -77,7 +77,7 @@ def internal_to_cartesian(bond_position, angle_position, torsion_position, inter
     return xyz
 
 #@jit(float64[:,:](float64[:], float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-@jit
+@jit(nogil=True)
 def torsion_scan(bond_position, angle_position, torsion_position, internal_coordinates, phi_set):
     n_phis = len(phi_set)
     xyzs = np.zeros((n_phis, 3))
@@ -87,7 +87,7 @@ def torsion_scan(bond_position, angle_position, torsion_position, internal_coord
     return xyzs
 
 #@jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-@jit
+@jit(nogil=True)
 def cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position):
 
             a = atom_position - bond_position
