@@ -19,24 +19,26 @@ def _rotation_matrix(axis, angle):
     """
     This method produces a rotation matrix given an axis and an angle.
     """
-    axis = axis/_norm(axis)
+    axis_norm = _norm(axis)
+    for k in range(3):
+        axis[k] = axis[k] / axis_norm
     axis_squared = axis**2
     cos_angle = np.cos(angle)
     sin_angle = np.sin(angle)
 
-    rotation_matrix = np.zeros((3,3))
+    rotation_matrix = np.zeros((3,3), dtype=float64)
 
-    rotation_matrix[0, 0] = cos_angle+axis_squared[0]*(1-cos_angle)
-    rotation_matrix[0, 1] = axis[0]*axis[1]*(1-cos_angle) - axis[2]*sin_angle
-    rotation_matrix[0, 2] = axis[0]*axis[2]*(1-cos_angle)+axis[1]*sin_angle
+    rotation_matrix[0, 0] = cos_angle + axis_squared[0]*(1.0-cos_angle)
+    rotation_matrix[0, 1] = axis[0]*axis[1]*(1.0-cos_angle) - axis[2]*sin_angle
+    rotation_matrix[0, 2] = axis[0]*axis[2]*(1.0-cos_angle) + axis[1]*sin_angle
 
-    rotation_matrix[1, 0] = axis[1]*axis[0]*(1-cos_angle)+axis[2]*sin_angle
-    rotation_matrix[1, 1] = cos_angle+axis_squared[1]*(1-cos_angle)
-    rotation_matrix[1, 2] = axis[1]*axis[2]*(1-cos_angle) - axis[0]*sin_angle
+    rotation_matrix[1, 0] = axis[1]*axis[0]*(1.0-cos_angle) + axis[2]*sin_angle
+    rotation_matrix[1, 1] = cos_angle + axis_squared[1]*(1.0-cos_angle)
+    rotation_matrix[1, 2] = axis[1]*axis[2]*(1.0-cos_angle) - axis[0]*sin_angle
 
-    rotation_matrix[2, 0] = axis[2]*axis[0]*(1-cos_angle)-axis[1]*sin_angle
-    rotation_matrix[2, 1] = axis[2]*axis[1]*(1-cos_angle)+axis[0]*sin_angle
-    rotation_matrix[2, 2] = cos_angle+axis_squared[2]*(1-cos_angle)
+    rotation_matrix[2, 0] = axis[2]*axis[0]*(1.0-cos_angle) - axis[1]*sin_angle
+    rotation_matrix[2, 1] = axis[2]*axis[1]*(1.0-cos_angle) + axis[0]*sin_angle
+    rotation_matrix[2, 2] = cos_angle + axis_squared[2]*(1.0-cos_angle)
 
     return rotation_matrix
 
