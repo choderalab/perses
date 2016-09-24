@@ -146,7 +146,8 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
     @property
     def internal_coordinates(self):
         positions_without_units = self._positions.value_in_unit(unit.nanometer)
-        return coordinate_numba.cartesian_to_internal(positions_without_units[0], positions_without_units[1], positions_without_units[2], positions_without_units[3])
+        internals = coordinate_numba.cartesian_to_internal(positions_without_units[0], positions_without_units[1], positions_without_units[2], positions_without_units[3])
+        return internals
 
     @internal_coordinates.setter
     def internal_coordinates(self, internal_coordinates):
@@ -156,7 +157,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         internals_without_units[2] = internal_coordinates[2].value_in_unit(unit.radians)
         positions_without_units = self._positions.value_in_unit(unit.nanometer)
         new_cartesian_coordinates = coordinate_numba.internal_to_cartesian(positions_without_units[1], positions_without_units[2], positions_without_units[3], internals_without_units)
-        self._positions = unit.Quantity(new_cartesian_coordinates, unit=unit.nanometer)
+        self._positions[0] = unit.Quantity(new_cartesian_coordinates, unit=unit.nanometer)
 
     @property
     def bond_parameters(self):
@@ -213,6 +214,36 @@ def test_propose_bond():
     (dval, pval) = stats.kstest(bond_array, 'norm', args=(r0_without_units, sigma_without_units))
     if pval < 0.05:
         raise Exception("The bond may be drawn from the wrong distribution. p= %f" % pval)
+
+def test_bond_logq():
+    """
+    Make sure the bond logq calculation matches the openmm one
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=True, angle=False, torsion=False)
+    bond = testsystem.structure.bonds[0] #this bond has parameters
+    bond_with_units = geometry_engine._add_bond_units(bond)
+    (r0, k) = testsystem.bond_parameters
+    sigma = unit.sqrt(1.0/(beta*k))
+    sigma_without_units = sigma.value_in_unit(unit.nanometer)
+    r0_without_units = r0.value_in_unit(unit.nanometer)
+    bond_range = np.linspace(r0_without_units - sigma_without_units, r0_without_units + sigma_without_units, 100)
+    internal_coordinates = testsystem.internal_coordinates
+    r = unit.Quantity(internal_coordinates[0], unit=unit.nanometer)
+    theta = unit.Quantity(internal_coordinates[1], unit=unit.radians)
+    phi = unit.Quantity(internal_coordinates[2], unit=unit.radians)
+    internals_with_units = [r, theta, phi]
+    bond_range_with_units = unit.Quantity(bond_range, unit=unit.nanometer)
+
+    for bond_length in bond_range_with_units:
+        bond_logq_ge = geometry_engine._bond_logq(bond_length, bond_with_units, beta)
+        internals_with_units[0] = bond_length
+        testsystem.internal_coordinates = internals_with_units
+        bond_logq_omm = -beta*testsystem.energy
+        if (bond_logq_omm-bond_logq_ge) > 1.0e-6:
+            raise Exception("Bond logq did not match openmm")
+
 
 
 
@@ -964,4 +995,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_propose_bond()
+    test_bond_logq()
