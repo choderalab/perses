@@ -1,8 +1,7 @@
 from numba import jit, float64
 import numpy as np
 
-#@jit(float64[:](float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-@jit(nopython=True,nogil=True)
+@jit(float64[:](float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def _cross_vec3(a, b):
     c = np.zeros(3)
     c[0] = a[1]*b[2] - a[2]*b[1]
@@ -10,14 +9,12 @@ def _cross_vec3(a, b):
     c[2] = a[0]*b[1] - a[1]*b[0]
     return c
 
-#@jit(float64(float64[:]), nopython=True, nogil=True, cache=True)
-@jit(nopython=True,nogil=True)
+@jit(float64(float64[:]), nopython=True, nogil=True, cache=True)
 def _norm(a):
     n_2 = np.dot(a, a)
     return np.sqrt(n_2)
 
-#@jit(float64[:,:](float64[:], float64), nopython=True, nogil=True, cache=True)
-@jit(nopython=True,nogil=True)
+@jit(float64[:,:](float64[:], float64), nopython=True, nogil=True, cache=True)
 def _rotation_matrix(axis, angle):
     """
     This method produces a rotation matrix given an axis and an angle.
@@ -28,22 +25,22 @@ def _rotation_matrix(axis, angle):
     sin_angle = np.sin(angle)
 
     rotation_matrix = np.zeros((3,3))
-    rotation_matrix[0, :] = np.array([cos_angle+axis_squared[0]*(1-cos_angle),
-                                   axis[0]*axis[1]*(1-cos_angle) - axis[2]*sin_angle,
-                                   axis[0]*axis[2]*(1-cos_angle)+axis[1]*sin_angle])
 
-    rotation_matrix[1, :] = np.array([axis[1]*axis[0]*(1-cos_angle)+axis[2]*sin_angle,
-                                  cos_angle+axis_squared[1]*(1-cos_angle),
-                                  axis[1]*axis[2]*(1-cos_angle) - axis[0]*sin_angle])
+    rotation_matrix[0, 0] = cos_angle+axis_squared[0]*(1-cos_angle)
+    rotation_matrix[0, 1] = axis[0]*axis[1]*(1-cos_angle) - axis[2]*sin_angle
+    rotation_matrix[0, 2] = axis[0]*axis[2]*(1-cos_angle)+axis[1]*sin_angle
 
-    rotation_matrix[2, :] = np.array([axis[2]*axis[0]*(1-cos_angle)-axis[1]*sin_angle,
-                                    axis[2]*axis[1]*(1-cos_angle)+axis[0]*sin_angle,
-                                    cos_angle+axis_squared[2]*(1-cos_angle)])
+    rotation_matrix[1, 0] = axis[1]*axis[0]*(1-cos_angle)+axis[2]*sin_angle
+    rotation_matrix[1, 1] = cos_angle+axis_squared[1]*(1-cos_angle)
+    rotation_matrix[1, 2] = axis[1]*axis[2]*(1-cos_angle) - axis[0]*sin_angle
+
+    rotation_matrix[2, 0] = axis[2]*axis[0]*(1-cos_angle)-axis[1]*sin_angle
+    rotation_matrix[2, 1] = axis[2]*axis[1]*(1-cos_angle)+axis[0]*sin_angle
+    rotation_matrix[2, 2] = cos_angle+axis_squared[2]*(1-cos_angle)
 
     return rotation_matrix
 
-#@jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-@jit(nopython=True,nogil=True)
+@jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def internal_to_cartesian(bond_position, angle_position, torsion_position, internal_coordinates):
 
     r = internal_coordinates[0]
@@ -76,8 +73,7 @@ def internal_to_cartesian(bond_position, angle_position, torsion_position, inter
     xyz = bond_position + d_torsion
     return xyz
 
-#@jit(float64[:,:](float64[:], float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-@jit(nopython=True,nogil=True)
+@jit(float64[:,:](float64[:], float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def torsion_scan(bond_position, angle_position, torsion_position, internal_coordinates, phi_set):
     n_phis = len(phi_set)
     xyzs = np.zeros((n_phis, 3))
@@ -86,8 +82,7 @@ def torsion_scan(bond_position, angle_position, torsion_position, internal_coord
         xyzs[i] = internal_to_cartesian(bond_position, angle_position, torsion_position, internal_coordinates)
     return xyzs
 
-#@jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
-@jit(nopython=True,nogil=True)
+@jit(float64[:](float64[:], float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position):
 
             a = atom_position - bond_position
