@@ -469,53 +469,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         relevant_bond_with_units = self._add_bond_units(relevant_bond)
         return relevant_bond_with_units
 
-    def _get_internal_from_omm(self, atom_coords, bond_coords, angle_coords, torsion_coords):
-        #master system, will be used for all three
-        sys = openmm.System()
-        platform = openmm.Platform.getPlatformByName("Reference")
-        for i in range(4):
-            sys.addParticle(1.0*units.amu)
-
-        #first, the bond length:
-        bond_sys = openmm.System()
-        bond_sys.addParticle(1.0*units.amu)
-        bond_sys.addParticle(1.0*units.amu)
-        bond_force = openmm.CustomBondForce("r")
-        bond_force.addBond(0, 1, [])
-        bond_sys.addForce(bond_force)
-        bond_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
-        bond_context = openmm.Context(bond_sys, bond_integrator, platform)
-        bond_context.setPositions([atom_coords, bond_coords])
-        bond_state = bond_context.getState(getEnergy=True)
-        r = bond_state.getPotentialEnergy()
-        del bond_sys, bond_context, bond_integrator
-
-        #now, the angle:
-        angle_sys = copy.deepcopy(sys)
-        angle_force = openmm.CustomAngleForce("theta")
-        angle_force.addAngle(0,1,2,[])
-        angle_sys.addForce(angle_force)
-        angle_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
-        angle_context = openmm.Context(angle_sys, angle_integrator, platform)
-        angle_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
-        angle_state = angle_context.getState(getEnergy=True)
-        theta = angle_state.getPotentialEnergy()
-        del angle_sys, angle_context, angle_integrator
-
-        #finally, the torsion:
-        torsion_sys = copy.deepcopy(sys)
-        torsion_force = openmm.CustomTorsionForce("theta")
-        torsion_force.addTorsion(0,1,2,3,[])
-        torsion_sys.addForce(torsion_force)
-        torsion_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
-        torsion_context = openmm.Context(torsion_sys, torsion_integrator, platform)
-        torsion_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
-        torsion_state = torsion_context.getState(getEnergy=True)
-        phi = torsion_state.getPotentialEnergy()
-        del torsion_sys, torsion_context, torsion_integrator
-
-        return r, theta, phi
-
     def _get_bond_constraint(self, atom1, atom2, system):
         """
         Get the constraint parameters corresponding to the bond
