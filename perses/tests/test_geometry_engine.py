@@ -329,8 +329,13 @@ def test_torsion_scan():
     r = unit.Quantity(internals[0], unit=unit.nanometer)
     theta = unit.Quantity(internals[1], unit=unit.radian)
     torsion = testsystem.structure.dihedrals[0]
-    xys, phis = geometry_engine._torsion_scan(torsion, testsystem.positions, r, theta, n_divisions=n_divisions)
+    xyzs, phis = geometry_engine._torsion_scan(torsion, testsystem.positions, r, theta, n_divisions=n_divisions)
+    phis_without_units = phis.value_in_unit(unit.radians)
     for i in range(n_divisions):
+        xyz_ge = xyzs[i]
+        r, theta, phi = _get_internal_from_omm(xyz_ge, testsystem.positions[1], testsystem.positions[2], testsystem.positions[3])
+        if np.abs(phis_without_units[i] - phi) >1.0e-6:
+            raise Exception("Torsion scan did not match OpenMM torsion")
 
 
 
@@ -352,7 +357,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     bond_context = openmm.Context(bond_sys, bond_integrator, platform)
     bond_context.setPositions([atom_coords, bond_coords])
     bond_state = bond_context.getState(getEnergy=True)
-    r = bond_state.getPotentialEnergy()
+    r = bond_state.getPotentialEnergy()/unit.kilojoule_per_mole
     del bond_sys, bond_context, bond_integrator
 
     #now, the angle:
@@ -364,7 +369,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     angle_context = openmm.Context(angle_sys, angle_integrator, platform)
     angle_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
     angle_state = angle_context.getState(getEnergy=True)
-    theta = angle_state.getPotentialEnergy()
+    theta = angle_state.getPotentialEnergy()/unit.kilojoule_per_mole
     del angle_sys, angle_context, angle_integrator
 
     #finally, the torsion:
@@ -376,7 +381,7 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     torsion_context = openmm.Context(torsion_sys, torsion_integrator, platform)
     torsion_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
     torsion_state = torsion_context.getState(getEnergy=True)
-    phi = torsion_state.getPotentialEnergy()
+    phi = torsion_state.getPotentialEnergy()/unit.kilojoule_per_mole
     del torsion_sys, torsion_context, torsion_integrator
 
     return r, theta, phi
@@ -1016,55 +1021,6 @@ def _get_capped_amino_acid(amino_acid='ALA'):
     shutil.rmtree(temp_dir)
     return topology, positions
 
-
-def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
-    import copy
-    #master system, will be used for all three
-    sys = openmm.System()
-    platform = openmm.Platform.getPlatformByName("Reference")
-    for i in range(4):
-        sys.addParticle(1.0*unit.amu)
-
-    #first, the bond length:
-    bond_sys = openmm.System()
-    bond_sys.addParticle(1.0*unit.amu)
-    bond_sys.addParticle(1.0*unit.amu)
-    bond_force = openmm.CustomBondForce("r")
-    bond_force.addBond(0, 1, [])
-    bond_sys.addForce(bond_force)
-    bond_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-    bond_context = openmm.Context(bond_sys, bond_integrator, platform)
-    bond_context.setPositions([atom_coords, bond_coords])
-    bond_state = bond_context.getState(getEnergy=True)
-    r = bond_state.getPotentialEnergy()
-    del bond_sys, bond_context, bond_integrator
-
-    #now, the angle:
-    angle_sys = copy.deepcopy(sys)
-    angle_force = openmm.CustomAngleForce("theta")
-    angle_force.addAngle(0,1,2,[])
-    angle_sys.addForce(angle_force)
-    angle_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-    angle_context = openmm.Context(angle_sys, angle_integrator, platform)
-    angle_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
-    angle_state = angle_context.getState(getEnergy=True)
-    theta = angle_state.getPotentialEnergy()
-    del angle_sys, angle_context, angle_integrator
-
-    #finally, the torsion:
-    torsion_sys = copy.deepcopy(sys)
-    torsion_force = openmm.CustomTorsionForce("theta")
-    torsion_force.addTorsion(0,1,2,3,[])
-    torsion_sys.addForce(torsion_force)
-    torsion_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-    torsion_context = openmm.Context(torsion_sys, torsion_integrator, platform)
-    torsion_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
-    torsion_state = torsion_context.getState(getEnergy=True)
-    phi = torsion_state.getPotentialEnergy()
-    del torsion_sys, torsion_context, torsion_integrator
-
-    return r, theta, phi
-
 def _tleap_all():
     aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
     for aa in aminos:
@@ -1129,6 +1085,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_add_angle_units()
-    test_add_bond_units()
-    test_add_torsion_units()
+    test_torsion_scan()
