@@ -80,7 +80,6 @@ class GeometryTestSystem(object):
         self._context.setPositions(self._positions)
         return self._context.getState(getEnergy=True).getPotentialEnergy()
 
-
 class FourAtomValenceTestSystem(GeometryTestSystem):
     """
     This testsystem has 4 particles, and the potential for a bond, angle, torsion term.
@@ -100,8 +99,8 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         self._default_angle_theta0 = unit.Quantity(value=1.91113635, unit=unit.radian)
         self._default_angle_k = unit.Quantity(value=418.40000000000003, unit=unit.kilojoule/(unit.mole*unit.radian**2))
         self._default_torsion_periodicity = 2
-        self._default_torsion_phase = unit.Quantity(value=0.0, unit=unit.radians)
-        self._default_torsion_k = unit.Quantity(value=0.0, unit=unit.kilojoule/unit.mole)
+        self._default_torsion_phase = unit.Quantity(value=np.pi/2.0, unit=unit.radians)
+        self._default_torsion_k = unit.Quantity(value=20.0, unit=unit.kilojoule/unit.mole)
 
         self._topology = app.Topology()
         new_chain = self._topology.addChain("0")
@@ -333,9 +332,47 @@ def test_torsion_scan():
     phis_without_units = phis.value_in_unit(unit.radians)
     for i in range(n_divisions):
         xyz_ge = xyzs[i]
-        r, theta, phi = _get_internal_from_omm(xyz_ge, testsystem.positions[1], testsystem.positions[2], testsystem.positions[3])
+        r_new, theta_new, phi = _get_internal_from_omm(xyz_ge, testsystem.positions[1], testsystem.positions[2], testsystem.positions[3])
         if np.abs(phis_without_units[i] - phi) >1.0e-6:
             raise Exception("Torsion scan did not match OpenMM torsion")
+        if np.abs(r_new - internals[0]) >1.0e-6 or np.abs(theta_new - internals[1]) > 1.0e-6:
+            raise Exception("Theta or r was disturbed in torsion scan.")
+
+def test_torsion_log_pmf():
+    """
+    Check that the torsion log pmf is correct
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    n_divisions = 740
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=True, angle=True, torsion=True)
+    internals = testsystem.internal_coordinates
+    r = unit.Quantity(internals[0], unit=unit.nanometer)
+    theta = unit.Quantity(internals[1], unit=unit.radian)
+    torsion = testsystem.structure.dihedrals[0]
+    torsion_with_units = geometry_engine._add_torsion_units(torsion)
+    torsion_log_pmf, phis = geometry_engine._torsion_log_pmf(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+    manual_torsion_log_pmf = calculate_torsion_potential_manually(beta, torsion_with_units, phis)
+    deviation = np.abs(torsion_log_pmf - manual_torsion_log_pmf)
+    if np.max(deviation) > 1.0e-4:
+        raise Exception("Torsion pmf didn't match expected.")
+
+
+def calculate_torsion_potential_manually(beta, torsion, phis):
+    """
+    Manually calculate the torsion potential
+    """
+    torsion_logq = np.zeros(len(phis))
+    torsion_k = torsion.type.phi_k
+    torsion_per = torsion.type.per
+    torsion_phase = torsion.type.phase
+    for i in range(len(phis)):
+        torsion_logq[i] = -1.0*beta*torsion_k*(1+unit.cos(torsion_per*phis[i] - torsion_phase))
+    #torsion_logq -= max(torsion_logq)
+    q = np.exp(torsion_logq)
+    Z = np.sum(q)
+    torsion_log_pmf = torsion_logq-np.log(Z)
+    return torsion_log_pmf
 
 
 
@@ -1085,4 +1122,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_torsion_scan()
+    test_torsion_log_pmf()
