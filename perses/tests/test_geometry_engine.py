@@ -396,6 +396,7 @@ def test_torsion_logp():
     if np.abs(1.0 - torsion_sum) > 1.0e-3:
         raise Exception("The torsion continuous distribution does not integrate to one.")
 
+
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     #master system, will be used for all three
     sys = openmm.System()
@@ -829,7 +830,7 @@ def _guessFileFormat(file, filename):
     return 'pdb'
 
 
-def test_run_geometry_engine(index=0):
+def run_geometry_engine(index=0):
     """
     Run the geometry engine a few times to make sure that it actually runs
     without exceptions. Convert n-pentane to 2-methylpentane
@@ -1007,7 +1008,7 @@ def test_try_random_itoc():
         # print(atom_position-recomputed_xyz)
         # TODO: Add a test here that can fail if something is wrong.
 
-def test_logp_reverse():
+def run_logp_reverse():
     """
     Make sure logp_reverse and logp_forward are consistent
     """
