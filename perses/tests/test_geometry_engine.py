@@ -357,7 +357,6 @@ def test_torsion_log_pmf():
     if np.max(deviation) > 1.0e-4:
         raise Exception("Torsion pmf didn't match expected.")
 
-
 def calculate_torsion_potential_manually(beta, torsion, phis):
     """
     Manually calculate the torsion potential
@@ -374,7 +373,28 @@ def calculate_torsion_potential_manually(beta, torsion, phis):
     torsion_log_pmf = torsion_logq-np.log(Z)
     return torsion_log_pmf
 
-
+def test_torsion_logp():
+    """
+    Test the torsion_logp method in GeometryEngine
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    n_divisions = 360
+    n_divisions_test = 740
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=True, angle=True, torsion=True)
+    internals = testsystem.internal_coordinates
+    r = unit.Quantity(internals[0], unit=unit.nanometer)
+    theta = unit.Quantity(internals[1], unit=unit.radian)
+    torsion = testsystem.structure.dihedrals[0]
+    torsion_with_units = geometry_engine._add_torsion_units(torsion)
+    phis = unit.Quantity(np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions_test), unit=unit.radians)
+    log_pdf = np.zeros(n_divisions_test)
+    for i in range(n_divisions_test):
+        log_pdf[i] = geometry_engine._torsion_logp(testsystem._context, torsion, testsystem.positions, r, theta, phis[i], beta, n_divisions=n_divisions)
+    pdf = np.exp(log_pdf)
+    torsion_sum = np.trapz(pdf, phis)
+    if np.abs(1.0 - torsion_sum) > 1.0e-3:
+        raise Exception("The torsion continuous distribution does not integrate to one.")
 
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     #master system, will be used for all three
@@ -1122,4 +1142,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_torsion_log_pmf()
+    test_torsion_logp()
