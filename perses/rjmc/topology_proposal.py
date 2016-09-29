@@ -888,10 +888,7 @@ class PointMutationEngine(PolymerProposalEngine):
             # amino_prob : np.array, probability value for each amino acid option (uniform)
             if self._always_change:
                 amino_prob = np.array([1.0/(len(aminos)-1) for l in range(len(aminos))])
-                if proposed_location in [residue_id_to_index[residue_id] for residue_id in current_mutation]:
-                    amino_prob[aminos.index(current_mutation[proposed_location])] = 0.0
-                else:
-                    amino_prob[aminos.index(original_residue.name)] = 0.0
+                amino_prob[aminos.index(original_residue.name)] = 0.0
             else:
                 amino_prob = np.array([1.0/(len(aminos)) for k in range(len(aminos))])
             # proposed_amino_index : int, index of three letter residue name in aminos list
