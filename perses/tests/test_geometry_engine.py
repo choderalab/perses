@@ -396,6 +396,58 @@ def test_torsion_logp():
     if np.abs(1.0 - torsion_sum) > 1.0e-3:
         raise Exception("The torsion continuous distribution does not integrate to one.")
 
+def test_propose_torsion():
+    """
+    Test the proposal of a simple torsion angle.
+    """
+    #First, construct an oversampled pdf for the torsion drive
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    import scipy.stats as stats
+    import scipy.integrate as integrate
+    n_divisions = 360
+    factor_oversample = 4
+    n_divisions_test = n_divisions*factor_oversample
+    n_samples = 1000
+    geometry_engine = FFAllAngleGeometryEngine()
+    testsystem = FourAtomValenceTestSystem(bond=True, angle=True, torsion=True)
+    internals = testsystem.internal_coordinates
+    r = unit.Quantity(internals[0], unit=unit.nanometer)
+    theta = unit.Quantity(internals[1], unit=unit.radian)
+    torsion = testsystem.structure.dihedrals[0]
+    torsion_with_units = geometry_engine._add_torsion_units(torsion)
+    phis = unit.Quantity(np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions_test), unit=unit.radians)
+    log_pdf = np.zeros(n_divisions_test)
+    for i in range(n_divisions_test):
+        log_pdf[i] = geometry_engine._torsion_logp(testsystem._context, torsion, testsystem.positions, r, theta, phis[i], beta, n_divisions=n_divisions)
+    pdf = np.exp(log_pdf)
+
+    #Then, draw a set of samples from the same distribution:
+    torsion_samples = unit.Quantity(np.zeros(n_samples), unit=unit.radian)
+    calculated_cdf = integrate.cumtrapz(pdf, dx=2*np.pi/n_divisions_test)
+    cdf_func = create_oversampled_cdf(calculated_cdf, phis)
+    for i in range(n_samples):
+        torsion_samples[i], logp = geometry_engine._propose_torsion(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+        phi_idx = np.where(phis == torsion_samples[i])
+        phi_logp = np.log(pdf[phi_idx])
+        if np.abs(phi_logp - logp) > 1.0e-4:
+            raise Exception("Propose torsion returned an inconsistent logp")
+
+    #now check if the samples match the logp:
+    (dval, pval) = stats.kstest(torsion_samples, cdf_func)
+    if pval < 0.05:
+        raise Exception("Torsion may not have been drawn from the correct distribution.")
+
+def create_oversampled_cdf(calculated_cdf, phis):
+    """
+    Create a cdf callable for scipy.stats.kstest
+    """
+
+    def torsion_cdf(phi):
+        idx = np.where(phis==phi)
+        cdf_val = calculated_cdf[idx]
+        return cdf_val
+
+    return torsion_cdf
 
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     #master system, will be used for all three
@@ -1143,4 +1195,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_torsion_logp()
+    test_propose_torsion()
