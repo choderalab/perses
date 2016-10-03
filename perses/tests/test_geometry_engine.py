@@ -404,7 +404,7 @@ def test_propose_torsion():
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     import scipy.stats as stats
     import scipy.integrate as integrate
-    n_divisions = 360
+    n_divisions = 90
     factor_oversample = 4
     n_divisions_test = n_divisions*factor_oversample
     n_samples = 1000
@@ -445,9 +445,21 @@ def create_oversampled_cdf(calculated_cdf, phis):
     def torsion_cdf(phi):
         idx = np.where(phis==phi)
         cdf_val = calculated_cdf[idx]
-        return cdf_val
+        return cdf_val[0]
 
     return torsion_cdf
+
+def test_copy_positions():
+    """
+    Make sure the copy_positions method works
+    """
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    old_positions = np.random.normal([50, 3])
+    new_positions = np.random.normal([65, 3])
+    atom_map = {a : a for a in range(15)}
+
+
+
 
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     #master system, will be used for all three
@@ -1195,4 +1207,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_propose_torsion()
+    run_geometry_engine()

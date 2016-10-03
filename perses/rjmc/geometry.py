@@ -310,12 +310,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=360)
+                phi, logp_phi = self._spline_propose(context, torsion, new_positions, r, theta, beta, n_divisions=36)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=360)
+                logp_phi = self._spline_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=36)
 
             #accumulate logp
             if direction == 'reverse':
@@ -841,6 +841,84 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         phi = phis[phi_idx]
         return phi, logp
+
+    def _spline_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
+        """
+        Use a spline fit to the torsion profile to get a logp
+        Parameters
+        ----------
+        growth_context
+        torsion
+        positions
+        r
+        theta
+        phi
+        beta
+        n_divisions
+
+        Returns
+        -------
+
+        """
+        import scipy.interpolate as interpolate
+        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        spline = interpolate.UnivariateSpline(phis, np.exp(logp_torsions), k=4)
+        Z = spline.integral(-np.pi, np.pi)
+        p_phi = spline(phi) / Z
+        return np.log(p_phi)
+
+    def _spline_propose(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+        """
+
+        Parameters
+        ----------
+        growth_context
+        torsion
+        positions
+        r
+        theta
+        beta
+        n_divisions
+
+        Returns
+        -------
+
+        """
+        import scipy.interpolate as interpolate
+        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        spline = interpolate.UnivariateSpline(phis, np.exp(logp_torsions), k=4)
+        Z = spline.integral(-np.pi, np.pi)
+        #now need to find the max of the spline (for constructing a majorizing function)
+        spline_derivative = spline.derivative(1)
+        spline_second_derivative = spline.derivative(2)
+        potential_extrema = spline_derivative.roots()
+        second_derivative_at_roots = spline_second_derivative(potential_extrema)
+        maxima_indices = np.where(second_derivative_at_roots < 0.0)
+        max_index = np.argmax(spline(second_derivative_at_roots[maxima_indices]))
+        max_phi = second_derivative_at_roots[max_index]
+        max_value = spline(max_phi) / Z #needed for majorizing function
+
+        phi = 0.0
+        logp = 0.0
+        accepted = False
+        n_rejected = 0
+        #now perform rejection sampling
+        while not accepted:
+            phi_samp = np.random.uniform(-np.pi, np.pi)
+            runif = np.random.uniform(0.0, max_value + 1.0)
+            p_phi_samp = spline(phi_samp) / Z
+            if p_phi_samp > runif:
+                phi = phi_samp
+                logp = np.log(p_phi_samp)
+                accepted = True
+            else:
+                n_rejected+=1
+        print(n_rejected)
+        return units.Quantity(phi, unit=units.radians), logp
+
+
+
+
 
 
     def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
