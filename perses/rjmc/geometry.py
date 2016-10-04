@@ -289,7 +289,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     r = self._propose_bond(bond, beta)
                 bond_k = bond.type.k
                 sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
+                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
                 logp_r = self._bond_logq(r, bond, beta) - logZ_r
             else:
                 if direction == 'forward':
@@ -305,7 +305,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 theta = self._propose_angle(angle, beta)
             angle_k = angle.type.k
             sigma_theta = units.sqrt(1/(beta*angle_k))
-            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta/units.radians))) # CHECK DOMAIN AND UNITS
+            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
             logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
 
             #propose a torsion angle and calcualate its probability
@@ -720,8 +720,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from perses.rjmc import coordinate_numba
         torsion_scan_init = time.time()
         positions_copy = copy.deepcopy(positions)
-        positions_copy = positions_copy.in_units_of(units.nanometers)
-        positions_copy = positions_copy / units.nanometers
+        positions_copy = positions_copy.value_in_unit(units.nanometers)
         positions_copy = positions_copy.astype(np.float64)
         r = r.value_in_unit(units.nanometers)
         theta = theta.value_in_unit(units.radians)
@@ -1105,7 +1104,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
                     r = self._propose_bond(bond, beta)
                 bond_k = bond.type.k
                 sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
+                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom)))) # CHECK DOMAIN AND UNITS
                 logp_r = self._bond_logq(r, bond, beta) - logZ_r
             else:
                 constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
