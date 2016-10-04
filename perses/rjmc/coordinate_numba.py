@@ -84,7 +84,7 @@ def torsion_scan(bond_position, angle_position, torsion_position, internal_coord
         xyzs[i] = internal_to_cartesian(bond_position, angle_position, torsion_position, internal_coordinates)
     return xyzs
 
-@jit(float64[:](float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
+@jit(float64(float64[:], float64[:], float64[:]), nopython=True, nogil=True, cache=True)
 def calculate_angle(atom_position, bond_position, angle_position):
             a = atom_position - bond_position
             b = angle_position - bond_position
