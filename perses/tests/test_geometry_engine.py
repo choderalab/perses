@@ -455,9 +455,12 @@ def test_copy_positions():
     Make sure the copy_positions method works
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
     old_positions = np.random.normal([50, 3])
     new_positions = np.random.normal([65, 3])
-    atom_map = {a : a for a in range(15)}
+    common_positions = np.random.choice(65,size=50, replace=False)
+    atom_map = {a : common_positions[a] for a in range(50)}
+    geometry_engine._copy_positions()
 
 
 
