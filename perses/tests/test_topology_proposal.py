@@ -352,13 +352,12 @@ def test_mutate_from_every_amino_to_every_other():
 
     pm_top_engine = topology_proposal.PointMutationEngine(current_topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants)
 
-    current_positions = np.zeros((current_topology.getNumAtoms(), 3))
-    modeller = app.Modeller(current_topology, current_positions)
     old_topology = copy.deepcopy(current_topology)
+    new_topology = copy.deepcopy(current_topology)
 
     old_chemical_state_key = pm_top_engine.compute_state_key(old_topology)
 
-    for chain in modeller.topology.chains():
+    for chain in new_topology.chains():
         if chain.id == chain_id:
             # num_residues : int
             num_residues = len(chain._residues)
@@ -378,18 +377,16 @@ def test_mutate_from_every_amino_to_every_other():
                 raise Exception(msg)
             metadata = dict()
 
-            current_positions = np.zeros((new_topology.getNumAtoms(), 3))
-            modeller = app.Modeller(new_topology, current_positions)
-            for atom in modeller.topology.atoms():
+            for atom in new_topology.atoms():
                 atom.old_index = atom.index
 
-            index_to_new_residues, metadata = pm_top_engine._choose_mutant(modeller, metadata)
+            index_to_new_residues, metadata = pm_top_engine._choose_mutant(new_topology, metadata)
             if len(index_to_new_residues) == 0:
                 matching_amino_found+=1
                 continue
             print('Mutating %s to %s' % (original_residue_name, proposed_amino))
 
-            residue_map = pm_top_engine._generate_residue_map(modeller, index_to_new_residues)
+            residue_map = pm_top_engine._generate_residue_map(new_topology, index_to_new_residues)
             for res_pair in residue_map:
                 residue = res_pair[0]
                 name = res_pair[1]
@@ -397,15 +394,14 @@ def test_mutate_from_every_amino_to_every_other():
                 assert index_to_new_residues[residue.index] == name
                 assert residue.name+'-'+str(residue.id)+'-'+name in metadata['mutations']
 
-            modeller, missing_atoms = pm_top_engine._delete_excess_atoms(modeller, residue_map)
-            modeller = pm_top_engine._add_new_atoms(modeller, missing_atoms, residue_map)
+            new_topology, missing_atoms = pm_top_engine._delete_excess_atoms(new_topology, residue_map)
+            new_topology = pm_top_engine._add_new_atoms(new_topology, missing_atoms, residue_map)
             for res_pair in residue_map:
                 residue = res_pair[0]
                 name = res_pair[1]
                 assert residue.name == name
 
-            atom_map = pm_top_engine._construct_atom_map(residue_map, old_topology, index_to_new_residues, modeller)
-            new_topology = modeller.topology
+            atom_map = pm_top_engine._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
             templates = pm_top_engine._ff.getMatchingTemplates(new_topology)
             assert [templates[index].name == residue.name for index, (residue, name) in enumerate(residue_map)]
 
@@ -526,16 +522,17 @@ def test_run_peptide_library_engine():
     library = ['AVILMFYQP','RHKDESTNQ','STNQCFGPL']
 
     pl_top_library = topology_proposal.PeptideLibraryEngine(system_generator, library, chain_id)
+
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 if __name__ == "__main__":
 
 #    test_run_point_mutation_propose()
-#    test_mutate_from_every_amino_to_every_other()
-#    test_specify_allowed_mutants()
+    test_mutate_from_every_amino_to_every_other()
+    test_specify_allowed_mutants()
 #    test_propose_self()
-#    test_limiting_allowed_residues()
-#    test_run_peptide_library_engine()
+    test_limiting_allowed_residues()
+    test_run_peptide_library_engine()
 #    test_small_molecule_proposals()
 #    test_alanine_dipeptide_map()
     test_always_change()

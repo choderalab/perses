@@ -1,5 +1,5 @@
 * travis-ci builds: [![Travis Build Status](https://travis-ci.org/choderalab/perses.svg?branch=master)](https://travis-ci.org/choderalab/perses)
-* Jenkins GPU tests: [![Jenkins Test Status](https://jenkins.choderalab.org/buildStatus/icon?job=test-perses-linux-xeon-gtxtitan-src)](https://jenkins.choderalab.org/job/test-perses-linux-xeon-gtxtitan-src/)
+* Jenkins GPU tests: [![Build Status](https://jenkins.choderalab.org/buildStatus/icon?job=test-perses-linux)](https://jenkins.choderalab.org/job/test-perses-linux/)
 * Landscape.io code health: [![Code Health](https://landscape.io/github/choderalab/perses/master/landscape.svg?style=flat)](https://landscape.io/github/choderalab/perses/master)
 
 # Perses
