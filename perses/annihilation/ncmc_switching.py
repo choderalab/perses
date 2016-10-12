@@ -695,13 +695,12 @@ class NCMCHybridEngine(NCMCEngine):
         direction = 'insert'
         if (self.nsteps == 0):
             # Special case of instantaneous insertion/deletion.
-            logP = 0.0
             final_positions = copy.deepcopy(proposed_positions)
             from perses.tests.utils import compute_potential
-            potential_del = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
-            potential_ins = self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
-            potential = potential_del - potential_ins
-            return [final_positions, logP, potential]
+            potential_del = -self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+            potential_ins = -self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
+            potential = potential_ins - potential_del
+            return [final_positions, initial_positions, potential]
 
 ########################################################################
         # Create alchemical system.
