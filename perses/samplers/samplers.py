@@ -219,7 +219,7 @@ class SamplerState(object):
 
         return self
 
-    def createContext(self, integrator=None, platform=None):
+    def createContext(self, integrator=None, platform=None, thermodynamic_state=None):
         """
         Create an OpenMM Context object from the current sampler state.
 
@@ -230,6 +230,8 @@ class SamplerState(object):
            If not specified, a VerletIntegrator with 1 fs timestep is created.
         platform : simtk.openmm.Platform, optional, default=None
            If specified, the Platform to use for context creation.
+        thermodynamic_state : ThermodynamicState, optional, default=None
+            If specified, a barostat will be added to periodic systems with a pressure defined.
 
         Returns
         -------
@@ -239,6 +241,7 @@ class SamplerState(object):
         Notes
         -----
         If the selected or default platform fails, the CPU and Reference platforms will be tried, in that order.
+        If the system is periodic and has a pressure defined, a MonteCarloBarostat is added.
 
         Examples
         --------
@@ -285,11 +288,21 @@ class SamplerState(object):
         if integrator is None:
             integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
 
+        # Create a copy of the system
+        system = copy.deepcopy(self.system)
+
+        # If thermodynamic state is specified with a pressure, add a barostat.
+        if (thermodynamic_state is not None) and (thermodynamic_state.pressure is not None):
+            if not system.usesPeriodicBoundaryConditions():
+                raise Exception('Specified a pressure but system does not have periodic boundary conditions')
+            barostat = openmm.MonteCarloBarostat(thermodynamic_state.pressure, thermodynamic_state.temperature)
+            system.addForce(barostat)
+
         # Create a Context.
         if platform:
-            context = openmm.Context(self.system, integrator, platform)
+            context = openmm.Context(system, integrator, platform)
         else:
-            context = openmm.Context(self.system, integrator)
+            context = openmm.Context(system, integrator)
 
         # Set box vectors, if specified.
         if (self.box_vectors is not None):
@@ -608,7 +621,7 @@ class MCMCSampler(object):
         start_time = time.time()
 
         # Create a Context
-        context = self.sampler_state.createContext(integrator=integrator)
+        context = self.sampler_state.createContext(integrator=integrator, thermodynamic_state=self.thermodynamic_state)
         context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
 
         if self.verbose:
