@@ -695,13 +695,12 @@ class NCMCHybridEngine(NCMCEngine):
         direction = 'insert'
         if (self.nsteps == 0):
             # Special case of instantaneous insertion/deletion.
-            logP = 0.0
             final_positions = copy.deepcopy(proposed_positions)
             from perses.tests.utils import compute_potential
-            potential_del = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
-            potential_ins = self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
-            potential = potential_del - potential_ins
-            return [final_positions, logP, potential]
+            potential_del = -self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+            potential_ins = -self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
+            potential = potential_ins - potential_del
+            return [final_positions, initial_positions, potential]
 
 ########################################################################
         # Create alchemical system.
@@ -995,9 +994,10 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         Reset step counter and total work
         """
         self.setGlobalVariableByName("total_work", 0.0)
+        self.setGlobalVariableByName("protocol_work", 0.0)
+        self.setGlobalVariableByName("shadow_work", 0.0)
         if (self.nsteps > 0):
             self.setGlobalVariableByName("step", 0)
-            self.setGlobalVariableByName("pstep", 0)
             if self.has_statistics:
                 self.setGlobalVariableByName("naccept", 0)
                 self.setGlobalVariableByName("ntrials", 0)
@@ -1011,10 +1011,20 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
     def getWork(self, context):
         """Retrieve accumulated work (in units of kT)
         """
-        return self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
+        return self.getGlobalVariableByName("total_work")
+
+    def getShadowWork(self, context):
+        """Retrieve accumulated shadow work (in units of kT)
+        """
+        return self.getGlobalVariableByName("shadow_work")
+
+    def getProtocolWork(self, context):
+        """Retrieve accumulated protocol work (in units of kT)
+        """
+        return self.getGlobalVariableByName("protocol_work")
 
     def getLogAcceptanceProbability(self, context):
-        logp_accept = -1.0*self.getGlobalVariableByName("total_work") * unit.kilojoules_per_mole / self.kT
+        logp_accept = -1.0*self.getGlobalVariableByName("total_work")
         return logp_accept
 
 class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
@@ -1116,63 +1126,104 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
 
         # NCMC variables
         self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
-        self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
+        self.addGlobalVariable('total_work', 0.0) # cumulative total work in kT
+        self.addGlobalVariable('shadow_work', 0.0) # cumulative shadow work in kT
+        self.addGlobalVariable('protocol_work', 0.0) # cumulative protocol work in kT
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
         self.addGlobalVariable('kinetic', 0.0) # kinetic energy
         self.addGlobalVariable("Einitial", 0) # initial energy after setting initial alchemical state
+        self.addGlobalVariable("kT", self.kT.value_in_unit_system(unit.md_unit_system))  # thermal energy
+        self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
+        self.addGlobalVariable('step', 0) # current NCMC step number
 
         # VV variables
         if (nsteps > 0):
             # VV variables
-            self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
-            self.addGlobalVariable('step', 0) # current NCMC step number
             self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
             self.addGlobalVariable('psteps', steps_per_propagation)
             self.addGlobalVariable('pstep', 0)
 
-        # Constrain initial positions and velocities.
-        self.addConstrainPositions()
-        self.addConstrainVelocities()
-        self.addUpdateContextState()
-
         if nsteps == 0:
+            self.beginIfBlock('step = 0')            
+            # Initialize alchemical state
             self.addAlchemicalResetStep()
+            self.setGlobalVariableByName("total_work", 0.0)
+            self.setGlobalVariableByName("protocol_work", 0.0)
+            self.setGlobalVariableByName("shadow_work", 0.0)
+            # Compute energy of initial alchemical state
             self.addComputeGlobal('Einitial', 'energy') # store initial energy after setting initial alchemical state
+            # Constrain initial positions and velocities
+            self.addConstrainPositions()
+            self.addConstrainVelocities()
+            # Allow context state to be updated
+            #self.addUpdateContextState()
+            # Compute instantaneous work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
             self.addComputeGlobal("Enew", "energy")
-            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+            self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)/kT")
+            self.addComputeGlobal("total_work", "protocol_work")
+            # Update step
+            self.addComputeGlobal("step", "step+1")
+            # End block
+            self.endBlock()
         if nsteps > 0:
-            self.addComputeGlobal('pstep', '0')
             # Initial step only
             self.beginIfBlock('step = 0')
+            # Initialize alchemical state
             self.addAlchemicalResetStep()
+            self.setGlobalVariableByName("total_work", 0.0)
+            self.setGlobalVariableByName("protocol_work", 0.0)
+            self.setGlobalVariableByName("shadow_work", 0.0)
+            # Compute energy of initial alchemical state
             self.addComputeGlobal('Einitial', 'energy') # store initial energy after setting initial alchemical state
+            # Constrain initial positions and velocities
+            self.addConstrainPositions()
+            self.addConstrainVelocities()
+            # Allow context state to be updated
+            #self.addUpdateContextState()
+            # Accumulate shadow work while running propagation steps
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Eold", "energy + kinetic")
+            # Execute propagation steps.
+            self.addComputeGlobal('pstep', '0')
             self.beginWhileBlock('pstep < psteps')
             self.addVelocityVerletStep()
             self.addComputeGlobal('pstep', 'pstep+1')
             self.endBlock()
+            # Compute shadow work contribution
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Enew", "energy + kinetic")
-            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+            self.addComputeGlobal("shadow_work", "shadow_work + (Enew-Eold)/kT")
+            # End block
             self.endBlock()
 
-            # All steps
-            self.beginIfBlock('step < nsteps')
+            # All steps, including initial step
+            self.beginIfBlock('step < nsteps')        
+            # Accumulate protocol work
+            self.addComputeGlobal("Eold", "energy")
+            self.addAlchemicalPerturbationStep()
+            self.addComputeGlobal("Enew", "energy")
+            self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)/kT")
+            # Accumulate shadow work while running propagation steps
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Eold", "energy + kinetic")
-            self.addAlchemicalPerturbationStep()
+            # Execute propagation steps.
+            self.addComputeGlobal('pstep', '0')
             self.beginWhileBlock('pstep < psteps')
             self.addVelocityVerletStep()
             self.addComputeGlobal('pstep', 'pstep+1')
             self.endBlock()
+            # Compute shadow work contribution
             self.addComputeSum('kinetic', '0.5 * m * v^2')
             self.addComputeGlobal("Enew", "energy + kinetic")
-            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+            self.addComputeGlobal("shadow_work", "shadow_work + (Enew-Eold)/kT")
+            # Increment step
             self.addComputeGlobal('step', 'step+1')
+            # Compute total work
+            self.addComputeGlobal("total_work", "shadow_work + protocol_work")
+            # End block
             self.endBlock()
 
 class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
@@ -1217,20 +1268,22 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
         gamma = collision_rate
 
         # NCMC variables
-        self.addGlobalVariable('lambda', 0.0) # initial total energy (kinetic + potential)
-        self.addGlobalVariable('total_work', 0.0) # initial total energy (kinetic + potential)
+        self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics        self.addGlobalVariable('lambda', 0.0) # alchemical switching parameter
+        self.addGlobalVariable('total_work', 0.0) # cumulative total work in kT
+        self.addGlobalVariable('shadow_work', 0.0) # cumulative shadow work in kT
+        self.addGlobalVariable('protocol_work', 0.0) # cumulative protocol work in kT
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
         self.addGlobalVariable("Einitial", 0) # initial energy after setting initial alchemical state
+        self.addGlobalVariable("kT", self.kT.value_in_unit_system(unit.md_unit_system))  # thermal energy
+        self.addGlobalVariable('step', 0) # current NCMC step number
 
         if (nsteps > 0):
             # GHMC variables
             self.addGlobalVariable("Eold_GHMC", 0)  # old GHMC energy
             self.addGlobalVariable("Enew_GHMC", 0)  # new GHMC energy
             self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
-            self.addGlobalVariable('step', 0) # current NCMC step number
             self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
-            self.addGlobalVariable("kT", self.kT.value_in_unit_system(unit.md_unit_system))  # thermal energy
             self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
             self.addPerDofVariable("sigma", 0)
             self.addGlobalVariable("ke", 0)  # kinetic energy
@@ -1242,40 +1295,70 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable("pstep", 0) # number of propagation steps taken
             self.addGlobalVariable("psteps", steps_per_propagation) # total number of propagation steps
 
-        # Constrain initial positions and velocities.
-        self.addConstrainPositions()
-        self.addConstrainVelocities()
-        self.addUpdateContextState()
-
         if nsteps == 0:
+            self.beginIfBlock('step = 0')            
+            # Initialize alchemical state
             self.addAlchemicalResetStep()
+            self.setGlobalVariableByName("total_work", 0.0)
+            self.setGlobalVariableByName("protocol_work", 0.0)
+            self.setGlobalVariableByName("shadow_work", 0.0)
+            # Compute energy of initial alchemical state
             self.addComputeGlobal('Einitial', 'energy') # store initial energy after setting initial alchemical state
+            # Constrain initial positions and velocities
+            self.addConstrainPositions()
+            self.addConstrainVelocities()
+            # Allow context state to be updated
+            #self.addUpdateContextState()
+            # Compute instantaneous work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
             self.addComputeGlobal("Enew", "energy")
-            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
+            self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)/kT")
+            self.addComputeGlobal("total_work", "protocol_work")
+            # Update step
+            self.addComputeGlobal("step", "step+1")
+            # End block
+            self.endBlock()
         if nsteps > 0:
-            #self.addComputeGlobal('pstep', '0')
-
             # Initial step only
             self.beginIfBlock('step = 0')
-            #self.beginWhileBlock('pstep < psteps')
+            # Initialize alchemical state
             self.addAlchemicalResetStep()
+            self.setGlobalVariableByName("total_work", 0.0)
+            self.setGlobalVariableByName("protocol_work", 0.0)
+            self.setGlobalVariableByName("shadow_work", 0.0)
+            # Compute energy of initial alchemical state
             self.addComputeGlobal('Einitial', 'energy') # store initial energy after setting initial alchemical state
-            #self.addGHMCStep()
-            #self.addComputeGlobal('pstep', 'pstep+1')
-            #self.endBlock()
+            # Constrain initial positions and velocities
+            self.addConstrainPositions()
+            self.addConstrainVelocities()
+            # Allow context state to be updated
+            #self.addUpdateContextState()
+            # Execute propagation steps.
+            self.addComputeGlobal('pstep', '0')
+            self.beginWhileBlock('pstep < psteps')
+            self.addGHMCStep()
+            self.addComputeGlobal('pstep', 'pstep+1')
+            self.endBlock()
+            # End block
             self.endBlock()
 
-            # All steps
-            self.beginIfBlock('step < nsteps')
+            # All steps, including initial step
+            self.beginIfBlock('step < nsteps')        
+            # Accumulate protocol work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
             self.addComputeGlobal("Enew", "energy")
-            self.addComputeGlobal("total_work", "total_work + (Enew-Eold)")
-            #self.beginWhileBlock('pstep < psteps')
+            self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)/kT")
+            # Execute propagation steps.
+            self.addComputeGlobal('pstep', '0')
+            self.beginWhileBlock('pstep < psteps')
             self.addGHMCStep()
-            #self.addComputeGlobal('pstep', 'pstep+1')
-            #self.endBlock()
+            self.addComputeGlobal('pstep', 'pstep+1')
+            self.endBlock()
+            # Increment step
             self.addComputeGlobal('step', 'step+1')
+            # Compute total work
+            self.addComputeGlobal("total_work", "protocol_work")
+            # End block
             self.endBlock()
