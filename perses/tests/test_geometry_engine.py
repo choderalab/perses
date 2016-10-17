@@ -1051,9 +1051,9 @@ def test_try_random_itoc():
     for i in range(1000):
         atom_position += unit.Quantity(np.random.normal(size=3), unit=unit.nanometers)
         r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
-        r = (r/r.unit)*unit.nanometers
-        theta = (theta/theta.unit)*unit.radians
-        phi = (phi/phi.unit)*unit.radians
+        r = r*unit.nanometers
+        theta = theta*unit.radians
+        phi = phi*unit.radians
         recomputed_xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         new_r, new_theta, new_phi = _get_internal_from_omm(recomputed_xyz,bond_position, angle_position, torsion_position)
         crtp = geometry_engine._cartesian_to_internal(recomputed_xyz,bond_position, angle_position, torsion_position)
@@ -1196,4 +1196,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_propose_torsion()
+    test_try_random_itoc()
