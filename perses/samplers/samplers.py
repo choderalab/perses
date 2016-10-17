@@ -231,7 +231,8 @@ class SamplerState(object):
         platform : simtk.openmm.Platform, optional, default=None
            If specified, the Platform to use for context creation.
         thermodynamic_state : ThermodynamicState, optional, default=None
-            If specified, a barostat will be added to periodic systems with a pressure defined.
+            If a pressure is specified in the thermodynamic state, a barostat will be added
+            to periodic systems.
 
         Returns
         -------
