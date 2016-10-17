@@ -450,21 +450,6 @@ def create_cdf(log_pmf, phis, n_divisions):
 
     return torsion_cdf
 
-def test_copy_positions():
-    """
-    Make sure the copy_positions method works
-    """
-    from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    geometry_engine = FFAllAngleGeometryEngine()
-    old_positions = np.random.normal([50, 3])
-    new_positions = np.random.normal([65, 3])
-    common_positions = np.random.choice(65,size=50, replace=False)
-    atom_map = {a : common_positions[a] for a in range(50)}
-    geometry_engine._copy_positions()
-
-
-
-
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     #master system, will be used for all three
     sys = openmm.System()
