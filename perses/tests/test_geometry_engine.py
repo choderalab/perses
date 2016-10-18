@@ -172,22 +172,37 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
 
 def test_propose_angle():
     """
-    Test the proposal of angles by GeometryEngine
+    Test the proposal of angles by GeometryEngine by comparing to proposals from a normal distribution
+    with mean theta0 (equilibrium angle) and variance sigma = sqrt(1.0/(k*beta)), where k is the force
+    constant and beta is the inverse temperature. A Kolmogorov-Smirnov test is used for that comparison.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     import scipy.stats as stats
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a test system with only an angle force
     testsystem = FourAtomValenceTestSystem(bond=False, angle=True, torsion=False)
+
+    #There is only one angle in this system--extract it
     angle = testsystem.structure.angles[0]
     angle_with_units = geometry_engine._add_angle_units(angle)
+
+    #extract the parameters and convert them to the equivalents for a normal distribution
+    #without units
     (theta0, k) = testsystem.angle_parameters
     sigma = unit.sqrt(1.0/(beta*k))
     sigma_without_units = sigma.value_in_unit(unit.radian)
     theta0_without_units = theta0.value_in_unit(unit.radian)
+
+    #allocate an array for proposing angles from the appropriate distribution
     angle_array = np.zeros(1000)
     for i in range(1000):
         proposed_angle_with_units = geometry_engine._propose_angle(angle_with_units, beta)
         angle_array[i] = proposed_angle_with_units.value_in_unit(unit.radians)
+
+    #compare the sampled angles to a normal cdf with the appropriate parameters using
+    #the Kolomogorov-Smirnov test. The null hypothesis is that they are drawn from the same
+    #distribution (the test passes).
     (dval, pval) = stats.kstest(angle_array,'norm', args=(theta0_without_units, sigma_without_units))
     if pval < 0.05:
         raise Exception("The angle may be drawn from the wrong distribution. p= %f" % pval)
