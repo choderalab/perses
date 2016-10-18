@@ -209,22 +209,36 @@ def test_propose_angle():
 
 def test_propose_bond():
     """
-    Test the proposal of bonds by GeometryEngine
+    Test the proposal of bonds by GeometryEngine by comparing to proposals from a normal distribution
+    with mean r0 (equilibrium bond length) and variance sigma = sqrt(1.0/(k*beta)), where k is the force
+    constant and beta is the inverse temperature. A Kolmogorov-Smirnov test is used for that comparison.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     import scipy.stats as stats
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #create a test system with just a bond from the 1-2 atoms
     testsystem = FourAtomValenceTestSystem(bond=True, angle=False, torsion=False)
+
+    #Retrive this bond force's parameters
     bond = testsystem.structure.bonds[0] #this bond has parameters
     bond_with_units = geometry_engine._add_bond_units(bond)
     (r0, k) = testsystem.bond_parameters
+
+    #compute the equivalent parameters for a normal distribution
     sigma = unit.sqrt(1.0/(beta*k))
     sigma_without_units = sigma.value_in_unit(unit.nanometers)
     r0_without_units = r0.value_in_unit(unit.nanometers)
+
+    #Allocate an array for sampled bond lengths and propose from the geometry engine
     bond_array = np.zeros(1000)
     for i in range(1000):
         proposed_bond_with_units = geometry_engine._propose_bond(bond_with_units, beta)
         bond_array[i] = proposed_bond_with_units.value_in_unit(unit.nanometer)
+
+    #compare the sampled angles to a normal cdf with the appropriate parameters using
+    #the Kolomogorov-Smirnov test. The null hypothesis is that they are drawn from the same
+    #distribution (the test passes).
     (dval, pval) = stats.kstest(bond_array, 'norm', args=(r0_without_units, sigma_without_units))
     if pval < 0.05:
         raise Exception("The bond may be drawn from the wrong distribution. p= %f" % pval)
