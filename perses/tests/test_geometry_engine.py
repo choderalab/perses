@@ -245,25 +245,45 @@ def test_propose_bond():
 
 def test_bond_logq():
     """
-    Make sure the bond logq calculation matches the openmm one
+    Compare the bond logq (log unnormalized probability) calculated by the geometry engine to the log-unnormalized
+    probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature).
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a testsystem with only a bond force
     testsystem = FourAtomValenceTestSystem(bond=True, angle=False, torsion=False)
+
+    #Extrct the bond and its parameters
+    #r0 - equilibrium bond length
+    #k - force constant
     bond = testsystem.structure.bonds[0] #this bond has parameters
     bond_with_units = geometry_engine._add_bond_units(bond)
     (r0, k) = testsystem.bond_parameters
+
+    #Convert the bond parameters to the normal distribution `sigma` (variance) and use r0 as mean
     sigma = unit.sqrt(1.0/(beta*k))
     sigma_without_units = sigma.value_in_unit(unit.nanometer)
     r0_without_units = r0.value_in_unit(unit.nanometer)
+
+    #Create a set of bond lengths to test from r0 - sigma to r0 + sigma
     bond_range = np.linspace(r0_without_units - sigma_without_units, r0_without_units + sigma_without_units, 100)
+
+    #Extract the internal coordinates and add units.
+    #r - bond length
+    #theta - bond angle
+    #phi - torsion angle
     internal_coordinates = testsystem.internal_coordinates
     r = unit.Quantity(internal_coordinates[0], unit=unit.nanometer)
     theta = unit.Quantity(internal_coordinates[1], unit=unit.radians)
     phi = unit.Quantity(internal_coordinates[2], unit=unit.radians)
     internals_with_units = [r, theta, phi]
+
+    #Add units to the set of bond lengths
     bond_range_with_units = unit.Quantity(bond_range, unit=unit.nanometer)
 
+    #Loop through the bond lengths and make sure the unnormalized log probability calculated by the geometry engine (logq)
+    #matches that calculated by openmm (-beta*potential_energy) within 1.0e-6 tolerance
     for bond_length in bond_range_with_units:
         bond_logq_ge = geometry_engine._bond_logq(bond_length, bond_with_units, beta)
         internals_with_units[0] = bond_length
