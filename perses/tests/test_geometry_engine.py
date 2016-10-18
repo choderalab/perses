@@ -294,21 +294,36 @@ def test_bond_logq():
 
 def test_angle_logq():
     """
-    Make sure the angle logq calculation matches the openmm one
+    Compare the angle logq (log unnormalized probability) calculated by the geometry engine to the log-unnormalized
+    probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature).
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a testsystem with only an angle
     testsystem = FourAtomValenceTestSystem(bond=False, angle=True, torsion=False)
+
+    #Retrieve that angle and add units to it
     angle = testsystem.structure.angles[0]
     angle_with_units = geometry_engine._add_angle_units(angle)
-    angle_test_range = np.linspace(0.0, np.pi, num=100)
-    angle_test_range_with_units = unit.Quantity(angle_test_range, unit=unit.radians)
+
+    #Retrieve internal coordinates and add units
+    #r - bond length
+    #theta - bond angle
+    #phi - torsion angle
     internal_coordinates = testsystem.internal_coordinates
     r = unit.Quantity(internal_coordinates[0], unit=unit.nanometer)
     theta = unit.Quantity(internal_coordinates[1], unit=unit.radians)
     phi = unit.Quantity(internal_coordinates[2], unit=unit.radians)
     internals_with_units = [r, theta, phi]
 
+    #Get a range of test points for the angle from 0 to pi, and add units
+    angle_test_range = np.linspace(0.0, np.pi, num=100)
+    angle_test_range_with_units = unit.Quantity(angle_test_range, unit=unit.radians)
+
+    #Loop through the test points for the angle and calculate the log-unnormalized probability of each using
+    #geometry engine and openmm (-beta*potential_energy) where beta is inverse temperature. Tolerance 1.0e-4,
+    #because this tries a range of angles well outside what one would typically see.
     for test_angle in angle_test_range_with_units:
         angle_logq_ge = geometry_engine._angle_logq(test_angle, angle_with_units, beta)
         internals_with_units[1] = test_angle
