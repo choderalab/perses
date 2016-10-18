@@ -334,17 +334,29 @@ def test_angle_logq():
 
 def test_add_bond_units():
     """
-    Make sure bond units are added correctly to the bond term
+    Test that the geometry engine adds the correct units and value when replacing the default non-unit-bearing parmed
+    parameters by comparing the result to the known original settings.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a testsystem with just a bond
     testsystem = FourAtomValenceTestSystem(bond=True, angle=False, torsion=False)
+
+    #Extract this bond
     bond = testsystem.structure.bonds[0] #this bond has parameters
     bond_with_units = geometry_engine._add_bond_units(bond)
+
+    #Get the pre-defined parameters in the testsystem
     (r0, k) = testsystem.bond_parameters
     k_units = k.unit
+
+    #take the difference between the known parameters and the ones with units added
+    #If units are added incorrectly, this will result in either incompatible units or a nonzero difference
     bond_difference = bond_with_units.type.req - r0
     force_constant_difference = bond_with_units.type.k - k
+
+    #Test the difference between the given parameters and the one with units added, with a tolerance of 1.0e-6
     if np.abs(bond_difference.value_in_unit(unit.nanometers)) > 1.0e-6 or np.abs(force_constant_difference.value_in_unit(k_units)) > 1.0e-6:
         raise Exception("Did not add units correctly to bond.")
 
