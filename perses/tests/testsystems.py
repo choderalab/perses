@@ -1011,7 +1011,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         components = ['inhibitor', 'complex'] # TODO: Add 'ATP:kinase' complex to enable resistance design
         padding = 9.0*unit.angstrom
         explicit_solvent_model = 'tip3p'
-        setup_path = 'data/abl-imatinib'
+        setup_path = 'data/t4-lysozyme'
         thermodynamic_states = dict()
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
@@ -1025,17 +1025,11 @@ class AblAffinityTestSystem(PersesTestSystem):
 
         # Read SMILES from CSV file of clinical kinase inhibitors.
         from pkg_resources import resource_filename
-        smiles_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.csv')
-        import csv
-        molecules = list()
-        with open(smiles_filename, 'r') as csvfile:
-            csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
-            for row in csvreader:
-                name = row[0]
-                smiles = row[1]
-                molecules.append(smiles)
-        # Add current molecule
-        molecules.append('Cc1ccc(cc1Nc2nccc(n2)c3cccnc3)NC(=O)c4ccc(cc4)C[NH+]5CCN(CC5)C')
+        smiles_filename = resource_filename('perses', 't4-lysozyme/clean_smiles_t4.txt')
+        smiles_file = open(smiles_filename,'r')
+        smiles_list = smiles_file.readlines()
+        #remove any stray newlines:
+        molecules = [smiles.replace("\n", "") for smiles in smiles_list]
         self.molecules = molecules
 
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
