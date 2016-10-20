@@ -1172,9 +1172,7 @@ class AblAffinityTestSystem(PersesTestSystem):
 
 class T4AffinityTestSystem(PersesTestSystem):
     """
-    Create a consistent set of SAMS samplers useful for optimizing kinase inhibitor affinity to Abl.
-
-    TODO: Generalize to standard inhibitor:protein test system and extend to T4 lysozyme small molecules.
+    Create a consistent set of SAMS samplers useful for optimizing inhibitor affinity to T4
 
     Properties
     ----------
