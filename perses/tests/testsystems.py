@@ -1282,7 +1282,7 @@ class T4AffinityTestSystem(PersesTestSystem):
             storage = None
             if self.storage:
                 storage = NetCDFStorageView(self.storage, envname=environment)
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL', storage=storage)
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='UNL', storage=storage)
 
         # Generate systems
         systems = dict()
