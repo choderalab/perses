@@ -1218,7 +1218,7 @@ class T4AffinityTestSystem(PersesTestSystem):
 
         # Read SMILES from CSV file of clinical kinase inhibitors.
         from pkg_resources import resource_filename
-        smiles_filename = resource_filename('perses', 't4-lysozyme/clean_smiles_t4.txt')
+        smiles_filename = resource_filename('perses', 'data/t4-lysozyme/clean_smiles_t4.txt')
         smiles_file = open(smiles_filename,'r')
         smiles_list = smiles_file.readlines()
         #remove any stray newlines:
@@ -2388,6 +2388,36 @@ def run_abl_affinity_write_pdb_ncmc_switching():
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
     #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
 
+def run_t4_affinity_write_pdb_ncmc_switching():
+    """
+    Run abl test system.
+    """
+    testsystem = T4AffinityTestSystem()
+    #for environment in testsystem.environments:
+    for environment in ['vacuum-complex']:
+        print(environment)
+        testsystem.exen_samplers[environment].pdbfile = open('t4-benzene-%s.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].geometry_pdbfile = open('t4-benzene-%s-geometry-proposals.pdb' % environment, 'w')
+        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10000
+        testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
+        testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
+        testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
+        testsystem.mcmc_samplers[environment].nsteps = 10000
+        testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
+
+        testsystem.mcmc_samplers[environment].verbose = True
+        testsystem.exen_samplers[environment].verbose = True
+        testsystem.sams_samplers[environment].verbose = True
+        #testsystem.mcmc_samplers[environment].run(niterations=5)
+        testsystem.exen_samplers[environment].run(niterations=5)
+
+        #testsystem.sams_samplers[environment].run(niterations=5)
+
+    #testsystem.designer.verbose = True
+    #testsystem.designer.run(niterations=500)
+    #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
+    #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
+
 def run_constph_abl():
     """
     Run Abl:imatinib constant-pH test system.
@@ -2489,12 +2519,13 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_alanine_system(sterics=False)
+    #run_alanine_system(sterics=False)
+    run_t4_affinity_write_pdb_ncmc_switching()
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
-    run_imidazole()
+    #run_imidazole()
     #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
