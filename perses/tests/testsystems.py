@@ -2050,8 +2050,7 @@ class NaphthaleneTestSystem(PersesTestSystem):
             initial_topology._state_key = proposal_engine._fake_states[0]
 
             temperature = 300*unit.kelvin
-            pressure = 1.0*unit.atmosphere
-            thermodynamic_state = ThermodynamicState(system=initial_system, temperature=temperature, pressure=pressure)
+            thermodynamic_state = ThermodynamicState(system=initial_system, temperature=temperature)
 
             chemical_state_key = proposal_engine.compute_state_key(initial_topology)
             sampler_state = SamplerState(system=initial_system, positions=initial_positions)
@@ -2480,7 +2479,8 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_alanine_system(sterics=True)
+    run_naphthalene_system()
+#    run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
