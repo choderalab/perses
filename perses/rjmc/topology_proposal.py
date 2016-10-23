@@ -1619,3 +1619,152 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 pass
         removed_smiles = smiles_set.difference(safe_smiles)
         return safe_smiles, removed_smiles
+
+class NaphthaleneProposalEngine(SmallMoleculeSetProposalEngine):
+    """
+    Custom ProposalEngine to use with NaphthaleneTestSystem defines two "states"
+    of naphthalene, identified 'naphthalene-A' and 'naphthalene-B', which are
+    tracked by adding a custom _state_key attribute to the topology
+
+    Generates TopologyProposal from naphthalene to naphthalene, only matching
+    one ring such that geometry must rebuild the other
+
+    Can only be used with input topology of naphthalene
+
+    Constructor Arguments:
+        system_generator, SystemGenerator object
+            SystemGenerator initialized with the appropriate forcefields
+        residue_name, OPTIONAL,  str
+            Default = "MOL"
+            The name that will be used for small molecule residues in the topology
+        atom_expr, OPTIONAL, oechem.OEExprOpts
+            Default is None
+            Currently not implemented -- would dictate how match is defined
+        bond_expr, OPTIONAL, oechem.OEExprOpts
+            Default is None
+            Currently not implemented -- would dictate how match is defined
+        proposal_metadata, OPTIONAL, dict
+            Default is None
+            metadata for the proposal engine
+        storage, OPTIONAL, NetCDFStorageView
+            Default is None
+            If specified, write statistics to this storage layer
+        always_change, OPTIONAL, bool
+            Default is True
+            Currently not implemented -- will always behave as True
+            The proposal will always be from the current "state" to the other
+            Self proposals will never be made
+    """
+    def __init__(self, system_generator, residue_name="MOL", atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
+        self._fake_states = ["naphthalene-A", "naphthalene-B"]
+        super(NaphthaleneProposalEngine, self).__init__(list(), system_generator, residue_name=residue_name)
+
+    def propose(self, current_system, current_topology, current_metadata=None):
+        """
+        Custom proposal for NaphthaleneTestSystem will switch from current naphthalene
+        "state" (either 'naphthalene-A' or 'naphthalene-B') to the other
+
+        This proposal engine can only be used with input topology of
+        naphthalene, and propose() will first confirm naphthalene is residue "MOL"
+        The topology may have water but should not have any other
+        carbon-containing residue.
+
+        The "new" system and topology are deep copies of the old, but the atom_map
+        is custom defined to only match one of the two rings.
+
+        Arguments:
+        ----------
+        current_system : openmm.System object
+            the system of the current state
+        current_topology : app.Topology object
+            the topology of the current state
+        current_metadata : dict, OPTIONAL
+            Not implemented
+
+        Returns:
+        -------
+        proposal : TopologyProposal object
+           topology proposal object
+
+        """
+        naph_smiles='c1ccc2ccccc2c1'
+        given_smiles = super(NaphthaleneProposalEngine, self).compute_state_key(current_topology)
+        if naph_smiles != given_smiles:
+            raise(Exception("NaphthaleneProposalEngine can only be used with naphthalene topology; smiles of given topology is: {0}".format(given_smiles)))
+
+        old_key = current_topology._state_key
+        new_key = [key for key in self._fake_states if key != old_key][0]
+
+        new_topology = copy.deepcopy(current_topology)
+        new_topology._state_key = new_key
+        new_system = copy.deepcopy(current_system)
+        atom_map = self._make_skewed_atom_map(current_topology)
+        proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=0.0,
+                                                 new_to_old_atom_map=atom_map, old_chemical_state_key=old_key, new_chemical_state_key=new_key)
+        return proposal
+
+    def _make_skewed_atom_map(self, topology):
+        """
+        Custom definition for the atom map between naphthalene and naphthalene
+
+        If a regular atom map was constructed (via oechem.OEMCSSearch), all
+        atoms would be matched, and the geometry engine would have nothing
+        to add.  This method manually finds one of the two naphthalene rings
+        and matches it to itself, rotated 180degrees.  The second ring and
+        all hydrogens will have to be repositioned by the geometry engine.
+
+        The rings are identified by finding how many other carbons each
+        carbon in the topology is bonded to.  This will be 2 for all carbons
+        in naphthalene except the two carbon atoms shared by both rings.
+        Starting with these 2 shared atoms, a ring is traced by following
+        bonds between adjacent carbons until returning to the shared carbons.
+
+        Arguments:
+        ----------
+        topology : app.Topology object
+            topology of naphthalene
+            Only one topology is needed, because current and proposed are
+            identical
+        Returns:
+        --------
+        atom_map : dict
+            maps the atom indices of carbons from one ring back to themselves
+        """
+        # make dict of carbons in topology to list of carbons they're bonded to
+        carbon_bonds = dict()
+        for atom in topology.atoms():
+            if atom.element == app.element.carbon:
+                carbon_bonds[atom] = set()
+        for bond in topology.bonds():
+            if bond[0].element == app.element.carbon and bond[1].element == app.element.carbon:
+                carbon_bonds[bond[0]].add(bond[1])
+                carbon_bonds[bond[1]].add(bond[0])
+
+        # identify the rings by finding 2 middle carbons then tracing their bonds
+        find_ring = list()
+        for carbon, bounds in carbon_bonds.items():
+            if len(bounds) == 3:
+                find_ring.append(carbon)
+        assert len(find_ring) == 2
+
+        add_next = [carbon for carbon in carbon_bonds[find_ring[1]] if carbon not in find_ring]
+        while len(add_next) > 0:
+            find_ring.append(add_next[0])
+            add_next = [carbon for carbon in carbon_bonds[add_next[0]] if carbon not in find_ring]
+        assert len(find_ring) == 6
+
+        # map the ring flipped 180
+        atom_map = {find_ring[i].index : find_ring[(i+3)%6].index for i in range(6)}
+        return atom_map
+
+    def compute_state_key(self, topology):
+        """
+        For this test system, the topologies for the two states are
+        identical; therefore a custom attribute `_state_key` has
+        been added to the topology itself, to track whether a switch
+        has been accepted
+
+        compute_state_key will return topology._state_key rather than
+        SMILES, because SMILES are identical in the two states.
+        """
+        return topology._state_key
