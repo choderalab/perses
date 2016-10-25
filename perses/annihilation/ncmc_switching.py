@@ -12,7 +12,7 @@ default_functions = {
     'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
     'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
     'lambda_bonds' : '0.9*lambda + 0.1', # don't fully soften bonds
-    'lambda_angles' : 'lambda*lambda', # don't fully soften angles
+    'lambda_angles' : '0.9*lambda + 0.1', # don't fully soften angles
     'lambda_torsions' : 'lambda'
     }
 
