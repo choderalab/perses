@@ -2083,12 +2083,115 @@ class NaphthaleneTestSystem(PersesTestSystem):
         self.mcmc_samplers = mcmc_samplers
         self.exen_samplers = exen_samplers
 
-def run_naphthalene_system():
+class ButaneTestSystem(PersesTestSystem):
     """
-    Runs NaphthalaneTestSystem ExpandedEnsemble sampler ONLY
+    Test turning Butane into Butane in vacuum
+    Currently only trying to test ExpandedEnsemble sampler, therefore
+    SAMS sampler and MultiTargetDesign are not implemented at this time
+
+    Uses a custom ProposalEngine to only match two carbons, have geometry
+    engine choose positions for others
+
+    geometry_engine.write_proposal_pdb set to True
+
+    Constructor:
+    ButaneTestSystem(storage_filename="butane.nc", exen_pdb_filename=None)
+
+    Arguments:
+        storage_filename, OPTIONAL, string
+            Default is "butane.nc"
+            Storage must be provided in order to analyze testsystem acceptance rates
+        exen_pdb_filename, OPTIONAL, string
+            Default is None
+            If value is not None, will write pdbfile after every ExpandedEnsemble
+            iteration
+
+    Only one environment ('vacuum') is currently implemented; however all 
+    samplers are saved in dictionaries for consistency with other testsystems
+    """
+
+    def __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
+        """
+        __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
+        """
+        super(ButaneTestSystem, self).__init__(storage_filename=storage_filename)
+        environments = ['vacuum']
+
+        self.geometry_engine.write_proposal_pdb = True
+
+        system_generators = dict()
+        topologies = dict()
+        positions = dict()
+        proposal_engines = dict()
+        thermodynamic_states = dict()
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+
+        from perses.rjmc.topology_proposal import SystemGenerator, ButaneProposalEngine
+        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromSMILES
+        from perses.samplers.thermodynamics import ThermodynamicState
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
+
+        for key in environments:
+            if key == "vacuum":
+                forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
+                gaff_xml_filename = get_data_filename('data/gaff.xml')
+            system_generator = SystemGenerator([gaff_xml_filename], forcefield_kwargs=forcefield_kwargs)
+            system_generators[key] = system_generator
+
+            proposal_engine = ButaneProposalEngine(system_generator)
+            initial_molecule = createOEMolFromSMILES(smiles='CCCC')
+            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+            initial_topology._state_key = proposal_engine._fake_states[0]
+
+            temperature = 300*unit.kelvin
+            thermodynamic_state = ThermodynamicState(system=initial_system, temperature=temperature)
+
+            chemical_state_key = proposal_engine.compute_state_key(initial_topology)
+            sampler_state = SamplerState(system=initial_system, positions=initial_positions)
+
+            mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
+            mcmc_sampler.nsteps = 5
+            mcmc_sampler.timestep = 1.0*unit.femtosecond
+            mcmc_sampler.verbose = True
+
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options={'nsteps':250}, storage=self.storage)
+            exen_sampler.verbose = True
+            if exen_pdb_filename is not None:
+                exen_sampler.pdbfile = open(exen_pdb_filename,'w')
+
+            topologies[key] = initial_topology
+            positions[key] = initial_positions
+            proposal_engines[key] = proposal_engine
+            thermodynamic_states[key] = thermodynamic_state
+            mcmc_samplers[key] = mcmc_sampler
+            exen_samplers[key] = exen_sampler
+
+        # save
+        self.environments = environments
+        self.storage_filename = storage_filename
+        self.system_generators = system_generators
+        self.topologies = topologies
+        self.positions = positions
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+
+def run_null_system(testsystem):
+    """
+    Intended for use with NaphthaleneTestSystem or ButaneTestSystem ONLY
+
+    Runs TestSystem ExpandedEnsemble sampler ONLY
     Uses BAR to check whether the free energies of the two states
     (both naphthalene) are within 6 sigma of 0
     Imports netCDF4 to read in storage file and access data
+
+    Arguments:
+    ----------
+    testsystem : NaphthaleneTestSystem or ButantTestSystem
+        Only these two test systems have the proposal_engine._fake_states
+        attribute, which differentiates between 2 states of a null proposal
 
     CURRENTLY:
     The expanded ensemble acceptance rate of naphthalene-A to naphthalene-B
@@ -2102,7 +2205,9 @@ def run_naphthalene_system():
         move netcdf import to analysis for general use
         move BAR import to analysis, define use of BAR to be generalized
     """
-    testsystem = NaphthaleneTestSystem()
+    if type(testsystem) not in [NaphthaleneTestSystem, ButaneTestSystem]:
+        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem or ButantTestSystem; given {0}".format(type(testsystem))))
+
     import netCDF4 as netcdf
     import pickle
     import codecs
@@ -2479,7 +2584,8 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_naphthalene_system()
+    testsystem = ButaneTestSystem()
+    run_null_system(testsystem)
 #    run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
