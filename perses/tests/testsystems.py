@@ -2584,7 +2584,7 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    testsystem = NaphthaleneTestSystem()
+    testsystem = ButaneTestSystem()
     run_null_system(testsystem)
 #    run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
