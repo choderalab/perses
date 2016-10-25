@@ -2067,7 +2067,7 @@ class GeometrySystemGenerator(object):
                 heavy_torsions.append(torsion)
         return heavy_torsions
 
-    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices):
+    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices, heavy_atoms_only=False):
         """
         Determine extra angles to be placed on aromatic ring members. Sometimes,
         the native angle force is too weak to efficiently close the ring. As with the
@@ -2080,6 +2080,8 @@ class GeometrySystemGenerator(object):
         reference_topology : simtk.openmm.app.Topology
             new/old topology if forward/backward
         growth_indices : list of parmed.atom
+        heavy_atoms_only : Boolean, default False
+            Only add angles for heavy atoms.
 
         Returns
         -------
@@ -2111,7 +2113,10 @@ class GeometrySystemGenerator(object):
         #TODO: find out if that's really true
         aromatic_pred = oechem.OEIsAromaticAtom()
         heavy_pred = oechem.OEIsHeavy()
-        angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
+        if heavy_atoms_only:
+            angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
+        else:
+            angle_criteria = aromatic_pred
 
         #get all heavy aromatic atoms:
         #TODO: do this more efficiently
