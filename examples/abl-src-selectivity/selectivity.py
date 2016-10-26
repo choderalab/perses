@@ -194,7 +194,7 @@ class Selectivity(PersesTestSystem):
 
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = {sams_samplers['explicit-src-imatinib']: 1.0, sams_samplers['explicit-abl-imatinib']: -1.0}
-        designer = MultiTargetDesign(target_samplers, storage=storage)
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
         # Store things.
