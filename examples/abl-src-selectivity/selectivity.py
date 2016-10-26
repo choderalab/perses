@@ -7,9 +7,9 @@ from perses.tests.testsystems import PersesTestSystem
 import perses.rjmc.geometry as geometry
 from perses.storage import NetCDFStorage, NetCDFStorageView
 
-class abl_src_affinity(PersesTestSystem):
+class Selectivity(PersesTestSystem):
     """
-    Create a consistent set of SAMS samplers useful for optimizing kinase inhibitor affinity to Abl.
+    Create a consistent set of SAMS samplers useful for optimizing kinase inhibitor selectivity.
 
     TODO: Generalize to standard inhibitor:protein test system and extend to T4 lysozyme small molecules.
 
@@ -48,8 +48,8 @@ class abl_src_affinity(PersesTestSystem):
 
     """
     def __init__(self, **kwargs):
-        super(abl_src_affinity, self).__init__(**kwargs)
-        #solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
+        super(Selectivity, self).__init__(**kwargs)
+
         solvents = ['explicit'] # DEBUG
         components = ['src-imatinib', 'abl-imatinib'] # TODO: Add 'ATP:kinase' complex to enable resistance design
         padding = 9.0*unit.angstrom
@@ -191,9 +191,9 @@ class abl_src_affinity(PersesTestSystem):
                 thermodynamic_states[environment] = thermodynamic_state
 
         # Create test MultiTargetDesign sampler.
-        # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
+
         from perses.samplers.samplers import MultiTargetDesign
-        target_samplers = { sams_samplers['explicit-src-imatinib'] : 1.0, sams_samplers['explicit-abl-imatinib'] : -1.0 }
+        target_samplers = {sams_samplers['explicit-src-imatinib']: 1.0, sams_samplers['explicit-abl-imatinib']: -1.0}
         designer = MultiTargetDesign(target_samplers)
         designer.verbose = True
 
@@ -215,9 +215,11 @@ class abl_src_affinity(PersesTestSystem):
         minimize(self)
 
 def run_selectivity():
+
     storage_filename = 'output-src-abl.nc'
-    system = abl_src_affinity(storage_filename=storage_filename)
+    system = Selectivity(storage_filename=storage_filename)
     system.designer.run(niterations=10)
+
     from perses.analysis import Analysis
     analysis = Analysis(storage_filename=storage_filename)
     analysis.plot_ncmc_work('ncmc-work.pdf')
