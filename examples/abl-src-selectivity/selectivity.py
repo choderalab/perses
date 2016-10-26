@@ -181,12 +181,12 @@ class Selectivity(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':10}, geometry_engine=geometry_engine)
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':10}, geometry_engine=geometry_engine, storage=storage)
                 exen_samplers[environment].verbose = True
-                sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+                sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
                 thermodynamic_states[environment] = thermodynamic_state
 
@@ -194,7 +194,7 @@ class Selectivity(PersesTestSystem):
 
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = {sams_samplers['explicit-src-imatinib']: 1.0, sams_samplers['explicit-abl-imatinib']: -1.0}
-        designer = MultiTargetDesign(target_samplers)
+        designer = MultiTargetDesign(target_samplers, storage=storage)
         designer.verbose = True
 
         # Store things.
