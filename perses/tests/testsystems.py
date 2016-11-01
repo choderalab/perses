@@ -2133,8 +2133,8 @@ def run_valence_system():
     testsystem = ValenceSmallMoleculeLibraryTestSystem(storage_filename='output.nc')
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
-    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
-    testsystem.mcmc_samplers[environment].nsteps = 5
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
+    testsystem.mcmc_samplers[environment].nsteps = 1
     testsystem.sams_samplers[environment].run(niterations=50)
 
 def run_alanine_system(sterics=False):
@@ -2302,12 +2302,12 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_alanine_system(sterics=False)
+    #run_alanine_system(sterics=False)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
-    #run_valence_system()
+    run_valence_system()
     #run_t4_inhibitors()
-    run_imidazole()
+    #run_imidazole()
     #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
