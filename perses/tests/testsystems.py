@@ -2018,10 +2018,12 @@ class NullTestSystem(PersesTestSystem):
     samplers are saved in dictionaries for consistency with other testsystems
 
     """
-    def __init__(mol_name, storage_filename="null.nc", exen_pdb_filename=None)
+    def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None):
         if mol_name not in ['naphthalene', 'butane']:
             raise(IOError("NullTestSystem molecule name can only be naphthalene or butane, given {0}".format(mol_name)))
-        super(NaphthaleneTestSystem, self).__init__(storage_filename=storage_filename)
+
+        super(NullTestSystem, self).__init__(storage_filename=storage_filename)
+
         if mol_name == 'naphthalene':
             smiles = 'c1ccc2ccccc2c1'
             from perses.rjmc.topology_proposal import NaphthaleneProposalEngine as NullProposal
@@ -2124,7 +2126,7 @@ class NaphthaleneTestSystem(NullTestSystem):
         """
         __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
         """
-        super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename)
+        super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
 
 class ButaneTestSystem(NullTestSystem):
     """
@@ -2157,7 +2159,7 @@ class ButaneTestSystem(NullTestSystem):
         """
         __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
         """
-        super(ButaneTestSystem, self).__init__('butant', storage_filename=storage_filename)
+        super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
 
 def run_null_system(testsystem):
     """
