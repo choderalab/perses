@@ -1217,6 +1217,8 @@ class ExpandedEnsembleSampler(object):
             self.storage.write_quantity('logp_accept', logp_accept, iteration=self.iteration)
             self.storage.write_quantity('logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
             self.storage.write_quantity('logp_geometry', geometry_logp, iteration=self.iteration)
+            self.storage.write_quantity('logp_geometry_reverse', geometry_logp_reverse, iteration=self.iteration)
+            self.storage.write_quantity('logp_geometry_propose', geometry_logp_propose, iteration=self.iteration)
             self.storage.write_quantity('new_log_weight', new_log_weight, iteration=self.iteration)
             self.storage.write_quantity('old_log_weight', old_log_weight, iteration=self.iteration)
 
