@@ -1957,7 +1957,7 @@ class GeometrySystemGenerator(object):
         return growth_system
 
 
-    def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
+    def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices, heavy_torsions_only=False):
         """
         Determine which atoms need an extra torsion. First figure out which residue is
         covered by the new atoms, then determine the rotatable bonds. Finally, construct
@@ -1972,6 +1972,8 @@ class GeometrySystemGenerator(object):
             the new/old topology if forward/backward
         growth_indices : list of atom
             The list of new atoms and the order in which they will be added.
+        heavy_torsions_only : Boolean, default False
+            Whether to only add torsions for heavy atoms (not hydrogens)
 
         Returns
         -------
@@ -2018,7 +2020,10 @@ class GeometrySystemGenerator(object):
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
         non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
-        relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        if heavy_torsions_only:
+            relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        else:
+            relevant_torsion_list = non_rotor_torsions
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
@@ -2062,7 +2067,7 @@ class GeometrySystemGenerator(object):
                 heavy_torsions.append(torsion)
         return heavy_torsions
 
-    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices):
+    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices, heavy_atoms_only=False):
         """
         Determine extra angles to be placed on aromatic ring members. Sometimes,
         the native angle force is too weak to efficiently close the ring. As with the
@@ -2075,6 +2080,8 @@ class GeometrySystemGenerator(object):
         reference_topology : simtk.openmm.app.Topology
             new/old topology if forward/backward
         growth_indices : list of parmed.atom
+        heavy_atoms_only : Boolean, default False
+            Only add angles for heavy atoms.
 
         Returns
         -------
@@ -2106,7 +2113,10 @@ class GeometrySystemGenerator(object):
         #TODO: find out if that's really true
         aromatic_pred = oechem.OEIsAromaticAtom()
         heavy_pred = oechem.OEIsHeavy()
-        angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
+        if heavy_atoms_only:
+            angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
+        else:
+            angle_criteria = aromatic_pred
 
         #get all heavy aromatic atoms:
         #TODO: do this more efficiently
