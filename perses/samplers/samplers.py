@@ -815,10 +815,10 @@ class ExpandedEnsembleSampler(object):
             self._switching_nsteps = options['nsteps']
         else:
             self._switching_nsteps = 0
-        if scheme=='ncmc-geometry-ncmc':
+        if scheme in ['ncmc-geometry-ncmc','geometry-ncmc']:
             from perses.annihilation.ncmc_switching import NCMCEngine
             self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
-        elif scheme=='geometry-ncmc':
+        elif scheme=='geometry-ncmc-geometry':
             from perses.annihilation.ncmc_switching import NCMCHybridEngine
             self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
         else:
@@ -884,42 +884,11 @@ class ExpandedEnsembleSampler(object):
         if self.scheme == 'ncmc-geometry-ncmc':
             if self.verbose: print("Updating chemical state with ncmc-geometry-ncmc scheme...")
 
-            # DEBUG: Check current topology can be built.
-            try:
-                self.proposal_engine._system_generator.build_system(self.topology)
-            except Exception as e:
-                msg = str(e)
-                msg += '\n'
-                msg += 'ExpandedEnsembleSampler.update_sampler: self.topology before ProposalEngine call cannot be built into a system'
-                raise Exception(msg)
-
             # Propose new chemical state.
             if self.verbose: print("Proposing new topology...")
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
             if self.verbose: print("Proposed transformation: %s => %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
-
-            # DEBUG: Check current topology can be built.
-            if self.verbose: print("Generating new system...")
-            try:
-                self.proposal_engine._system_generator.build_system(topology_proposal.new_topology)
-            except Exception as e:
-                msg = str(e)
-                msg += '\n'
-                msg += 'ExpandedEnsembleSampler.update_sampler: toology_proposal.new_topology before ProposalEngine call cannot be built into a system'
-                raise Exception(msg)
-
-            # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
-            natoms_old = topology_proposal.old_system.getNumParticles()
-            natoms_new = topology_proposal.new_system.getNumParticles()
-            if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
-                msg = "Some old atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_old
-                msg += str(topology_proposal.new_to_old_atom_map)
-                raise Exception(msg)
-            if not set(topology_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
-                msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
-                msg += str(topology_proposal.new_to_old_atom_map)
-                raise Exception(msg)
 
             # Determine state keys
             old_state_key = self.state_key
@@ -1019,24 +988,119 @@ class ExpandedEnsembleSampler(object):
 
             # Write to storage.
             if self.storage:
-                self.storage.write_quantity('update_state_elapsed_time', elapsed_time, iteration=self.iteration)
-                self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
-                self.storage.write_object('state_key', self.state_key, iteration=self.iteration)
-                self.storage.write_object('proposed_state_key', topology_proposal.new_chemical_state_key, iteration=self.iteration)
-                self.storage.write_quantity('naccepted', self.naccepted, iteration=self.iteration)
-                self.storage.write_quantity('nrejected', self.nrejected, iteration=self.iteration)
-                self.storage.write_quantity('logp_accept', logp_accept, iteration=self.iteration)
-                self.storage.write_quantity('logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
-                self.storage.write_quantity('logp_geometry', geometry_logp, iteration=self.iteration)
-                self.storage.write_quantity('logp_switch', switch_logp, iteration=self.iteration)
                 self.storage.write_quantity('logp_ncmc_elimination', ncmc_elimination_logp, iteration=self.iteration)
                 self.storage.write_quantity('logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
-                self.storage.write_quantity('new_log_weight', new_log_weight, iteration=self.iteration)
-                self.storage.write_quantity('old_log_weight', old_log_weight, iteration=self.iteration)
-
+                self.storage.write_quantity('update_state_elapsed_time', elapsed_time, iteration=self.iteration)
+                self.storage.write_quantity('logp_switch', switch_logp, iteration=self.iteration)
 
         elif self.scheme == 'geometry-ncmc':
+            raise(NotImplementedError("ExpandedEnsembleSampler scheme 'geometry-ncmc' has not been statistically validated and should not be used."))
+            from perses.tests.utils import compute_potential
             if self.verbose: print("Updating chemical state with geometry-ncmc scheme...")
+            # Propose new chemical state.
+            if self.verbose: print("Proposing new topology...")
+            [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
+            topology_proposal = self.proposal_engine.propose(system, topology)
+            if self.verbose: print("Proposed transformation: %s => %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
+
+            # Determine state keys
+            old_state_key = self.state_key
+            new_state_key = topology_proposal.new_chemical_state_key
+
+            # Determine log weight
+            old_log_weight = self.get_log_weight(old_state_key)
+            new_log_weight = self.get_log_weight(new_state_key)
+
+            potential_delete = self.sampler.thermodynamic_state.beta * compute_potential(system, positions, platform=self.ncmc_engine.platform)
+
+            if self.verbose: print("Geometry engine proposal...")
+            # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
+            initial_time = time.time()
+            geometry_old_positions = positions
+            geometry_new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            if self.verbose: print('proposal took %.3f s' % (time.time() - initial_time))
+
+            if self.geometry_pdbfile is not None:
+                print("Writing proposed geometry...")
+                #self.geometry_pdbfile.write('MODEL     %4d\n' % (self.iteration+1)) # PyMOL doesn't render connectivity correctly this way
+                from simtk.openmm.app import PDBFile
+                PDBFile.writeFile(topology_proposal.new_topology, geometry_new_positions, file=self.geometry_pdbfile)
+                #self.geometry_pdbfile.write('ENDMDL\n')
+                self.geometry_pdbfile.flush()
+
+            if self.verbose: print("Geometry engine logP_reverse calculation...")
+            initial_time = time.time()
+            geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, geometry_new_positions, geometry_old_positions, self.sampler.thermodynamic_state.beta)
+            geometry_logp = geometry_logp_reverse - geometry_logp_propose
+            if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
+
+            if self.verbose: print("Performing NCMC insertion")
+            # Alchemically introduce new atoms.
+            initial_time = time.time()
+            [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, geometry_new_positions, direction='insert', iteration=self.iteration)
+            if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
+            # Check that positions are not NaN
+            if np.any(np.isnan(ncmc_new_positions)):
+                raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
+
+            def print_energy_components(topology, system, positions):
+                from parmed.openmm import load_topology, energy_decomposition_system
+                structure = load_topology(topology, system=system, xyz=positions)
+                energies = energy_decomposition_system(structure, system, nrg=unit.kilocalories_per_mole)
+                for (name, energy) in energies:
+                    print('%40s %12.3f kcal/mol' % (name, energy))
+
+            # Compute change in eliminated potential contribution.
+            switch_logp = - (potential_insert - potential_delete)
+            if self.verbose:
+                print('potential before geometry  : %12.3f kT' % potential_delete)
+                print_energy_components(topology_proposal.old_topology, topology_proposal.old_system, geometry_old_positions)
+                print('potential after geometry   : %12.3f kT' % potential_insert)
+                print_energy_components(topology_proposal.new_topology, topology_proposal.new_system, geometry_new_positions)
+                print('---------------------------------------------------------')
+                print('switch_logp                : %12.3f' % switch_logp)
+                print('geometry_logp_propose      : %12.3f' % geometry_logp_propose)
+                print('geometry_logp_reverse      : %12.3f' % geometry_logp_reverse)
+
+            # Compute total log acceptance probability, including all components.
+            logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
+            if self.verbose:
+                print("logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_introduction_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
+                    % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
+
+            # Accept or reject.
+            if np.isnan(logp_accept):
+                accept = False
+                print('logp_accept = NaN')
+            else:
+                accept = ((logp_accept>=0.0) or (np.random.uniform() < np.exp(logp_accept)))
+                if self.accept_everything:
+                    print('accept_everything option is turned on; accepting')
+                    accept = True
+
+            if accept:
+                self.sampler.thermodynamic_state.system = topology_proposal.new_system
+                self.sampler.sampler_state.system = topology_proposal.new_system
+                self.topology = topology_proposal.new_topology
+                self.sampler.sampler_state.positions = ncmc_new_positions
+                self.sampler.topology = topology
+                self.state_key = topology_proposal.new_chemical_state_key
+                self.naccepted += 1
+                if self.verbose: print("    accepted")
+            else:
+                self.nrejected += 1
+                if self.verbose: print("    rejected")
+
+            elapsed_time = time.time() - initial_time
+
+            # Write to storage.
+            if self.storage:
+                self.storage.write_quantity('logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
+                self.storage.write_quantity('update_state_elapsed_time', elapsed_time, iteration=self.iteration)
+                self.storage.write_quantity('logp_switch', switch_logp, iteration=self.iteration)
+
+        elif self.scheme == 'geometry-ncmc-geometry':
+            if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
 
             # DEBUG: Check current topology can be built.
             try:
@@ -1139,20 +1203,23 @@ class ExpandedEnsembleSampler(object):
                 if self.verbose: print("    rejected")
             # Write to storage.
             if self.storage:
-                self.storage.write_configuration(self.sampler.envname, self.__class__.__name__, 'positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
-                self.storage.write_object(self.sampler.envname, self.__class__.__name__, 'state_key', self.state_key, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'naccepted', self.naccepted, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'nrejected', self.nrejected, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_accept', logp_accept, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_geometry', geometry_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_switch', switch_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'logp_ncmc', ncmc_logp, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'new_log_weight', new_log_weight, iteration=self.iteration)
-                self.storage.write_quantity(self.sampler.envname, self.__class__.__name__, 'old_log_weight', old_log_weight, iteration=self.iteration)
+                self.storage.write_quantity('logp_ncmc', ncmc_logp, iteration=self.iteration)
 
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
+
+        if self.storage:
+            self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
+            self.storage.write_object('state_key', self.state_key, iteration=self.iteration)
+            self.storage.write_object('proposed_state_key', topology_proposal.new_chemical_state_key, iteration=self.iteration)
+            self.storage.write_quantity('naccepted', self.naccepted, iteration=self.iteration)
+            self.storage.write_quantity('nrejected', self.nrejected, iteration=self.iteration)
+            self.storage.write_quantity('logp_accept', logp_accept, iteration=self.iteration)
+            self.storage.write_quantity('logp_topology_proposal', topology_proposal.logp_proposal, iteration=self.iteration)
+            self.storage.write_quantity('logp_geometry', geometry_logp, iteration=self.iteration)
+            self.storage.write_quantity('new_log_weight', new_log_weight, iteration=self.iteration)
+            self.storage.write_quantity('old_log_weight', old_log_weight, iteration=self.iteration)
+
 
         # Update statistics.
         self.update_statistics()
