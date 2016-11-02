@@ -1997,7 +1997,7 @@ class NullTestSystem(PersesTestSystem):
     Uses a custom ProposalEngine to only match subset of atoms, requiring
     geometry to build in the rest
 
-    geometry_engine.write_proposal_pdb set to True
+    geometry_engine.write_proposal_pdb set to False
 
     Constructor:
     NullTestSystem(mol_name, storage_filename="null.nc", exen_pdb_filename=None)
@@ -2032,7 +2032,7 @@ class NullTestSystem(PersesTestSystem):
 
         environments = ['vacuum']
 
-        self.geometry_engine.write_proposal_pdb = True
+#        self.geometry_engine.write_proposal_pdb = True
 
         system_generators = dict()
         topologies = dict()
@@ -2209,7 +2209,7 @@ def run_null_system(testsystem):
         # from each state
 #        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
         print(testsystem.exen_samplers[key].number_of_state_visits)
-        print("{0} acceptances in {1} iterations".format(testsystem.exen_samplers[key].naccepted, testsystem.exen_samplers[key].iteration))
+        print("Acceptances in {0} iterations: {1}".format(testsystem.exen_samplers[key].iteration, testsystem.exen_samplers[key].naccepted))
 
         ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
         ee_sam = ncfile.groups['ExpandedEnsembleSampler']
