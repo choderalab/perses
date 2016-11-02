@@ -2032,6 +2032,8 @@ class GeometrySystemGenerator(object):
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
+            if -1 in atom_indices:
+                continue
             # Determine phase in [-pi,+pi) interval
             #phase = (np.pi)*units.radians+angle
             phase = torsion.radians + np.pi # TODO: Check that this is the correct convention?

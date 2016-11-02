@@ -1988,7 +1988,114 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
             list_of_canonicalized_smiles.append(can_smi)
         return list_of_canonicalized_smiles
 
-class NaphthaleneTestSystem(PersesTestSystem):
+class NullTestSystem(PersesTestSystem):
+    """
+    Test turning a small molecule into itself in vacuum
+    Currently only trying to test ExpandedEnsemble sampler, therefore
+    SAMS sampler and MultiTargetDesign are not implemented at this time
+
+    Uses a custom ProposalEngine to only match subset of atoms, requiring
+    geometry to build in the rest
+
+    geometry_engine.write_proposal_pdb set to True
+
+    Constructor:
+    NullTestSystem(mol_name, storage_filename="null.nc", exen_pdb_filename=None)
+
+    Arguments:
+        mol_name, string
+            MUST be in ['naphthalene', 'butane']
+            Name of small molecule for null transformation
+        storage_filename, OPTIONAL, string
+            Default is "null.nc"
+            Storage must be provided in order to analyze testsystem acceptance rates
+        exen_pdb_filename, OPTIONAL, string
+            Default is None
+            If value is not None, will write pdbfile after every ExpandedEnsemble
+            iteration
+
+    Only one environment ('vacuum') is currently implemented; however all 
+    samplers are saved in dictionaries for consistency with other testsystems
+
+    """
+    def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None):
+        if mol_name not in ['naphthalene', 'butane']:
+            raise(IOError("NullTestSystem molecule name can only be naphthalene or butane, given {0}".format(mol_name)))
+
+        super(NullTestSystem, self).__init__(storage_filename=storage_filename)
+
+        if mol_name == 'naphthalene':
+            smiles = 'c1ccc2ccccc2c1'
+            from perses.rjmc.topology_proposal import NaphthaleneProposalEngine as NullProposal
+        elif mol_name == 'butane':
+            smiles = 'CCCC'
+            from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
+
+        environments = ['vacuum']
+
+        self.geometry_engine.write_proposal_pdb = True
+
+        system_generators = dict()
+        topologies = dict()
+        positions = dict()
+        proposal_engines = dict()
+        thermodynamic_states = dict()
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+
+        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromSMILES
+        from perses.samplers.thermodynamics import ThermodynamicState
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
+
+        for key in environments:
+            if key == "vacuum":
+                forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
+                gaff_xml_filename = get_data_filename('data/gaff.xml')
+            system_generator = SystemGenerator([gaff_xml_filename], forcefield_kwargs=forcefield_kwargs)
+            system_generators[key] = system_generator
+
+            proposal_engine = NullProposal(system_generator)
+            initial_molecule = createOEMolFromSMILES(smiles=smiles)
+            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+            initial_topology._state_key = proposal_engine._fake_states[0]
+
+            temperature = 300*unit.kelvin
+            thermodynamic_state = ThermodynamicState(system=initial_system, temperature=temperature)
+
+            chemical_state_key = proposal_engine.compute_state_key(initial_topology)
+            sampler_state = SamplerState(system=initial_system, positions=initial_positions)
+
+            mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
+            mcmc_sampler.nsteps = 5
+            mcmc_sampler.timestep = 1.0*unit.femtosecond
+            mcmc_sampler.verbose = True
+
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options={'nsteps':0}, storage=self.storage)
+            exen_sampler.verbose = True
+            if exen_pdb_filename is not None:
+                exen_sampler.pdbfile = open(exen_pdb_filename,'w')
+
+            topologies[key] = initial_topology
+            positions[key] = initial_positions
+            proposal_engines[key] = proposal_engine
+            thermodynamic_states[key] = thermodynamic_state
+            mcmc_samplers[key] = mcmc_sampler
+            exen_samplers[key] = exen_sampler
+
+        # save
+        self.environments = environments
+        self.storage_filename = storage_filename
+        self.system_generators = system_generators
+        self.topologies = topologies
+        self.positions = positions
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+
+
+class NaphthaleneTestSystem(NullTestSystem):
     """
     Test turning Naphthalene into Naphthalene in vacuum
     Currently only trying to test ExpandedEnsemble sampler, therefore
@@ -2019,71 +2126,9 @@ class NaphthaleneTestSystem(PersesTestSystem):
         """
         __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
         """
-        super(NaphthaleneTestSystem, self).__init__(storage_filename=storage_filename)
-        environments = ['vacuum']
+        super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
 
-        self.geometry_engine.write_proposal_pdb = True
-
-        system_generators = dict()
-        topologies = dict()
-        positions = dict()
-        proposal_engines = dict()
-        thermodynamic_states = dict()
-        mcmc_samplers = dict()
-        exen_samplers = dict()
-
-        from perses.rjmc.topology_proposal import SystemGenerator, NaphthaleneProposalEngine
-        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromSMILES
-        from perses.samplers.thermodynamics import ThermodynamicState
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
-
-        for key in environments:
-            if key == "vacuum":
-                forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
-                gaff_xml_filename = get_data_filename('data/gaff.xml')
-            system_generator = SystemGenerator([gaff_xml_filename], forcefield_kwargs=forcefield_kwargs)
-            system_generators[key] = system_generator
-
-            proposal_engine = NaphthaleneProposalEngine(system_generator)
-            initial_molecule = createOEMolFromSMILES(smiles='c1ccc2ccccc2c1')
-            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
-            initial_topology._state_key = proposal_engine._fake_states[0]
-
-            temperature = 300*unit.kelvin
-            thermodynamic_state = ThermodynamicState(system=initial_system, temperature=temperature)
-
-            chemical_state_key = proposal_engine.compute_state_key(initial_topology)
-            sampler_state = SamplerState(system=initial_system, positions=initial_positions)
-
-            mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
-            mcmc_sampler.nsteps = 5 
-            mcmc_sampler.timestep = 1.0*unit.femtosecond
-            mcmc_sampler.verbose = True
-
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options={'nsteps':250}, storage=self.storage)
-            exen_sampler.verbose = True
-            if exen_pdb_filename is not None:
-                exen_sampler.pdbfile = open(exen_pdb_filename,'w')
-
-            topologies[key] = initial_topology
-            positions[key] = initial_positions
-            proposal_engines[key] = proposal_engine
-            thermodynamic_states[key] = thermodynamic_state
-            mcmc_samplers[key] = mcmc_sampler
-            exen_samplers[key] = exen_sampler
-
-        # save
-        self.environments = environments
-        self.storage_filename = storage_filename
-        self.system_generators = system_generators
-        self.topologies = topologies
-        self.positions = positions
-        self.proposal_engines = proposal_engines
-        self.thermodynamic_states = thermodynamic_states
-        self.mcmc_samplers = mcmc_samplers
-        self.exen_samplers = exen_samplers
-
-class ButaneTestSystem(PersesTestSystem):
+class ButaneTestSystem(NullTestSystem):
     """
     Test turning Butane into Butane in vacuum
     Currently only trying to test ExpandedEnsemble sampler, therefore
@@ -2114,69 +2159,7 @@ class ButaneTestSystem(PersesTestSystem):
         """
         __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
         """
-        super(ButaneTestSystem, self).__init__(storage_filename=storage_filename)
-        environments = ['vacuum']
-
-        self.geometry_engine.write_proposal_pdb = True
-
-        system_generators = dict()
-        topologies = dict()
-        positions = dict()
-        proposal_engines = dict()
-        thermodynamic_states = dict()
-        mcmc_samplers = dict()
-        exen_samplers = dict()
-
-        from perses.rjmc.topology_proposal import SystemGenerator, ButaneProposalEngine
-        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromSMILES
-        from perses.samplers.thermodynamics import ThermodynamicState
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
-
-        for key in environments:
-            if key == "vacuum":
-                forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
-                gaff_xml_filename = get_data_filename('data/gaff.xml')
-            system_generator = SystemGenerator([gaff_xml_filename], forcefield_kwargs=forcefield_kwargs)
-            system_generators[key] = system_generator
-
-            proposal_engine = ButaneProposalEngine(system_generator)
-            initial_molecule = createOEMolFromSMILES(smiles='CCCC')
-            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
-            initial_topology._state_key = proposal_engine._fake_states[0]
-
-            temperature = 300*unit.kelvin
-            thermodynamic_state = ThermodynamicState(system=initial_system, temperature=temperature)
-
-            chemical_state_key = proposal_engine.compute_state_key(initial_topology)
-            sampler_state = SamplerState(system=initial_system, positions=initial_positions)
-
-            mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
-            mcmc_sampler.nsteps = 5
-            mcmc_sampler.timestep = 1.0*unit.femtosecond
-            mcmc_sampler.verbose = True
-
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options={'nsteps':250}, storage=self.storage)
-            exen_sampler.verbose = True
-            if exen_pdb_filename is not None:
-                exen_sampler.pdbfile = open(exen_pdb_filename,'w')
-
-            topologies[key] = initial_topology
-            positions[key] = initial_positions
-            proposal_engines[key] = proposal_engine
-            thermodynamic_states[key] = thermodynamic_state
-            mcmc_samplers[key] = mcmc_sampler
-            exen_samplers[key] = exen_sampler
-
-        # save
-        self.environments = environments
-        self.storage_filename = storage_filename
-        self.system_generators = system_generators
-        self.topologies = topologies
-        self.positions = positions
-        self.proposal_engines = proposal_engines
-        self.thermodynamic_states = thermodynamic_states
-        self.mcmc_samplers = mcmc_samplers
-        self.exen_samplers = exen_samplers
+        super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
 
 def run_null_system(testsystem):
     """
@@ -2213,7 +2196,7 @@ def run_null_system(testsystem):
     import codecs
     for key in testsystem.environments: # only one key: vacuum
         # run a single iteration to generate item in number_of_state_visits dict
-        testsystem.exen_samplers[key].run(niterations=1)
+        testsystem.exen_samplers[key].run(niterations=100)
         # until a switch is accepted, only the initial state will have an item
         # in the number_of_state_visits dict
         while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
@@ -2223,6 +2206,7 @@ def run_null_system(testsystem):
         # from each state
         testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
         print(testsystem.exen_samplers[key].number_of_state_visits)
+        print("{0} acceptances in {1} iterations".format(testsystem.exen_samplers[key].naccepted, testsystem.exen_samplers[key].iteration))
 
         ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
         ee_sam = ncfile.groups['ExpandedEnsembleSampler']
