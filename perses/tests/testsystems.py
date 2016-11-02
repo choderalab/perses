@@ -2016,14 +2016,11 @@ class NullTestSystem(PersesTestSystem):
 
     Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
-
     """
-    def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None):
+    def __init__(mol_name, storage_filename="null.nc", exen_pdb_filename=None)
         if mol_name not in ['naphthalene', 'butane']:
             raise(IOError("NullTestSystem molecule name can only be naphthalene or butane, given {0}".format(mol_name)))
-
-        super(NullTestSystem, self).__init__(storage_filename=storage_filename)
-
+        super(NaphthaleneTestSystem, self).__init__(storage_filename=storage_filename)
         if mol_name == 'naphthalene':
             smiles = 'c1ccc2ccccc2c1'
             from perses.rjmc.topology_proposal import NaphthaleneProposalEngine as NullProposal
@@ -2031,7 +2028,7 @@ class NullTestSystem(PersesTestSystem):
             smiles = 'CCCC'
             from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
 
-        environments = ['vacuum', 'explicit']
+        environments = ['vacuum']
 
         self.geometry_engine.write_proposal_pdb = True
 
@@ -2059,19 +2056,9 @@ class NullTestSystem(PersesTestSystem):
             system_generator = SystemGenerator(ff_list, forcefield_kwargs=forcefield_kwargs)
             system_generators[key] = system_generator
 
-            proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
-            initial_molecule = createOEMolFromIUPAC(iupac_name=self.mol_name)
-            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
-
-            if key == "explicit":
-                modeller = app.Modeller(initial_topology, initial_positions)
-                modeller.addSolvent(system_generators[key].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
-                initial_topology = modeller.getTopology()
-                initial_positions = modeller.getPositions()
-                initial_system = system_generators[key].build_system(initial_topology)
-                with open('is_there_water.pdb', 'w') as fo:
-                    app.PDBFile.writeFile(initial_topology, initial_positions, fo)
-
+            proposal_engine = NullProposal(system_generator)
+            initial_molecule = createOEMolFromSMILES(smiles=smiles)
+            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
             initial_topology._state_key = proposal_engine._fake_states[0]
 
             temperature = 300*unit.kelvin
@@ -2140,7 +2127,7 @@ class NaphthaleneTestSystem(NullTestSystem):
         """
         __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
         """
-        super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+        super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename)
 
 class ButaneTestSystem(NullTestSystem):
     """
@@ -2173,7 +2160,7 @@ class ButaneTestSystem(NullTestSystem):
         """
         __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
         """
-        super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+        super(ButaneTestSystem, self).__init__('butant', storage_filename=storage_filename)
 
 def run_null_system(testsystem):
     """
@@ -2220,7 +2207,7 @@ def run_null_system(testsystem):
         # from each state
 #        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
         print(testsystem.exen_samplers[key].number_of_state_visits)
-        print("Acceptances in {0} iterations: {1}".format(testsystem.exen_samplers[key].iteration, testsystem.exen_samplers[key].naccepted))
+        print("{0} acceptances in {1} iterations".format(testsystem.exen_samplers[key].naccepted, testsystem.exen_samplers[key].iteration))
 
         ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
         ee_sam = ncfile.groups['ExpandedEnsembleSampler']
