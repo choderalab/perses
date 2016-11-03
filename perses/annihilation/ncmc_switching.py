@@ -35,7 +35,7 @@ default_hybrid_functions = {
 
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
-default_timestep = 1.0 * unit.femtoseconds
+default_timestep = 0.5 * unit.femtoseconds
 default_steps_per_propagation = 1
 
 class NaNException(Exception):
