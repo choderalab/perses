@@ -253,6 +253,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
+        context.setParameter(growth_parameter_name, atom_proposal_order.keys()[-1])
         debug = False
         if debug:
             context.setPositions(self._metadata['reference_positions'])
