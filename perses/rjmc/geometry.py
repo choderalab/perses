@@ -209,7 +209,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics, add_extra_torsions=False, add_extra_angles=False)
             growth_system_time = time.time() - system_init
         elif direction=='reverse':
             if new_positions is None:
@@ -217,7 +217,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
+            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics, add_extra_torsions=False, add_extra_angles=False)
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
