@@ -100,6 +100,9 @@ def createOEMolFromIUPAC(iupac_name='bosutinib'):
     # Create atom names.
     oechem.OETriposAtomNames(mol)
 
+    # Create bond types
+    oechem.OETriposBondTypeNames(mol)
+
     # Assign geometry
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
