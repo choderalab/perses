@@ -1940,7 +1940,7 @@ class PropaneProposalEngine(NullProposalEngine):
                 break
         for bond in topology.bonds():
             if any([carbon in bond for carbon in ccbond]) and app.element.hydrogen in [atom.element for atom in bond]:
-                atom_map[bond[0]] = bond[0]
-                atom_map[bond[1]] = bond[1]
+                atom_map[bond[0].index] = bond[0].index
+                atom_map[bond[1].index] = bond[1].index
         return atom_map
 
