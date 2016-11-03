@@ -253,7 +253,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-        context.setParameter(growth_parameter_name, atom_proposal_order.keys()[-1])
+        context.setParameter(growth_parameter_name, len(atom_proposal_order.keys())+1)
         debug = False
         if debug:
             context.setPositions(self._metadata['reference_positions'])
@@ -2055,9 +2055,9 @@ class GeometrySystemGenerator(object):
             #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
             #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
             #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
-            if type(torsion_force) == openmm.CustomTorsionForce:
+            if isinstance(torsion_force, openmm.CustomTorsionForce):
                 torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
-            elif type(torsion_force) == openmm.PeriodicTorsionForce:
+            elif isinstance(torsion_force, openmm.PeriodicTorsionForce):
                 torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], periodicity, phase, k)
             else:
                 raise ValueError("The force supplied to this method must be either a CustomTorsionForce or a PeriodicTorsionForce")
@@ -2142,9 +2142,9 @@ class GeometrySystemGenerator(object):
                     growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
                     #If this is a CustomAngleForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
                     #If it's a regular HarmonicAngleForce, there is no growth_index and the parameters are passed separately.
-                    if type(angle_force) == openmm.CustomAngleForce:
+                    if isinstance(angle_force, openmm.CustomAngleForce):
                         angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], [angle_radians, angle_force_constant, growth_idx])
-                    elif type(angle_force) == openmm.HarmonicAngleForce:
+                    elif isinstance(angle_force, openmm.HarmonicAngleForce)
                         angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], angle_radians, angle_force_constant)
                     else:
                         raise ValueError("Angle force must be either CustomAngleForce or HarmonicAngleForce")
