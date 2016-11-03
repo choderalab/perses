@@ -1988,6 +1988,272 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
             list_of_canonicalized_smiles.append(can_smi)
         return list_of_canonicalized_smiles
 
+class NullTestSystem(PersesTestSystem):
+    """
+    Test turning a small molecule into itself in vacuum
+    Currently only trying to test ExpandedEnsemble sampler, therefore
+    SAMS sampler and MultiTargetDesign are not implemented at this time
+
+    Uses a custom ProposalEngine to only match subset of atoms, requiring
+    geometry to build in the rest
+
+    geometry_engine.write_proposal_pdb set to True
+
+    Constructor:
+    NullTestSystem(mol_name, storage_filename="null.nc", exen_pdb_filename=None)
+
+    Arguments:
+        mol_name, string
+            MUST be in ['naphthalene', 'butane']
+            Name of small molecule for null transformation
+        storage_filename, OPTIONAL, string
+            Default is "null.nc"
+            Storage must be provided in order to analyze testsystem acceptance rates
+        exen_pdb_filename, OPTIONAL, string
+            Default is None
+            If value is not None, will write pdbfile after every ExpandedEnsemble
+            iteration
+
+    Only one environment ('vacuum') is currently implemented; however all 
+    samplers are saved in dictionaries for consistency with other testsystems
+
+    """
+    def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None):
+        if mol_name not in ['naphthalene', 'butane']:
+            raise(IOError("NullTestSystem molecule name can only be naphthalene or butane, given {0}".format(mol_name)))
+
+        super(NullTestSystem, self).__init__(storage_filename=storage_filename)
+
+        if mol_name == 'naphthalene':
+            smiles = 'c1ccc2ccccc2c1'
+            from perses.rjmc.topology_proposal import NaphthaleneProposalEngine as NullProposal
+        elif mol_name == 'butane':
+            smiles = 'CCCC'
+            from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
+
+        environments = ['vacuum']
+
+        self.geometry_engine.write_proposal_pdb = True
+
+        system_generators = dict()
+        topologies = dict()
+        positions = dict()
+        proposal_engines = dict()
+        thermodynamic_states = dict()
+        mcmc_samplers = dict()
+        exen_samplers = dict()
+
+        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromSMILES
+        from perses.samplers.thermodynamics import ThermodynamicState
+        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
+
+        for key in environments:
+            if key == "vacuum":
+                forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
+                gaff_xml_filename = get_data_filename('data/gaff.xml')
+            system_generator = SystemGenerator([gaff_xml_filename], forcefield_kwargs=forcefield_kwargs)
+            system_generators[key] = system_generator
+
+            proposal_engine = NullProposal(system_generator)
+            initial_molecule = createOEMolFromSMILES(smiles=smiles)
+            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+            initial_topology._state_key = proposal_engine._fake_states[0]
+
+            temperature = 300*unit.kelvin
+            thermodynamic_state = ThermodynamicState(system=initial_system, temperature=temperature)
+
+            chemical_state_key = proposal_engine.compute_state_key(initial_topology)
+            sampler_state = SamplerState(system=initial_system, positions=initial_positions)
+
+            mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
+            mcmc_sampler.nsteps = 5
+            mcmc_sampler.timestep = 1.0*unit.femtosecond
+            mcmc_sampler.verbose = True
+
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options={'nsteps':0}, storage=self.storage)
+            exen_sampler.verbose = True
+            if exen_pdb_filename is not None:
+                exen_sampler.pdbfile = open(exen_pdb_filename,'w')
+
+            topologies[key] = initial_topology
+            positions[key] = initial_positions
+            proposal_engines[key] = proposal_engine
+            thermodynamic_states[key] = thermodynamic_state
+            mcmc_samplers[key] = mcmc_sampler
+            exen_samplers[key] = exen_sampler
+
+        # save
+        self.environments = environments
+        self.storage_filename = storage_filename
+        self.system_generators = system_generators
+        self.topologies = topologies
+        self.positions = positions
+        self.proposal_engines = proposal_engines
+        self.thermodynamic_states = thermodynamic_states
+        self.mcmc_samplers = mcmc_samplers
+        self.exen_samplers = exen_samplers
+
+
+class NaphthaleneTestSystem(NullTestSystem):
+    """
+    Test turning Naphthalene into Naphthalene in vacuum
+    Currently only trying to test ExpandedEnsemble sampler, therefore
+    SAMS sampler and MultiTargetDesign are not implemented at this time
+
+    Uses a custom ProposalEngine to only match one ring, requiring
+    geometry to build in the other
+
+    geometry_engine.write_proposal_pdb set to True
+
+    Constructor:
+    NaphthaleneTestSystem(storage_filename="naphthalene.nc", exen_pdb_filename=None)
+
+    Arguments:
+        storage_filename, OPTIONAL, string
+            Default is "naphthalene.nc"
+            Storage must be provided in order to analyze testsystem acceptance rates
+        exen_pdb_filename, OPTIONAL, string
+            Default is None
+            If value is not None, will write pdbfile after every ExpandedEnsemble
+            iteration
+
+    Only one environment ('vacuum') is currently implemented; however all 
+    samplers are saved in dictionaries for consistency with other testsystems
+    """
+
+    def __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
+        """
+        __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
+        """
+        super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+
+class ButaneTestSystem(NullTestSystem):
+    """
+    Test turning Butane into Butane in vacuum
+    Currently only trying to test ExpandedEnsemble sampler, therefore
+    SAMS sampler and MultiTargetDesign are not implemented at this time
+
+    Uses a custom ProposalEngine to only match two carbons, have geometry
+    engine choose positions for others
+
+    geometry_engine.write_proposal_pdb set to True
+
+    Constructor:
+    ButaneTestSystem(storage_filename="butane.nc", exen_pdb_filename=None)
+
+    Arguments:
+        storage_filename, OPTIONAL, string
+            Default is "butane.nc"
+            Storage must be provided in order to analyze testsystem acceptance rates
+        exen_pdb_filename, OPTIONAL, string
+            Default is None
+            If value is not None, will write pdbfile after every ExpandedEnsemble
+            iteration
+
+    Only one environment ('vacuum') is currently implemented; however all 
+    samplers are saved in dictionaries for consistency with other testsystems
+    """
+
+    def __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
+        """
+        __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
+        """
+        super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+
+def run_null_system(testsystem):
+    """
+    Intended for use with NaphthaleneTestSystem or ButaneTestSystem ONLY
+
+    Runs TestSystem ExpandedEnsemble sampler ONLY
+    Uses BAR to check whether the free energies of the two states
+    (both naphthalene) are within 6 sigma of 0
+    Imports netCDF4 to read in storage file and access data
+
+    Arguments:
+    ----------
+    testsystem : NaphthaleneTestSystem or ButantTestSystem
+        Only these two test systems have the proposal_engine._fake_states
+        attribute, which differentiates between 2 states of a null proposal
+
+    CURRENTLY:
+    The expanded ensemble acceptance rate of naphthalene-A to naphthalene-B
+    is very low.  This test will run 10 iterations of the ExpandedEnsemble
+    sampler until a switch is accepted, and then run approximately that
+    number of steps again, to ensure w_f and w_r have nonzero length. This
+    should not be necessary if the acceptance rate is higher, and the
+    number of exen_sampler iterations can be fixed.
+
+    TODO:
+        move netcdf import to analysis for general use
+        move BAR import to analysis, define use of BAR to be generalized
+    """
+    if type(testsystem) not in [NaphthaleneTestSystem, ButaneTestSystem]:
+        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem or ButantTestSystem; given {0}".format(type(testsystem))))
+
+    import netCDF4 as netcdf
+    import pickle
+    import codecs
+    for key in testsystem.environments: # only one key: vacuum
+        # run a single iteration to generate item in number_of_state_visits dict
+        testsystem.exen_samplers[key].run(niterations=100)
+        # until a switch is accepted, only the initial state will have an item
+        # in the number_of_state_visits dict
+        while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
+            testsystem.exen_samplers[key].run(niterations=10)
+        # after a switch has been accepted, run approximately the same number of
+        # steps again, to end up with roughly equal number of proposals starting
+        # from each state
+        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
+        print(testsystem.exen_samplers[key].number_of_state_visits)
+        print("{0} acceptances in {1} iterations".format(testsystem.exen_samplers[key].naccepted, testsystem.exen_samplers[key].iteration))
+
+        ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
+        ee_sam = ncfile.groups['ExpandedEnsembleSampler']
+        niterations = ee_sam.variables['logp_accept'].shape[0]
+        logps = np.zeros(niterations, np.float64)
+        state_keys = list()
+        for n in range(niterations):
+            logps[n] = ee_sam.variables['logp_accept'][n]
+            s_key = str(ee_sam.variables['proposed_state_key'][n])
+            state_keys.append(pickle.loads(codecs.decode(s_key, "base64")))
+
+        len_w_r = state_keys.count(testsystem.proposal_engines[key]._fake_states[0])
+        len_w_f = state_keys.count(testsystem.proposal_engines[key]._fake_states[1])
+        try:
+            assert niterations == len_w_f + len_w_r
+        except:
+            print("{0} iterations, but {1} started from A and {2} started from B?".format(niterations, len_w_f, len_w_r))
+        if len_w_f == 0 or len_w_r == 0:
+            # test failure, but what to do?
+            raise(Exception("Cannot run BAR because no transitions were made"))
+
+        # after importing all logps, use proposed_state_key to split them into
+        # separate arrays depending on the direction of the proposed switch
+        w_f = np.zeros(len_w_f, np.float64)
+        w_r = np.zeros(len_w_r, np.float64)
+        w_f_count = 0
+        w_r_count = 0
+        for n in range(niterations):
+            if state_keys[n] == testsystem.proposal_engines[key]._fake_states[1]:
+                w_f[w_f_count] = logps[n]
+                w_f_count += 1
+            else:
+                w_r[w_r_count] = logps[n]
+                w_r_count += 1
+
+        from pymbar import BAR
+        [df, ddf] = BAR(w_f, w_r, method='self-consistent-iteration')
+        print('%8.3f +- %.3f kT' % (df, ddf))
+        NSIGMA_MAX = 6.0
+        if (abs(df) > NSIGMA_MAX * ddf):
+            msg = 'Delta F (%d proposals) = %f +- %f kT; should be within %f sigma of 0' % (niterations, df, ddf, NSIGMA_MAX)
+            msg += '\n'
+            msg += 'w_f = %s\n' % str(w_f)
+            msg += 'w_r = %s\n' % str(w_r)
+            raise Exception(msg)
+
+
 def check_topologies(testsystem):
     """
     Check that all SystemGenerators can build systems for their corresponding Topology objects.
@@ -2302,12 +2568,14 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    run_alanine_system(sterics=False)
+    testsystem = ButaneTestSystem()
+    run_null_system(testsystem)
+#    run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
-    run_imidazole()
+    #run_imidazole()
     #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
