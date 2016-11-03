@@ -2018,8 +2018,8 @@ class NullTestSystem(PersesTestSystem):
     samplers are saved in dictionaries for consistency with other testsystems
     """
     def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None):
-        if mol_name not in ['naphthalene', 'butane']:
-            raise(IOError("NullTestSystem molecule name can only be naphthalene or butane, given {0}".format(mol_name)))
+        if mol_name not in ['naphthalene', 'butane', 'propane']:
+            raise(IOError("NullTestSystem molecule name can only be naphthalene, butane or propane, given {0}".format(mol_name)))
 
         super(NullTestSystem, self).__init__(storage_filename=storage_filename)
 
@@ -2029,6 +2029,9 @@ class NullTestSystem(PersesTestSystem):
         elif mol_name == 'butane':
             smiles = 'CCCC'
             from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
+        elif mol_name == 'propane':
+            smiles = 'CC'
+            from perses.rjmc.topology_proposal import PropaneProposalEngine as NullProposal
 
         environments = ['vacuum']
 
@@ -2164,9 +2167,43 @@ class ButaneTestSystem(NullTestSystem):
         """
         super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
 
+class PropaneTestSystem(NullTestSystem):
+    """
+    Test turning Propane into Propane in vacuum
+    Currently only trying to test ExpandedEnsemble sampler, therefore
+    SAMS sampler and MultiTargetDesign are not implemented at this time
+
+    Uses a custom ProposalEngine to map CH3-CH2, have geometry build in the
+    other CH3
+
+    geometry_engine.write_proposal_pdb set to True
+
+    Constructor:
+    ButaneTestSystem(storage_filename="propane.nc", exen_pdb_filename=None)
+
+    Arguments:
+        storage_filename, OPTIONAL, string
+            Default is "propane.nc"
+            Storage must be provided in order to analyze testsystem acceptance rates
+        exen_pdb_filename, OPTIONAL, string
+            Default is None
+            If value is not None, will write pdbfile after every ExpandedEnsemble
+            iteration
+
+    Only one environment ('vacuum') is currently implemented; however all 
+    samplers are saved in dictionaries for consistency with other testsystems
+    """
+
+    def __init__(self, storage_filename="propane.nc", exen_pdb_filename=None):
+        """
+        __init__(self, storage_filename="propane.nc", exen_pdb_filename=None):
+        """
+        super(PropaneTestSystem, self).__init__('propane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+
+
 def run_null_system(testsystem):
     """
-    Intended for use with NaphthaleneTestSystem or ButaneTestSystem ONLY
+    Intended for use with NullTestSystem subclasses ONLY
 
     Runs TestSystem ExpandedEnsemble sampler ONLY
     Uses BAR to check whether the free energies of the two states
@@ -2175,8 +2212,8 @@ def run_null_system(testsystem):
 
     Arguments:
     ----------
-    testsystem : NaphthaleneTestSystem or ButantTestSystem
-        Only these two test systems have the proposal_engine._fake_states
+    testsystem : NaphthaleneTestSystem, ButantTestSystem, or PropaneTestSystem
+        Only these three test systems have the proposal_engine._fake_states
         attribute, which differentiates between 2 states of a null proposal
 
     CURRENTLY:
@@ -2191,8 +2228,8 @@ def run_null_system(testsystem):
         move netcdf import to analysis for general use
         move BAR import to analysis, define use of BAR to be generalized
     """
-    if type(testsystem) not in [NaphthaleneTestSystem, ButaneTestSystem]:
-        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem or ButantTestSystem; given {0}".format(type(testsystem))))
+    if not issubclass(type(testsystem), NullTestSystem):
+        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem, ButantTestSystem or PropaneTestSystem; given {0}".format(type(testsystem))))
 
     import netCDF4 as netcdf
     import pickle
@@ -2575,14 +2612,13 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    #run_alanine_system(sterics=False)
-    testsystem = ButaneTestSystem()
+    testsystem = PropaneTestSystem()
     run_null_system(testsystem)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
-    run_imidazole()
+    #run_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
     #run_kinase_inhibitors()
