@@ -2052,7 +2052,12 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
             #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
-            torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
+            if type(torsion_force) == openmm.CustomTorsionForce:
+                torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
+            elif type(torsion_force) == openmm.PeriodicTorsionForce:
+                torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], periodicity, phase, k)
+            else:
+                raise ValueError("The force supplied to this method must be either a CustomTorsionForce or a PeriodicTorsionForce")
 
         return torsion_force
 
