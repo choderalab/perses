@@ -2071,7 +2071,7 @@ class NullTestSystem(PersesTestSystem):
             mcmc_sampler.timestep = 1.0*unit.femtosecond
             mcmc_sampler.verbose = True
 
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options={'nsteps':0}, storage=self.storage)
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme='ncmc-geometry-ncmc', options={'nsteps':0}, storage=self.storage)
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')
@@ -2199,14 +2199,18 @@ def run_null_system(testsystem):
         testsystem.exen_samplers[key].run(niterations=100)
         # until a switch is accepted, only the initial state will have an item
         # in the number_of_state_visits dict
-#        while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
-#            testsystem.exen_samplers[key].run(niterations=10)
+        while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
+            testsystem.exen_samplers[key].run(niterations=10)
         # after a switch has been accepted, run approximately the same number of
         # steps again, to end up with roughly equal number of proposals starting
         # from each state
-#        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
+        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
         print(testsystem.exen_samplers[key].number_of_state_visits)
         print("Acceptances in {0} iterations: {1}".format(testsystem.exen_samplers[key].iteration, testsystem.exen_samplers[key].naccepted))
+
+        from perses.analysis import Analysis
+        analysis = Analysis(testsystem.storage_filename)
+        analysis.plot_exen_logp_components()
 
         ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
         ee_sam = ncfile.groups['ExpandedEnsembleSampler']
