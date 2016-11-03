@@ -2215,7 +2215,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         # Determine forces to keep
         forces_to_keep = ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce']
         if use_sterics:
-            force_to_keep += ['NonbondedForce']
+            forces_to_keep += ['NonbondedForce']
 
         # Create reference system, removing forces we won't use
         self._reference_system = copy.deepcopy(reference_system)
@@ -2231,11 +2231,22 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         # Create new system, copying forces we will keep.
         self._growth_system = copy.deepcopy(self._reference_system)
 
+        #Extract the forces from the system to use for adding auxiliary angles and torsions
+        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
+
+
         # Zero all parameters
         self.set_growth_parameter_index(0)
 
-        # TODO: Add extra ring-closing torsions, if requested.
-
+        # Add extra ring-closing torsions, if requested.
+        if add_extra_torsions:
+            if reference_topology==None:
+                raise ValueError("Need to specify topology in order to add extra torsions.")
+            self._determine_extra_torsions(reference_forces['PeriodicTorsionForce'], reference_topology, growth_indices)
+        if add_extra_angles:
+            if reference_topology==None:
+                raise ValueError("Need to specify topology in order to add extra angles")
+            self._determine_extra_angles(reference_forces['HarmonicAngleForce'], reference_topology, growth_indices)
         # TODO: Precompute growth indices for force terms for speed
 
     def set_growth_parameter_index(self, growth_index, context=None):
