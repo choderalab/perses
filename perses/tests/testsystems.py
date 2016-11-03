@@ -2013,12 +2013,17 @@ class NullTestSystem(PersesTestSystem):
             Default is None
             If value is not None, will write pdbfile after every ExpandedEnsemble
             iteration
+        scheme, OPTIONAL, string
+            Default is 'ncmc-geometry-ncmc'
+            Scheme to be used by ExpandedEnsembleSampler
+            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
+            Default will run NCMC on old and new system separately
 
     Only one environment ('vacuum') is currently implemented; however all 
     samplers are saved in dictionaries for consistency with other testsystems
 
     """
-    def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None):
+    def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None, scheme='ncmc-geometry-ncmc'):
         if mol_name not in ['naphthalene', 'butane', 'propane']:
             raise(IOError("NullTestSystem molecule name can only be naphthalene, butane or propane, given {0}".format(mol_name)))
 
@@ -2074,7 +2079,7 @@ class NullTestSystem(PersesTestSystem):
             mcmc_sampler.timestep = 1.0*unit.femtosecond
             mcmc_sampler.verbose = True
 
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme='ncmc-geometry-ncmc', options={'nsteps':0}, storage=self.storage)
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme=scheme, options={'nsteps':0}, storage=self.storage)
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')
@@ -2186,16 +2191,21 @@ class PropaneTestSystem(NullTestSystem):
             Default is None
             If value is not None, will write pdbfile after every ExpandedEnsemble
             iteration
+        scheme, OPTIONAL, string
+            Default is 'geometry-ncmc-geometry'
+            Scheme to be used by ExpandedEnsembleSampler
+            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
+            Default will use a hybrid NCMC method
 
     Only one environment ('vacuum') is currently implemented; however all 
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
-    def __init__(self, storage_filename="propane.nc", exen_pdb_filename=None):
+    def __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
         """
-        __init__(self, storage_filename="propane.nc", exen_pdb_filename=None):
+        __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
         """
-        super(PropaneTestSystem, self).__init__('propane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+        super(PropaneTestSystem, self).__init__('propane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme)
 
 
 def run_null_system(testsystem):
