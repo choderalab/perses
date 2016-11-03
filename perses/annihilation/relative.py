@@ -36,8 +36,11 @@ class HybridTopologyFactory(object):
         self.softening = softening
 
         self.return_self = False
-        if topology1 == topology2:
+        if topology1 == topology2 and len(atom_mapping_1to2.keys()) == system2.getNumParticles():
             self.return_self = True
+            for k,v in atom_mapping_1to2.items():
+                if k != v:
+                    self.return_self = False
         self.topology1 = copy.deepcopy(topology1)
         self.topology2 = copy.deepcopy(topology2)
 
