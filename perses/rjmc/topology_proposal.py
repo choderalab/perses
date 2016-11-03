@@ -1866,3 +1866,81 @@ class ButaneProposalEngine(NullProposalEngine):
             hydrogen1.index : hydrogen0.index,
         }
         return atom_map
+
+class PropaneProposalEngine(NullProposalEngine):
+    """
+    Custom ProposalEngine to use with PropaneTestSystem defines two "states"
+    of butane, identified 'propane-A' and 'propane-B', which are
+    tracked by adding a custom _state_key attribute to the topology
+
+    Generates TopologyProposal from propane to propane, only matching
+    one CH3 and the middle C such that geometry must rebuild the other
+
+    Can only be used with input topology of propane
+
+    Constructor Arguments:
+        system_generator, SystemGenerator object
+            SystemGenerator initialized with the appropriate forcefields
+        residue_name, OPTIONAL,  str
+            Default = "MOL"
+            The name that will be used for small molecule residues in the topology
+        atom_expr, OPTIONAL, oechem.OEExprOpts
+            Default is None
+            Currently not implemented -- would dictate how match is defined
+        bond_expr, OPTIONAL, oechem.OEExprOpts
+            Default is None
+            Currently not implemented -- would dictate how match is defined
+        proposal_metadata, OPTIONAL, dict
+            Default is None
+            metadata for the proposal engine
+        storage, OPTIONAL, NetCDFStorageView
+            Default is None
+            If specified, write statistics to this storage layer
+        always_change, OPTIONAL, bool
+            Default is True
+            Currently not implemented -- will always behave as True
+            The proposal will always be from the current "state" to the other
+            Self proposals will never be made
+    """
+    def __init__(self, system_generator, residue_name="MOL", atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
+        super(PropaneProposalEngine, self).__init__(system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr, proposal_metadata=proposal_metadata, storage=storage, always_change=always_change)
+        self._fake_states = ["propane-A", "propane-B"]
+        self.smiles = 'CCC'
+
+    def _make_skewed_atom_map(self, topology):
+        """
+        Custom definition for the atom map between propane and propane
+
+        If a regular atom map was constructed (via oechem.OEMCSSearch), all
+        atoms would be matched, and the geometry engine would have nothing
+        to add.  This method manually finds CH3-CH2 and matches each atom to
+        itself.  The other carbon and three hydrogens will have to be
+        repositioned by the geometry engine.
+
+        The two carbons are chosen by finding the first carbon-carbon bond in
+        the topology. To minimize the atoms being rebuilt by geometry, all
+        hydrogens from each of the selected carbons are also found and
+        mapped to themselves.
+
+        Arguments:
+        ----------
+        topology : app.Topology object
+            topology of propane
+            Only one topology is needed, because current and proposed are
+            identical
+        Returns:
+        --------
+        atom_map : dict
+            maps the atom indices of CH3-CH2 to themselves
+        """
+        atom_map = dict()
+        for bond in topology.bonds():
+            if all([atom.element == app.element.carbon for atom in bond]):
+                ccbond = bond
+                break
+        for bond in topology.bonds():
+            if any([carbon in bond for carbon in ccbond]) and app.element.hydrogen in [atom.element for atom in bond]:
+                atom_map[bond[0]] = bond[0]
+                atom_map[bond[1]] = bond[1]
+        return atom_map
+

@@ -1997,7 +1997,7 @@ class NullTestSystem(PersesTestSystem):
     Uses a custom ProposalEngine to only match subset of atoms, requiring
     geometry to build in the rest
 
-    geometry_engine.write_proposal_pdb set to True
+    geometry_engine.write_proposal_pdb set to False
 
     Constructor:
     NullTestSystem(mol_name, storage_filename="null.nc", exen_pdb_filename=None)
@@ -2019,8 +2019,8 @@ class NullTestSystem(PersesTestSystem):
 
     """
     def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None):
-        if mol_name not in ['naphthalene', 'butane']:
-            raise(IOError("NullTestSystem molecule name can only be naphthalene or butane, given {0}".format(mol_name)))
+        if mol_name not in ['naphthalene', 'butane', 'propane']:
+            raise(IOError("NullTestSystem molecule name can only be naphthalene, butane or propane, given {0}".format(mol_name)))
 
         super(NullTestSystem, self).__init__(storage_filename=storage_filename)
 
@@ -2030,10 +2030,13 @@ class NullTestSystem(PersesTestSystem):
         elif mol_name == 'butane':
             smiles = 'CCCC'
             from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
+        elif mol_name == 'propane':
+            smiles = 'CC'
+            from perses.rjmc.topology_proposal import PropaneProposalEngine as NullProposal
 
         environments = ['vacuum']
 
-        self.geometry_engine.write_proposal_pdb = True
+#        self.geometry_engine.write_proposal_pdb = True
 
         system_generators = dict()
         topologies = dict()
@@ -2071,7 +2074,7 @@ class NullTestSystem(PersesTestSystem):
             mcmc_sampler.timestep = 1.0*unit.femtosecond
             mcmc_sampler.verbose = True
 
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options={'nsteps':0}, storage=self.storage)
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme='ncmc-geometry-ncmc', options={'nsteps':0}, storage=self.storage)
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')
@@ -2161,9 +2164,43 @@ class ButaneTestSystem(NullTestSystem):
         """
         super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
 
+class PropaneTestSystem(NullTestSystem):
+    """
+    Test turning Propane into Propane in vacuum
+    Currently only trying to test ExpandedEnsemble sampler, therefore
+    SAMS sampler and MultiTargetDesign are not implemented at this time
+
+    Uses a custom ProposalEngine to map CH3-CH2, have geometry build in the
+    other CH3
+
+    geometry_engine.write_proposal_pdb set to True
+
+    Constructor:
+    ButaneTestSystem(storage_filename="propane.nc", exen_pdb_filename=None)
+
+    Arguments:
+        storage_filename, OPTIONAL, string
+            Default is "propane.nc"
+            Storage must be provided in order to analyze testsystem acceptance rates
+        exen_pdb_filename, OPTIONAL, string
+            Default is None
+            If value is not None, will write pdbfile after every ExpandedEnsemble
+            iteration
+
+    Only one environment ('vacuum') is currently implemented; however all 
+    samplers are saved in dictionaries for consistency with other testsystems
+    """
+
+    def __init__(self, storage_filename="propane.nc", exen_pdb_filename=None):
+        """
+        __init__(self, storage_filename="propane.nc", exen_pdb_filename=None):
+        """
+        super(PropaneTestSystem, self).__init__('propane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+
+
 def run_null_system(testsystem):
     """
-    Intended for use with NaphthaleneTestSystem or ButaneTestSystem ONLY
+    Intended for use with NullTestSystem subclasses ONLY
 
     Runs TestSystem ExpandedEnsemble sampler ONLY
     Uses BAR to check whether the free energies of the two states
@@ -2172,8 +2209,8 @@ def run_null_system(testsystem):
 
     Arguments:
     ----------
-    testsystem : NaphthaleneTestSystem or ButantTestSystem
-        Only these two test systems have the proposal_engine._fake_states
+    testsystem : NaphthaleneTestSystem, ButantTestSystem, or PropaneTestSystem
+        Only these three test systems have the proposal_engine._fake_states
         attribute, which differentiates between 2 states of a null proposal
 
     CURRENTLY:
@@ -2188,8 +2225,8 @@ def run_null_system(testsystem):
         move netcdf import to analysis for general use
         move BAR import to analysis, define use of BAR to be generalized
     """
-    if type(testsystem) not in [NaphthaleneTestSystem, ButaneTestSystem]:
-        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem or ButantTestSystem; given {0}".format(type(testsystem))))
+    if not issubclass(type(testsystem), NullTestSystem):
+        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem, ButantTestSystem or PropaneTestSystem; given {0}".format(type(testsystem))))
 
     import netCDF4 as netcdf
     import pickle
@@ -2199,12 +2236,12 @@ def run_null_system(testsystem):
         testsystem.exen_samplers[key].run(niterations=100)
         # until a switch is accepted, only the initial state will have an item
         # in the number_of_state_visits dict
-#        while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
-#            testsystem.exen_samplers[key].run(niterations=10)
+        while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
+            testsystem.exen_samplers[key].run(niterations=10)
         # after a switch has been accepted, run approximately the same number of
         # steps again, to end up with roughly equal number of proposals starting
         # from each state
-#        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
+        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
         print(testsystem.exen_samplers[key].number_of_state_visits)
         print("Acceptances in {0} iterations: {1}".format(testsystem.exen_samplers[key].iteration, testsystem.exen_samplers[key].naccepted))
 
@@ -2568,7 +2605,7 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    testsystem = ButaneTestSystem()
+    testsystem = PropaneTestSystem()
     run_null_system(testsystem)
 #    run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
