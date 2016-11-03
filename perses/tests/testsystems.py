@@ -2035,7 +2035,7 @@ class NullTestSystem(PersesTestSystem):
             smiles = 'CCCC'
             from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
         elif mol_name == 'propane':
-            smiles = 'CC'
+            smiles = 'CCC'
             from perses.rjmc.topology_proposal import PropaneProposalEngine as NullProposal
 
         environments = ['vacuum']
