@@ -158,29 +158,6 @@ class NCMCEngine(object):
                         parameters.append(parameter_name)
         return parameters
 
-    def _updateAlchemicalState(self, context, functions, value):
-        """
-        Update alchemical state using the specified lambda value.
-
-        Parameters
-        ----------
-        context : simtk.openmm.Context
-            The Context
-        functions : dict
-            A dictionary of functions
-        value : float
-            The alchemical lambda value
- 
-        TODO: Improve function evaluation to better match Lepton and be more flexible in exact replacement of 'lambda' tokens
-
-        """
-        from parsing import NumericStringParser
-        nsp = NumericStringParser()
-        for parameter in functions:
-            function = functions[parameter]
-            evaluated = nsp.eval(function.replace('lambda', str(value)))
-            context.setParameter(parameter, evaluated)
- 
     def _computeAlchemicalCorrection(self, unmodified_system, alchemical_system, initial_positions, final_positions, direction='insert'):
         """
         Compute log probability for correction from transforming real system to/from alchemical system.
@@ -301,6 +278,74 @@ class NCMCEngine(object):
         alchemical_system = alchemical_factory.createPerturbedSystem()
         return [unmodified_system, alchemical_system]
 
+    def _integrate_switching(self, integrator, context, topology, indices, iteration, direction):
+        """
+        Runs `self.nsteps` integrator steps
+
+        For `delete`, lambda will go from 1 to 0
+        For `insert`, lambda will go from 0 to 1
+
+        Parameters
+        ----------
+        itegrator : NCMCAlchemicalIntegrator subclasses
+            NCMC switching integrator to annihilate or introduce particles alchemically.
+        context : openmm.Context 
+            Alchemical context
+        topology
+            Alchemical topology being modified
+        indices : list(int)
+            List of the indices of atoms that are turned on / off
+        iteration : int or None
+            Iteration number, for storage purposes.
+        direction : str
+            Direction of alchemical switching:
+                'insert' causes lambda to switch from 0 to 1 over nsteps steps of integration
+                'delete' causes lambda to switch from 1 to 0 over nsteps steps of integration
+        """
+        # Integrate switching
+        try:
+            # Write atom indices that are changing.
+            if self._storage:
+                self._storage.write_object('atomindices', indices, iteration=iteration)
+
+            # Allocate storage for work.
+            work = np.zeros([self.nsteps+1], np.float64) # work[n] is the accumulated work up to step n
+
+            # Write trajectory frame.
+            if self._storage and self.write_ncmc_interval:
+                positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(nsteps+1))
+
+            # Perform NCMC integration.
+            for step in range(self.nsteps):
+                # Take a step. 
+                integrator.step(1)
+
+                # Store accumulated work
+                work[step+1] = integrator.getWork(context)
+
+                # Write trajectory frame.
+                if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
+                    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+                    assert quantity_is_finite(positions) == True
+                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(nsteps+1))
+
+            # Store work values.
+            if self._storage:
+                self._storage.write_array('work_%s' % direction, work, iteration=iteration)
+
+        except Exception as e:
+            # Trap NaNs as a special exception (allowing us to reject later, if desired)
+            if str(e) == "Particle coordinate is nan":
+                msg = "Particle coordinate is nan during NCMC integration while using integrator_type '%s'" % self.integrator_type
+                if self.integrator_type == 'GHMC':
+                    msg += '\n'
+                    msg += 'This should NEVER HAPPEN with GHMC!'
+                raise NaNException(msg)
+            else:
+                traceback.print_exc()
+                raise e
+
     def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None, iteration=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
@@ -392,48 +437,7 @@ class NCMCEngine(object):
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
 
         # Integrate switching
-        try:
-            # Write atom indices that are changing.
-            if self._storage:
-                self._storage.write_object('atomindices', indices, iteration=iteration)
-
-            # Allocate storage for work.
-            work = np.zeros([self.nsteps+1], np.float64) # work[n] is the accumulated work up to step n
-
-            # Write trajectory frame.
-            if self._storage and self.write_ncmc_interval:
-                positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(nsteps+1))
-
-            # Perform NCMC integration.
-            for step in range(self.nsteps):
-                # Take a step.
-                integrator.step(1)
-
-                # Store accumulated work
-                work[step+1] = integrator.getWork(context)
-
-                # Write trajectory frame.
-                if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
-                    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-                    assert quantity_is_finite(positions) == True
-                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(nsteps+1))
-
-            # Store work values.
-            if self._storage:
-                self._storage.write_array('work_%s' % direction, work, iteration=iteration)
-
-        except Exception as e:
-            # Trap NaNs as a special exception (allowing us to reject later, if desired)
-            if str(e) == "Particle coordinate is nan":
-                msg = "Particle coordinate is nan during NCMC integration while using integrator_type '%s'" % self.integrator_type
-                if self.integrator_type == 'GHMC':
-                    msg += '\n'
-                    msg += 'This should NEVER HAPPEN with GHMC!'
-                raise NaNException(msg)
-            else:
-                traceback.print_exc()
-                raise e
+        self._integrate_switching(integrator, context, topology, indices, iteration, direction)
 
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
@@ -748,57 +752,8 @@ class NCMCHybridEngine(NCMCEngine):
         context.setVelocitiesToTemperature(self.temperature)
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
 
-        # Set initial context parameters.
-        integrator.setGlobalVariableByName('lambda', 0)
-
-        # Compute initial potential of alchemical state.
-        initial_logP = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        if np.isnan(initial_logP):
-            raise NaNException("Initial potential of 'insert' operation is NaN")
-        from perses.tests.utils import compute_potential_components
-        # Take a single integrator step since all switching steps are unrolled in NCMCVVAlchemicalIntegrator.
-        try:
-            # Write PDB file if requested.
-            if self.write_ncmc_interval is not None:
-
-                from simtk.openmm.app import PDBFile
-                filename = 'ncmc-%s-%d.pdb' % (direction, self.nattempted)
-                outfile = open(filename, 'w')
-                PDBFile.writeHeader(alchemical_topology, file=outfile)
-                modelIndex = 0
-                PDBFile.writeModel(alchemical_topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
-                try:
-                    for step in range(self.nsteps):
-                        integrator.step(1)
-                        if (step+1)%self.write_ncmc_interval == 0:
-                            modelIndex += 1
-                            PDBFile.writeModel(alchemical_topology, context.getState(getPositions=True).getPositions(asNumpy=True), file=outfile, modelIndex=modelIndex)
-                except ValueError as e:
-                    # System is exploding and coordinates won't fit in PDB ATOM fields
-                    print(e)
-
-                PDBFile.writeFooter(alchemical_topology, file=outfile)
-                outfile.close()
-            else:
-                for step in range(self.nsteps):
-                    integrator.step(1)
-                    potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-                    current_step = integrator.get_step()
-
-        except Exception as e:
-            # Trap NaNs as a special exception (allowing us to reject later, if desired)
-            if str(e) == "Particle coordinate is nan":
-                raise NaNException(str(e))
-            else:
-                raise e
-
-        # Set final context parameters.
-        integrator.setGlobalVariableByName('lambda', 1)
-
-        # Compute final potential of alchemical state.
-        final_logP = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
-        if np.isnan(final_logP):
-            raise NaNException("Final potential of hybrid switch operation is NaN")
+        indices = [initial_to_hybrid_atom_map[idx] for idx in topology_proposal.unique_old_atoms] + [final_to_hybrid_atom_map[idx] for idx in topology_proposal.unique_new_atoms]
+        self._integrate_switching(integrator, context, alchemical_topology, indices, None, direction)
 
         # Store final positions and log acceptance probability.
         final_hybrid_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
