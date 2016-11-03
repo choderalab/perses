@@ -2200,7 +2200,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         verbose : bool, optional, default=False
             If True, will print verbose output.
 
-        # We assume `reference_system` remains unmodified
+        NB: We assume `reference_system` remains unmodified
 
         """
         self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
