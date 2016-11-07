@@ -346,6 +346,15 @@ class NCMCEngine(object):
                 traceback.print_exc()
                 raise e
 
+    def _zero_steps_return(self, initial_positions, system):
+        # TODO: Check this is correct.
+        # TODO: Can we simplify this so there are not two code branches here?
+        logP = 0.0
+        final_positions = copy.deepcopy(initial_positions)
+        from perses.tests.utils import compute_potential
+        potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
+        return [final_positions, logP, potential]
+
     def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None, iteration=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
@@ -397,13 +406,7 @@ class NCMCEngine(object):
 
         # Handle special case of instantaneous insertion/deletion.
         if (self.nsteps == 0):
-            # TODO: Check this is correct.
-            # TODO: Can we simplify this so there are not two code branches here?
-            logP = 0.0
-            final_positions = copy.deepcopy(initial_positions)
-            from perses.tests.utils import compute_potential
-            potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
-            return [final_positions, logP, potential]
+            return self._zero_steps_return(initial_positions, system)
 
         # Create alchemical system.
         [unmodified_system, alchemical_system] = self.make_alchemical_system(topology_proposal, direction=direction)
@@ -412,6 +415,7 @@ class NCMCEngine(object):
         available_parameters = self._getAvailableParameters(alchemical_system)
         functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
 
+        integrator = self._choose_integrator(alchemical_system, functions, direction)
         # Create an NCMC velocity Verlet integrator.
         if self.integrator_type == 'VV':
             integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, steps_per_propagation=self.steps_per_propagation, timestep=self.timestep, direction=direction)
@@ -677,6 +681,15 @@ class NCMCHybridEngine(NCMCEngine):
             final_positions[finalatom] = positions[hybridatom]
         return final_positions
 
+    def _zero_steps_return(self, initial_positions, proposed_positions, topology_proposal):
+        # Special case of instantaneous insertion/deletion.
+        final_positions = copy.deepcopy(proposed_positions)
+        from perses.tests.utils import compute_potential
+        potential_del = -self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+        potential_ins = -self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
+        potential = potential_ins - potential_del
+        return [final_positions, initial_positions, potential]
+
     def integrate(self, topology_proposal, initial_positions, proposed_positions, platform=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
@@ -706,15 +719,8 @@ class NCMCHybridEngine(NCMCEngine):
         """
         direction = 'insert'
         if (self.nsteps == 0):
-            # Special case of instantaneous insertion/deletion.
-            final_positions = copy.deepcopy(proposed_positions)
-            from perses.tests.utils import compute_potential
-            potential_del = -self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
-            potential_ins = -self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
-            potential = potential_ins - potential_del
-            return [final_positions, initial_positions, potential]
+            return self._zero_steps_return(initial_positions, proposed_positions, topology_proposal)
 
-########################################################################
         # Create alchemical system.
         [unmodified_old_system,
          unmodified_new_system,
@@ -725,19 +731,13 @@ class NCMCHybridEngine(NCMCEngine):
          initial_to_hybrid_atom_map] = self.make_alchemical_system(
                                             topology_proposal, initial_positions,
                                             proposed_positions)
-########################################################################
 
         # Select subset of switching functions based on which alchemical parameters are present in the system.
         available_parameters = self._getAvailableParameters(alchemical_system)
         functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
 
-        # Create an NCMC velocity Verlet integrator.
-        if self.integrator_type == 'VV':
-            integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction='insert')
-        elif self.integrator_type == 'GHMC':
-            integrator = NCMCGHMCAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, timestep=self.timestep, direction='insert')
-        else:
-            raise Exception("integrator_type '%s' unknown" % self.integrator_type)
+        integrator = self._choose_integrator(alchemical_system, functions, direction)
+
         # Set the constraint tolerance if specified.
         if self.constraint_tolerance is not None:
             integrator.setConstraintTolerance(self.constraint_tolerance)
