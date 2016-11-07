@@ -214,6 +214,26 @@ class NCMCEngine(object):
         return switch_logp, logP_alchemical_correction
 
     def _choose_system_from_direction(self, topology_proposal, direction):
+        """
+        Based on the direction, return a topology, indices of alchemical
+        atoms, and system which relate to the chemical state being modified.
+
+        Parameters
+        ----------
+        topology_proposal : TopologyProposal
+            Contains old/new Topology and System objects and atom mappings.
+        direction : str, optional, default='insert'
+            Direction of topology proposal to use for identifying alchemical atoms (allowed values: ['insert', 'delete'])
+
+        Returns
+        -------
+        topology : openmm.app.Topology
+            Alchemical topology being modified
+        indices : list(int)
+            List of the indices of atoms that are turned on / off
+        unmodified_system : simtk.openmm.System
+            Unmodified real system corresponding to appropriate leg of transformation.
+        """
         # Select reference topology, indices, and system based on whether we are deleting or inserting.
         if direction == 'delete':
             return topology_proposal.old_topology, topology_proposal.unique_old_atoms, topology_proposal.old_system
@@ -227,18 +247,17 @@ class NCMCEngine(object):
 
         Arguments
         ---------
-        topology_proposal : TopologyProposal namedtuple
-            Contains old topology, proposed new topology, and atom mapping
+        unmodified_system : simtk.openmm.System
+            Unmodified real system corresponding to appropriate leg of transformation.
+        alchemical_atoms : list(int)
+            List of the indices of atoms that are turned on / off
         direction : str, optional, default='insert'
             Direction of topology proposal to use for identifying alchemical atoms (allowed values: ['insert', 'delete'])
 
         Returns
         -------
-        unmodified_system : simtk.openmm.System
-            Unmodified real system corresponding to appropriate leg of transformation.
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
-
         """
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
@@ -246,7 +265,7 @@ class NCMCEngine(object):
 
         # Return the alchemically-modified system in fully-interacting form.
         alchemical_system = alchemical_factory.createPerturbedSystem()
-        return [unmodified_system, alchemical_system]
+        return alchemical_system
 
     def _integrate_switching(self, integrator, context, topology, indices, iteration, direction):
         """
@@ -261,7 +280,7 @@ class NCMCEngine(object):
             NCMC switching integrator to annihilate or introduce particles alchemically.
         context : openmm.Context 
             Alchemical context
-        topology
+        topology : openmm.app.Topology
             Alchemical topology being modified
         indices : list(int)
             List of the indices of atoms that are turned on / off
@@ -337,6 +356,8 @@ class NCMCEngine(object):
         ----------
         initial_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
             Positions of the atoms at the beginning of the NCMC switching.
+        system : simtk.openmm.System
+            The system with appropriate atoms alchemically modified
 
         Returns
         -------
@@ -356,6 +377,27 @@ class NCMCEngine(object):
         return [final_positions, logP, potential]
 
     def _choose_integrator(self, alchemical_system, functions, direction):
+        """
+        Instantiate the appropriate type of NCMC integrator, setting
+        constraint tolerance if specified.
+
+        Parameters
+        ----------
+        alchemical_system : simtk.openmm.System
+            The system with appropriate atoms alchemically modified
+        functions : dict
+            functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
+            controls how alchemical context parameter 'parameter' is switched
+        direction : str
+            Direction of alchemical switching:
+                'insert' causes lambda to switch from 0 to 1 over nsteps steps of integration
+                'delete' causes lambda to switch from 1 to 0 over nsteps steps of integration
+
+        Returns
+        -------
+        integrator : simtk.openmm.CustomIntegrator
+            NCMC switching integrator to annihilate or introduce particles alchemically.
+        """
         # Create an NCMC velocity Verlet integrator.
         if self.integrator_type == 'VV':
             integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, steps_per_propagation=self.steps_per_propagation, timestep=self.timestep, direction=direction)
@@ -371,6 +413,23 @@ class NCMCEngine(object):
         return integrator
 
     def _create_context(self, system, integrator, positions):
+        """
+        Instantiate context for alchemical system.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system with appropriate atoms alchemically modified
+        itegrator : NCMCAlchemicalIntegrator subclasses
+            NCMC switching integrator to annihilate or introduce particles alchemically.
+        positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the atoms at the beginning of the NCMC switching.
+
+        Returns
+        -------
+        context : openmm.Context 
+            Alchemical context
+        """
         # Create a context on the specified platform.
         if self.platform is not None:
             context = openmm.Context(system, integrator, self.platform)
@@ -386,6 +445,17 @@ class NCMCEngine(object):
     def _get_functions(self, system):
         """
         Select subset of switching functions based on which alchemical parameters are present in the system.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system with appropriate atoms alchemically modified
+
+        Returns
+        -------
+        functions : dict
+            functions[parameter] is the function (parameterized by 't' which switched from 0 to 1) that
+            controls how alchemical context parameter 'parameter' is switched
         """
         available_parameters = self._getAvailableParameters(system)
         functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
@@ -407,6 +477,10 @@ class NCMCEngine(object):
             and alchemical systems of the same chemical state
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
+        itegrator : NCMCAlchemicalIntegrator subclasses
+            NCMC switching integrator to annihilate or introduce particles alchemically.
+        context : openmm.Context 
+            Alchemical context
 
         Returns
         -------
@@ -469,7 +543,7 @@ class NCMCEngine(object):
             return self._zero_steps_return(initial_positions, system)
 
         # Create alchemical system.
-        [unmodified_system, alchemical_system] = self.make_alchemical_system(system, indices, direction=direction)
+        alchemical_system = self.make_alchemical_system(system, indices, direction=direction)
 
         functions = self._get_functions(alchemical_system)
         integrator = self._choose_integrator(alchemical_system, functions, direction)
@@ -715,9 +789,6 @@ class NCMCHybridEngine(NCMCEngine):
             steps of alchemical switching
         logP : float
             The log acceptance probability of the switch
-        potential : simtk.unit.Quantity with units compatible with kilocalories_per_mole
-            For `delete`, the potential energy of the final (alchemically eliminated) conformation.
-            For `insert`, the potential energy of the initial (alchemically eliminated) conformation.
         """
         direction = 'insert'
         if (self.nsteps == 0):
