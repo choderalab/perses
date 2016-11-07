@@ -707,9 +707,6 @@ class NCMCHybridEngine(NCMCEngine):
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
         return logP_alchemical_correction
 
-    def _compute_switch_logP(self, unmodified_old_system, unmodified_new_system, initial_positions, final_positions):
-        return self.compute_logP(unmodified_new_system, final_positions) - self.compute_logP(unmodified_old_system, initial_positions)
-
     def make_alchemical_system(self, topology_proposal, old_positions,
                                new_positions):
         """
