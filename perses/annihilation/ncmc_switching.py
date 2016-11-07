@@ -158,7 +158,7 @@ class NCMCEngine(object):
                         parameters.append(parameter_name)
         return parameters
 
-    def _computeAlchemicalCorrection(self, integrator, context, system, positions, direction):
+    def _computeAlchemicalCorrection(self, integrator, context, system, initial_positions, final_positions, direction):
         """
         Compute log probability for correction from transforming real system to/from alchemical system.
 
@@ -173,10 +173,10 @@ class NCMCEngine(object):
             Alchemical context
         system : simtk.unit.System
             Real fully-interacting system.
-        positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
-            The positions of the alchemical system when NCMC lambda = 1.
-            If direction is `insert` final positions should be given
-            If direction is `delete` initial positions should be given
+        initial_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
+            The positions of the alchemical system at the start of the NCMC protocol
+        final_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
+            The positions of the alchemical system at the end of the NCMC protocol
         direction : str, optional, default='insert'
             Direction of topology proposal to use for identifying alchemical atoms (allowed values: ['insert', 'delete'])
 
@@ -190,18 +190,17 @@ class NCMCEngine(object):
         logP_alchemical_correction : float
             The log acceptance probability of the switch between physical
             and alchemical systems of the same chemical state
-
         """
         # Get initial and final real and alchemical potentials
         from perses.tests.utils import compute_potential
         initial_alchemical_potential = self.beta * integrator.getGlobalVariableByName("Einitial") * unit.kilojoules_per_mole
         final_alchemical_potential = self.beta * context.getState(getEnergy=True).getPotentialEnergy()
         if direction == 'insert':
-            final_unmodified_potential = self.beta * compute_potential(system, positions, platform=self.platform)
+            final_unmodified_potential = self.beta * compute_potential(system, final_positions, platform=self.platform)
             logP_alchemical_correction = final_unmodified_potential - final_alchemical_potential
             switch_logp = initial_alchemical_potential
         elif direction == 'delete':
-            initial_unmodified_potential = self.beta * compute_potential(system, positions, platform=self.platform)
+            initial_unmodified_potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
             logP_alchemical_correction = initial_alchemical_potential - initial_unmodified_potential
             switch_logp = final_alchemical_potential
 
@@ -214,7 +213,14 @@ class NCMCEngine(object):
 
         return switch_logp, logP_alchemical_correction
 
-    def make_alchemical_system(self, topology_proposal, direction='insert'):
+    def _choose_system_from_direction(self, topology_proposal, direction):
+        # Select reference topology, indices, and system based on whether we are deleting or inserting.
+        if direction == 'delete':
+            return topology_proposal.old_topology, topology_proposal.unique_old_atoms, topology_proposal.old_system
+        elif direction == 'insert':
+            return topology_proposal.new_topology, topology_proposal.unique_new_atoms, topology_proposal.new_system
+
+    def make_alchemical_system(self, unmodified_system, alchemical_atoms, direction='insert'):
         """
         Generate an alchemically-modified system at the correct atoms
         based on the topology proposal
@@ -234,21 +240,6 @@ class NCMCEngine(object):
             The system with appropriate atoms alchemically modified
 
         """
-        if direction not in ['insert', 'delete']:
-            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
-
-        atom_map = topology_proposal.new_to_old_atom_map
-
-        #take the unique atoms as those not in the {new_atom : old_atom} atom map
-        if direction == 'delete':
-            unmodified_system = topology_proposal.old_system
-            alchemical_atoms = [atom for atom in range(unmodified_system.getNumParticles()) if atom not in atom_map.values()]
-        elif direction == 'insert':
-            unmodified_system = topology_proposal.new_system
-            alchemical_atoms = [atom for atom in range(unmodified_system.getNumParticles()) if atom not in atom_map.keys()]
-        else:
-            raise Exception("direction must be one of ['delete', 'insert']; found '%s' instead" % direction)
-
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
         alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True, alchemical_torsions=True, alchemical_bonds=True, alchemical_angles=True, softcore_beta=0.0)
@@ -346,8 +337,6 @@ class NCMCEngine(object):
         ----------
         initial_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
             Positions of the atoms at the beginning of the NCMC switching.
-        system : simtk.openmm.System
-            Unmodified real system corresponding to appropriate leg of transformation.
 
         Returns
         -------
@@ -402,12 +391,33 @@ class NCMCEngine(object):
         functions = { parameter_name : self.functions[parameter_name] for parameter_name in self.functions if (parameter_name in available_parameters) }
         return functions
 
-    def _clean_up_integration(self, logP_NCMC, logP_alchemical_correction, alchemical_system):
+    def _clean_up_integration(self, logP_NCMC, logP_alchemical_correction, alchemical_system, context, integrator):
+        """
+        The final steps of the NCMC protocol are to incorporate the alchemical
+        correction into the log acceptance probability of the ncmc integrator,
+        delete the alchemical system, context and integrator, and increase
+        the counter of number of NCMC attempts.
+
+        Parameters
+        ----------
+        logP_NCMC : float
+            The log acceptance probability of the NCMC moves
+        logP_alchemical_correction : float
+            The log acceptance probability of the switch between physical
+            and alchemical systems of the same chemical state
+        alchemical_system : simtk.openmm.System
+            The system with appropriate atoms alchemically modified
+
+        Returns
+        -------
+        logP_ncmc : float
+            The log acceptance probability of the switch
+        """
         # Compute total logP
         logP_ncmc = logP_NCMC + logP_alchemical_correction
 
         # Clean up alchemical system.
-        del alchemical_system
+        del alchemical_system, context, integrator
 
         # Keep track of statistics.
         self.nattempted += 1
@@ -443,8 +453,8 @@ class NCMCEngine(object):
         logP : float
             The log acceptance probability of the switch
         potential : simtk.unit.Quantity with units compatible with kilocalories_per_mole
-            For `delete`, the potential energy of the final (alchemically eliminated) conformation.
-            For `insert`, the potential energy of the initial (alchemically eliminated) conformation.
+            For `delete`, `beta` * the potential energy of the final (alchemically eliminated) conformation.
+            For `insert`, `beta` * the potential energy of the initial (alchemically eliminated) conformation.
 
         """
         if direction not in ['insert', 'delete']:
@@ -452,41 +462,25 @@ class NCMCEngine(object):
 
         assert quantity_is_finite(initial_positions) == True
 
-        # Select reference topology, indices, and system based on whether we are deleting or inserting.
-        if direction == 'delete':
-            topology = topology_proposal.old_topology
-            indices = topology_proposal.unique_old_atoms
-            system = topology_proposal.old_system
-        elif direction == 'insert':
-            topology = topology_proposal.new_topology
-            indices = topology_proposal.unique_new_atoms
-            system = topology_proposal.new_system
+        topology, indices, system = self._choose_system_from_direction(topology_proposal, direction)
 
         # Handle special case of instantaneous insertion/deletion.
         if (self.nsteps == 0):
             return self._zero_steps_return(initial_positions, system)
 
         # Create alchemical system.
-        [unmodified_system, alchemical_system] = self.make_alchemical_system(topology_proposal, direction=direction)
+        [unmodified_system, alchemical_system] = self.make_alchemical_system(system, indices, direction=direction)
 
         functions = self._get_functions(alchemical_system)
-
         integrator = self._choose_integrator(alchemical_system, functions, direction)
-
         context = self._create_context(alchemical_system, integrator, initial_positions)
 
         # Integrate switching
         final_positions, logP_NCMC = self._integrate_switching(integrator, context, topology, indices, iteration, direction)
 
-        if direction == 'insert':
-            switch_logp, logP_alchemical_correction = self._computeAlchemicalCorrection(integrator, context, system, final_positions, direction)
-        elif direction == 'delete':
-            switch_logp, logP_alchemical_correction = self._computeAlchemicalCorrection(integrator, context, system, initial_positions, direction)
+        switch_logp, logP_alchemical_correction = self._computeAlchemicalCorrection(integrator, context, system, initial_positions, final_positions, direction)
 
-        # Clean up.
-        del context, integrator
-
-        logP_ncmc = self._clean_up_integration(logP_NCMC, logP_alchemical_correction, alchemical_system)
+        logP_ncmc = self._clean_up_integration(logP_NCMC, logP_alchemical_correction, alchemical_system, context, integrator)
 
         # Return
         return [final_positions, logP, switch_logp]
@@ -749,9 +743,6 @@ class NCMCHybridEngine(NCMCEngine):
         final_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, final_to_hybrid_atom_map)
         new_old_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, initial_to_hybrid_atom_map)
 
-        # Clean up NCMC switching integrator.
-        del context, integrator
-
         # Compute contribution from transforming real system to/from alchemical system.
         logP_alchemical_correction = self._computeAlchemicalCorrection(
                                               unmodified_old_system,
@@ -763,7 +754,7 @@ class NCMCHybridEngine(NCMCEngine):
                                               final_positions,
                                           )
 
-        logP_ncmc = self._clean_up_integration(logP_NCMC, logP_alchemical_correction, alchemical_system)
+        logP_ncmc = self._clean_up_integration(logP_NCMC, logP_alchemical_correction, alchemical_system, context, integrator)
 
         # Return
         return [final_positions, new_old_positions, logP_ncmc]
