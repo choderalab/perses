@@ -160,13 +160,13 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
     functions = {
         'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
         'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '1.0', # don't soften angles
+        'lambda_bonds' : 'lambda', # don't soften bonds
+        'lambda_angles' : 'lambda', # don't soften angles
         'lambda_torsions' : 'lambda'
     }
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCHybridEngine
-    ncmc_engine = NCMCHybridEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
+    ncmc_engine = NCMCHybridEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps, softening=0.7)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):

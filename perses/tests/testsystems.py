@@ -2000,12 +2000,9 @@ class NullTestSystem(PersesTestSystem):
     geometry_engine.write_proposal_pdb set to False
 
     Constructor:
-    NullTestSystem(mol_name, storage_filename="null.nc", exen_pdb_filename=None)
+    NullTestSystem(storage_filename="null.nc", exen_pdb_filename=None)
 
     Arguments:
-        mol_name, string
-            MUST be in ['naphthalene', 'butane']
-            Name of small molecule for null transformation
         storage_filename, OPTIONAL, string
             Default is "null.nc"
             Storage must be provided in order to analyze testsystem acceptance rates
@@ -2022,21 +2019,14 @@ class NullTestSystem(PersesTestSystem):
     Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
-    def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None, scheme='ncmc-geometry-ncmc'):
-        if mol_name not in ['naphthalene', 'butane', 'propane']:
-            raise(IOError("NullTestSystem molecule name can only be naphthalene, butane or propane, given {0}".format(mol_name)))
+    def __init__(self, storage_filename="null.nc", exen_pdb_filename=None, scheme='ncmc-geometry-ncmc', options=None):
 
         super(NullTestSystem, self).__init__(storage_filename=storage_filename)
 
-        if mol_name == 'naphthalene':
-            smiles = 'c1ccc2ccccc2c1'
-            from perses.rjmc.topology_proposal import NaphthaleneProposalEngine as NullProposal
-        elif mol_name == 'butane':
-            smiles = 'CCCC'
-            from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
-        elif mol_name == 'propane':
-            smiles = 'CCC'
-            from perses.rjmc.topology_proposal import PropaneProposalEngine as NullProposal
+        if options is None:
+            options = {'nsteps':0}
+        if 'nsteps' not in options.keys():
+            options['nsteps'] = 0
 
         environments = ['vacuum']
 
@@ -2051,7 +2041,7 @@ class NullTestSystem(PersesTestSystem):
         exen_samplers = dict()
 
         from perses.rjmc.topology_proposal import SystemGenerator
-        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromSMILES
+        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromIUPAC
         from perses.samplers.thermodynamics import ThermodynamicState
         from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
 
@@ -2066,9 +2056,9 @@ class NullTestSystem(PersesTestSystem):
             system_generator = SystemGenerator(ff_list, forcefield_kwargs=forcefield_kwargs)
             system_generators[key] = system_generator
 
-            proposal_engine = NullProposal(system_generator)
-            initial_molecule = createOEMolFromSMILES(smiles=smiles)
-            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+            proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
+            initial_molecule = createOEMolFromIUPAC(iupac_name=self.mol_name)
+            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
             initial_topology._state_key = proposal_engine._fake_states[0]
 
             temperature = 300*unit.kelvin
@@ -2082,7 +2072,7 @@ class NullTestSystem(PersesTestSystem):
             mcmc_sampler.timestep = 1.0*unit.femtosecond
             mcmc_sampler.verbose = True
 
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme=scheme, options={'nsteps':0}, storage=self.storage)
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme=scheme, options=options, storage=self.storage)
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')
@@ -2128,16 +2118,24 @@ class NaphthaleneTestSystem(NullTestSystem):
             Default is None
             If value is not None, will write pdbfile after every ExpandedEnsemble
             iteration
+        scheme, OPTIONAL, string
+            Default is 'geometry-ncmc-geometry'
+            Scheme to be used by ExpandedEnsembleSampler
+            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
+            Default will use a hybrid NCMC method
 
     Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
-    def __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
+    def __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
         """
-        __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
+        __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
         """
-        super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+        from perses.rjmc.topology_proposal import NaphthaleneProposalEngine
+        self.NullProposal = NaphthaleneProposalEngine
+        self.mol_name = 'naphthalene'
+        super(NaphthaleneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
 
 class ButaneTestSystem(NullTestSystem):
     """
@@ -2161,16 +2159,24 @@ class ButaneTestSystem(NullTestSystem):
             Default is None
             If value is not None, will write pdbfile after every ExpandedEnsemble
             iteration
+        scheme, OPTIONAL, string
+            Default is 'geometry-ncmc-geometry'
+            Scheme to be used by ExpandedEnsembleSampler
+            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
+            Default will use a hybrid NCMC method
 
     Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
-    def __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
+    def __init__(self, storage_filename="butane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
         """
-        __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
+        __init__(self, storage_filename="butane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
         """
-        super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+        from perses.rjmc.topology_proposal import ButaneProposalEngine
+        self.NullProposal = ButaneProposalEngine
+        self.mol_name = 'butane'
+        super(ButaneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
 
 class PropaneTestSystem(NullTestSystem):
     """
@@ -2204,11 +2210,14 @@ class PropaneTestSystem(NullTestSystem):
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
-    def __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
+    def __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
         """
         __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
         """
-        super(PropaneTestSystem, self).__init__('propane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme)
+        from perses.rjmc.topology_proposal import PropaneProposalEngine
+        self.NullProposal = PropaneProposalEngine
+        self.mol_name = 'propane'
+        super(PropaneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
 
 
 def run_null_system(testsystem):
@@ -2622,7 +2631,7 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    testsystem = PropaneTestSystem()
+    testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc')
     run_null_system(testsystem)
     #run_alanine_system(sterics=False)
     #run_fused_rings()

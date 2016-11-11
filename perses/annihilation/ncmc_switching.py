@@ -25,6 +25,7 @@ functions_disable_all = {
     'lambda_torsions' : 'lambda'
     }
 
+# make something hyperbolic or something to go from on to off to on
 default_hybrid_functions = {
     'lambda_sterics' : 'lambda',
     'lambda_electrostatics' : 'lambda',
@@ -584,7 +585,7 @@ class NCMCHybridEngine(NCMCEngine):
                  nsteps=default_nsteps, timestep=default_timestep, 
                  constraint_tolerance=None, platform=None, 
                  write_ncmc_interval=None, integrator_type='GHMC',
-                 storage=None, softening=0.1):
+                 softening=0.1):
         """
         Subclass of NCMCEngine which switches directly between two different
         systems using an alchemical hybrid topology.
@@ -614,10 +615,13 @@ class NCMCHybridEngine(NCMCEngine):
             PDB file generated for each attempt.
         integrator_type : str, optional, default='GHMC'
             NCMC internal integrator type ['GHMC', 'VV']
+        softening : float, optional, default=0.1
+            lambda functions controlling interactions between unique atoms
+            will be scaled by ((1-softening)*lambda + softening)
         """
         if functions is None:
             functions = default_hybrid_functions
-
+        self.softening = softening
         super(NCMCHybridEngine, self).__init__(temperature=temperature, functions=functions, nsteps=nsteps,
                                                timestep=timestep, constraint_tolerance=constraint_tolerance,
                                                platform=platform, write_ncmc_interval=write_ncmc_interval,
@@ -670,13 +674,30 @@ class NCMCHybridEngine(NCMCEngine):
         ---------
         topology_proposal : TopologyProposal namedtuple
             Contains old topology, proposed new topology, and atom mapping
+        old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the atoms at the beginning of the NCMC switching.
+        new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the atoms proposed by geometry engine.
+
         Returns
         -------
-        unmodified_system : simtk.openmm.System
-            Unmodified real system corresponding to appropriate leg of
-            transformation.
+        unmodified_old_system : simtk.openmm.System
+            Unmodified real system corresponding to old chemical state.
+        unmodified_new_system : simtk.openmm.System
+            Unmodified real system corresponding to new chemical state.
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
+        alchemical_topology : openmm.app.Topology
+            Topology which includes unique atoms of old and new states.
+        alchemical_positions : simtk.unit.Quantity of dimensions [nparticles,3]
+            with units compatible with angstroms
+            Positions for the alchemical hybrid topology
+        final_atom_map : dict(int : int)
+            Dictionary mapping the index of every atom in the new topology
+            to its index in the hybrid topology
+        initial_atom_map : dict(int : int)
+            Dictionary mapping the index of every atom in the old topology
+            to its index in the hybrid topology
         """
 
         atom_map = topology_proposal.old_to_new_atom_map
@@ -693,7 +714,8 @@ class NCMCHybridEngine(NCMCEngine):
                                                    unmodified_new_system,
                                                    old_topology, new_topology,
                                                    old_positions,
-                                                   new_positions, atom_map)
+                                                   new_positions, atom_map,
+                                                   softening=self.softening)
 
         # Return the alchemically-modified system in fully-interacting form.
 #        alchemical_system, _, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
@@ -709,6 +731,28 @@ class NCMCHybridEngine(NCMCEngine):
         return final_positions
 
     def _zero_steps_return(self, initial_positions, proposed_positions, topology_proposal):
+        """
+        Handle the special case of instantaneous insertion / deletion
+
+        Parameters
+        ----------
+        initial_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the atoms at the beginning of the NCMC switching.
+        proposed_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of the atoms proposed by geometry engine.
+        topology_proposal : TopologyProposal namedtuple
+            Contains old topology, proposed new topology, and atom mapping
+
+        Returns
+        -------
+        final_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
+            The final positions are equivalent to the proposed positions after 0 steps of alchemical switching
+        initial_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
+            Positions of the atoms at the beginning of the NCMC switching.
+        potential : float
+            The difference in potential energies between the old system and
+            positions and new system with proposed positions.
+        """
         # Special case of instantaneous insertion/deletion.
         final_positions = copy.deepcopy(proposed_positions)
         from perses.tests.utils import compute_potential
