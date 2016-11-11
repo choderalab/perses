@@ -1585,6 +1585,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         safe_smiles
         removed_smiles
         """
+        import networkx as nx
         from perses.tests.utils import smiles_to_topology
         import itertools
         from perses.rjmc.geometry import ProposalOrderTools
@@ -1593,6 +1594,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         smiles_pairs = set()
         smiles_set = set(smiles_list)
 
+        #create a graph G for molecule proposals
+        G = nx.Graph()
         for mol1, mol2 in itertools.combinations(smiles_list, 2):
             smiles_pairs.add((mol1, mol2))
 
@@ -1614,8 +1617,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 reverse_order = proposal_order.determine_proposal_order(direction='reverse')
                 safe_smiles.add(smiles_pair[0])
                 safe_smiles.add(smiles_pair[1])
+                smiles1 = smiles_pair[0]
+                smiles2 = smiles_pair[1]
+                G.add_edge(smiles1, smiles2)
                 print("Adding %s and %s" % (smiles_pair[0], smiles_pair[1]))
             except NoTorsionError:
                 pass
+        #Get the connected components of the graph
+        connected_graphs = list(nx.connected_component_subgraphs(G))
+        safe_smiles_groups = [nodeset for nodeset in connected_graphs]
         removed_smiles = smiles_set.difference(safe_smiles)
-        return safe_smiles, removed_smiles
+        return safe_smiles_groups, removed_smiles
