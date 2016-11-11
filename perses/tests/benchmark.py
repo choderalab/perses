@@ -211,7 +211,7 @@ def benchmark_ncmc_null_protocols():
         print('Now testing {0} null transformations'.format(molecule_name))
         mean = dict()
         sigma = dict()
-        for ncmc_nsteps in [0, 1, 10, 100]:#, 1000, 10000]:
+        for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
             print('Running {0} hybrid NCMC steps for {1} iterations'.format(ncmc_nsteps, niterations))
             mean[ncmc_nsteps], sigma[ncmc_nsteps] = check_hybrid_null_elimination(NullProposal, ncmc_nsteps=ncmc_nsteps)
         plot_ncmc_logP(molecule_name, 'hybrid', mean, sigma)
