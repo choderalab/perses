@@ -1218,11 +1218,11 @@ class T4AffinityTestSystem(PersesTestSystem):
 
         # Read SMILES from CSV file of clinical kinase inhibitors.
         from pkg_resources import resource_filename
-        smiles_filename = resource_filename('perses', 'data/t4-lysozyme/clean_smiles_t4.txt')
+        smiles_filename = resource_filename('perses', 'data/t4-lysozyme/clean_smiles_t4_networkx.txt')
         smiles_file = open(smiles_filename,'r')
         smiles_list = smiles_file.readlines()
-        #remove any stray newlines:
-        molecules = [smiles.replace("\n", "") for smiles in smiles_list]
+        #remove any stray newlines as well as an extraneous GROUP:
+        molecules = [smiles.replace("\n", "").replace("GROUP","") for smiles in smiles_list]
         self.molecules = molecules
 
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
