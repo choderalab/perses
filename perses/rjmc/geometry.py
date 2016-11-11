@@ -2145,7 +2145,7 @@ class GeometrySystemGenerator(object):
                     #If it's a regular HarmonicAngleForce, there is no growth_index and the parameters are passed separately.
                     if isinstance(angle_force, openmm.CustomAngleForce):
                         angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], [angle_radians, angle_force_constant, growth_idx])
-                    elif isinstance(angle_force, openmm.HarmonicAngleForce)
+                    elif isinstance(angle_force, openmm.HarmonicAngleForce):
                         angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], angle_radians, angle_force_constant)
                     else:
                         raise ValueError("Angle force must be either CustomAngleForce or HarmonicAngleForce")
