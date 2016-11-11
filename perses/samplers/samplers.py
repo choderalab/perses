@@ -1102,32 +1102,11 @@ class ExpandedEnsembleSampler(object):
         elif self.scheme == 'geometry-ncmc-geometry':
             if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
 
-            # DEBUG: Check current topology can be built.
-            try:
-                self.proposal_engine._system_generator.build_system(self.topology)
-            except Exception as e:
-                msg = str(e)
-                msg += '\n'
-                msg += 'ExpandedEnsembleSampler.update_sampler: self.topology before ProposalEngine call cannot be built into a system'
-                raise Exception(msg)
-
             # Propose new chemical state.
             if self.verbose: print("Proposing new topology...")
             [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
             topology_proposal = self.proposal_engine.propose(system, topology)
             if self.verbose: print("Proposed transformation: %s => %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
-
-            # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
-            natoms_old = topology_proposal.old_system.getNumParticles()
-            natoms_new = topology_proposal.new_system.getNumParticles()
-            if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
-                msg = "Some old atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_old
-                msg += str(topology_proposal.new_to_old_atom_map)
-                raise Exception(msg)
-            if not set(topology_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
-                msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
-                msg += str(topology_proposal.new_to_old_atom_map)
-                raise Exception(msg)
 
             # Determine state keys
             old_state_key = self.state_key
@@ -1162,7 +1141,6 @@ class ExpandedEnsembleSampler(object):
             initial_time = time.time()
             geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, ncmc_new_positions, ncmc_old_positions, self.sampler.thermodynamic_state.beta)
             geometry_logp = geometry_logp_reverse - geometry_logp_propose
-            # why wtf
             if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
 
             # Compute change in eliminated potential contribution.
