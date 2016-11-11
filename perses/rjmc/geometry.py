@@ -942,6 +942,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         self._n_trials = n_trials
         self.verbose = False
         self.write_proposal_pdb = False
+        raise NotImplementedError("This functionality is not yet tested.")
 
     def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
         """
