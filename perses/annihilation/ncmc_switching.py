@@ -558,7 +558,7 @@ class NCMCEngine(object):
         logP_ncmc = self._clean_up_integration(logP_NCMC, logP_alchemical_correction, alchemical_system, context, integrator)
 
         # Return
-        return [final_positions, logP, switch_logp]
+        return [final_positions, logP_ncmc, switch_logp]
 
 class NCMCHybridEngine(NCMCEngine):
     """
