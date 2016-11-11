@@ -5,10 +5,11 @@ Clean the T4 ligands to include only valid smiles that can be proposed.
 import openeye.oechem as oechem
 import openeye.oeomega as oeomega
 import openeye.oequacpac as oequacpac
+import networkx as nx
 from perses.rjmc import topology_proposal
 import logging
 
-ATOM_OPTS = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+ATOM_OPTS = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_AtomicNumber
 BOND_OPTS = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
 RAW_FILENAME_BINDERS = "../L99A-binders.txt"
@@ -67,10 +68,12 @@ def get_acceptable_smiles():
 if __name__=="__main__":
     clean_smiles, rejected_smiles = get_acceptable_smiles()
 
-    clean_smiles_file = open("clean_smiles_t4.txt",'w')
-    clean_smiles_file.writelines("\n".join(clean_smiles))
-    clean_smiles_file.close()
+    clean_smiles_file = open("clean_smiles_t4_networkx.txt",'w')
+    for smiles_group in clean_smiles:
+        clean_smiles_file.writelines(["GROUP"])
+        clean_smiles_file.writelines("\n".join(smiles_group))
+        clean_smiles_file.close()
 
-    rejected_smiles_file = open("rejected_smiles_t4.txt", 'w')
+    rejected_smiles_file = open("rejected_smiles_t4_nx.txt", 'w')
     rejected_smiles_file.writelines("\n".join(rejected_smiles))
     rejected_smiles_file.close()
