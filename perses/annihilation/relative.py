@@ -60,10 +60,10 @@ class HybridTopologyFactory(object):
         for atom1idx, atom2idx in self.atom_mapping_1to2.items():
             atom1 = system1_atoms[atom1idx]
             atom2 = system2_atoms[atom2idx]
-            if not atom1.name == atom2.name:
-                if atom1.element == atom2.element and atom1.element == app.Element.getBySymbol('H'):
-                    continue
+            if not atom1.element == atom2.element:
                 keys_to_delete.append(atom1idx)
+        if len(keys_to_delete) == len(self.atom_mapping_1to2.keys()):
+            del(keys_to_delete[-1])
         for key in keys_to_delete:
             del(self.atom_mapping_1to2[key])
 
