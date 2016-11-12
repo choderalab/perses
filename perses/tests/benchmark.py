@@ -185,10 +185,12 @@ def check_alchemical_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6
 
 def plot_ncmc_logP(mol_name, ncmc_type, mean, sigma):
     x = mean.keys()
+    x.sort()
     y = [mean[steps] for steps in x]
     dy = [sigma[steps] for steps in x]
     plt.fill_between(x, [mean - dev for mean, dev in zip(y, dy)], [mean + dev for mean, dev in zip(y, dy)])
     plt.plot(x, y, 'k')
+    plt.xscale('log')
 
     plt.title("Log acceptance probability of {0} NCMC for {1}".format(ncmc_type, mol_name))
     plt.ylabel('logP NCMC')
