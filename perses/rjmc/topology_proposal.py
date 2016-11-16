@@ -1190,9 +1190,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """        
-        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
-        print('current_mol_smiles = %s' % current_mol_smiles) # DEBUG
-
+        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)        
         current_receptor_topology = self._remove_small_molecule(current_topology)
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
 
