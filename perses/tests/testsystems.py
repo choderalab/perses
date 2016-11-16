@@ -496,7 +496,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
                 break
 
         from openmoltools import forcefield_generators
-        from utils import extractPositionsFromOEMOL, giveOpenmmPositionsToOEMOL
+        from perses.tests.utils import extractPositionsFromOEMOL, giveOpenmmPositionsToOEMOL
         import perses.rjmc.geometry as geometry
         from perses.rjmc.topology_proposal import TopologyProposal
         # create OEMol version of benzene
@@ -1456,15 +1456,10 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         state_penalties_filename = resource_filename('perses', os.path.join(setup_path, 'imidazole/imidazole-state-penalties.out'))
         for (smiles, log_state_penalty) in zip(molecules, np.fromfile(state_penalties_filename, sep='\n')):
             log_state_penalties[smiles] = log_state_penalty
-
-        # Add current molecule
-        smiles = 'C1=CN=CN1'
-        molecules.append(smiles)
-        self.molecules = molecules
-        log_state_penalties[smiles] = 0.0
+        molecules = molecules
 
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
-        molecules = sanitizeSMILES(self.molecules)
+        molecules = sanitizeSMILES(molecules)
 
         # Create a system generator for desired forcefields
         print('Creating system generators...')

@@ -420,11 +420,12 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     4
 
     """
-    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
+    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString, OEAddExplicitHydrogens
     sanitized_smiles_set = set()
     for smiles in smiles_list:
         molecule = OEGraphMol()
         OESmilesToMol(molecule, smiles)
+        OEAddExplicitHydrogens(molecule)
 
         if verbose:
             molecule.SetTitle(smiles)
@@ -447,8 +448,8 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
                     if verbose: print('expanded: %s', isosmiles)
                     sanitized_smiles_set.add(isosmiles)
         else:
-            # Convert to OpenEye's canonical isomeric SMILES.
-            isosmiles = OECreateIsoSmiString(molecule)
+            # Convert to OpenEye's canonical isomeric SMILES with explicit hydrogens.
+            isosmiles = oechem.OECreateSmiString(molecule, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
             sanitized_smiles_set.add(isosmiles)
 
     sanitized_smiles_list = list(sanitized_smiles_set)
