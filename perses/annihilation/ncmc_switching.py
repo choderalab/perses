@@ -477,10 +477,10 @@ class NCMCEngine(object):
             and alchemical systems of the same chemical state
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
-        itegrator : NCMCAlchemicalIntegrator subclasses
-            NCMC switching integrator to annihilate or introduce particles alchemically.
         context : openmm.Context 
             Alchemical context
+        itegrator : NCMCAlchemicalIntegrator subclasses
+            NCMC switching integrator to annihilate or introduce particles alchemically.
 
         Returns
         -------
@@ -632,21 +632,17 @@ class NCMCHybridEngine(NCMCEngine):
 
         Parameters
         ----------
+        itegrator : NCMCAlchemicalIntegrator subclasses
+            NCMC switching integrator to annihilate or introduce particles alchemically.
+        context : openmm.Context 
+            Alchemical context
         unmodified_old_system : simtk.unit.System
             Real fully-interacting system.
         unmodified_new_system : simtk.unit.System
             Real fully-interacting system.
-        alchemical_system : simtk.unit.System
-            Alchemically modified system in fully-interacting form.
         initial_positions : simtk.unit.Quantity of dimensions [nparticles,3]
             with units compatible with angstroms
             The initial positions before NCMC switching.
-        alchemical_positions : simtk.unit.Quantity of dimensions [nparticles,3]
-            with units compatible with angstroms
-            The initial positions of hybrid topology before NCMC switching.
-        final_hybrid_positions : simtk.unit.Quantity of dimensions
-            [nparticles,3] with units compatible with angstroms
-            The final positions of hybrid topology after NCMC switching.
         final_positions : simtk.unit.Quantity of dimensions [nparticles,3]
             with units compatible with angstroms
             The final positions after NCMC switching.
@@ -770,12 +766,11 @@ class NCMCHybridEngine(NCMCEngine):
 
         # Compute contribution from transforming real system to/from alchemical system.
         logP_alchemical_correction = self._computeAlchemicalCorrection(
+                                              integrator,
+                                              context,
                                               unmodified_old_system,
                                               unmodified_new_system,
-                                              alchemical_system,
                                               initial_positions,
-                                              alchemical_positions,
-                                              final_hybrid_positions,
                                               final_positions,
                                           )
 
