@@ -150,7 +150,7 @@ def test_hybrid_scheme():
     from perses.samplers.samplers import ExpandedEnsembleSampler
     for environment in testsystem.environments:
         chemical_state_key = testsystem.proposal_engines[environment].compute_state_key(testsystem.topologies[environment])
-        testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], geometry.FFAllAngleGeometryEngine(metadata={}), scheme='geometry-ncmc', options={'nsteps':1})
+        testsystem.exen_samplers[environment] = ExpandedEnsembleSampler(testsystem.mcmc_samplers[environment], testsystem.topologies[environment], chemical_state_key, testsystem.proposal_engines[environment], geometry.FFAllAngleGeometryEngine(metadata={}), scheme='geometry-ncmc-geometry', options={'nsteps':1})
         exen_sampler = testsystem.exen_samplers[environment]
         exen_sampler.verbose = True
         f = partial(exen_sampler.run, niterations)
