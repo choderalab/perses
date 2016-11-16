@@ -11,6 +11,7 @@ try:
 except:
     from urllib2 import urlopen
     from cStringIO import StringIO
+from nose.plugins.attrib import attr
 
 temperature = 300*unit.kelvin
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
