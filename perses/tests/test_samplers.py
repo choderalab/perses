@@ -13,6 +13,8 @@ __author__ = 'John D. Chodera'
 # IMPORTS
 ################################################################################
 
+from nose.plugins.attrib import attr
+
 from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
