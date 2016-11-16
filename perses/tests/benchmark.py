@@ -64,8 +64,8 @@ def check_hybrid_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6.0, 
         'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
         'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
         'lambda_bonds' : '1.0',  
-        'lambda_angles' : '0.5*lambda+0.5', 
-        'lambda_torsions' : '0.5*lambda+0.5'
+        'lambda_angles' : '0.1*lambda+0.9', 
+        'lambda_torsions' : '0.7*lambda+0.3'
     }
 
     testsystem = NullProposal(storage_filename=None, scheme='geometry-ncmc-geometry',options={'functions': functions, 'nsteps': ncmc_nsteps})
@@ -100,11 +100,9 @@ def check_hybrid_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6.0, 
         # Compute total probability
         logP_n[iteration] = logP
 
-    # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
     work_n = - logP_n
-    from pymbar import EXP
-    [df, ddf] = EXP(work_n)
-    return df, ddf
+    print(work_n.mean(), work_n.std())
+    return work_n.mean(), work_n.std()
 
 def check_alchemical_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
@@ -112,9 +110,8 @@ def check_alchemical_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6
 
     Parameters
     ----------
-    topology_proposal : TopologyProposal
-        The topology proposal to test.
-        This must be a null transformation, where topology_proposal.old_system == topology_proposal.new_system
+    NullProposal : class
+        subclass of testsystems.NullTestSystem
     ncmc_nsteps : int, optional, default=50
         Number of NCMC switching steps, or 0 for instantaneous switching.
     NSIGMA_MAX : float, optional, default=6.0
@@ -126,8 +123,8 @@ def check_alchemical_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6
         'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
         'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
         'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '1.0', # don't soften angles
-        'lambda_torsions' : 'lambda'
+        'lambda_angles' : '0.1*lambda+0.9', # don't soften angles
+        'lambda_torsions' : '0.7*lambda+0.3'
     }
     testsystem = NullProposal(storage_filename=None, scheme='ncmc-geometry-ncmc',options={'functions': functions, 'nsteps': ncmc_nsteps})
 
@@ -176,12 +173,10 @@ def check_alchemical_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6
         logP_insert_n[iteration] = logP_insert
         logP_switch_n[iteration] = logP_switch
 
-    # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
     logP_n = logP_delete_n + logP_insert_n + logP_switch_n
     work_n = - logP_n
-    from pymbar import EXP
-    [df, ddf] = EXP(work_n)
-    return df, ddf
+    print(work_n.mean(), work_n.std())
+    return work_n.mean(), work_n.std()
 
 def plot_ncmc_logP(mol_name, ncmc_type, mean, sigma):
     x = mean.keys()
@@ -201,7 +196,13 @@ def plot_ncmc_logP(mol_name, ncmc_type, mean, sigma):
 
 def benchmark_ncmc_null_protocols():
     """
-    Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
+    Check convergence of logP for hybrid and delete/insert NCMC schemes for 3
+    small molecule null proposals
+
+    Does not run geometry engine
+
+    Plot mean and standard deviation of logP for 0, 1, 10, 100, 1000, 10000
+    ncmc steps.
     """
     from perses.tests.testsystems import NaphthaleneTestSystem, ButaneTestSystem, PropaneTestSystem
     molecule_names = {
@@ -210,7 +211,7 @@ def benchmark_ncmc_null_protocols():
         'propane' : PropaneTestSystem,
     }
     for molecule_name, NullProposal in molecule_names.items():
-        print('Now testing {0} null transformations'.format(molecule_name))
+        print('\nNow testing {0} null transformations'.format(molecule_name))
         mean = dict()
         sigma = dict()
         for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
