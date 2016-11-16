@@ -68,18 +68,39 @@ def test_valence():
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
 
-def test_samplers():
+def test_testsystems_travis():
     """
-    Test samplers on multiple test systems.
+    Test samplers on basic test systems for travis.
     """
-    testsystem_names = ['ImidazoleProtonationStateTestSystem', 'T4LysozymeMutationTestSystem', 'ValenceSmallMoleculeLibraryTestSystem', 'T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem', 'AblImatinibResistanceTestSystem', 'AblAffinityTestSystem']
-    #testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem']
-    niterations = 5 # number of iterations to run
+    # These tests have to work for the first paper.
+    testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem', 'AlkanesTestSystem', 'FusedRingsTestSystem', 'T4LysozymeInhibitorsTestSystem']
 
     # If TESTSYSTEMS environment variable is specified, test those systems.
     if 'TESTSYSTEMS' in os.environ:
         testsystem_names = os.environ['TESTSYSTEMS'].split(' ')
 
+    run_samplers(testsystem_names)
+
+@attr('advanced')
+def test_testsystems_advanced():
+    """
+    Test samplers on advanced test systems.
+    """
+    testsystem_names = ['ImidazoleProtonationStateTestSystem', 'AblImatinibResistanceTestSystem', 'KinaseInhibitorsTestSystem', 'AlanineDipeptideTestSystem', 'AblAffinityTestSystem', 'T4LysozymeMutationTestSystem']
+    run_samplers(testsystem_names)
+
+def run_samplers(testsystem_names, niterations=5):
+    """
+    Run sampler stack on named test systems.
+
+    Parameters
+    ----------
+    testsystem_names : list of str
+        Names of test systems to run
+    niterations : int, optional, default=5
+        Number of iterations to run
+
+    """
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
         testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
