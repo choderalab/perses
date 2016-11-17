@@ -287,7 +287,6 @@ def test_alchemical_elimination_peptide():
 if __name__ == "__main__":
     print(__name__)
     for x in test_ncmc_engine_molecule():
-    for x in test_ncmc_engine_molecule():
         print(x.description)
         x()
 #    test_ncmc_alchemical_integrator_stability_molecules()

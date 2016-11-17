@@ -33,7 +33,7 @@ from perses.analysis import Analysis
 def test_analysis():
     """Test analysis tools.
     """
-    testsystem_names = ['AlanineDipeptideTestSystem']
+    testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem']
 
     for testsystem_name in testsystem_names:
         # Create storage.
