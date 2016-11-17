@@ -44,55 +44,14 @@ script:
   # Install and test openeye tools
   - pip install $OPENEYE_CHANNEL OpenEye-toolkits==2016.6.1 && python -c "import openeye; print(openeye.__version__)"
   # Test the package
-  - cd devtools && nosetests $NOSETESTS --nocapture --verbosity=3 --with-timer -a '!slow' && cd ..
+  - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
 
 env:
   matrix:
     # Allfast tests for python 2.7
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.storage perses.tests.test_storage"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.analysis perses.tests.test_analysis"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.testsystems perses.tests.utils"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.samplers"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ImidazoleProtonationStateTestSystem"
-    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="T4LysozymeInhibitorsTestSystem"
-    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="KinaseInhibitorsTestSystem"
-    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlkanesTestSystem"
-    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AlanineDipeptideTestSystem"
-    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="AblImatinibTestSystem"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.rjmc"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_topology_proposal"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_geometry_engine"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.bias"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.annihilation"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_ncmc_integrator"
-    - python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_elimination"
-    # Main tests for python 3.4
-    # We skip slow tests.
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.storage perses.tests.test_storage"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.analysis perses.tests.test_analysis"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.testsystems perses.tests.utils"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.samplers"
-    #- python=2.7 CONDA_PY=27 NOSETESTS="perses.tests.test_samplers" TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.rjmc"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_topology_proposal"
-    #- python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_geometry_engine"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.bias"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.annihilation"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_ncmc_integrator"
-    - python=3.4 CONDA_PY=34 NOSETESTS="perses.tests.test_elimination"
-    # Main tests for python 3.5
-    # We skip slow tests.
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.storage perses.tests.test_storage"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.analysis perses.tests.test_analysis"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.tests.testsystems perses.tests.utils"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.samplers"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.rjmc"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.tests.test_topology_proposal"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.bias"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.annihilation"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.tests.test_ncmc_integrator"
-    - python=3.5 CONDA_PY=35 NOSETESTS="perses.tests.test_elimination"
+    - python=2.7 CONDA_PY=27 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem ImidazoleProtonationStateTestSystem"
+    - python=3.4 CONDA_PY=34 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
+    - python=3.5 CONDA_PY=35 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
 
   global:
     - ORGNAME="omnia"
