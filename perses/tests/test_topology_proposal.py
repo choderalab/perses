@@ -11,6 +11,7 @@ try:
 except:
     from urllib2 import urlopen
     from cStringIO import StringIO
+from nose.plugins.attrib import attr
 
 temperature = 300*unit.kelvin
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
@@ -140,6 +141,7 @@ def _guessFileFormat(file, filename):
     file.seek(0)
     return 'pdb'
 
+@attr('advanced')
 def test_specify_allowed_mutants():
     """
     Make sure proposals can be made using optional argument allowed_mutations
@@ -183,9 +185,10 @@ def test_specify_allowed_mutants():
             msg += str(pm_top_proposal.new_to_old_atom_map)
             raise Exception(msg)
 
+@attr('advanced')
 def test_propose_self():
     """
-    Propose a mutation to remain at WT in insulin    
+    Propose a mutation to remain at WT in insulin
     """
     import perses.rjmc.topology_proposal as topology_proposal
 
@@ -217,6 +220,7 @@ def test_propose_self():
     assert pm_top_proposal.old_system == pm_top_proposal.new_system
     assert pm_top_proposal.old_chemical_state_key == pm_top_proposal.new_chemical_state_key
 
+@attr('advanced')
 def test_run_point_mutation_propose():
     """
     Propose a random mutation in insulin
@@ -243,6 +247,7 @@ def test_run_point_mutation_propose():
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
     pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
 
+@attr('advanced')
 def test_alanine_dipeptide_map():
     pdb_filename = resource_filename('openmmtools', 'data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
     from simtk.openmm.app import PDBFile
@@ -288,6 +293,7 @@ def test_alanine_dipeptide_map():
                 mass_by_sys = system.getParticleMass(l)
                 print('Should have matched %s actually got %s' % (mass_by_map, mass_by_sys))
 
+@attr('advanced')
 def test_mutate_from_every_amino_to_every_other():
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -411,6 +417,7 @@ def test_mutate_from_every_amino_to_every_other():
 
         assert matching_amino_found == 1
 
+@attr('advanced')
 def test_limiting_allowed_residues():
     """
     Test example system with certain mutations allowed to mutate
@@ -444,6 +451,7 @@ def test_limiting_allowed_residues():
     pl_top_library = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residues_allowed_to_mutate)
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
+@attr('advanced')
 def test_always_change():
     """
     Test 'always_change' argument in topology proposal
@@ -491,6 +499,7 @@ def test_always_change():
         topology = pl_top_proposal.new_topology
         system = pl_top_proposal.new_system
 
+@attr('advanced')
 def test_run_peptide_library_engine():
     """
     Test example system with peptide and library
@@ -527,12 +536,12 @@ def test_run_peptide_library_engine():
 
 if __name__ == "__main__":
 
-#    test_run_point_mutation_propose()
-    test_mutate_from_every_amino_to_every_other()
-    test_specify_allowed_mutants()
+    test_run_point_mutation_propose()
+#    test_mutate_from_every_amino_to_every_other()
+#    test_specify_allowed_mutants()
 #    test_propose_self()
-    test_limiting_allowed_residues()
-    test_run_peptide_library_engine()
+#    test_limiting_allowed_residues()
+#    test_run_peptide_library_engine()
 #    test_small_molecule_proposals()
 #    test_alanine_dipeptide_map()
-    test_always_change()
+#    test_always_change()
