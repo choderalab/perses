@@ -2031,7 +2031,7 @@ class NullTestSystem(PersesTestSystem):
             smiles = 'CCCC'
             from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
 
-        environments = ['vacuum']
+        environments = ['vacuum', 'explicit']
 
         self.geometry_engine.write_proposal_pdb = True
 
@@ -2049,15 +2049,27 @@ class NullTestSystem(PersesTestSystem):
         from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
 
         for key in environments:
+            gaff_xml_filename = get_data_filename('data/gaff.xml')
             if key == "vacuum":
                 forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
-                gaff_xml_filename = get_data_filename('data/gaff.xml')
-            system_generator = SystemGenerator([gaff_xml_filename], forcefield_kwargs=forcefield_kwargs)
+                ff_list = [gaff_xml_filename]
+            if key == "exlicit":
+                ff_list = [gaff_xml_filename, 'tip3p.xml']
+                forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }
+            system_generator = SystemGenerator(ff_list, forcefield_kwargs=forcefield_kwargs)
             system_generators[key] = system_generator
 
-            proposal_engine = NullProposal(system_generator)
-            initial_molecule = createOEMolFromSMILES(smiles=smiles)
-            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+            proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
+            initial_molecule = createOEMolFromIUPAC(iupac_name=self.mol_name)
+            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
+
+            if key == "exlicit":
+                modeller = app.Modeller(initial_topology, initial_positions)
+                modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+                initial_topology = modeller.getTopology()
+                initial_positions = modeller.getPositions()
+                initial_system = system_generators[key].build_system(initial_topology)
+
             initial_topology._state_key = proposal_engine._fake_states[0]
 
             temperature = 300*unit.kelvin
