@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 # NUMBER OF ATTEMPTS
 ################################################################################
 niterations = 50
+ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
 ################################################################################
@@ -69,7 +70,7 @@ def check_hybrid_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6.0, 
     }
 
     testsystem = NullProposal(storage_filename=None, scheme='geometry-ncmc-geometry',options={'functions': functions, 'nsteps': ncmc_nsteps})
-    for key in testsystem.environments: # only one key: vacuum
+    for key in [ENV]: #testsystem.environments: # only one key: vacuum
         # run a single iteration to generate item in number_of_state_visits dict
         ncmc_engine = testsystem.exen_samplers[key].ncmc_engine
 
@@ -128,7 +129,7 @@ def check_alchemical_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6
     }
     testsystem = NullProposal(storage_filename=None, scheme='ncmc-geometry-ncmc',options={'functions': functions, 'nsteps': ncmc_nsteps})
 
-    for key in testsystem.environments: # only one key: vacuum
+    for key in [ENV]: #testsystem.environments: # only one key: vacuum
         # run a single iteration to generate item in number_of_state_visits dict
         ncmc_engine = testsystem.exen_samplers[key].ncmc_engine
 
@@ -190,8 +191,24 @@ def plot_ncmc_logP(mol_name, ncmc_type, mean, sigma):
     plt.title("Log acceptance probability of {0} NCMC for {1}".format(ncmc_type, mol_name))
     plt.ylabel('logP NCMC')
     plt.xlabel('ncmc steps')
-    plt.savefig('{0}_{1}NCMC_logP'.format(mol_name, ncmc_type))
-    print('Saved plot to {0}_{1}NCMC_logP.png'.format(mol_name, ncmc_type))
+    plt.savefig('{0}_{1}_{2}NCMC_logP'.format(ENV, mol_name, ncmc_type))
+    print('Saved plot to {0}_{1}_{2}NCMC_logP.png'.format(ENV, mol_name, ncmc_type))
+    plt.clf()
+
+def plot_exen_logP(mol_name, ncmc_type, mean, sigma):
+    x = mean.keys()
+    x.sort()
+    y = [mean[steps] for steps in x]
+    dy = [sigma[steps] for steps in x]
+    plt.fill_between(x, [mean - dev for mean, dev in zip(y, dy)], [mean + dev for mean, dev in zip(y, dy)])
+    plt.plot(x, y, 'k')
+    plt.xscale('log')
+
+    plt.title("Log acceptance probability of {0} ExpandedEnsemble for {1}".format(ncmc_type, mol_name))
+    plt.ylabel('logP')
+    plt.xlabel('ncmc steps')
+    plt.savefig('{0}_{1}_{2}EXEN_logP'.format(ENV, mol_name, ncmc_type))
+    print('Saved plot to {0}_{1}_{2}EXEN_logP.png'.format(ENV, mol_name, ncmc_type))
     plt.clf()
 
 def benchmark_ncmc_null_protocols():
@@ -210,22 +227,103 @@ def benchmark_ncmc_null_protocols():
         'butane' : ButaneTestSystem,
         'propane' : PropaneTestSystem,
     }
+    methods = {
+        'hybrid' : check_hybrid_null_elimination,
+        'two-stage' : check_alchemical_null_elimination,
+    }
     for molecule_name, NullProposal in molecule_names.items():
         print('\nNow testing {0} null transformations'.format(molecule_name))
-        mean = dict()
-        sigma = dict()
-        for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
-            print('Running {0} hybrid NCMC steps for {1} iterations'.format(ncmc_nsteps, niterations))
-            mean[ncmc_nsteps], sigma[ncmc_nsteps] = check_hybrid_null_elimination(NullProposal, ncmc_nsteps=ncmc_nsteps)
-        plot_ncmc_logP(molecule_name, 'hybrid', mean, sigma)
+        for scheme, method in methods.items():
+            mean = dict()
+            sigma = dict()
+            for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+                print('Running {0} delete-insert NCMC steps for {1} iterations'.format(ncmc_nsteps, niterations))
+                mean[ncmc_nsteps], sigma[ncmc_nsteps] = method(NullProposal, ncmc_nsteps=ncmc_nsteps)
+            plot_ncmc_logP(molecule_name, scheme, mean, sigma)
 
-        mean = dict()
-        sigma = dict()
-        for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
-            print('Running {0} delete-insert NCMC steps for {1} iterations'.format(ncmc_nsteps, niterations))
-            mean[ncmc_nsteps], sigma[ncmc_nsteps] = check_alchemical_null_elimination(NullProposal, ncmc_nsteps=ncmc_nsteps)
-        plot_ncmc_logP(molecule_name, 'two-stage', mean, sigma)
+def check_alchemical_exen(NullProposal, scheme, ncmc_nsteps, functions):
+    testsystem = NullProposal(storage_filename=None, scheme=scheme,options={'functions': functions, 'nsteps': ncmc_nsteps})
+    for key in [ENV]: #testsystem.environments: # only one key: vacuum
+        # run a single iteration to generate item in number_of_state_visits dict
+        exen_sampler = testsystem.exen_samplers[key]
+        exen_sampler.verbose = False
+        topology = testsystem.topologies[key]
+        system = testsystem.system_generators[key].build_system(topology)
+        topology_proposal = testsystem.proposal_engines[key].propose(system, topology)
+        positions = testsystem.positions[key]
+
+    nequil = 5 # number of equilibration iterations
+    for iteration in range(nequil):
+        [positions, velocities] = simulate(topology_proposal.old_system, positions)
+    testsystem.positions[ENV] = positions
+    return testsystem, exen_sampler
+
+def check_hybrid_exen(NullProposal, ncmc_nsteps=50):
+    functions = {
+        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_bonds' : '1.0',
+        'lambda_angles' : '0.1*lambda+0.9',
+        'lambda_torsions' : '0.7*lambda+0.3'
+    }
+    testsystem, exen_sampler = check_alchemical_exen(NullProposal, 'geometry-ncmc-geometry', ncmc_nsteps, functions)
+    logP_n = np.zeros([niterations], np.float64)
+    for iteration in range(niterations):
+        exen_sampler.update_positions()
+        logP, _ = exen_sampler._geometry_ncmc_geometry()
+        logP_n[iteration] = logP
+
+    print(logP_n.mean(), logP_n.std())
+    return logP_n.mean(), logP_n.std()
+
+def check_twostage_exen(NullProposal, ncmc_nsteps=50):
+    functions = {
+        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_bonds' : '1.0', # don't soften bonds
+        'lambda_angles' : '0.1*lambda+0.9', # don't soften angles
+        'lambda_torsions' : '0.7*lambda+0.3'
+    }
+    testsystem, exen_sampler = check_alchemical_exen(NullProposal, 'ncmc-geometry-ncmc', ncmc_nsteps, functions)
+    logP_n = np.zeros([niterations], np.float64)
+    for iteration in range(niterations):
+        exen_sampler.update_positions()
+        logP, _ = exen_sampler._ncmc_geometry_ncmc()
+        logP_n[iteration] = logP
+
+    print(logP_n.mean(), logP_n.std())
+    return logP_n.mean(), logP_n.std()
+
+def benchmark_exen_ncmc_null_protocols():
+    """
+    Relationship of overall ExpandedEnsemble logp_accept to n_ncmc_steps
+
+    Check convergence of logP for hybrid and delete/insert NCMC schemes for 3
+    small molecule null proposals
+
+    Plot mean and standard deviation of logP for 0, 1, 10, 100, 1000, 10000
+    ncmc steps.
+    """
+    from perses.tests.testsystems import NaphthaleneTestSystem, ButaneTestSystem, PropaneTestSystem
+    molecule_names = {
+        'naphthalene' : NaphthaleneTestSystem,
+        'butane' : ButaneTestSystem,
+        'propane' : PropaneTestSystem,
+    }
+    methods = {
+        'hybrid' : check_hybrid_exen,
+        'two-stage' : check_twostage_exen,
+    }
+    for molecule_name, NullProposal in molecule_names.items():
+        print('\nNow testing {0} null transformations'.format(molecule_name))
+        for scheme, method in methods.items():
+            mean = dict()
+            sigma = dict()
+            for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+                print('Running {0} hybrid NCMC steps for {1} iterations'.format(ncmc_nsteps, niterations))
+                mean[ncmc_nsteps], sigma[ncmc_nsteps] = method(NullProposal, ncmc_nsteps=ncmc_nsteps)
+            plot_exen_logP(molecule_name, scheme, mean, sigma)
 
 if __name__ == "__main__":
-    benchmark_ncmc_null_protocols()
+    benchmark_exen_ncmc_null_protocols()
 
