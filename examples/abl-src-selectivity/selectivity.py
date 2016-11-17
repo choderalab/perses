@@ -1,20 +1,15 @@
 from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
-import sys, math
-import numpy as np
-from functools import partial
-from pkg_resources import resource_filename
-from openeye import oechem, oeshape, oeomega
-from openmmtools import testsystems
 from perses.tests.utils import sanitizeSMILES
-import copy
 from perses.tests.testsystems import minimize
 from perses.tests.testsystems import PersesTestSystem
+import perses.rjmc.geometry as geometry
+from perses.storage import NetCDFStorage, NetCDFStorageView
 
-class abl_src_affinity(PersesTestSystem):
+class Selectivity(PersesTestSystem):
     """
-    Create a consistent set of SAMS samplers useful for optimizing kinase inhibitor affinity to Abl.
+    Create a consistent set of SAMS samplers useful for optimizing kinase inhibitor selectivity.
 
     TODO: Generalize to standard inhibitor:protein test system and extend to T4 lysozyme small molecules.
 
@@ -52,9 +47,9 @@ class abl_src_affinity(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['vacuum-inhibitor']
 
     """
-    def __init__(self):
-        super(abl_src_affinity, self).__init__()
-        #solvents = ['vacuum', 'explicit'] # TODO: Add 'implicit' once GBSA parameterization for small molecules is working
+    def __init__(self, **kwargs):
+        super(Selectivity, self).__init__(**kwargs)
+
         solvents = ['explicit'] # DEBUG
         components = ['src-imatinib', 'abl-imatinib'] # TODO: Add 'ATP:kinase' complex to enable resistance design
         padding = 9.0*unit.angstrom
@@ -63,6 +58,8 @@ class abl_src_affinity(PersesTestSystem):
         thermodynamic_states = dict()
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
+        geometry_engine = geometry.FFAllAngleGeometryEngine()
+
 
         # Construct list of all environments
         environments = list()
@@ -140,7 +137,10 @@ class abl_src_affinity(PersesTestSystem):
         proposal_metadata = { }
         proposal_engines = dict()
         for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL')
+            storage = None
+            if self.storage:
+                storage = NetCDFStorageView(self.storage, envname=environment)
+            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name='MOL', storage=storage)
 
         # Generate systems
         systems = dict()
@@ -158,7 +158,7 @@ class abl_src_affinity(PersesTestSystem):
                 if solvent == 'explicit':
                     thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
                 else:
-                    thermodynamic_states[environment]   = ThermodynamicState(system=systems[environment], temperature=temperature)
+                    thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature)
 
         # Create SAMS samplers
         from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
@@ -170,6 +170,10 @@ class abl_src_affinity(PersesTestSystem):
                 environment = solvent + '-' + component
                 chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
 
+                storage = None
+                if self.storage:
+                    storage = NetCDFStorageView(self.storage, envname=environment)
+
                 if solvent == 'explicit':
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
@@ -177,20 +181,20 @@ class abl_src_affinity(PersesTestSystem):
                     thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
                     sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, storage=storage)
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':5})
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], options={'nsteps':10}, geometry_engine=geometry_engine, storage=storage)
                 exen_samplers[environment].verbose = True
-                sams_samplers[environment] = SAMSSampler(exen_samplers[environment])
+                sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
                 thermodynamic_states[environment] = thermodynamic_state
 
         # Create test MultiTargetDesign sampler.
-        # TODO: Replace this with inhibitor:kinase and ATP:kinase ratio
+
         from perses.samplers.samplers import MultiTargetDesign
-        target_samplers = { sams_samplers['explicit-src-imatinib'] : 1.0, sams_samplers['explicit-abl-imatinib'] : -1.0 }
-        designer = MultiTargetDesign(target_samplers)
+        target_samplers = {sams_samplers['explicit-src-imatinib']: 1.0, sams_samplers['explicit-abl-imatinib']: -1.0}
+        designer = MultiTargetDesign(target_samplers, storage=self.storage)
         designer.verbose = True
 
         # Store things.
@@ -210,6 +214,16 @@ class abl_src_affinity(PersesTestSystem):
         # This system must currently be minimized.
         minimize(self)
 
+def run_selectivity():
+
+    storage_filename = 'output-src-abl.nc'
+    system = Selectivity(storage_filename=storage_filename)
+    system.designer.run(niterations=10)
+
+    from perses.analysis import Analysis
+    analysis = Analysis(storage_filename=storage_filename)
+    analysis.plot_ncmc_work('ncmc-work.pdf')
+
+
 if __name__ == '__main__':
-    system = abl_src_affinity()
-    system.designer.run(niterations=100)
+    run_selectivity()

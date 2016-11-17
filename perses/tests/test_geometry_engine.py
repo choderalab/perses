@@ -25,6 +25,7 @@ try:
     from subprocess import getoutput  # If python 3
 except ImportError:
     from commands import getoutput  # If python 2
+from nose.plugins.attrib import attr
 
 from perses.rjmc import coordinate_numba
 
@@ -682,6 +683,7 @@ def align_molecules(mol1, mol2):
         new_to_old_atom_mapping[new_index] = old_index
     return new_to_old_atom_mapping
 
+@attr('advanced')
 def test_mutate_quick():
     """
     Abbreviated version of test_mutate_all for travis.
@@ -743,7 +745,7 @@ def test_mutate_quick():
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+@attr('advanced')
 def test_mutate_from_all_to_all():
     """
     Make sure mutations are successful between every possible pair of before-and-after residues

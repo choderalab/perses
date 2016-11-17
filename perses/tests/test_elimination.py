@@ -67,9 +67,16 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     geometry : bool, optional, default=None
         If True, will also use geometry engine in the middle of the null transformation.
     """
+    functions = {
+        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_bonds' : '1.0', # don't soften bonds
+        'lambda_angles' : '1.0', # don't soften angles
+        'lambda_torsions' : 'lambda'
+    }
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    ncmc_engine = NCMCEngine(temperature=temperature, nsteps=ncmc_nsteps)
+    ncmc_engine = NCMCEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -128,6 +135,8 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
         msg += str(logP_delete_n) + '\n'
         msg += 'insert logP:\n'
         msg += str(logP_insert_n) + '\n'
+        msg += 'switch logP:\n'
+        msg += str(logP_switch_n) + '\n'
         msg += 'logP:\n'
         msg += str(logP_n) + '\n'
         raise Exception(msg)
@@ -225,19 +234,31 @@ def test_ncmc_engine_molecule():
     if os.environ.get("TRAVIS", None) == 'true':
         molecule_names = ['pentane']
 
+    molecule_names = ['pentane'] # DEBUG
     for molecule_name in molecule_names:
         from perses.tests.utils import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
         natoms = system.getNumParticles()
+
+        # DEBUG
+        print(molecule_name)
+        from openeye import oechem
+        ofs = oechem.oemolostream('%s.mol2' % molecule_name)
+        oechem.OEWriteMol2File(ofs, molecule)
+        ofs.close()
+
         # Eliminate half of the molecule
         # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
-        new_to_old_atom_map = { index : index for index in range(int(natoms/2)) }
+        new_to_old_atom_map = { atom.index : atom.index for atom in topology.atoms() if str(atom.element.name) in ['carbon','nitrogen'] }
+
+        # DEBUG
+        print(new_to_old_atom_map)
 
         from perses.rjmc.topology_proposal import TopologyProposal
         topology_proposal = TopologyProposal(
             new_topology=topology, new_system=system, old_topology=topology, old_system=system,
             old_chemical_state_key='', new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
-        for ncmc_nsteps in [0, 1, 50]:
+        for ncmc_nsteps in [50]:#[0, 1, 50]:
             f = partial(check_alchemical_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
@@ -265,5 +286,11 @@ def test_alchemical_elimination_peptide():
 
 if __name__ == "__main__":
     print(__name__)
-    for x in test_alchemical_elimination_molecule():
+    for x in test_ncmc_engine_molecule():
+        print(x.description)
         x()
+#    test_ncmc_alchemical_integrator_stability_molecules()
+#    for x in test_alchemical_elimination_mutation():
+#        x()
+#    for x in test_alchemical_elimination_peptide():
+#        x()
