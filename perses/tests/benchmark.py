@@ -182,4 +182,3 @@ def benchmark_ncmc_work_during_protocol():
 
 if __name__ == "__main__":
     benchmark_ncmc_work_during_protocol()
-
