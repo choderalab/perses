@@ -912,7 +912,7 @@ class ExpandedEnsembleSampler(object):
             raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
         return ncmc_new_positions, ncmc_old_positions, ncmc_logp
 
-    def _geometry_ncmc_geometry(self, topology_proposal, old_log_weight, new_log_weight):
+    def _geometry_ncmc_geometry(self, topology_proposal, positions, old_log_weight, new_log_weight):
         if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
 
         geometry_old_positions = positions
@@ -937,9 +937,10 @@ class ExpandedEnsembleSampler(object):
 
         return logp_accept, ncmc_new_positions
 
-    def _ncmc_geometry_ncmc(self, topology_proposal, old_log_weight, new_log_weight):
+    def _ncmc_geometry_ncmc(self, topology_proposal, positions, old_log_weight, new_log_weight):
         if self.verbose: print("Updating chemical state with ncmc-geometry-ncmc scheme...")
 
+        initial_time = time.time()
         ncmc_old_positions, ncmc_elimination_logp, potential_delete = self._ncmc_delete(topology_proposal, positions)
 
         geometry_old_positions = ncmc_old_positions
@@ -973,11 +974,12 @@ class ExpandedEnsembleSampler(object):
 
         return logp_accept, ncmc_new_positions
 
-    def _geometry_ncmc(self, topology_proposal, old_log_weight, new_log_weight):
+    def _geometry_ncmc(self, topology_proposal, positions, old_log_weight, new_log_weight):
         raise(NotImplementedError("ExpandedEnsembleSampler scheme 'geometry-ncmc' has not been statistically validated and should not be used."))
         from perses.tests.utils import compute_potential
         if self.verbose: print("Updating chemical state with geometry-ncmc scheme...")
 
+        initial_time = time.time()
         potential_delete = self.sampler.thermodynamic_state.beta * compute_potential(system, positions, platform=self.ncmc_engine.platform)
 
         geometry_old_positions = positions
@@ -1037,11 +1039,11 @@ class ExpandedEnsembleSampler(object):
         new_log_weight = self.get_log_weight(new_state_key)
 
         if self.scheme == 'ncmc-geometry-ncmc':
-            logp_accept, ncmc_new_positions = self._ncmc_geometry_ncmc(topology_proposal, old_log_weight, new_log_weight)
+            logp_accept, ncmc_new_positions = self._ncmc_geometry_ncmc(topology_proposal, positions, old_log_weight, new_log_weight)
         elif self.scheme == 'geometry-ncmc':
-            logp_accept, ncmc_new_positions = self._geometry_ncmc(topology_proposal, old_log_weight, new_log_weight)
+            logp_accept, ncmc_new_positions = self._geometry_ncmc(topology_proposal, positions, old_log_weight, new_log_weight)
         elif self.scheme == 'geometry-ncmc-geometry':
-            logp_accept, ncmc_new_positions = self._geometry_ncmc_geometry(topology_proposal, old_log_weight, new_log_weight)
+            logp_accept, ncmc_new_positions = self._geometry_ncmc_geometry(topology_proposal, positions, old_log_weight, new_log_weight)
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
 

@@ -2051,9 +2051,9 @@ class NullTestSystem(PersesTestSystem):
             if key == "vacuum":
                 forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
                 ff_list = [gaff_xml_filename]
-            if key == "exlicit":
+            if key == "explicit":
                 ff_list = [gaff_xml_filename, 'tip3p.xml']
-                forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }
+                forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : app.HBonds }
             system_generator = SystemGenerator(ff_list, forcefield_kwargs=forcefield_kwargs)
             system_generators[key] = system_generator
 
@@ -2061,12 +2061,14 @@ class NullTestSystem(PersesTestSystem):
             initial_molecule = createOEMolFromIUPAC(iupac_name=self.mol_name)
             initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
 
-            if key == "exlicit":
+            if key == "explicit":
                 modeller = app.Modeller(initial_topology, initial_positions)
-                modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+                modeller.addSolvent(system_generators[key].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
                 initial_topology = modeller.getTopology()
                 initial_positions = modeller.getPositions()
                 initial_system = system_generators[key].build_system(initial_topology)
+                with open('is_there_water.pdb', 'w') as fo:
+                    app.PDBFile.writeFile(initial_topology, initial_positions, fo)
 
             initial_topology._state_key = proposal_engine._fake_states[0]
 
