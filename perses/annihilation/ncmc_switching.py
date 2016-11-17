@@ -627,48 +627,6 @@ class NCMCHybridEngine(NCMCEngine):
                                                platform=platform, write_ncmc_interval=write_ncmc_interval,
                                                integrator_type=integrator_type)
 
-    def compute_logP(self, system, positions, parameter=None):
-        """
-        Compute potential energy of the specified system object at the specified positions.
-
-        Constraints are applied before the energy is computed.
-
-        Parameters
-        ----------
-        system : simtk.openmm.System
-            The System object for which the potential energy is to be computed.
-        positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the atoms for which energy is to be computed.
-
-        Returns
-        -------
-        potential : simtk.unit.Quantity with units of energy
-            The computed potential energy
-            
-        """
-        # Create dummy integrator.
-        integrator = openmm.VerletIntegrator(self.timestep)
-        # Set the constraint tolerance if specified.
-        if self.constraint_tolerance is not None:
-            integrator.setConstraintTolerance(self.constraint_tolerance)
-        # Create a context on the specified platform.
-        if self.platform is not None:
-            context = openmm.Context(system, integrator, self.platform)
-        else:
-            context = openmm.Context(system, integrator)
-        context.setPositions(positions)
-        context.applyConstraints(integrator.getConstraintTolerance())
-        if parameter is not None:
-            available_parameters = self._getAvailableParameters(system)
-            for parameter_name in available_parameters:
-                context.setParameter(parameter_name, parameter)
-        # Compute potential energy.
-        potential = context.getState(getEnergy=True).getPotentialEnergy()
-        # Clean up context and integrator.
-        del context, integrator
-        # Return potential energy.
-        return -self.beta * potential
-
     def _computeAlchemicalCorrection(self, integrator, context,
                                      unmodified_old_system, unmodified_new_system,
                                      initial_positions, final_positions,
@@ -700,12 +658,9 @@ class NCMCHybridEngine(NCMCEngine):
         logP_alchemical_correction : float
             The log acceptance probability of the switch
         """
-        # Compute correction from transforming real system to/from alchemical system
-#        initial_logP_correction = self.compute_logP(alchemical_system, alchemical_positions, parameter=0) - self.compute_logP(unmodified_old_system, initial_positions)
-#        final_logP_correction = self.compute_logP(unmodified_new_system, final_positions) - self.compute_logP(alchemical_system, final_hybrid_positions, parameter=1)
-
-        initial_logP_correction = (self.beta * integrator.getGlobalVariableByName("Einitial") * unit.kilojoules_per_mole) - self.compute_logP(unmodified_old_system, initial_positions)
-        final_logP_correction = self.compute_logP(unmodified_new_system, final_positions) - (self.beta * context.getState(getEnergy=True).getPotentialEnergy())
+        from perses.tests.utils import compute_potential
+        initial_logP_correction = (self.beta * integrator.getGlobalVariableByName("Einitial") * unit.kilojoules_per_mole) - compute_potential(unmodified_old_system, initial_positions, platform=self.platform)
+        final_logP_correction = self.compute_potential(unmodified_new_system, final_positions, platform=self.platform) - (self.beta * context.getState(getEnergy=True).getPotentialEnergy())
 
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
         return logP_alchemical_correction
