@@ -1782,6 +1782,11 @@ class NaphthaleneProposalEngine(NullProposalEngine):
 
         # map the ring flipped 180
         atom_map = {find_ring[i].index : find_ring[(i+3)%6].index for i in range(6)}
+
+        for atom in topology.atoms():
+            if atom.residue != find_ring[0].residue:
+                atom_map[atom.index] = atom.index
+
         return atom_map
 
 class ButaneProposalEngine(NullProposalEngine):
@@ -1865,6 +1870,11 @@ class ButaneProposalEngine(NullProposalEngine):
             hydrogen0.index : hydrogen1.index,
             hydrogen1.index : hydrogen0.index,
         }
+
+        for atom in topology.atoms():
+            if atom.residue != ccbond[0].residue:
+                atom_map[atom.index] = atom.index
+
         return atom_map
 
 class PropaneProposalEngine(NullProposalEngine):
@@ -1942,5 +1952,8 @@ class PropaneProposalEngine(NullProposalEngine):
             if any([carbon in bond for carbon in ccbond]) and app.element.hydrogen in [atom.element for atom in bond]:
                 atom_map[bond[0].index] = bond[0].index
                 atom_map[bond[1].index] = bond[1].index
+        for atom in topology.atoms():
+            if atom.residue != ccbond[0].residue:
+                atom_map[atom.index] = atom.index
         return atom_map
 
