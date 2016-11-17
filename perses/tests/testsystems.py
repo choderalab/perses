@@ -2067,8 +2067,6 @@ class NullTestSystem(PersesTestSystem):
                 initial_topology = modeller.getTopology()
                 initial_positions = modeller.getPositions()
                 initial_system = system_generators[key].build_system(initial_topology)
-                with open('is_there_water.pdb', 'w') as fo:
-                    app.PDBFile.writeFile(initial_topology, initial_positions, fo)
 
             initial_topology._state_key = proposal_engine._fake_states[0]
 
