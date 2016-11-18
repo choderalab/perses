@@ -335,8 +335,8 @@ def test_angle_logq():
 
 def test_add_bond_units():
     """
-    Test that the geometry engine adds the correct units and value when replacing the default non-unit-bearing parmed
-    parameters by comparing the result to the known original settings.
+    Test that the geometry engine adds the correct units and value to bonds when replacing the default non-unit-bearing parmed
+    parameters by comparing the result to the known original parameters.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
@@ -363,26 +363,44 @@ def test_add_bond_units():
 
 def test_add_angle_units():
     """
-    Make sure that angle units are added correctly to the angle term
+    Test that the geometry engine adds the correct units and value to angles when replacing the default non-unit-bearing parmed
+    parameters by comparing the result to the known original parameters.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a test system with just an angle
     testsystem = FourAtomValenceTestSystem(bond=False, angle=True, torsion=False)
+
+    #Extract this angle
     angle = testsystem.structure.angles[0]
+
+    #Have the GeometryEngine add units to the angle
     angle_with_units = geometry_engine._add_angle_units(angle)
+
+    #Get the parameters from the testsystem
     (theta0, k) = testsystem.angle_parameters
     k_units = k.unit
+
+    #Get the difference between the angle with units added and the original
+    #This serves two purposes: First, checking that the value has not been disturbed
+    #But second, that it has also been created with compatible units correctly.
     angle_difference = angle_with_units.type.theteq - theta0
     force_constant_difference = angle_with_units.type.k - k
+
+    #Check that the absolute value of the differences between the unit-added angle and the reference are less than a 1.0e-6 threshold
     if np.abs(angle_difference.value_in_unit(unit.radians)) > 1.0e-6 or np.abs(force_constant_difference.value_in_unit(k_units)) > 1.0e-6:
         raise Exception("Did not add units correctly to angle.")
 
 def test_add_torsion_units():
     """
-    Make sure torsion units are added correctly to the torsion term
+    Test that the geometry engine adds the correct units and value to torsions when replacing the default non-unit-bearing parmed
+    parameters by comparing the result to the known original parameters.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a testsystem with 
     testsystem = FourAtomValenceTestSystem(bond=False, angle=False, torsion=True)
     torsion = testsystem.structure.dihedrals[0]
     torsion_with_units = geometry_engine._add_torsion_units(torsion)
@@ -917,7 +935,6 @@ def make_geometry_proposal_array(smiles_list, forcefield=['data/gaff.xml']):
         topology_proposals.append(proposal_tuple)
     return topology_proposals
 
-
 def load_pdbid_to_openmm(pdbid):
     """
     create openmm topology without pdb file
@@ -959,7 +976,6 @@ def _guessFileFormat(file, filename):
             return 'pdb'
     file.seek(0)
     return 'pdb'
-
 
 def run_geometry_engine(index=0):
     """
