@@ -459,20 +459,32 @@ def test_torsion_scan():
         if np.abs(r_new - internals[0]) >1.0e-6 or np.abs(theta_new - internals[1]) > 1.0e-6:
             raise Exception("Theta or r was disturbed in torsion scan.")
 
-def test_torsion_log_pmf():
+def test_torsion_log_discrete_pdf():
     """
-    Check that the torsion log pmf is correct
+    Compare the discrete log pdf for the torsion created by the GeometryEngine to one calculated manually in Python.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
+
+    #use 740 points
     n_divisions = 740
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a testsystem with a bond, angle, and torsion
     testsystem = FourAtomValenceTestSystem(bond=True, angle=True, torsion=True)
+
+    #Extract the internal coordinates in appropriate units
     internals = testsystem.internal_coordinates
     r = unit.Quantity(internals[0], unit=unit.nanometer)
     theta = unit.Quantity(internals[1], unit=unit.radian)
+
+    #Get the relevant torsion and add units to it
     torsion = testsystem.structure.dihedrals[0]
     torsion_with_units = geometry_engine._add_torsion_units(torsion)
-    torsion_log_pmf, phis = geometry_engine._torsion_log_pmf(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+
+    #Calculate the torsion log pmf according to the geometry engine
+    torsion_log_pmf, phis = geometry_engine._torsion_log_probability_mass_function(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+
+    #
     manual_torsion_log_pmf = calculate_torsion_potential_manually(beta, torsion_with_units, phis)
     deviation = np.abs(torsion_log_pmf - manual_torsion_log_pmf)
     if np.max(deviation) > 1.0e-4:
@@ -533,7 +545,7 @@ def test_propose_torsion():
     theta = unit.Quantity(internals[1], unit=unit.radian)
     torsion = testsystem.structure.dihedrals[0]
     torsion_with_units = geometry_engine._add_torsion_units(torsion)
-    logp_phis, phis = geometry_engine._torsion_log_pmf(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+    logp_phis, phis = geometry_engine._torsion_log_probability_mass_function(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
     phis_without_units = phis.value_in_unit(unit.radians)
     cdf_func = create_cdf(logp_phis, phis_without_units, n_divisions)
     #Then, draw a set of samples from the same distribution:

@@ -737,7 +737,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._torsion_coordinate_time += torsion_scan_time
         return xyzs_quantity, phis
 
-    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+    def _torsion_log_probability_mass_function(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -838,7 +838,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal.
         """
-        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         division = units.Quantity(2*np.pi/n_divisions, unit=units.radian)
         phi_median_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
         phi_min = phis[phi_median_idx] - division/2.0
@@ -875,7 +875,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         torsion_logp : float
             the logp of this torsion
         """
-        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         phi_idx = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
         torsion_logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         return torsion_logp
@@ -907,7 +907,7 @@ class SplineTorsionGeometryEngine(FFAllAngleGeometryEngine):
 
         """
         import scipy.interpolate as interpolate
-        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         spline = interpolate.UnivariateSpline(phis, np.exp(logp_torsions), k=4)
         Z = spline.integral(-np.pi, np.pi)
         p_phi = spline(phi) / Z
@@ -931,7 +931,7 @@ class SplineTorsionGeometryEngine(FFAllAngleGeometryEngine):
 
         """
         import scipy.interpolate as interpolate
-        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         spline = interpolate.UnivariateSpline(phis, np.exp(logp_torsions), k=4)
         Z = spline.integral(-np.pi, np.pi)
         #now need to find the max of the spline (for constructing a majorizing function)
