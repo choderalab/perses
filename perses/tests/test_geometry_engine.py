@@ -400,31 +400,57 @@ def test_add_torsion_units():
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
 
-    #Create a testsystem with 
+    #Create a testsystem with only a torsion
     testsystem = FourAtomValenceTestSystem(bond=False, angle=False, torsion=True)
+
+    #Extract that torsion
     torsion = testsystem.structure.dihedrals[0]
+
+    #Have the geometry engine add units to the torsion
     torsion_with_units = geometry_engine._add_torsion_units(torsion)
+
+    #Extract the torsion parameters from the testsystem
     (periodicity, phase, k) = testsystem.torsion_parameters
+
+    #Get the absolute values of differences between reference and unit-added torsion parameters
+    #This checks not only that the value is correct, but also that the units are compatible
     periodicity_difference = np.abs(periodicity - torsion_with_units.type.per)
     phase_difference = np.abs(phase - torsion_with_units.type.phase)
     force_difference = np.abs(k - torsion_with_units.type.phi_k)
+
+    #Make sure absolute values of differences are less than 1.0e-6 threshold
     if periodicity_difference > 1.0e-6 or phase_difference.value_in_unit(unit.radians) > 1.0e-6 or force_difference.value_in_unit(k.unit) > 1.0e-6:
         raise Exception("Did not add units correctly to torsion.")
 
 def test_torsion_scan():
     """
-    Test the generation of torsion angles
+    Test that the torsion scan is generating angles that correspond to what openmm calculates. It does this by first generating
+    a set of torsion angles at evenly spaced intervals, then checking that the cartesian coordinates generated from those
+    have the correct torsion angle according to OpenMM. The OpenMM check is achieved via a function that creates a system with
+    a torsion force that is just "phi" allowing us to read out the internal value of the torsion.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
+
+    #do 360 test points
     n_divisions = 360
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a testsystem with only a torsion
     testsystem = FourAtomValenceTestSystem(bond=False, angle=False, torsion=True)
+
+    #get the internal coordinates of the testsystem
     internals = testsystem.internal_coordinates
     r = unit.Quantity(internals[0], unit=unit.nanometer)
     theta = unit.Quantity(internals[1], unit=unit.radian)
+
+    #get the torsion that we're going to rotate
     torsion = testsystem.structure.dihedrals[0]
+
+    #perform the torsion scan with the genometry engine, which returns cartesian coordinates
     xyzs, phis = geometry_engine._torsion_scan(torsion, testsystem.positions, r, theta, n_divisions=n_divisions)
     phis_without_units = phis.value_in_unit(unit.radians)
+
+    #check that the values of phi that OpenMM calculates matches the ones created by the GeometryEngine within 1.0e-6
     for i in range(n_divisions):
         xyz_ge = xyzs[i]
         r_new, theta_new, phi = _get_internal_from_omm(xyz_ge, testsystem.positions[1], testsystem.positions[2], testsystem.positions[3])
