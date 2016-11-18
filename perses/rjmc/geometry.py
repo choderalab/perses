@@ -198,7 +198,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         initial_time = time.time()
         proposal_order_tool = ProposalOrderTools(top_proposal)
         proposal_order_time = time.time() - initial_time
-        growth_system_generator = GeometrySystemGenerator()
         growth_parameter_name = 'growth_stage'
         if direction=="forward":
             forward_init = time.time()
@@ -210,7 +209,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics, add_extra_torsions=False, add_extra_angles=False)
+            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
+            growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
         elif direction=='reverse':
             if new_positions is None:
@@ -218,7 +218,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics, add_extra_torsions=False, add_extra_angles=False)
+            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
+            growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -253,6 +254,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
+        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys())+1, context)
         debug = False
         if debug:
             context.setPositions(self._metadata['reference_positions'])
@@ -263,7 +265,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #now for the main loop:
         logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
         for atom, torsion in atom_proposal_order.items():
-            context.setParameter(growth_parameter_name, growth_parameter_value)
+            growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
@@ -776,9 +778,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             self._position_set_time += position_time
             energy_computation_init = time.time()
             state = growth_context.getState(getEnergy=True)
+            potential_energy = state.getPotentialEnergy()
             energy_computation_time = time.time() - energy_computation_init
             self._energy_time += energy_computation_time
-            logq_i = -beta*state.getPotentialEnergy()
+            logq_i = -beta*potential_energy
             logq[i] = logq_i
 
         if np.sum(np.isnan(logq)) == n_divisions:
@@ -977,6 +980,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         self._n_trials = n_trials
         self.verbose = False
         self.write_proposal_pdb = False
+        raise NotImplementedError("This functionality is not yet tested.")
 
     def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
         """
@@ -1009,7 +1013,6 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         initial_time = time.time()
         proposal_order_tool = ProposalOrderTools(top_proposal)
         proposal_order_time = time.time() - initial_time
-        growth_system_generator = GeometrySystemGenerator()
         growth_parameter_name = "growth_stage"
         if direction=="forward":
             forward_init = time.time()
@@ -1026,7 +1029,8 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=False, add_extra_torsions=False, reference_topology=top_proposal.new_topology)
+            growth_system_generator = GrowthSystem(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=False, add_extra_torsions=False, reference_topology=top_proposal.new_topology)
+            growth_system = growth_system_generator.get_modified_system()
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
@@ -1040,7 +1044,8 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
             oechem.OECanonicalOrderAtoms(res_mol)
             oechem.OETriposAtomNames(res_mol)
             res_smiles = oechem.OEMolToSmiles(res_mol)
-            growth_system = growth_system_generator.create_modified_system(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=True, add_extra_torsions=True, add_extra_angles=True, reference_topology=top_proposal.old_topology)
+            growth_system_generator = GrowthSystem(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, use_sterics=True, add_extra_torsions=True, add_extra_angles=True, reference_topology=top_proposal.old_topology)
+            growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -1079,7 +1084,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         for atom, torsion in atom_proposal_order.items():
-            context.setParameter(growth_parameter_name, growth_parameter_value)
+            growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
@@ -1812,10 +1817,22 @@ class GeometrySystemGenerator(object):
     _HarmonicAngleForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
     _PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
-    def __init__(self, verbose=False):
+    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=False):
         """
         Parameters
         ----------
+        reference_system : simtk.openmm.System object
+            The system containing the relevant forces and particles
+        growth_indices : list of atom
+            The order in which the atom indices will be proposed
+        parameter_name : str
+            The name of the global context parameter
+        add_extra_torsions : bool, optional
+            Whether to add additional torsions to keep rings flat. Default true.
+        force_names : list of str
+            A list of the names of forces that will be included in this system
+        force_parameters : dict
+            Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
         verbose : bool, optional, default=False
             If True, will print verbose output.
 
@@ -1843,29 +1860,6 @@ class GeometrySystemGenerator(object):
 
         self.verbose = verbose
 
-    def create_modified_system(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None):
-        """
-        Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
-        for each integer above 0, an additional atom is made interacting, with order determined by growth_index
-        Parameters
-        ----------
-        reference_system : simtk.openmm.System object
-            The system containing the relevant forces and particles
-        growth_indices : list of atom
-            The order in which the atom indices will be proposed
-        parameter_name : str
-            The name of the global context parameter
-        add_extra_torsions : bool, optional
-            Whether to add additional torsions to keep rings flat. Default true.
-        force_names : list of str
-            A list of the names of forces that will be included in this system
-        force_parameters : dict
-            Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
-        Returns
-        -------
-        growth_system : simtk.openmm.System object
-            System with the appropriate modifications
-        """
         # Get list of particle indices for new and old atoms.
         new_particle_indices = [ atom.idx for atom in growth_indices ]
         old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in new_particle_indices]
@@ -1993,10 +1987,31 @@ class GeometrySystemGenerator(object):
                 raise ValueError("Need to specify topology in order to add extra angles")
             self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
 
-        return growth_system
+        # Store growth system
+        self._growth_parameter_name = parameter_name
+        self._growth_system = growth_system
 
+    def set_growth_parameter_index(self, growth_parameter_index, context=None):
+        """
+        Set the growth parameter index
+        """
+        # TODO: Set default force global parameters if context is not None.
+        if context is not None:
+            context.setParameter(self._growth_parameter_name, growth_parameter_index)
 
-    def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices, heavy_torsions_only=False):
+    def get_modified_system(self):
+        """
+        Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
+        for each integer above 0, an additional atom is made interacting, with order determined by growth_index
+
+        Returns
+        -------
+        growth_system : simtk.openmm.System object
+            System with the appropriate modifications
+        """
+        return self._growth_system
+
+    def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
         """
         Determine which atoms need an extra torsion. First figure out which residue is
         covered by the new atoms, then determine the rotatable bonds. Finally, construct
@@ -2011,8 +2026,6 @@ class GeometrySystemGenerator(object):
             the new/old topology if forward/backward
         growth_indices : list of atom
             The list of new atoms and the order in which they will be added.
-        heavy_torsions_only : Boolean, default False
-            Whether to only add torsions for heavy atoms (not hydrogens)
 
         Returns
         -------
@@ -2059,10 +2072,7 @@ class GeometrySystemGenerator(object):
         rotor = oechem.OEIsRotor()
         torsion_predicate = oechem.OENotBond(rotor)
         non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
-        if heavy_torsions_only:
-            relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
-        else:
-            relevant_torsion_list = non_rotor_torsions
+        relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
@@ -2071,8 +2081,6 @@ class GeometrySystemGenerator(object):
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
-            if -1 in atom_indices:
-                continue
             # Determine phase in [-pi,+pi) interval
             #phase = (np.pi)*units.radians+angle
             phase = torsion.radians + np.pi # TODO: Check that this is the correct convention?
@@ -2085,7 +2093,14 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
             #print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
-            torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
+            #If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
+            #If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
+            if isinstance(torsion_force, openmm.CustomTorsionForce):
+                torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
+            elif isinstance(torsion_force, openmm.PeriodicTorsionForce):
+                torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], periodicity, phase, k)
+            else:
+                raise ValueError("The force supplied to this method must be either a CustomTorsionForce or a PeriodicTorsionForce")
 
         return torsion_force
 
@@ -2108,7 +2123,7 @@ class GeometrySystemGenerator(object):
                 heavy_torsions.append(torsion)
         return heavy_torsions
 
-    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices, heavy_atoms_only=False):
+    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices):
         """
         Determine extra angles to be placed on aromatic ring members. Sometimes,
         the native angle force is too weak to efficiently close the ring. As with the
@@ -2121,8 +2136,6 @@ class GeometrySystemGenerator(object):
         reference_topology : simtk.openmm.app.Topology
             new/old topology if forward/backward
         growth_indices : list of parmed.atom
-        heavy_atoms_only : Boolean, default False
-            Only add angles for heavy atoms.
 
         Returns
         -------
@@ -2154,10 +2167,7 @@ class GeometrySystemGenerator(object):
         #TODO: find out if that's really true
         aromatic_pred = oechem.OEIsAromaticAtom()
         heavy_pred = oechem.OEIsHeavy()
-        if heavy_atoms_only:
-            angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
-        else:
-            angle_criteria = aromatic_pred
+        angle_criteria = oechem.OEAndAtom(aromatic_pred, heavy_pred)
 
         #get all heavy aromatic atoms:
         #TODO: do this more efficiently
@@ -2170,7 +2180,14 @@ class GeometrySystemGenerator(object):
                     atom_indices = [angle_atoms[0].GetData("topology_index"), atom.GetData("topology_index"), angle_atoms[1].GetData("topology_index")]
                     angle_radians = angle*units.radian
                     growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
-                    angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], [angle_radians,angle_force_constant, growth_idx])
+                    #If this is a CustomAngleForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
+                    #If it's a regular HarmonicAngleForce, there is no growth_index and the parameters are passed separately.
+                    if isinstance(angle_force, openmm.CustomAngleForce):
+                        angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], [angle_radians, angle_force_constant, growth_idx])
+                    elif isinstance(angle_force, openmm.HarmonicAngleForce):
+                        angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], angle_radians, angle_force_constant)
+                    else:
+                        raise ValueError("Angle force must be either CustomAngleForce or HarmonicAngleForce")
         return angle_force
 
 
@@ -2199,6 +2216,139 @@ class GeometrySystemGenerator(object):
             return 0
         new_atom_growth_order = [growth_indices_list.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
+
+class GeometrySystemGeneratorFast(GeometrySystemGenerator):
+    """
+    Use updateParametersInContext to make energy evaluation fast.
+    """
+
+    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=False):
+        """
+        Parameters
+        ----------
+        reference_system : simtk.openmm.System object
+            The system containing the relevant forces and particles
+        growth_indices : list of atom
+            The order in which the atom indices will be proposed
+        parameter_name : str
+            The name of the global context parameter
+        add_extra_torsions : bool, optional
+            Whether to add additional torsions to keep rings flat. Default true.
+        force_names : list of str
+            A list of the names of forces that will be included in this system
+        force_parameters : dict
+            Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
+        verbose : bool, optional, default=False
+            If True, will print verbose output.
+
+        NB: We assume `reference_system` remains unmodified
+
+        """
+        self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
+
+        self.verbose = verbose
+
+        # Get list of particle indices for new and old atoms.
+        self._new_particle_indices = [ atom.idx for atom in growth_indices ]
+        self._old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in self._new_particle_indices]
+        self._growth_indices = growth_indices
+
+        # Determine forces to keep
+        forces_to_keep = ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce']
+        if use_sterics:
+            forces_to_keep += ['NonbondedForce']
+
+        # Create reference system, removing forces we won't use
+        self._reference_system = copy.deepcopy(reference_system)
+        force_indices_to_remove = list()
+        for force_index in range(self._reference_system.getNumForces()):
+            force = self._reference_system.getForce(force_index)
+            force_name = force.__class__.__name__
+            if force_name not in forces_to_keep:
+                force_indices_to_remove.append(force_index)
+        for force_index in force_indices_to_remove[::-1]:
+            self._reference_system.removeForce(force_index)
+
+        # Create new system, copying forces we will keep.
+        self._growth_system = copy.deepcopy(self._reference_system)
+
+        #Extract the forces from the system to use for adding auxiliary angles and torsions
+        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
+
+
+        # Zero all parameters
+        self.set_growth_parameter_index(0)
+
+        # Add extra ring-closing torsions, if requested.
+        if add_extra_torsions:
+            if reference_topology==None:
+                raise ValueError("Need to specify topology in order to add extra torsions.")
+            self._determine_extra_torsions(reference_forces['PeriodicTorsionForce'], reference_topology, growth_indices)
+        if add_extra_angles:
+            if reference_topology==None:
+                raise ValueError("Need to specify topology in order to add extra angles")
+            self._determine_extra_angles(reference_forces['HarmonicAngleForce'], reference_topology, growth_indices)
+        # TODO: Precompute growth indices for force terms for speed
+
+    def set_growth_parameter_index(self, growth_index, context=None):
+        """
+        Set the growth parameter index
+        """
+        for (growth_force, reference_force) in zip(self._growth_system.getForces(), self._reference_system.getForces()):
+            force_name = growth_force.__class__.__name__
+            if (force_name == 'HarmonicBondForce'):
+                for bond in range(reference_force.getNumBonds()):
+                    parameters = reference_force.getBondParameters(bond)
+                    this_growth_index = self._calculate_growth_idx(parameters[:2], self._growth_indices)
+                    if (growth_index < this_growth_index):
+                        parameters[3] *= 0.0
+                    growth_force.setBondParameters(bond, *parameters)
+            elif (force_name == 'HarmonicAngleForce'):
+                for angle in range(reference_force.getNumAngles()):
+                    parameters = reference_force.getAngleParameters(angle)
+                    this_growth_index = self._calculate_growth_idx(parameters[:3], self._growth_indices)
+                    if (growth_index < this_growth_index):
+                        parameters[4] *= 0.0
+                    growth_force.setAngleParameters(angle, *parameters)
+            elif (force_name == 'PeriodicTorsionForce'):
+                for torsion in range(reference_force.getNumTorsions()):
+                    parameters = reference_force.getTorsionParameters(torsion)
+                    this_growth_index = self._calculate_growth_idx(parameters[:4], self._growth_indices)
+                    if (growth_index < this_growth_index):
+                        parameters[6] *= 0.0
+                    growth_force.setTorsionParameters(torsion, *parameters)
+            elif (force_name == 'NonbondedForce'):
+                for particle_index in range(reference_force.getNumParticles()):
+                    parameters = reference_force.getParticleParameters(particle_index)
+                    this_growth_index = self._calculate_growth_idx([particle_index], self._growth_indices)
+                    if (growth_index < this_growth_index):
+                        parameters[0] *= 0.0
+                        parameters[2] *= 0.0
+                    growth_force.setParticleParameters(particle_index, *parameters)
+                for exception_index in range(reference_force.getNumExceptions()):
+                    parameters = reference_force.getExceptionParameters(exception_index)
+                    this_growth_index = self._calculate_growth_idx(parameters[:2], self._growth_indices)
+                    if (growth_index < this_growth_index):
+                        parameters[2] *= 0.0
+                        parameters[4] *= 0.0
+                    growth_force.setExceptionParameters(exception_index, *parameters)
+
+            # Update parameters in context
+            if context is not None:
+                growth_force.updateParametersInContext(context)
+
+class PredHBond(oechem.OEUnaryBondPred):
+    """
+    Example elaborating usage on:
+    https://docs.eyesopen.com/toolkits/python/oechemtk/predicates.html#section-predicates-match
+    """
+    def __call__(self, bond):
+        atom1 = bond.GetBgn()
+        atom2 = bond.GetEnd()
+        if atom1.IsHydrogen() or atom2.IsHydrogen():
+            return True
+        else:
+            return False
 
 
 class ProposalOrderTools(object):
