@@ -294,6 +294,39 @@ def benchmark_exen_ncmc_null_protocols():
                 mean[ncmc_nsteps], sigma[ncmc_nsteps] = method(NullProposal, ncmc_nsteps=ncmc_nsteps)
             plot_exen_logP(molecule_name, scheme, mean, sigma)
 
+def plot_logPs(logps, molecule_name, scheme, component):
+    x = logps.keys()
+    x.sort()
+    y = [logps[steps].mean() for steps in x]
+    dy = [logps[steps].std() for steps in x]
+    plt.fill_between(x, [mean - dev for mean, dev in zip(y, dy)], [mean + dev for mean, dev in zip(y, dy)])
+    plt.plot(x, y, 'k')
+    plt.xscale('log')
+
+    plt.title("Log acceptance probability of {0} ExpandedEnsemble for {1}".format(scheme, molecule_name))
+    plt.ylabel('logP')
+    plt.xlabel('ncmc steps')
+    plt.savefig('{0}_{1}_{2}{3}_logP'.format(ENV, molecule_name, scheme, component))
+    print('Saved plot to {0}_{1}_{2}{3}_logP.png'.format(ENV, molecule_name, scheme, component))
+    plt.clf()
+
+def benchmark_exen_ncmc_protocol(analyses, molecule_name, scheme):
+    components = {
+        'logp_accept' : 'EXEN',
+        'logp_ncmc' : 'NCMC',
+    }
+
+    for component in components.keys():
+        print('Finding {0} over nsteps for {1} with {2} NCMC'.format(component, molecule_name, scheme))
+        logps = dict()
+        for nsteps, analysis in analyses.items():
+            ee_sam = analysis._ncfile.groups['ExpandedEnsembleSampler']
+            niterations = ee_sam.variables[component].shape[0]
+            logps[nsteps] = np.zeros(niterations, np.float64)
+            for n in range(niterations):
+                logps[nsteps][n] = ee_sam.variables[component][n]
+        plot_logPs(logps, molecule_name, scheme, components[component])
+
 def benchmark_ncmc_work_during_protocol():
     from perses.tests.testsystems import NaphthaleneTestSystem, ButaneTestSystem, PropaneTestSystem
     from perses.analysis import Analysis
@@ -313,18 +346,24 @@ def benchmark_ncmc_work_during_protocol():
     for molecule_name, NullProposal in molecule_names.items():
         print('\nNow testing {0} null transformations'.format(molecule_name))
         for name, [scheme, functions] in methods.items():
-            testsystem = NullProposal(storage_filename='{0}_{1}.nc'.format(molecule_name, name), scheme=scheme, options={'functions' : functions, 'nsteps' : 1000})
-            testsystem.exen_samplers['vacuum'].verbose = False
-            if name == 'hybrid':
-                testsystem.exen_samplers['vacuum'].ncmc_engine.softening = 0.0
-            testsystem.exen_samplers['vacuum'].run(niterations=niterations)
+            analyses = dict()
+            for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+                print('Running {0} {2} ExpandedEnsemble steps for {1} iterations'.format(ncmc_nsteps, niterations, name))
+                testsystem = NullProposal(storage_filename='{0}_{1}-{2}steps.nc'.format(molecule_name, name, ncmc_nsteps), scheme=scheme, options={'functions' : functions, 'nsteps' : ncmc_nsteps})
+                testsystem.exen_samplers['vacuum'].verbose = False
+                if name == 'hybrid':
+                    testsystem.exen_samplers['vacuum'].ncmc_engine.softening = 0.0
+                testsystem.exen_samplers['vacuum'].run(niterations=niterations)
 
-            analysis = Analysis(testsystem.storage_filename)
-            print(analysis.get_environments())
-            analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_1000_steps.pdf'.format(molecule_name, name))
+                analysis = Analysis(testsystem.storage_filename)
+                print(analysis.get_environments())
+                if ncmc_nsteps > 99:
+                    analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_{2}_steps.pdf'.format(molecule_name, name, ncmc_nsteps))
+                analysis.plot_exen_logp_components()
+                analyses[ncmc_nsteps] = analysis
+            benchmark_exen_ncmc_protocol(analyses, molecule_name, name)
+
 
 if __name__ == "__main__":
     benchmark_ncmc_work_during_protocol()
-#    benchmark_ncmc_null_protocols()
-    benchmark_exen_ncmc_null_protocols()
 
