@@ -89,11 +89,11 @@ class Analysis(object):
 
         """
         with PdfPages(filename) as pdf:
-            for envname in self.get_environments():
-                modname = 'NCMCEngine'
+            for envname in ['NCMCEngine', 'NCMCHybridEngine']: #self.get_environments():
+                modname = envname
                 work = dict()
                 for direction in ['delete', 'insert']:
-                    varname = '/' + envname + '/' + modname + '/' + 'work_' + direction
+                    varname = '/' + modname + '/' + 'work_' + direction
                     try:
                         # TODO: For now, we analyze all but the last sample, so that this can be run on active simulations.
                         # Later, we should find some way to omit the last sample only if it is nonsensical.
@@ -107,10 +107,10 @@ class Analysis(object):
                     """
                     plt.figure(figsize=(12, 8))
 
-                    nrows = 2
+                    nrows = len(work.keys())
                     ncols = 6
                     workcols = 2
-                    for (row, direction) in enumerate(['delete', 'insert']):
+                    for (row, direction) in enumerate(work.keys()):
                         #
                         # Plot work vs step
                         #

@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 # NUMBER OF ATTEMPTS
 ################################################################################
 niterations = 50
-ENV = 'vacuum'
+ENV = 'explicit'
 ################################################################################
 # CONSTANTS
 ################################################################################
@@ -33,18 +33,21 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 
-def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds, platform=None):
-    integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
-    if platform == None:
-        context = openmm.Context(system, integrator)
-    else:
-        context = openmm.Context(system, integrator, platform)
-    context.setPositions(positions)
-    context.setVelocitiesToTemperature(temperature)
-    integrator.step(nsteps)
-    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-    velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
-    return [positions, velocities]
+functions_hybrid = {
+    'lambda_sterics' : 'lambda',
+    'lambda_electrostatics' : 'lambda',
+    'lambda_bonds' : '1.0',
+    'lambda_angles' : '0.1*lambda+0.9',
+    'lambda_torsions' : '0.7*lambda+0.3'
+}
+functions_twostage = {
+    'lambda_sterics' : '(2*lambda)^4 * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+    'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+    'lambda_bonds' : '1.0', # don't soften bonds
+    'lambda_angles' : '0.1*lambda+0.9', # don't soften angles
+    'lambda_torsions' : '0.7*lambda+0.3'
+}
+
 
 def check_hybrid_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
@@ -61,32 +64,23 @@ def check_hybrid_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6.0, 
     geometry : bool, optional, default=None
         If True, will also use geometry engine in the middle of the null transformation.
     """
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0',  
-        'lambda_angles' : '0.1*lambda+0.9', 
-        'lambda_torsions' : '0.7*lambda+0.3'
-    }
+    functions = functions_hybrid
 
     testsystem = NullProposal(storage_filename=None, scheme='geometry-ncmc-geometry',options={'functions': functions, 'nsteps': ncmc_nsteps})
     for key in [ENV]: #testsystem.environments: # only one key: vacuum
         # run a single iteration to generate item in number_of_state_visits dict
+        exen_sampler = testsystem.exen_samplers[key]
+        exen_sampler.verbose = False
         ncmc_engine = testsystem.exen_samplers[key].ncmc_engine
+        exen_sampler.run(niterations=5)
 
-        topology = testsystem.topologies[key]
-        system = testsystem.system_generators[key].build_system(topology)
+        topology = exen_sampler.topology
+        system = exen_sampler.sampler.sampler_state.system
         topology_proposal = testsystem.proposal_engines[key].propose(system, topology)
-        positions = testsystem.positions[key]
+        positions = exen_sampler.sampler.sampler_state.positions
 
-    nequil = 5 # number of equilibration iterations
     logP_n = np.zeros([niterations], np.float64)
-    for iteration in range(nequil):
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
-        # Equilibrate
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
-
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
             raise Exception("Positions became NaN during equilibration")
@@ -120,34 +114,25 @@ def check_alchemical_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6
     geometry : bool, optional, default=None
         If True, will also use geometry engine in the middle of the null transformation.
     """
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '0.1*lambda+0.9', # don't soften angles
-        'lambda_torsions' : '0.7*lambda+0.3'
-    }
+    functions = functions_twostage
     testsystem = NullProposal(storage_filename=None, scheme='ncmc-geometry-ncmc',options={'functions': functions, 'nsteps': ncmc_nsteps})
 
     for key in [ENV]: #testsystem.environments: # only one key: vacuum
         # run a single iteration to generate item in number_of_state_visits dict
+        exen_sampler = testsystem.exen_samplers[key]
+        exen_sampler.verbose = False
         ncmc_engine = testsystem.exen_samplers[key].ncmc_engine
+        exen_sampler.run(niterations=5)
 
-        topology = testsystem.topologies[key]
-        system = testsystem.system_generators[key].build_system(topology)
+        topology = exen_sampler.topology
+        system = exen_sampler.sampler.sampler_state.system
         topology_proposal = testsystem.proposal_engines[key].propose(system, topology)
-        positions = testsystem.positions[key]
+        positions = exen_sampler.sampler.sampler_state.positions
 
-    nequil = 5 # number of equilibration iterations
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
     logP_switch_n = np.zeros([niterations], np.float64)
-    for iteration in range(nequil):
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
-        # Equilibrate
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
-
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
             raise Exception("Positions became NaN during equilibration")
@@ -228,7 +213,7 @@ def benchmark_ncmc_null_protocols():
         'propane' : PropaneTestSystem,
     }
     methods = {
-        'hybrid' : check_hybrid_null_elimination,
+#        'hybrid' : check_hybrid_null_elimination,
         'two-stage' : check_alchemical_null_elimination,
     }
     for molecule_name, NullProposal in molecule_names.items():
@@ -252,20 +237,11 @@ def check_alchemical_exen(NullProposal, scheme, ncmc_nsteps, functions):
         topology_proposal = testsystem.proposal_engines[key].propose(system, topology)
         positions = testsystem.positions[key]
 
-    nequil = 5 # number of equilibration iterations
-    for iteration in range(nequil):
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
     testsystem.positions[ENV] = positions
     return testsystem, exen_sampler
 
 def check_hybrid_exen(NullProposal, ncmc_nsteps=50):
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0',
-        'lambda_angles' : '0.1*lambda+0.9',
-        'lambda_torsions' : '0.7*lambda+0.3'
-    }
+    functions = functions_hybrid
     testsystem, exen_sampler = check_alchemical_exen(NullProposal, 'geometry-ncmc-geometry', ncmc_nsteps, functions)
     logP_n = np.zeros([niterations], np.float64)
     for iteration in range(niterations):
@@ -277,13 +253,7 @@ def check_hybrid_exen(NullProposal, ncmc_nsteps=50):
     return logP_n.mean(), logP_n.std()
 
 def check_twostage_exen(NullProposal, ncmc_nsteps=50):
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '0.1*lambda+0.9', # don't soften angles
-        'lambda_torsions' : '0.7*lambda+0.3'
-    }
+    functions = functions_twostage
     testsystem, exen_sampler = check_alchemical_exen(NullProposal, 'ncmc-geometry-ncmc', ncmc_nsteps, functions)
     logP_n = np.zeros([niterations], np.float64)
     for iteration in range(niterations):
@@ -324,6 +294,37 @@ def benchmark_exen_ncmc_null_protocols():
                 mean[ncmc_nsteps], sigma[ncmc_nsteps] = method(NullProposal, ncmc_nsteps=ncmc_nsteps)
             plot_exen_logP(molecule_name, scheme, mean, sigma)
 
+def benchmark_ncmc_work_during_protocol():
+    from perses.tests.testsystems import NaphthaleneTestSystem, ButaneTestSystem, PropaneTestSystem
+    from perses.analysis import Analysis
+    import netCDF4 as netcdf
+    import pickle
+    import codecs
+    molecule_names = {
+        'naphthalene' : NaphthaleneTestSystem,
+        'butane' : ButaneTestSystem,
+        'propane' : PropaneTestSystem,
+    }
+    methods = {
+        'hybrid' : ['geometry-ncmc-geometry', functions_hybrid],
+        'two-stage' : ['ncmc-geometry-ncmc', functions_twostage],
+    }
+
+    for molecule_name, NullProposal in molecule_names.items():
+        print('\nNow testing {0} null transformations'.format(molecule_name))
+        for name, [scheme, functions] in methods.items():
+            testsystem = NullProposal(storage_filename='{0}_{1}.nc'.format(molecule_name, name), scheme=scheme, options={'functions' : functions, 'nsteps' : 1000})
+            testsystem.exen_samplers['vacuum'].verbose = False
+            if name == 'hybrid':
+                testsystem.exen_samplers['vacuum'].ncmc_engine.softening = 0.0
+            testsystem.exen_samplers['vacuum'].run(niterations=niterations)
+
+            analysis = Analysis(testsystem.storage_filename)
+            print(analysis.get_environments())
+            analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_1000_steps.pdf'.format(molecule_name, name))
+
 if __name__ == "__main__":
+    benchmark_ncmc_work_during_protocol()
+#    benchmark_ncmc_null_protocols()
     benchmark_exen_ncmc_null_protocols()
 

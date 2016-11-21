@@ -820,7 +820,7 @@ class ExpandedEnsembleSampler(object):
             self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         elif scheme=='geometry-ncmc-geometry':
             from perses.annihilation.ncmc_switching import NCMCHybridEngine
-            self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
+            self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
         self.geometry_engine = geometry_engine
@@ -858,6 +858,157 @@ class ExpandedEnsembleSampler(object):
         if state_key not in self.log_weights:
             self.log_weights[state_key] = 0.0
         return self.log_weights[state_key]
+
+    def _geometry_forward(self, topology_proposal, old_positions):
+        if self.verbose: print("Geometry engine proposal...")
+        # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
+        initial_time = time.time()
+        new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, old_positions, self.sampler.thermodynamic_state.beta)
+        if self.verbose: print('proposal took %.3f s' % (time.time() - initial_time))
+
+        if self.geometry_pdbfile is not None:
+            print("Writing proposed geometry...")
+            from simtk.openmm.app import PDBFile
+            PDBFile.writeFile(topology_proposal.new_topology, new_positions, file=self.geometry_pdbfile)
+            self.geometry_pdbfile.flush()
+
+        return new_positions, geometry_logp_propose
+
+    def _geometry_reverse(self, topology_proposal, new_positions, old_positions):
+        if self.verbose: print("Geometry engine logP_reverse calculation...")
+        initial_time = time.time()
+        geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, self.sampler.thermodynamic_state.beta)
+        if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
+        return geometry_logp_reverse
+
+    def _ncmc_insert(self, topology_proposal, ncmc_old_positions):
+        if self.verbose: print("Performing NCMC insertion")
+        # Alchemically introduce new atoms.
+        initial_time = time.time()
+        [ncmc_new_positions, ncmc_introduction_logp, potential_insert] = self.ncmc_engine.integrate(topology_proposal, ncmc_old_positions, direction='insert', iteration=self.iteration)
+        if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
+        # Check that positions are not NaN
+        if np.any(np.isnan(ncmc_new_positions)):
+            raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
+        return ncmc_new_positions, ncmc_introduction_logp, potential_insert
+
+    def _ncmc_delete(self, topology_proposal, ncmc_old_positions):
+        if self.verbose: print("Performing NCMC annihilation")
+        # Alchemically eliminate atoms being removed.
+        [ncmc_old_positions, ncmc_elimination_logp, potential_delete] = self.ncmc_engine.integrate(topology_proposal, ncmc_old_positions, direction='delete', iteration=self.iteration)
+        # Check that positions are not NaN
+        if np.any(np.isnan(ncmc_old_positions)):
+            raise Exception("Positions are NaN after NCMC delete with %d steps" % self._switching_nsteps)
+        return ncmc_old_positions, ncmc_elimination_logp, potential_delete
+
+    def _ncmc_hybrid(self, topology_proposal, old_positions, new_positions):
+        if self.verbose: print("Performing NCMC switching")
+        initial_time = time.time()
+        [ncmc_new_positions, ncmc_old_positions, ncmc_logp] = self.ncmc_engine.integrate(topology_proposal, old_positions, new_positions, iteration=self.iteration)
+        if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
+        # Check that positions are not NaN
+        if np.any(np.isnan(ncmc_new_positions)):
+            raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
+        return ncmc_new_positions, ncmc_old_positions, ncmc_logp
+
+    def _geometry_ncmc_geometry(self, topology_proposal, positions, old_log_weight, new_log_weight):
+        if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
+
+        geometry_old_positions = positions
+        geometry_new_positions, geometry_logp_propose = self._geometry_forward(topology_proposal, geometry_old_positions)
+
+        ncmc_new_positions, ncmc_old_positions, ncmc_logp = self._ncmc_hybrid(topology_proposal, positions, geometry_new_positions)
+
+        geometry_logp_reverse = self._geometry_reverse(topology_proposal, ncmc_new_positions, ncmc_old_positions)
+        geometry_logp = geometry_logp_reverse - geometry_logp_propose
+
+        # Compute total log acceptance probability, including all components.
+        logp_accept = topology_proposal.logp_proposal + geometry_logp + ncmc_logp + new_log_weight - old_log_weight
+        if self.verbose:
+            print("logp_accept = %+10.4e [logp_proposal = %+10.4e, geometry_logp = %+10.4e, ncmc_logp = %+10.4e, old_log_weight = %+10.4e, new_log_weight = %+10.4e]"
+                % (logp_accept, topology_proposal.logp_proposal, geometry_logp, ncmc_logp, old_log_weight, new_log_weight))
+        # Write to storage.
+        if self.storage:
+            self.storage.write_quantity('logp_ncmc', ncmc_logp, iteration=self.iteration)
+            self.storage.write_quantity('logp_geometry', geometry_logp, iteration=self.iteration)
+            self.storage.write_quantity('new_log_weight', new_log_weight, iteration=self.iteration)
+            self.storage.write_quantity('old_log_weight', old_log_weight, iteration=self.iteration)
+
+        return logp_accept, ncmc_new_positions
+
+    def _ncmc_geometry_ncmc(self, topology_proposal, positions, old_log_weight, new_log_weight):
+        if self.verbose: print("Updating chemical state with ncmc-geometry-ncmc scheme...")
+
+        initial_time = time.time()
+        ncmc_old_positions, ncmc_elimination_logp, potential_delete = self._ncmc_delete(topology_proposal, positions)
+
+        geometry_old_positions = ncmc_old_positions
+        geometry_new_positions, geometry_logp_propose = self._geometry_forward(topology_proposal, geometry_old_positions)
+
+        geometry_logp_reverse = self._geometry_reverse(topology_proposal, geometry_new_positions, geometry_old_positions)
+        geometry_logp = geometry_logp_reverse - geometry_logp_propose
+
+        ncmc_new_positions, ncmc_introduction_logp, potential_insert = self._ncmc_insert(topology_proposal, geometry_new_positions)
+
+        # Compute change in eliminated potential contribution.
+        switch_logp = - (potential_insert - potential_delete)
+
+        # Compute total log acceptance probability, including all components.
+        logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_elimination_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
+        if self.verbose:
+            print("logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_elimination_logp %+10.4e ncmc_introduction_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
+                % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_elimination_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
+
+        elapsed_time = time.time() - initial_time
+
+        # Write to storage.
+        if self.storage:
+            self.storage.write_quantity('logp_ncmc_elimination', ncmc_elimination_logp, iteration=self.iteration)
+            self.storage.write_quantity('logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
+            self.storage.write_quantity('update_state_elapsed_time', elapsed_time, iteration=self.iteration)
+            self.storage.write_quantity('logp_switch', switch_logp, iteration=self.iteration)
+            self.storage.write_quantity('logp_geometry', geometry_logp, iteration=self.iteration)
+            self.storage.write_quantity('new_log_weight', new_log_weight, iteration=self.iteration)
+            self.storage.write_quantity('old_log_weight', old_log_weight, iteration=self.iteration)
+
+        return logp_accept, ncmc_new_positions
+
+    def _geometry_ncmc(self, topology_proposal, positions, old_log_weight, new_log_weight):
+        raise(NotImplementedError("ExpandedEnsembleSampler scheme 'geometry-ncmc' has not been statistically validated and should not be used."))
+        from perses.tests.utils import compute_potential
+        if self.verbose: print("Updating chemical state with geometry-ncmc scheme...")
+
+        initial_time = time.time()
+        potential_delete = self.sampler.thermodynamic_state.beta * compute_potential(system, positions, platform=self.ncmc_engine.platform)
+
+        geometry_old_positions = positions
+        geometry_new_positions, geometry_logp_propose = self._geometry_forward(topology_proposal, geometry_old_positions)
+
+        geometry_logp_reverse = self._geometry_reverse(topology_proposal, geometry_new_positions, geometry_old_positions)
+        geometry_logp = geometry_logp_reverse - geometry_logp_propose
+
+        ncmc_new_positions, ncmc_introduction_logp, potential_insert = self._ncmc_insert(topology_proposal, geometry_new_positions)
+
+        # Compute change in eliminated potential contribution.
+        switch_logp = - (potential_insert - potential_delete)
+
+        # Compute total log acceptance probability, including all components.
+        logp_accept = topology_proposal.logp_proposal + geometry_logp + switch_logp + ncmc_introduction_logp + new_log_weight - old_log_weight
+        if self.verbose:
+            print("logp_accept = %+10.4e [logp_proposal %+10.4e geometry_logp %+10.4e switch_logp %+10.4e ncmc_introduction_logp %+10.4e old_log_weight %+10.4e new_log_weight %+10.4e]"
+                % (logp_accept, topology_proposal.logp_proposal, geometry_logp, switch_logp, ncmc_introduction_logp, old_log_weight, new_log_weight))
+        elapsed_time = time.time() - initial_time
+
+        # Write to storage.
+        if self.storage:
+            self.storage.write_quantity('logp_ncmc_introduction', ncmc_introduction_logp, iteration=self.iteration)
+            self.storage.write_quantity('update_state_elapsed_time', elapsed_time, iteration=self.iteration)
+            self.storage.write_quantity('logp_switch', switch_logp, iteration=self.iteration)
+            self.storage.write_quantity('logp_geometry', geometry_logp, iteration=self.iteration)
+            self.storage.write_quantity('new_log_weight', new_log_weight, iteration=self.iteration)
+            self.storage.write_quantity('old_log_weight', old_log_weight, iteration=self.iteration)
+
+        return logp_accept, ncmc_new_positions
 
     def update_positions(self):
         """
