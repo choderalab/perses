@@ -141,8 +141,8 @@ class Analysis(object):
                 col = spot%2
                 plt.subplot2grid((nrows,ncols),(row,col))
                 plt.hist(logps[component])
-                plt.title("Contribution of {0} to log acceptance probability in ExpandedEnsembleSampler".format(component))
-                plt.xlabel(component)
+                plt.title(component)
+                #plt.xlabel(component)
             pdf.savefig()
             plt.close()
 
