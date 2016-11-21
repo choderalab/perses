@@ -2276,6 +2276,10 @@ def run_null_system(testsystem):
         print(testsystem.exen_samplers[key].number_of_state_visits)
         print("Acceptances in {0} iterations: {1}".format(testsystem.exen_samplers[key].iteration, testsystem.exen_samplers[key].naccepted))
 
+        from perses.analysis import Analysis
+        analysis = Analysis(testsystem.storage_filename)
+        analysis.plot_exen_logp_components()
+
         ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
         ee_sam = ncfile.groups['ExpandedEnsembleSampler']
         niterations = ee_sam.variables['logp_accept'].shape[0]

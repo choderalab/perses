@@ -79,6 +79,57 @@ class Analysis(object):
         # TODO
         pass
 
+    def plot_exen_logp_components(self):
+        """
+        Generate histograms of each component of Expanded Ensemble log acceptance probability
+        Components may include:
+            logp_topology_proposal
+            logp_geometry
+                logp_geometry_propose
+                logp_geometry_reverse
+            logp_switch                       (not present in 'geometry-ncmc-geometry' scheme)
+            logp_ncmc_elimination             ('ncmc-geometry-ncmc' scheme only)
+            logp_ncmc_introduction            (not present in 'geometry-ncmc-geometry' scheme)
+            logp_ncmc                         ('geometry-ncmc-geometry' scheme only)
+            new_log_weight
+            old_log_weight
+
+        Each histogram will be saved to {component name}.png
+        TODO: include input filename
+            storage ncfile has different hierarchy depending on which samplers are defined;
+            this probably only works without SAMS sampling (otherwise top level groups are
+            environments)
+
+        """
+        components = [
+            'logp_topology_proposal',
+            'logp_geometry',
+            'logp_geometry_propose',
+            'logp_geometry_reverse',
+            'logp_switch', 
+            'logp_ncmc_elimination',
+            'logp_ncmc_introduction',
+            'logp_ncmc',
+            'new_log_weight',
+            'old_log_weight',
+        ]
+
+        ee_sam = self._ncfile.groups['ExpandedEnsembleSampler']
+        for component in components:
+            try:
+                niterations = ee_sam.variables[component].shape[0]
+            except:
+                continue
+            logps = np.zeros(niterations, np.float64)
+            for n in range(niterations):
+                logps[n] = ee_sam.variables[component][n]
+            plt.hist(logps)
+            plt.title("Contribution of {0} to log acceptance probability in ExpandedEnsembleSampler".format(component))
+            plt.xlabel(component)
+            plt.savefig(component)
+            plt.clf()
+
+
     def plot_ncmc_work(self, filename):
         """Generate plots of NCMC work.
 

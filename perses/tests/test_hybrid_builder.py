@@ -239,7 +239,8 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         print('Difference in Final potentials:')
         print(final_logP_correction)
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
-
+        print('Alchemical Correction:')
+        print(logP_alchemical_correction)
 
 def test_setup_hybrid_system():
     alanine_topology, alanine_positions, leucine_topology, leucine_positions, atom_map = build_two_residues()
@@ -253,5 +254,26 @@ def test_setup_hybrid_system():
 
     compute_alchemical_correction(leucine_system, alanine_system, system, leucine_positions, positions, positions, alanine_positions)
 
+def test_null_hybrid_system():
+    from perses.tests.testsystems import NaphthaleneTestSystem
+    testsystem = NaphthaleneTestSystem()
+    for key in ['vacuum']:
+        exen_sampler = testsystem.exen_samplers[key]
+        exen_sampler.verbose = False
+
+        topology = exen_sampler.topology
+        system = exen_sampler.sampler.sampler_state.system
+        topology_proposal = testsystem.proposal_engines[key].propose(system, topology)
+        positions = exen_sampler.sampler.sampler_state.positions
+
+        new_positions, geometry_logp_propose = exen_sampler.geometry_engine.propose(topology_proposal, positions, exen_sampler.sampler.thermodynamic_state.beta)
+
+        hybrid = HybridTopologyFactory(topology_proposal.old_system, topology_proposal.new_system, topology_proposal.old_topology, topology_proposal.new_topology, positions, new_positions, topology_proposal.new_to_old_atom_map, softening=0.0)
+    [system, topology, shared_positions, sys2_indices_in_system, sys1_indices_in_system] = hybrid.createPerturbedSystem()
+
+    compute_alchemical_correction(topology_proposal.old_system, topology_proposal.new_system, system, positions, shared_positions, shared_positions, new_positions)
+
+
 if __name__ == '__main__':
-    test_setup_hybrid_system()
+    test_null_hybrid_system()
+#    test_setup_hybrid_system()
