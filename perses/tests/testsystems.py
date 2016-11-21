@@ -2016,7 +2016,7 @@ class NullTestSystem(PersesTestSystem):
             Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
             Default will run NCMC on old and new system separately
 
-    Only one environment ('vacuum') is currently implemented; however all 
+    Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
 
     """
@@ -2133,7 +2133,7 @@ class NaphthaleneTestSystem(NullTestSystem):
             Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
             Default will use a hybrid NCMC method
 
-    Only one environment ('vacuum') is currently implemented; however all 
+    Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
@@ -2215,7 +2215,7 @@ class PropaneTestSystem(NullTestSystem):
             Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
             Default will use a hybrid NCMC method
 
-    Only one environment ('vacuum') is currently implemented; however all 
+    Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
@@ -2471,8 +2471,8 @@ def run_valence_system():
     testsystem = ValenceSmallMoleculeLibraryTestSystem(storage_filename='output.nc')
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
-    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
-    testsystem.mcmc_samplers[environment].nsteps = 5
+    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
+    testsystem.mcmc_samplers[environment].nsteps = 1
     testsystem.sams_samplers[environment].run(niterations=50)
 
 def run_alanine_system(sterics=False):
@@ -2645,7 +2645,7 @@ if __name__ == '__main__':
 #    run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
-    #run_valence_system()
+    run_valence_system()
     #run_t4_inhibitors()
     #run_imidazole()
     #run_constph_imidazole()

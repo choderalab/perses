@@ -302,13 +302,25 @@ def test_ncmc_engine_molecule():
     if os.environ.get("TRAVIS", None) == 'true':
         molecule_names = ['pentane']
 
+    molecule_names = ['pentane'] # DEBUG
     for molecule_name in molecule_names:
         from perses.tests.utils import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
         natoms = system.getNumParticles()
+
+        # DEBUG
+        print(molecule_name)
+        from openeye import oechem
+        ofs = oechem.oemolostream('%s.mol2' % molecule_name)
+        oechem.OEWriteMol2File(ofs, molecule)
+        ofs.close()
+
         # Eliminate half of the molecule
         # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
         new_to_old_atom_map = { atom.index : atom.index for atom in topology.atoms() if str(atom.element.name) in ['carbon','nitrogen'] }
+
+        # DEBUG
+        print(new_to_old_atom_map)
 
         from perses.rjmc.topology_proposal import TopologyProposal
         topology_proposal = TopologyProposal(

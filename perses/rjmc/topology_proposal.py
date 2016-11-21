@@ -700,7 +700,7 @@ class PointMutationEngine(PolymerProposalEngine):
         Have the proposal engine always propose another mutation
         If allowed_mutations is not specified, always_change will require ALL
         point mutations to be different
-        The proposal engine will choose number of locations specified by 
+        The proposal engine will choose number of locations specified by
         max_point_mutants, and will require all of those residues to change
         eg: if old topology included L99A and M102Q, the new proposal cannot
             include L99A OR M102Q
