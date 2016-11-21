@@ -50,6 +50,7 @@ class Analysis(object):
         """
         # TODO: Replace this with calls to storage API
         self._ncfile = netcdf.Dataset(storage_filename, 'r')
+        self.storage_filename = storage_filename
 
     def get_environments(self):
         """Return a list of environments in storage file.
@@ -79,7 +80,7 @@ class Analysis(object):
         # TODO
         pass
 
-    def plot_exen_logp_components(self):
+    def plot_exen_logp_components(self, filename_prefix=None):
         """
         Generate histograms of each component of Expanded Ensemble log acceptance probability
         Components may include:
@@ -94,6 +95,10 @@ class Analysis(object):
             new_log_weight
             old_log_weight
 
+        Arguments:
+        ----------
+        filename_prefix : str, OPTIONAL, default = None
+            if specified, each plot is saved as '{0}-{1}'.format(filename_prefix, component)
         Each histogram will be saved to {component name}.png
         TODO: include input filename
             storage ncfile has different hierarchy depending on which samplers are defined;
@@ -115,19 +120,31 @@ class Analysis(object):
         ]
 
         ee_sam = self._ncfile.groups['ExpandedEnsembleSampler']
-        for component in components:
-            try:
-                niterations = ee_sam.variables[component].shape[0]
-            except:
-                continue
-            logps = np.zeros(niterations, np.float64)
-            for n in range(niterations):
-                logps[n] = ee_sam.variables[component][n]
-            plt.hist(logps)
-            plt.title("Contribution of {0} to log acceptance probability in ExpandedEnsembleSampler".format(component))
-            plt.xlabel(component)
-            plt.savefig(component)
-            plt.clf()
+        if filename_prefix is None:
+            filename_prefix = self.storage_filename.split('.')[0]
+        filename = '{0}-logP-components.pdf'.format(filename_prefix)
+        with PdfPages(filename) as pdf:
+            logps = dict()
+            for component in components:
+                try:
+                    niterations = ee_sam.variables[component].shape[0]
+                except:
+                    continue
+                logps[component] = np.zeros(niterations, np.float64)
+                for n in range(niterations):
+                    logps[component][n] = ee_sam.variables[component][n]
+            plt.figure(figsize=(8,12))
+            nrows = len(logps.keys())/2 + len(logps.keys())%2
+            ncols = 2
+            for spot, component in enumerate(logps.keys()):
+                row = spot/2
+                col = spot%2
+                plt.subplot2grid((nrows,ncols),(row,col))
+                plt.hist(logps[component])
+                plt.title("Contribution of {0} to log acceptance probability in ExpandedEnsembleSampler".format(component))
+                plt.xlabel(component)
+            pdf.savefig()
+            plt.close()
 
 
     def plot_ncmc_work(self, filename):
