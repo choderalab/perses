@@ -820,7 +820,7 @@ class ExpandedEnsembleSampler(object):
             self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         elif scheme=='geometry-ncmc-geometry':
             from perses.annihilation.ncmc_switching import NCMCHybridEngine
-            self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform)
+            self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         else:
             raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
         self.geometry_engine = geometry_engine
@@ -905,7 +905,7 @@ class ExpandedEnsembleSampler(object):
     def _ncmc_hybrid(self, topology_proposal, old_positions, new_positions):
         if self.verbose: print("Performing NCMC switching")
         initial_time = time.time()
-        [ncmc_new_positions, ncmc_old_positions, ncmc_logp] = self.ncmc_engine.integrate(topology_proposal, old_positions, new_positions)
+        [ncmc_new_positions, ncmc_old_positions, ncmc_logp] = self.ncmc_engine.integrate(topology_proposal, old_positions, new_positions, iteration=self.iteration)
         if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
         # Check that positions are not NaN
         if np.any(np.isnan(ncmc_new_positions)):
