@@ -2174,7 +2174,7 @@ class ButaneTestSystem(NullTestSystem):
             Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
             Default will use a hybrid NCMC method
 
-    Only one environment ('vacuum') is currently implemented; however all 
+    Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
@@ -2640,15 +2640,14 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc')
-    run_null_system(testsystem)
-#    run_alanine_system(sterics=True)
+    #testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc')
+    #run_null_system(testsystem)
+    #run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
-    run_valence_system()
+    #run_valence_system()
     #run_t4_inhibitors()
-    #run_imidazole()
-    #run_constph_imidazole()
+    run_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
     #run_kinase_inhibitors()
