@@ -2128,39 +2128,6 @@ class NaphthaleneTestSystem(NullTestSystem):
         """
         super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
 
-class ButaneTestSystem(NullTestSystem):
-    """
-    Test turning Butane into Butane in vacuum
-    Currently only trying to test ExpandedEnsemble sampler, therefore
-    SAMS sampler and MultiTargetDesign are not implemented at this time
-
-    Uses a custom ProposalEngine to only match two carbons, have geometry
-    engine choose positions for others
-
-    geometry_engine.write_proposal_pdb set to True
-
-    Constructor:
-    ButaneTestSystem(storage_filename="butane.nc", exen_pdb_filename=None)
-
-    Arguments:
-        storage_filename, OPTIONAL, string
-            Default is "butane.nc"
-            Storage must be provided in order to analyze testsystem acceptance rates
-        exen_pdb_filename, OPTIONAL, string
-            Default is None
-            If value is not None, will write pdbfile after every ExpandedEnsemble
-            iteration
-
-    Only one environment ('vacuum') is currently implemented; however all
-    samplers are saved in dictionaries for consistency with other testsystems
-    """
-
-    def __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
-        """
-        __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
-        """
-        super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
-
 def run_null_system(testsystem):
     """
     Intended for use with NaphthaleneTestSystem or ButaneTestSystem ONLY
@@ -2571,13 +2538,11 @@ if __name__ == '__main__':
     #run_alanine_system(sterics=False)
     testsystem = ButaneTestSystem()
     run_null_system(testsystem)
-#    run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
-    run_valence_system()
+    #run_valence_system()
     #run_t4_inhibitors()
-    #run_imidazole()
-    #run_constph_imidazole()
+    run_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
     #run_kinase_inhibitors()
