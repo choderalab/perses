@@ -1355,11 +1355,41 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         resname = self._residue_name
         mol_residues = [res for res in topology.residues() if res.name==resname]
         if len(mol_residues)!=1:
-            raise ValueError("There can only be one residue with a specific name in the topology.")
+            raise ValueError("There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'" % (len(mol_residues), resname))
         mol_residue = mol_residues[0]
         atoms = list(mol_residue.atoms())
         mol_start_idx = atoms[0].index
         return mol_start_idx, len(list(atoms))
+
+    def _append_topology(self, destination_topology, source_topology, exclude_residue_name=None):
+        """
+        Add the source OpenMM Topology to the destination Topology.
+
+        Parameters
+        ----------
+        destination_topology : simtk.openmm.app.Topology
+            The Topology to which the contents of `source_topology` are to be added.
+        source_topology : simtk.openmm.app.Topology
+            The Topology to be added.
+        exclude_residue_name : str, optional, default=None
+            If specified, any residues matching this name are excluded.
+
+        """
+        newAtoms = {}
+        for chain in source_topology.chains():
+            newChain = destination_topology.addChain(chain.id)
+            for residue in chain.residues():
+                if (residue.name == exclude_residue_name):
+                    continue
+                newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
+                for atom in residue.atoms():
+                    newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                    newAtoms[atom] = newAtom
+        for bond in source_topology.bonds():
+            if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+                continue
+            # TODO: Preserve bond order info using extended OpenMM API
+            destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
 
     def _build_new_topology(self, current_receptor_topology, oemol_proposed):
         """
@@ -1378,18 +1408,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_index : int
             The first index of the small molecule
         """
+        oemol_proposed.SetTitle(self._residue_name)
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
-        new_topology = copy.deepcopy(current_receptor_topology)
-        newAtoms = {}
-        for chain in mol_topology.chains():
-            newChain = new_topology.addChain(chain.id)
-            for residue in chain.residues():
-                newResidue = new_topology.addResidue(self._residue_name, newChain, residue.id)
-                for atom in residue.atoms():
-                    newAtom = new_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                    newAtoms[atom] = newAtom
-        for bond in mol_topology.bonds():
-            new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        new_topology = app.Topology()
+        self._append_topology(new_topology, current_receptor_topology)
+        self._append_topology(new_topology, mol_topology)
         # Copy periodic box vectors.
         if current_receptor_topology._periodicBoxVectors != None:
             new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
@@ -1413,19 +1436,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             Topology without small molecule
         """
         receptor_topology = app.Topology()
-        newAtoms = {}
-        for chain in topology.chains():
-            newChain = receptor_topology.addChain(chain.id)
-            for residue in chain.residues():
-                if residue.name != self._residue_name:
-                    newResidue = receptor_topology.addResidue(residue.name, newChain, residue.id)
-                    for atom in residue.atoms():
-                        newAtom = receptor_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                        newAtoms[atom] = newAtom
-        for bond in topology.bonds():
-            if bond[0].residue.name==self._residue_name or bond[1].residue.name==self._residue_name:
-                continue
-            receptor_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        self._append_topology(receptor_topology, topology, exclude_residue_name=self._residue_name)
+        # Copy periodic box vectors.
         if topology._periodicBoxVectors != None:
             receptor_topology._periodicBoxVectors = copy.deepcopy(topology._periodicBoxVectors)
         return receptor_topology
