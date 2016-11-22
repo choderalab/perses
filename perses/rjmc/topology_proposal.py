@@ -1355,11 +1355,41 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         resname = self._residue_name
         mol_residues = [res for res in topology.residues() if res.name==resname]
         if len(mol_residues)!=1:
-            raise ValueError("There can only be one residue with a specific name in the topology.")
+            raise ValueError("There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'" % (len(mol_residues), resname))
         mol_residue = mol_residues[0]
         atoms = list(mol_residue.atoms())
         mol_start_idx = atoms[0].index
         return mol_start_idx, len(list(atoms))
+
+    def _append_topology(self, destination_topology, source_topology, exclude_residue_name=None):
+        """
+        Add the source OpenMM Topology to the destination Topology.
+
+        Parameters
+        ----------
+        destination_topology : simtk.openmm.app.Topology
+            The Topology to which the contents of `source_topology` are to be added.
+        source_topology : simtk.openmm.app.Topology
+            The Topology to be added.
+        exclude_residue_name : str, optional, default=None
+            If specified, any residues matching this name are excluded.
+
+        """
+        newAtoms = {}
+        for chain in source_topology.chains():
+            newChain = destination_topology.addChain(chain.id)
+            for residue in chain.residues():
+                if (residue.name == exclude_residue_name):
+                    continue
+                newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
+                for atom in residue.atoms():
+                    newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                    newAtoms[atom] = newAtom
+        for bond in source_topology.bonds():
+            if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+                continue
+            # TODO: Preserve bond order info using extended OpenMM API
+            destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
 
     def _build_new_topology(self, current_receptor_topology, oemol_proposed):
         """
@@ -1378,18 +1408,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_index : int
             The first index of the small molecule
         """
+        oemol_proposed.SetTitle(self._residue_name)
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
-        new_topology = copy.deepcopy(current_receptor_topology)
-        newAtoms = {}
-        for chain in mol_topology.chains():
-            newChain = new_topology.addChain(chain.id)
-            for residue in chain.residues():
-                newResidue = new_topology.addResidue(self._residue_name, newChain, residue.id)
-                for atom in residue.atoms():
-                    newAtom = new_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                    newAtoms[atom] = newAtom
-        for bond in mol_topology.bonds():
-            new_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        new_topology = app.Topology()
+        self._append_topology(new_topology, current_receptor_topology)
+        self._append_topology(new_topology, mol_topology)
         # Copy periodic box vectors.
         if current_receptor_topology._periodicBoxVectors != None:
             new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
@@ -1413,19 +1436,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             Topology without small molecule
         """
         receptor_topology = app.Topology()
-        newAtoms = {}
-        for chain in topology.chains():
-            newChain = receptor_topology.addChain(chain.id)
-            for residue in chain.residues():
-                if residue.name != self._residue_name:
-                    newResidue = receptor_topology.addResidue(residue.name, newChain, residue.id)
-                    for atom in residue.atoms():
-                        newAtom = receptor_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                        newAtoms[atom] = newAtom
-        for bond in topology.bonds():
-            if bond[0].residue.name==self._residue_name or bond[1].residue.name==self._residue_name:
-                continue
-            receptor_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        self._append_topology(receptor_topology, topology, exclude_residue_name=self._residue_name)
+        # Copy periodic box vectors.
         if topology._periodicBoxVectors != None:
             receptor_topology._periodicBoxVectors = copy.deepcopy(topology._periodicBoxVectors)
         return receptor_topology
@@ -1782,6 +1794,11 @@ class NaphthaleneProposalEngine(NullProposalEngine):
 
         # map the ring flipped 180
         atom_map = {find_ring[i].index : find_ring[(i+3)%6].index for i in range(6)}
+
+        for atom in topology.atoms():
+            if atom.residue != find_ring[0].residue:
+                atom_map[atom.index] = atom.index
+
         return atom_map
 
 class ButaneProposalEngine(NullProposalEngine):
@@ -1865,4 +1882,89 @@ class ButaneProposalEngine(NullProposalEngine):
             hydrogen0.index : hydrogen1.index,
             hydrogen1.index : hydrogen0.index,
         }
+
+        for atom in topology.atoms():
+            if atom.residue != ccbond[0].residue:
+                atom_map[atom.index] = atom.index
+
+        return atom_map
+
+class PropaneProposalEngine(NullProposalEngine):
+    """
+    Custom ProposalEngine to use with PropaneTestSystem defines two "states"
+    of butane, identified 'propane-A' and 'propane-B', which are
+    tracked by adding a custom _state_key attribute to the topology
+
+    Generates TopologyProposal from propane to propane, only matching
+    one CH3 and the middle C such that geometry must rebuild the other
+
+    Can only be used with input topology of propane
+
+    Constructor Arguments:
+        system_generator, SystemGenerator object
+            SystemGenerator initialized with the appropriate forcefields
+        residue_name, OPTIONAL,  str
+            Default = "MOL"
+            The name that will be used for small molecule residues in the topology
+        atom_expr, OPTIONAL, oechem.OEExprOpts
+            Default is None
+            Currently not implemented -- would dictate how match is defined
+        bond_expr, OPTIONAL, oechem.OEExprOpts
+            Default is None
+            Currently not implemented -- would dictate how match is defined
+        proposal_metadata, OPTIONAL, dict
+            Default is None
+            metadata for the proposal engine
+        storage, OPTIONAL, NetCDFStorageView
+            Default is None
+            If specified, write statistics to this storage layer
+        always_change, OPTIONAL, bool
+            Default is True
+            Currently not implemented -- will always behave as True
+            The proposal will always be from the current "state" to the other
+            Self proposals will never be made
+    """
+    def __init__(self, system_generator, residue_name="MOL", atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
+        super(PropaneProposalEngine, self).__init__(system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr, proposal_metadata=proposal_metadata, storage=storage, always_change=always_change)
+        self._fake_states = ["propane-A", "propane-B"]
+        self.smiles = 'CCC'
+
+    def _make_skewed_atom_map(self, topology):
+        """
+        Custom definition for the atom map between propane and propane
+
+        If a regular atom map was constructed (via oechem.OEMCSSearch), all
+        atoms would be matched, and the geometry engine would have nothing
+        to add.  This method manually finds CH3-CH2 and matches each atom to
+        itself.  The other carbon and three hydrogens will have to be
+        repositioned by the geometry engine.
+
+        The two carbons are chosen by finding the first carbon-carbon bond in
+        the topology. To minimize the atoms being rebuilt by geometry, all
+        hydrogens from each of the selected carbons are also found and
+        mapped to themselves.
+
+        Arguments:
+        ----------
+        topology : app.Topology object
+            topology of propane
+            Only one topology is needed, because current and proposed are
+            identical
+        Returns:
+        --------
+        atom_map : dict
+            maps the atom indices of CH3-CH2 to themselves
+        """
+        atom_map = dict()
+        for bond in topology.bonds():
+            if all([atom.element == app.element.carbon for atom in bond]):
+                ccbond = bond
+                break
+        for bond in topology.bonds():
+            if any([carbon in bond for carbon in ccbond]) and app.element.hydrogen in [atom.element for atom in bond]:
+                atom_map[bond[0].index] = bond[0].index
+                atom_map[bond[1].index] = bond[1].index
+        for atom in topology.atoms():
+            if atom.residue != ccbond[0].residue:
+                atom_map[atom.index] = atom.index
         return atom_map

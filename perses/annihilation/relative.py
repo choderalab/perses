@@ -60,10 +60,10 @@ class HybridTopologyFactory(object):
         for atom1idx, atom2idx in self.atom_mapping_1to2.items():
             atom1 = system1_atoms[atom1idx]
             atom2 = system2_atoms[atom2idx]
-            if not atom1.name == atom2.name:
-                if atom1.element == atom2.element and atom1.element == app.Element.getBySymbol('H'):
-                    continue
+            if not atom1.element == atom2.element:
                 keys_to_delete.append(atom1idx)
+        if len(keys_to_delete) == len(self.atom_mapping_1to2.keys()):
+            del(keys_to_delete[-1])
         for key in keys_to_delete:
             del(self.atom_mapping_1to2[key])
 
@@ -623,13 +623,13 @@ class HybridTopologyFactory(object):
         for atom1 in self.unique_atoms1:
             index = sys1_indices_in_system[atom1] # index into system
             [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
-            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma1, 0*epsilon1])
-            electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, 0*charge1])
+            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma1, self.softening*epsilon1])
+            electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, self.softening*charge1])
         for atom2 in self.unique_atoms2:
             index = sys2_indices_in_system[atom2] # index into system
             [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
-            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, 0*epsilon2, sigma2, epsilon2])
-            electrostatics_custom_nonbonded_force.setParticleParameters(index, [0*charge2, charge2])
+            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, self.softening*epsilon2, sigma2, epsilon2])
+            electrostatics_custom_nonbonded_force.setParticleParameters(index, [self.softening*charge2, charge2])
         for index1 in unique_to_core_exceptions1:
             [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force1.getExceptionParameters(index1)
             atom_i = sys1_indices_in_system[atom1_i]
