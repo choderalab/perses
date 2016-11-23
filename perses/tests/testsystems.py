@@ -2264,7 +2264,7 @@ def run_null_system(testsystem):
     import codecs
     for key in testsystem.environments: # only one key: vacuum
         # run a single iteration to generate item in number_of_state_visits dict
-        testsystem.exen_samplers[key].run(niterations=niterations)
+        testsystem.exen_samplers[key].run(niterations=100)
 
         # until a switch is accepted, only the initial state will have an item
         # in the number_of_state_visits dict
@@ -2286,10 +2286,11 @@ def run_null_system(testsystem):
         niterations = ee_sam.variables['logp_accept'].shape[0]
         logps = np.zeros(niterations, np.float64)
         state_keys = list()
+        storage = testsystem.exen_samplers[key].storage
         for n in range(niterations):
             logps[n] = ee_sam.variables['logp_accept'][n]
-            s_key = str(ee_sam.variables['proposed_state_key'][n])
-            state_keys.append(pickle.loads(codecs.decode(s_key, "base64")))
+            state_key = storage.get_object('proposed_state_key', iteration=n)
+            state_keys.append(state_key)
 
         len_w_r = state_keys.count(testsystem.proposal_engines[key]._fake_states[0])
         len_w_f = state_keys.count(testsystem.proposal_engines[key]._fake_states[1])
@@ -2684,8 +2685,8 @@ def run_fused_rings():
 if __name__ == '__main__':
     #testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc')
     testsystem = PropaneTestSystem(scheme='geometry-ncmc-geometry') # use hybrid NCMC engine
-    #run_null_system(testsystem)
-    run_null_system_ncmc_trajectories(testsystem)
+    run_null_system(testsystem)
+    #run_null_system_ncmc_trajectories(testsystem)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
