@@ -11,9 +11,9 @@ from perses.tests.utils import quantity_is_finite
 default_functions = {
     'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
     'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-    'lambda_bonds' : '0.9*lambda + 0.1', # don't fully soften bonds
-    'lambda_angles' : '0.9*lambda + 0.1', # don't fully soften angles
-    'lambda_torsions' : 'lambda'
+    'lambda_bonds' : '1 - 0.5*lambda*(1-lambda)',
+    'lambda_angles' : '1 - 0.5*lambda*(1-lambda)',
+    'lambda_torsions' : '1 - 0.5*lambda*(1-lambda)'
     }
 
 
@@ -1230,7 +1230,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
     Use NCMC switching to annihilate or introduce particles alchemically.
     """
 
-    def __init__(self, temperature, system, functions, nsteps=0, steps_per_propagation=1, collision_rate=9.1/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
+    def __init__(self, temperature, system, functions, nsteps=0, steps_per_propagation=1, collision_rate=91.0/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
         """
         Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
 

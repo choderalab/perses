@@ -2326,7 +2326,7 @@ def run_null_system(testsystem):
             msg += 'w_r = %s\n' % str(w_r)
             raise Exception(msg)
 
-def run_null_system_ncmc_trajectories(testsystem, niterations=2, ncmc_nsteps=100):
+def run_null_system_ncmc_trajectories(testsystem, niterations=2, ncmc_nsteps=1000):
     """
     Intended for use with NullTestSystem subclasses ONLY
 
@@ -2346,6 +2346,9 @@ def run_null_system_ncmc_trajectories(testsystem, niterations=2, ncmc_nsteps=100
     import pickle
     import codecs
     for key in ['vacuum']: # only one key: vacuum
+        # Disable softening of annihilated/inserted valence terms
+        testsystem.exen_samplers[key].ncmc_engine.softening = 0.1
+
         # Set number of NCMC steps
         testsystem.exen_samplers[key].ncmc_engine.nsteps = ncmc_nsteps
 
@@ -2679,7 +2682,8 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc')
+    #testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc')
+    testsystem = PropaneTestSystem(scheme='geometry-ncmc-geometry') # use hybrid NCMC engine
     #run_null_system(testsystem)
     run_null_system_ncmc_trajectories(testsystem)
     #run_alanine_system(sterics=False)
