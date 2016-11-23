@@ -2174,7 +2174,7 @@ class ButaneTestSystem(NullTestSystem):
             Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
             Default will use a hybrid NCMC method
 
-    Only one environment ('vacuum') is currently implemented; however all 
+    Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
@@ -2264,7 +2264,8 @@ def run_null_system(testsystem):
     import codecs
     for key in testsystem.environments: # only one key: vacuum
         # run a single iteration to generate item in number_of_state_visits dict
-        testsystem.exen_samplers[key].run(niterations=100)
+        testsystem.exen_samplers[key].run(niterations=niterations)
+
         # until a switch is accepted, only the initial state will have an item
         # in the number_of_state_visits dict
         while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
@@ -2325,6 +2326,44 @@ def run_null_system(testsystem):
             msg += 'w_r = %s\n' % str(w_r)
             raise Exception(msg)
 
+def run_null_system_ncmc_trajectories(testsystem, niterations=2, ncmc_nsteps=100):
+    """
+    Intended for use with NullTestSystem subclasses ONLY
+
+    Runs TestSystem ExpandedEnsemble sampler ONLY
+    Writes out PDB files of NCMC switching trajectories
+
+    Arguments:
+    ----------
+    testsystem : NaphthaleneTestSystem, ButantTestSystem, or PropaneTestSystem
+        Only these three test systems have the proposal_engine._fake_states
+        attribute, which differentiates between 2 states of a null proposal
+    """
+    if not issubclass(type(testsystem), NullTestSystem):
+        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem, ButantTestSystem or PropaneTestSystem; given {0}".format(type(testsystem))))
+
+    import netCDF4 as netcdf
+    import pickle
+    import codecs
+    for key in ['vacuum']: # only one key: vacuum
+        # Set number of NCMC steps
+        testsystem.exen_samplers[key].ncmc_engine.nsteps = ncmc_nsteps
+
+        # write NCMC switching trajectories to NetCDF file
+        testsystem.exen_samplers[key].ncmc_engine.write_ncmc_interval = 1
+
+        # run a single iteration to generate item in number_of_state_visits dict
+        testsystem.exen_samplers[key].run(niterations=niterations)
+
+        # Write PDB file
+        classname = testsystem.__class__.__name__
+        storage = testsystem.exen_samplers[key].ncmc_engine._storage
+        for iteration in range(niterations):
+            filename = 'ncmc-%s-%05d.pdb' % (classname, iteration)
+            print('Writing PDB file for iteration %d to %s' % (iteration, filename))
+            traj = storage.get_trajectory('positions', iteration=iteration)
+            print(traj)
+            traj.save(filename)
 
 def check_topologies(testsystem):
     """
@@ -2641,12 +2680,13 @@ def run_fused_rings():
 
 if __name__ == '__main__':
     testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc')
-    run_null_system(testsystem)
+    #run_null_system(testsystem)
+    run_null_system_ncmc_trajectories(testsystem)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
     #run_t4_inhibitors()
-    run_imidazole()
+    #run_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
     #run_kinase_inhibitors()

@@ -170,7 +170,7 @@ class NCMCEngine(object):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         system : simtk.unit.System
             Real fully-interacting system.
@@ -279,7 +279,7 @@ class NCMCEngine(object):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         topology : openmm.app.Topology
             Alchemical topology being modified
@@ -311,21 +311,21 @@ class NCMCEngine(object):
             # Write trajectory frame.
             if self._storage and self.write_ncmc_interval:
                 positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(nsteps+1))
+                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(self.nsteps+1))
 
             # Perform NCMC integration.
             for step in range(self.nsteps):
-                # Take a step. 
+                # Take a step.
                 integrator.step(1)
 
                 # Store accumulated work
                 work[step+1] = integrator.getWork(context)
 
                 # Write trajectory frame.
-                if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
+                if self._storage and self.write_ncmc_interval and ((step+1) % self.write_ncmc_interval  == 0):
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
-                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(nsteps+1))
+                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(self.nsteps+1))
 
             # Store work values.
             if self._storage:
@@ -428,7 +428,7 @@ class NCMCEngine(object):
 
         Returns
         -------
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         """
         # Create a context on the specified platform.
@@ -478,7 +478,7 @@ class NCMCEngine(object):
             and alchemical systems of the same chemical state
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
@@ -581,9 +581,9 @@ class NCMCHybridEngine(NCMCEngine):
     [positions, new_old_positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, proposed_positions)
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, 
-                 nsteps=default_nsteps, timestep=default_timestep, 
-                 constraint_tolerance=None, platform=None, 
+    def __init__(self, temperature=default_temperature, functions=None,
+                 nsteps=default_nsteps, timestep=default_timestep,
+                 constraint_tolerance=None, platform=None,
                  write_ncmc_interval=None, integrator_type='GHMC',
                  storage=None, softening=0.1):
         """
@@ -639,7 +639,7 @@ class NCMCHybridEngine(NCMCEngine):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         unmodified_old_system : simtk.unit.System
             Real fully-interacting system.
@@ -1144,7 +1144,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable('pstep', 0)
 
         if nsteps == 0:
-            self.beginIfBlock('step = 0')            
+            self.beginIfBlock('step = 0')
             # Initialize alchemical state
             self.addAlchemicalResetStep()
             self.setGlobalVariableByName("total_work", 0.0)
@@ -1199,7 +1199,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.endBlock()
 
             # All steps, including initial step
-            self.beginIfBlock('step < nsteps')        
+            self.beginIfBlock('step < nsteps')
             # Accumulate protocol work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
@@ -1295,7 +1295,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable("psteps", steps_per_propagation) # total number of propagation steps
 
         if nsteps == 0:
-            self.beginIfBlock('step = 0')            
+            self.beginIfBlock('step = 0')
             # Initialize alchemical state
             self.addAlchemicalResetStep()
             self.setGlobalVariableByName("total_work", 0.0)
@@ -1343,7 +1343,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.endBlock()
 
             # All steps, including initial step
-            self.beginIfBlock('step < nsteps')        
+            self.beginIfBlock('step < nsteps')
             # Accumulate protocol work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()

@@ -164,6 +164,52 @@ class NetCDFStorage(object):
         else:
             ncgrp.variables[varname] = positions[:,:] / positions_unit
 
+    def get_trajectory(self, varname, iteration=None):
+        """Read a configuration (or a sequence of configurations) into an MDTraj object.
+
+        Parameters
+        ----------
+        varname : str
+            The variable name to be stored
+        iteration : int, optional, default=None
+            The local iteration for the module, or `None` if this is a singleton
+
+        Returns
+        -------
+        traj : MDTraj.Trajectory
+            The trajectory.
+        """
+        ncgrp = self._find_group()
+
+        def dimension_name(iteration, suffix):
+            dimension_name = ''
+            if self._envname: dimension_name += self._envname + '_'
+            if self._modname: dimension_name += self._modname + '_'
+            dimension_name += varname + '_' + suffix + '_' + str(iteration)
+            return dimension_name
+
+        if iteration is not None:
+            varname += '_' + str(iteration)
+
+        # Read Topology
+        topology_varname = varname + '_topology'
+        if (iteration is not None):
+            topology_varname += '_' + str(iteration)
+        topology = self.get_object(topology_varname, iteration=iteration)
+
+        # Read positions
+        positions_unit = unit.angstroms
+        print(varname)
+        print('shape = %s' % str(ncgrp.variables[varname].shape))
+        if len(ncgrp.variables[varname].shape) == 3:
+            positions = ncgrp.variables[varname][:,:,:] * unit.angstroms / unit.nanometers
+        else:
+            positions = ncgrp.variables[varname][:,:] * unit.angstroms / unit.nanometers
+
+        traj = mdtraj.Trajectory(positions, topology)
+
+        return traj
+
     def write_object(self, varname, obj, iteration=None):
         """Serialize a Python object, encoding as pickle when storing as string in NetCDF.
 
@@ -207,10 +253,12 @@ class NetCDFStorage(object):
             The retrieved object
 
         """
+        ncgrp = self._find_group()
+
         if iteration is not None:
-            pickled = self._ncfile['/envname/modname/varname'][iteration]
+            pickled = ncgrp.variables[varname][iteration]
         else:
-            pickled = self._ncfile['/envname/modname/varname'][0]
+            pickled = ncgrp.variables[varname][0]
 
         obj = pickle.loads(codecs.decode(pickled.encode(), "base64"))
         return obj
