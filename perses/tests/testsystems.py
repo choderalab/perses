@@ -2326,7 +2326,7 @@ def run_null_system(testsystem):
             msg += 'w_r = %s\n' % str(w_r)
             raise Exception(msg)
 
-def run_null_system_ncmc_trajectories(testsystem, niterations=2, ncmc_nsteps=1000):
+def run_null_system_ncmc_trajectories(testsystem, niterations=2, ncmc_nsteps=10000):
     """
     Intended for use with NullTestSystem subclasses ONLY
 
@@ -2347,13 +2347,13 @@ def run_null_system_ncmc_trajectories(testsystem, niterations=2, ncmc_nsteps=100
     import codecs
     for key in ['vacuum']: # only one key: vacuum
         # Disable softening of annihilated/inserted valence terms
-        testsystem.exen_samplers[key].ncmc_engine.softening = 0.1
+        testsystem.exen_samplers[key].ncmc_engine.softening = 1.0
 
         # Set number of NCMC steps
         testsystem.exen_samplers[key].ncmc_engine.nsteps = ncmc_nsteps
 
         # write NCMC switching trajectories to NetCDF file
-        testsystem.exen_samplers[key].ncmc_engine.write_ncmc_interval = 1
+        testsystem.exen_samplers[key].ncmc_engine.write_ncmc_interval = 50
 
         # run a single iteration to generate item in number_of_state_visits dict
         testsystem.exen_samplers[key].run(niterations=niterations)

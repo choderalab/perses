@@ -311,7 +311,8 @@ class NCMCEngine(object):
             # Write trajectory frame.
             if self._storage and self.write_ncmc_interval:
                 positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(self.nsteps+1))
+                nframes = int(self.nsteps/self.write_ncmc_interval) + 1
+                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=nframes)
 
             # Perform NCMC integration.
             for step in range(self.nsteps):
@@ -322,10 +323,11 @@ class NCMCEngine(object):
                 work[step+1] = integrator.getWork(context)
 
                 # Write trajectory frame.
-                if self._storage and self.write_ncmc_interval and ((step+1) % self.write_ncmc_interval  == 0):
+                if self._storage and self.write_ncmc_interval and ((step+1) % self.write_ncmc_interval == 0):
+                    frame = int((step+1) / self.write_ncmc_interval)
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
-                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(self.nsteps+1))
+                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=frame, nframes=nframes)
 
             # Store work values.
             if self._storage:
@@ -585,7 +587,7 @@ class NCMCHybridEngine(NCMCEngine):
                  nsteps=default_nsteps, timestep=default_timestep,
                  constraint_tolerance=None, platform=None,
                  write_ncmc_interval=None, integrator_type='GHMC',
-                 storage=None, softening=0.1):
+                 storage=None, softening=1.0):
         """
         Subclass of NCMCEngine which switches directly between two different
         systems using an alchemical hybrid topology.
