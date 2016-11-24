@@ -11,9 +11,9 @@ from perses.tests.utils import quantity_is_finite
 default_functions = {
     'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
     'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-    'lambda_bonds' : '0.9*lambda + 0.1', # don't fully soften bonds
-    'lambda_angles' : '0.9*lambda + 0.1', # don't fully soften angles
-    'lambda_torsions' : 'lambda'
+    'lambda_bonds' : '1 - 0.5*lambda*(1-lambda)',
+    'lambda_angles' : '1 - 0.5*lambda*(1-lambda)',
+    'lambda_torsions' : '1 - 0.5*lambda*(1-lambda)'
     }
 
 
@@ -170,7 +170,7 @@ class NCMCEngine(object):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         system : simtk.unit.System
             Real fully-interacting system.
@@ -279,7 +279,7 @@ class NCMCEngine(object):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         topology : openmm.app.Topology
             Alchemical topology being modified
@@ -311,21 +311,23 @@ class NCMCEngine(object):
             # Write trajectory frame.
             if self._storage and self.write_ncmc_interval:
                 positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(nsteps+1))
+                nframes = int(self.nsteps/self.write_ncmc_interval) + 1
+                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=nframes)
 
             # Perform NCMC integration.
             for step in range(self.nsteps):
-                # Take a step. 
+                # Take a step.
                 integrator.step(1)
 
                 # Store accumulated work
                 work[step+1] = integrator.getWork(context)
 
                 # Write trajectory frame.
-                if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
+                if self._storage and self.write_ncmc_interval and ((step+1) % self.write_ncmc_interval == 0):
+                    frame = int((step+1) / self.write_ncmc_interval)
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
-                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(nsteps+1))
+                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=frame, nframes=nframes)
 
             # Store work values.
             if self._storage:
@@ -428,7 +430,7 @@ class NCMCEngine(object):
 
         Returns
         -------
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         """
         # Create a context on the specified platform.
@@ -478,7 +480,7 @@ class NCMCEngine(object):
             and alchemical systems of the same chemical state
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
@@ -581,11 +583,11 @@ class NCMCHybridEngine(NCMCEngine):
     [positions, new_old_positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, proposed_positions)
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, 
-                 nsteps=default_nsteps, timestep=default_timestep, 
-                 constraint_tolerance=None, platform=None, 
+    def __init__(self, temperature=default_temperature, functions=None,
+                 nsteps=default_nsteps, timestep=default_timestep,
+                 constraint_tolerance=None, platform=None,
                  write_ncmc_interval=None, integrator_type='GHMC',
-                 storage=None, softening=0.1):
+                 storage=None, softening=1.0):
         """
         Subclass of NCMCEngine which switches directly between two different
         systems using an alchemical hybrid topology.
@@ -639,7 +641,7 @@ class NCMCHybridEngine(NCMCEngine):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         unmodified_old_system : simtk.unit.System
             Real fully-interacting system.
@@ -1144,7 +1146,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable('pstep', 0)
 
         if nsteps == 0:
-            self.beginIfBlock('step = 0')            
+            self.beginIfBlock('step = 0')
             # Initialize alchemical state
             self.addAlchemicalResetStep()
             self.setGlobalVariableByName("total_work", 0.0)
@@ -1199,7 +1201,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.endBlock()
 
             # All steps, including initial step
-            self.beginIfBlock('step < nsteps')        
+            self.beginIfBlock('step < nsteps')
             # Accumulate protocol work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
@@ -1230,7 +1232,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
     Use NCMC switching to annihilate or introduce particles alchemically.
     """
 
-    def __init__(self, temperature, system, functions, nsteps=0, steps_per_propagation=1, collision_rate=9.1/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
+    def __init__(self, temperature, system, functions, nsteps=0, steps_per_propagation=1, collision_rate=91.0/unit.picoseconds, timestep=1.0*unit.femtoseconds, direction='insert'):
         """
         Initialize an NCMC switching integrator to annihilate or introduce particles alchemically.
 
@@ -1295,7 +1297,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable("psteps", steps_per_propagation) # total number of propagation steps
 
         if nsteps == 0:
-            self.beginIfBlock('step = 0')            
+            self.beginIfBlock('step = 0')
             # Initialize alchemical state
             self.addAlchemicalResetStep()
             self.setGlobalVariableByName("total_work", 0.0)
@@ -1343,7 +1345,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.endBlock()
 
             # All steps, including initial step
-            self.beginIfBlock('step < nsteps')        
+            self.beginIfBlock('step < nsteps')
             # Accumulate protocol work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
