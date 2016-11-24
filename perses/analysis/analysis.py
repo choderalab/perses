@@ -111,7 +111,7 @@ class Analysis(object):
             'logp_geometry',
             'logp_geometry_propose',
             'logp_geometry_reverse',
-            'logp_switch', 
+            'logp_switch',
             'logp_ncmc_elimination',
             'logp_ncmc_introduction',
             'logp_ncmc',
@@ -134,11 +134,12 @@ class Analysis(object):
                 for n in range(niterations):
                     logps[component][n] = ee_sam.variables[component][n]
             plt.figure(figsize=(8,12))
-            nrows = len(logps.keys())/2 + len(logps.keys())%2
+            nrows = int(np.ceil(len(logps.keys())/2 + len(logps.keys())%2))
             ncols = 2
+            print('nrows = %d, ncols = %d' % (nrows, ncols))
             for spot, component in enumerate(logps.keys()):
-                row = spot/2
-                col = spot%2
+                row = int(spot/2)
+                col = int(spot%2)
                 plt.subplot2grid((nrows,ncols),(row,col))
                 plt.hist(logps[component])
                 plt.title(component)
