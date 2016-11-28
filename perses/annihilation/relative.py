@@ -26,10 +26,34 @@ class HybridTopologyFactory(object):
             softening: float, 0 - 1
                        minimum fraction of bond angle, and torsion forces
         """
+        # Assert that number of forces and ordering of forces are same for system1 and system2
+        systems_have_same_force_order = True
+        if (system1.getNumForces() != system2.getNumForces()):
+            systems_have_same_force_order = False
+        for (force1, force2) in zip(system1.getForces(), system2.getForces()):
+            if force1.__class__.__name__ != force2.__class__.__name__:
+                systems_have_same_force_order = False
+        if not systems_have_same_force_order:
+            msg = 'system1 and system2 must have the same number and ordering of Force objects\n'
+            msg += '\n'
+            msg += 'system1 forces:\n'
+            for (force_index, force) in enumerate(system1.getForces()):
+                msg += '%6d : %s\n' % (force_index, force.__class__.__name__)
+            msg += '\n'
+            msg += 'system2 forces:\n'
+            for (force_index, force) in enumerate(system2.getForces()):
+                msg += '%6d : %s\n' % (force_index, force.__class__.__name__)
+            msg += '\n'
+            raise Exception(msg)
+
         self.softcore_alpha=0.5
         self.softcore_beta=12*unit.angstrom**2
         self.system1 = copy.deepcopy(system1)
         self.system2 = copy.deepcopy(system2)
+
+        # Remove barostat
+        self._remove_barostat(self.system1)
+        self._remove_barostat(self.system2)
 
         if softening < 0.0 or softening > 1.0:
             softening = 0.1
@@ -72,6 +96,14 @@ class HybridTopologyFactory(object):
         self.unique_atoms2 = [atom for atom in range(topology2._numAtoms) if atom not in self.atom_mapping_1to2.values()]
 
         self.verbose = False
+
+    def _remove_barostat(self, system):
+        force_indices_to_remove = list()
+        for (force_index, force) in enumerate(system.getForces()):
+            if force.__class__.__name__ in ['MonteCarloBarostat', 'AnisotropicMonteCarloBarostat']:
+                force_indices_to_remove.append(force_index)
+        for force_index in force_indices_to_remove[::-1]:
+            system.removeForce(force_index)
 
     def _handle_constraints(self, system, system2, sys2_indices_in_system):
         if self.verbose: print("Adding constraints from system2...")

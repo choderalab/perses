@@ -16,6 +16,13 @@ default_functions = {
     'lambda_torsions' : '1 - 0.5*lambda*(1-lambda)'
     }
 
+functions_linear = {
+    'lambda_sterics' : 'lambda',
+    'lambda_electrostatics' : 'lambda',
+    'lambda_bonds' : 'lambda',
+    'lambda_angles' : 'lambda',
+    'lambda_torsions' : 'lambda'
+    }
 
 functions_disable_all = {
     'lambda_sterics' : 'lambda',
@@ -114,6 +121,9 @@ class NCMCEngine(object):
         self.integrator_type = integrator_type
         self.steps_per_propagation = steps_per_propagation
         self.verbose = verbose
+
+        self.softcore_alpha = 0.5
+        self.softcore_beta = 0.0
 
         if steps_per_propagation != 1:
             raise Exception('steps_per_propagation must be 1 until CustomIntegrator is debugged')
@@ -262,10 +272,16 @@ class NCMCEngine(object):
         """
         # Create an alchemical factory.
         from alchemy import AbsoluteAlchemicalFactory
-        alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True, alchemical_torsions=True, alchemical_bonds=True, alchemical_angles=True, softcore_beta=0.0)
+        alchemical_factory = AbsoluteAlchemicalFactory(unmodified_system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True, alchemical_torsions=True, alchemical_bonds=True, alchemical_angles=True, softcore_alpha=self.softcore_alpha, softcore_beta=self.softcore_beta)
 
         # Return the alchemically-modified system in fully-interacting form.
         alchemical_system = alchemical_factory.createPerturbedSystem()
+
+        # Disable barostat
+        for force in alchemical_system.getForces():
+            if hasattr(force, 'setFrequency'):
+                force.setFrequency(0)
+
         return alchemical_system
 
     def _integrate_switching(self, integrator, context, topology, indices, iteration, direction):
@@ -722,6 +738,12 @@ class NCMCHybridEngine(NCMCEngine):
         # Return the alchemically-modified system in fully-interacting form.
 #        alchemical_system, _, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
         alchemical_system, alchemical_topology, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
+
+        # Disable barostat
+        for force in alchemical_system.getForces():
+            if hasattr(force, 'setFrequency'):
+                force.setFrequency(0)
+
         return [unmodified_old_system, unmodified_new_system,
                 alchemical_system, alchemical_topology, alchemical_positions, final_atom_map,
                 initial_atom_map]
