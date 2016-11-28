@@ -2670,7 +2670,7 @@ def run_imidazole():
 
     # Run ligand in solvent constant-pH sampler calibration
     testsystem.sams_samplers['explicit-imidazole'].verbose=True
-    testsystem.sams_samplers['explicit-imidazole'].run(niterations=10)
+    testsystem.sams_samplers['explicit-imidazole'].run(niterations=50)
     
     # Analyze data.
     from perses.analysis import Analysis

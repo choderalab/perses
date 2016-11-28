@@ -1068,6 +1068,8 @@ class SystemGenerator(object):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
+        if 'removeCMMotion' not in self._forcefield_kwargs:
+            self._forcefield_kwargs['removeCMMotion'] = False
         if use_antechamber:
             self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
         self._barostat = None
