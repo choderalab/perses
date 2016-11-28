@@ -26,6 +26,26 @@ class HybridTopologyFactory(object):
             softening: float, 0 - 1
                        minimum fraction of bond angle, and torsion forces
         """
+        # Assert that number of forces and ordering of forces are same for system1 and system2
+        systems_have_same_force_order = True
+        if (system1.getNumForces() != system2.getNumForces()):
+            systems_have_same_force_order = False
+        for (force1, force2) in zip(system1.getForces(), system2.getForces()):
+            if force1.__class__.__name__ != force2.__class__.__name__:
+                systems_have_same_force_order = False
+        if not systems_have_same_force_order:
+            msg = 'system1 and system2 must have the same number and ordering of Force objects\n'
+            msg += '\n'
+            msg += 'system1 forces:\n'
+            for (force_index, force) in enumerate(system1.getForces()):
+                msg += '%6d : %s\n' % (force_index, force.__class__.__name__)
+            msg += '\n'
+            msg += 'system2 forces:\n'
+            for (force_index, force) in enumerate(system2.getForces()):
+                msg += '%6d : %s\n' % (force_index, force.__class__.__name__)
+            msg += '\n'
+            raise Exception(msg)
+
         self.softcore_alpha=0.5
         self.softcore_beta=12*unit.angstrom**2
         self.system1 = copy.deepcopy(system1)

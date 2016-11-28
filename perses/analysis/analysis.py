@@ -147,6 +147,50 @@ class Analysis(object):
             pdf.savefig()
             plt.close()
 
+    def plot_sams_weights(self, filename):
+        """Generate plots of SAMS weights.
+
+        NOTE: This currently does not work since logZ and log_weights are stored as objects containing 'dict's.
+
+        Parameters
+        ----------
+        filename : str
+            File to write PDF of NCMC work plots to.
+
+        """
+        with PdfPages(filename) as pdf:
+            for envname in self.get_environments():
+                def plot_sams_weights(pdf, logZ, log_weights, title=""):
+                    plt.figure(figsize=(12, 8))
+
+                    #
+                    # plot logZ
+                    #
+                    plt.subplot(2,1,1)
+                    plt.plot(logZ, '.')
+                    plt.xlabel('iteration')
+                    plt.ylabel('logZ estimate')
+                    
+                    #
+                    # plot log_weights
+                    #
+                    plt.subplot(2,1,2)
+                    plt.plot(log_weights, '.')
+                    plt.xlabel('iteration')
+                    plt.ylabel('log weights')
+
+                    pdf.savefig()  # saves the current figure into a pdf page
+                    plt.close()
+
+                for modname in ['SAMSSampler']:
+                    varname = '/' + envname + '/' + modname + '/' + 'logZ'
+                    print(varname)
+                    logZ = self._ncfile[varname][:]
+                    varname = '/' + envname + '/' + modname + '/' + 'log_weights'
+                    print(varname)
+                    log_weights = self._ncfile[varname][:]
+                    plot_sams_weights(pdf, logZ, log_weights)
+
 
     def plot_ncmc_work(self, filename):
         """Generate plots of NCMC work.
@@ -158,19 +202,7 @@ class Analysis(object):
 
         """
         with PdfPages(filename) as pdf:
-            for envname in ['NCMCEngine', 'NCMCHybridEngine']: #self.get_environments():
-                modname = envname
-                work = dict()
-                for direction in ['delete', 'insert']:
-                    varname = '/' + modname + '/' + 'work_' + direction
-                    try:
-                        # TODO: For now, we analyze all but the last sample, so that this can be run on active simulations.
-                        # Later, we should find some way to omit the last sample only if it is nonsensical.
-                        work[direction] = self._ncfile[varname][:-1,:]
-                        print('Found %s' % varname)
-                    except Exception as e:
-                        pass
-
+            for envname in self.get_environments():
                 def plot_work_trajectories(pdf, work, title=""):
                     """Generate figures for the specified switching legs.
                     """
@@ -229,12 +261,24 @@ class Analysis(object):
                     pdf.savefig()  # saves the current figure into a pdf page
                     plt.close()
 
-                if len(work) > 0:
-                    # Plot work for all chemical transformations.
-                    plot_work_trajectories(pdf, work, title='(all transformations)')
+                for modname in ['NCMCEngine', 'NCMCHybridEngine']:
+                    work = dict()
+                    for direction in ['delete', 'insert']:
+                        varname = '/' + envname + '/' + modname + '/' + 'work_' + direction
+                        try:
+                            # TODO: For now, we analyze all but the last sample, so that this can be run on active simulations.
+                            # Later, we should find some way to omit the last sample only if it is nonsensical.
+                            work[direction] = self._ncfile[varname][:-1,:]
+                            print('Found %s' % varname)
+                        except Exception as e:
+                            pass
+                    
+                    if len(work) > 0:
+                        # Plot work for all chemical transformations.
+                        plot_work_trajectories(pdf, work, title='(all transformations)')
 
-                    # Plot work separated out for each chemical transformation
-                    #[niterations, nsteps] = work.shape
-                    #transformations = dict()
-                    #for iteration in range(niterations):
-                    #    plot_work_trajectories(pdf, work, title='(all transformations)')
+                        # Plot work separated out for each chemical transformation
+                        #[niterations, nsteps] = work.shape
+                        #transformations = dict()
+                        #for iteration in range(niterations):
+                        #    plot_work_trajectories(pdf, work, title='(all transformations)')
