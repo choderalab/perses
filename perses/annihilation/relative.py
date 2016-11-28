@@ -51,10 +51,6 @@ class HybridTopologyFactory(object):
         self.system1 = copy.deepcopy(system1)
         self.system2 = copy.deepcopy(system2)
 
-        # Remove barostat
-        self._remove_barostat(self.system1)
-        self._remove_barostat(self.system2)
-
         if softening < 0.0 or softening > 1.0:
             softening = 0.1
         self.softening = softening
@@ -96,14 +92,6 @@ class HybridTopologyFactory(object):
         self.unique_atoms2 = [atom for atom in range(topology2._numAtoms) if atom not in self.atom_mapping_1to2.values()]
 
         self.verbose = False
-
-    def _remove_barostat(self, system):
-        force_indices_to_remove = list()
-        for (force_index, force) in enumerate(system.getForces()):
-            if force.__class__.__name__ in ['MonteCarloBarostat', 'AnisotropicMonteCarloBarostat']:
-                force_indices_to_remove.append(force_index)
-        for force_index in force_indices_to_remove[::-1]:
-            system.removeForce(force_index)
 
     def _handle_constraints(self, system, system2, sys2_indices_in_system):
         if self.verbose: print("Adding constraints from system2...")
