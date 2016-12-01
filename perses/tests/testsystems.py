@@ -2018,6 +2018,7 @@ class NullTestSystem(PersesTestSystem):
 
     Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
+
     """
     def __init__(self, storage_filename="null.nc", exen_pdb_filename=None, scheme='ncmc-geometry-ncmc', options=None):
 
@@ -2076,11 +2077,13 @@ class NullTestSystem(PersesTestSystem):
             sampler_state = SamplerState(system=initial_system, positions=initial_positions)
 
             mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
-            mcmc_sampler.nsteps = 5
+            mcmc_sampler.nsteps = 500
             mcmc_sampler.timestep = 1.0*unit.femtosecond
             mcmc_sampler.verbose = True
 
             exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme=scheme, options=options, storage=self.storage)
+            if scheme == 'geometry-ncmc-geometry':
+                exen_sampler.ncmc_engine.softening = 1.0
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')
@@ -2173,7 +2176,7 @@ class ButaneTestSystem(NullTestSystem):
             Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
             Default will use a hybrid NCMC method
 
-    Only one environment ('vacuum') is currently implemented; however all
+    Only one environment ('vacuum') is currently implemented; however all 
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
@@ -2214,7 +2217,7 @@ class PropaneTestSystem(NullTestSystem):
             Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
             Default will use a hybrid NCMC method
 
-    Only one environment ('vacuum') is currently implemented; however all 
+    Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
@@ -2639,7 +2642,7 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc')
+    testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc', options = {'nsteps':100})
     run_null_system(testsystem)
     #run_alanine_system(sterics=False)
     #run_fused_rings()

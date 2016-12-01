@@ -7,6 +7,9 @@ from simtk import openmm, unit
 from openmmtools.integrators import GHMCIntegrator
 from perses.storage import NetCDFStorageView
 from perses.tests.utils import quantity_is_finite
+## remove
+from simtk.openmm.app import PDBFile
+##
 
 default_functions = {
     'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
@@ -311,7 +314,7 @@ class NCMCEngine(object):
             # Write trajectory frame.
             if self._storage and self.write_ncmc_interval:
                 positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(nsteps+1))
+                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(self.nsteps+1))
 
             # Perform NCMC integration.
             for step in range(self.nsteps):
@@ -325,7 +328,7 @@ class NCMCEngine(object):
                 if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
                     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
-                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(nsteps+1))
+                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(self.nsteps+1))
 
             # Store work values.
             if self._storage:
@@ -585,7 +588,7 @@ class NCMCHybridEngine(NCMCEngine):
                  nsteps=default_nsteps, timestep=default_timestep, 
                  constraint_tolerance=None, platform=None, 
                  write_ncmc_interval=None, integrator_type='GHMC',
-                 softening=0.1):
+                 storage=None, softening=0.1):
         """
         Subclass of NCMCEngine which switches directly between two different
         systems using an alchemical hybrid topology.
