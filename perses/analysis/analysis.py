@@ -50,6 +50,7 @@ class Analysis(object):
         """
         # TODO: Replace this with calls to storage API
         self._ncfile = netcdf.Dataset(storage_filename, 'r')
+        self.storage_filename = storage_filename
 
     def get_environments(self):
         """Return a list of environments in storage file.

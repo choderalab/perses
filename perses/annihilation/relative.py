@@ -623,13 +623,13 @@ class HybridTopologyFactory(object):
         for atom1 in self.unique_atoms1:
             index = sys1_indices_in_system[atom1] # index into system
             [charge1, sigma1, epsilon1] = force1.getParticleParameters(atom1)
-            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma1, 0*epsilon1])
-            electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, 0*charge1])
+            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma1, epsilon1, sigma1, 0.0*epsilon1])
+            electrostatics_custom_nonbonded_force.setParticleParameters(index, [charge1, 0.0*charge1])
         for atom2 in self.unique_atoms2:
             index = sys2_indices_in_system[atom2] # index into system
             [charge2, sigma2, epsilon2] = force2.getParticleParameters(atom2)
-            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, 0*epsilon2, sigma2, epsilon2])
-            electrostatics_custom_nonbonded_force.setParticleParameters(index, [0*charge2, charge2])
+            sterics_custom_nonbonded_force.setParticleParameters(index, [sigma2, 0.0*epsilon2, sigma2, epsilon2])
+            electrostatics_custom_nonbonded_force.setParticleParameters(index, [0.0*charge2, charge2])
         for index1 in unique_to_core_exceptions1:
             [atom1_i, atom1_j, chargeProd, sigma, epsilon] = force1.getExceptionParameters(index1)
             atom_i = sys1_indices_in_system[atom1_i]

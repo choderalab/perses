@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 # NUMBER OF ATTEMPTS
 ################################################################################
 niterations = 50
-ENV = 'explicit'
+ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
 ################################################################################
@@ -36,9 +36,9 @@ beta = 1.0/kT
 functions_hybrid = {
     'lambda_sterics' : 'lambda',
     'lambda_electrostatics' : 'lambda',
-    'lambda_bonds' : '1.0',
-    'lambda_angles' : '0.1*lambda+0.9',
-    'lambda_torsions' : '0.7*lambda+0.3'
+    'lambda_bonds' : 'lambda',#'1.0',
+    'lambda_angles' : 'lambda',#'0.1*lambda+0.9',
+    'lambda_torsions' : 'lambda',#'0.7*lambda+0.3'
 }
 functions_twostage = {
     'lambda_sterics' : '(2*lambda)^4 * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
@@ -168,7 +168,7 @@ def benchmark_ncmc_work_during_protocol():
                 testsystem.exen_samplers[ENV].verbose = False
                 testsystem.exen_samplers[ENV].sampler.verbose = False
                 if name == 'hybrid':
-                    testsystem.exen_samplers[ENV].ncmc_engine.softening = 0.0
+                    testsystem.exen_samplers[ENV].ncmc_engine.softening = 1.0
                 testsystem.exen_samplers[ENV].run(niterations=niterations)
 
                 analysis = Analysis(testsystem.storage_filename)
