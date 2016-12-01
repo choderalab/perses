@@ -7,9 +7,6 @@ from simtk import openmm, unit
 from openmmtools.integrators import GHMCIntegrator
 from perses.storage import NetCDFStorageView
 from perses.tests.utils import quantity_is_finite
-## remove
-from simtk.openmm.app import PDBFile
-##
 
 default_functions = {
     'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
