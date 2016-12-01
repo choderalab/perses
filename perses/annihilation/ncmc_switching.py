@@ -477,10 +477,10 @@ class NCMCEngine(object):
             and alchemical systems of the same chemical state
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
-        itegrator : NCMCAlchemicalIntegrator subclasses
-            NCMC switching integrator to annihilate or introduce particles alchemically.
         context : openmm.Context 
             Alchemical context
+        itegrator : NCMCAlchemicalIntegrator subclasses
+            NCMC switching integrator to annihilate or introduce particles alchemically.
 
         Returns
         -------
@@ -583,7 +583,8 @@ class NCMCHybridEngine(NCMCEngine):
     def __init__(self, temperature=default_temperature, functions=None, 
                  nsteps=default_nsteps, timestep=default_timestep, 
                  constraint_tolerance=None, platform=None, 
-                 write_ncmc_interval=None, integrator_type='GHMC'):
+                 write_ncmc_interval=None, integrator_type='GHMC',
+                 storage=None, softening=0.1):
         """
         Subclass of NCMCEngine which switches directly between two different
         systems using an alchemical hybrid topology.
@@ -620,7 +621,7 @@ class NCMCHybridEngine(NCMCEngine):
         super(NCMCHybridEngine, self).__init__(temperature=temperature, functions=functions, nsteps=nsteps,
                                                timestep=timestep, constraint_tolerance=constraint_tolerance,
                                                platform=platform, write_ncmc_interval=write_ncmc_interval,
-                                               integrator_type=integrator_type)
+                                               storage=storage, integrator_type=integrator_type)
 
     def _computeAlchemicalCorrection(self, integrator, context,
                                      unmodified_old_system, unmodified_new_system,
@@ -632,21 +633,17 @@ class NCMCHybridEngine(NCMCEngine):
 
         Parameters
         ----------
+        itegrator : NCMCAlchemicalIntegrator subclasses
+            NCMC switching integrator to annihilate or introduce particles alchemically.
+        context : openmm.Context 
+            Alchemical context
         unmodified_old_system : simtk.unit.System
             Real fully-interacting system.
         unmodified_new_system : simtk.unit.System
             Real fully-interacting system.
-        alchemical_system : simtk.unit.System
-            Alchemically modified system in fully-interacting form.
         initial_positions : simtk.unit.Quantity of dimensions [nparticles,3]
             with units compatible with angstroms
             The initial positions before NCMC switching.
-        alchemical_positions : simtk.unit.Quantity of dimensions [nparticles,3]
-            with units compatible with angstroms
-            The initial positions of hybrid topology before NCMC switching.
-        final_hybrid_positions : simtk.unit.Quantity of dimensions
-            [nparticles,3] with units compatible with angstroms
-            The final positions of hybrid topology after NCMC switching.
         final_positions : simtk.unit.Quantity of dimensions [nparticles,3]
             with units compatible with angstroms
             The final positions after NCMC switching.
@@ -659,7 +656,7 @@ class NCMCHybridEngine(NCMCEngine):
         """
         from perses.tests.utils import compute_potential
         initial_logP_correction = (self.beta * integrator.getGlobalVariableByName("Einitial") * unit.kilojoules_per_mole) - self.beta * compute_potential(unmodified_old_system, initial_positions, platform=self.platform)
-        final_logP_correction = self.beta * self.compute_potential(unmodified_new_system, final_positions, platform=self.platform) - (self.beta * context.getState(getEnergy=True).getPotentialEnergy())
+        final_logP_correction = self.beta * compute_potential(unmodified_new_system, final_positions, platform=self.platform) - (self.beta * context.getState(getEnergy=True).getPotentialEnergy())
 
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
         return logP_alchemical_correction
@@ -720,7 +717,7 @@ class NCMCHybridEngine(NCMCEngine):
         potential = potential_ins - potential_del
         return [final_positions, initial_positions, potential]
 
-    def integrate(self, topology_proposal, initial_positions, proposed_positions, platform=None):
+    def integrate(self, topology_proposal, initial_positions, proposed_positions, platform=None, iteration=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
         The contribution of transforming the real system to/from an alchemical system is included.
@@ -764,18 +761,17 @@ class NCMCHybridEngine(NCMCEngine):
         integrator = self._choose_integrator(alchemical_system, functions, direction)
         context = self._create_context(alchemical_system, integrator, alchemical_positions)
 
-        final_hybrid_positions, logP_NCMC = self._integrate_switching(integrator, context, alchemical_topology, indices, None, direction)
+        final_hybrid_positions, logP_NCMC = self._integrate_switching(integrator, context, alchemical_topology, indices, iteration, direction)
         final_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, final_to_hybrid_atom_map)
         new_old_positions = self._convert_hybrid_positions_to_final(final_hybrid_positions, initial_to_hybrid_atom_map)
 
         # Compute contribution from transforming real system to/from alchemical system.
         logP_alchemical_correction = self._computeAlchemicalCorrection(
+                                              integrator,
+                                              context,
                                               unmodified_old_system,
                                               unmodified_new_system,
-                                              alchemical_system,
                                               initial_positions,
-                                              alchemical_positions,
-                                              final_hybrid_positions,
                                               final_positions,
                                           )
 

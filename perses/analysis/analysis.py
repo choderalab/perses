@@ -79,6 +79,73 @@ class Analysis(object):
         # TODO
         pass
 
+    def plot_exen_logp_components(self, filename_prefix=None):
+        """
+        Generate histograms of each component of Expanded Ensemble log acceptance probability
+        Components may include:
+            logp_topology_proposal
+            logp_geometry
+                logp_geometry_propose
+                logp_geometry_reverse
+            logp_switch                       (not present in 'geometry-ncmc-geometry' scheme)
+            logp_ncmc_elimination             ('ncmc-geometry-ncmc' scheme only)
+            logp_ncmc_introduction            (not present in 'geometry-ncmc-geometry' scheme)
+            logp_ncmc                         ('geometry-ncmc-geometry' scheme only)
+            new_log_weight
+            old_log_weight
+
+        Arguments:
+        ----------
+        filename_prefix : str, OPTIONAL, default = None
+            if specified, each plot is saved as '{0}-{1}'.format(filename_prefix, component)
+        Each histogram will be saved to {component name}.png
+        TODO: include input filename
+            storage ncfile has different hierarchy depending on which samplers are defined;
+            this probably only works without SAMS sampling (otherwise top level groups are
+            environments)
+
+        """
+        components = [
+            'logp_topology_proposal',
+            'logp_geometry',
+            'logp_geometry_propose',
+            'logp_geometry_reverse',
+            'logp_switch', 
+            'logp_ncmc_elimination',
+            'logp_ncmc_introduction',
+            'logp_ncmc',
+            'new_log_weight',
+            'old_log_weight',
+        ]
+
+        ee_sam = self._ncfile.groups['ExpandedEnsembleSampler']
+        if filename_prefix is None:
+            filename_prefix = self.storage_filename.split('.')[0]
+        filename = '{0}-logP-components.pdf'.format(filename_prefix)
+        with PdfPages(filename) as pdf:
+            logps = dict()
+            for component in components:
+                try:
+                    niterations = ee_sam.variables[component].shape[0]
+                except:
+                    continue
+                logps[component] = np.zeros(niterations, np.float64)
+                for n in range(niterations):
+                    logps[component][n] = ee_sam.variables[component][n]
+            plt.figure(figsize=(8,12))
+            nrows = len(logps.keys())/2 + len(logps.keys())%2
+            ncols = 2
+            for spot, component in enumerate(logps.keys()):
+                row = spot/2
+                col = spot%2
+                plt.subplot2grid((nrows,ncols),(row,col))
+                plt.hist(logps[component])
+                plt.title(component)
+                #plt.xlabel(component)
+            pdf.savefig()
+            plt.close()
+
+
     def plot_ncmc_work(self, filename):
         """Generate plots of NCMC work.
 
@@ -89,11 +156,11 @@ class Analysis(object):
 
         """
         with PdfPages(filename) as pdf:
-            for envname in self.get_environments():
-                modname = 'NCMCEngine'
+            for envname in ['NCMCEngine', 'NCMCHybridEngine']: #self.get_environments():
+                modname = envname
                 work = dict()
                 for direction in ['delete', 'insert']:
-                    varname = '/' + envname + '/' + modname + '/' + 'work_' + direction
+                    varname = '/' + modname + '/' + 'work_' + direction
                     try:
                         # TODO: For now, we analyze all but the last sample, so that this can be run on active simulations.
                         # Later, we should find some way to omit the last sample only if it is nonsensical.
@@ -107,10 +174,10 @@ class Analysis(object):
                     """
                     plt.figure(figsize=(12, 8))
 
-                    nrows = 2
+                    nrows = len(work.keys())
                     ncols = 6
                     workcols = 2
-                    for (row, direction) in enumerate(['delete', 'insert']):
+                    for (row, direction) in enumerate(work.keys()):
                         #
                         # Plot work vs step
                         #

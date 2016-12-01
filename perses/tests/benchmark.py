@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 # NUMBER OF ATTEMPTS
 ################################################################################
 niterations = 50
+ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
 ################################################################################
@@ -32,197 +33,152 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 
-def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds, platform=None):
-    integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
-    if platform == None:
-        context = openmm.Context(system, integrator)
-    else:
-        context = openmm.Context(system, integrator, platform)
-    context.setPositions(positions)
-    context.setVelocitiesToTemperature(temperature)
-    integrator.step(nsteps)
-    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-    velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
-    return [positions, velocities]
+functions_hybrid = {
+    'lambda_sterics' : 'lambda',
+    'lambda_electrostatics' : 'lambda',
+    'lambda_bonds' : '1.0',
+    'lambda_angles' : '0.1*lambda+0.9',
+    'lambda_torsions' : '0.7*lambda+0.3'
+}
+functions_twostage = {
+    'lambda_sterics' : '(2*lambda)^4 * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+    'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+    'lambda_bonds' : '1.0', # don't soften bonds
+    'lambda_angles' : '0.1*lambda+0.9',
+    'lambda_torsions' : '0.7*lambda+0.3'
+}
 
-def check_hybrid_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
+def plot_logPs(logps, molecule_name, scheme, component):
     """
-    Test alchemical elimination engine on null transformations, where some atoms are deleted and then reinserted in a cycle.
+    Create line plot of mean and standard deviation of given logPs.
 
-    Parameters
+    Arguments:
     ----------
-    NullProposal : class
-        subclass of testsystems.NullTestSystem
-    ncmc_nsteps : int, optional, default=50
-        Number of NCMC switching steps, or 0 for instantaneous switching.
-    NSIGMA_MAX : float, optional, default=6.0
-        Number of standard errors away from analytical solution tolerated before Exception is thrown
-    geometry : bool, optional, default=None
-        If True, will also use geometry engine in the middle of the null transformation.
+        logps: dict { int : np.ndarray }
+            key : number of total NCMC steps
+            value : array of `niterations` logP values
+        molecule_name : str
+            The molecule featured in the NullTestSystem being analyzed
+            in ['naphthalene','butane','propane']
+        scheme : str
+            Which NCMC scheme is being used
+            in ['hybrid','two-stage']
+        component : str
+            Which logP is being plotted
+            in ['NCMC','EXEN']
     """
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0',  
-        'lambda_angles' : '0.5*lambda+0.5', 
-        'lambda_torsions' : '0.5*lambda+0.5'
-    }
-
-    testsystem = NullProposal(storage_filename=None, scheme='geometry-ncmc-geometry',options={'functions': functions, 'nsteps': ncmc_nsteps})
-    for key in testsystem.environments: # only one key: vacuum
-        # run a single iteration to generate item in number_of_state_visits dict
-        ncmc_engine = testsystem.exen_samplers[key].ncmc_engine
-
-        topology = testsystem.topologies[key]
-        system = testsystem.system_generators[key].build_system(topology)
-        topology_proposal = testsystem.proposal_engines[key].propose(system, topology)
-        positions = testsystem.positions[key]
-
-    nequil = 5 # number of equilibration iterations
-    logP_n = np.zeros([niterations], np.float64)
-    for iteration in range(nequil):
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
-    for iteration in range(niterations):
-        # Equilibrate
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
-
-        # Check that positions are not NaN
-        if(np.any(np.isnan(positions / unit.angstroms))):
-            raise Exception("Positions became NaN during equilibration")
-
-        # Hybrid NCMC from old to new
-        [positions, new_old_positions, logP] = ncmc_engine.integrate(topology_proposal, positions, positions)
-
-        # Check that positions are not NaN
-        if(np.any(np.isnan(positions / unit.angstroms))):
-            raise Exception("Positions became NaN on Hybrid NCMC switch")
-
-        # Compute total probability
-        logP_n[iteration] = logP
-
-    # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
-    work_n = - logP_n
-    from pymbar import EXP
-    [df, ddf] = EXP(work_n)
-    return df, ddf
-
-def check_alchemical_null_elimination(NullProposal, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
-    """
-    Test alchemical elimination engine on null transformations, where some atoms are deleted and then reinserted in a cycle.
-
-    Parameters
-    ----------
-    topology_proposal : TopologyProposal
-        The topology proposal to test.
-        This must be a null transformation, where topology_proposal.old_system == topology_proposal.new_system
-    ncmc_nsteps : int, optional, default=50
-        Number of NCMC switching steps, or 0 for instantaneous switching.
-    NSIGMA_MAX : float, optional, default=6.0
-        Number of standard errors away from analytical solution tolerated before Exception is thrown
-    geometry : bool, optional, default=None
-        If True, will also use geometry engine in the middle of the null transformation.
-    """
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '1.0', # don't soften angles
-        'lambda_torsions' : 'lambda'
-    }
-    testsystem = NullProposal(storage_filename=None, scheme='ncmc-geometry-ncmc',options={'functions': functions, 'nsteps': ncmc_nsteps})
-
-    for key in testsystem.environments: # only one key: vacuum
-        # run a single iteration to generate item in number_of_state_visits dict
-        ncmc_engine = testsystem.exen_samplers[key].ncmc_engine
-
-        topology = testsystem.topologies[key]
-        system = testsystem.system_generators[key].build_system(topology)
-        topology_proposal = testsystem.proposal_engines[key].propose(system, topology)
-        positions = testsystem.positions[key]
-
-    nequil = 5 # number of equilibration iterations
-    logP_insert_n = np.zeros([niterations], np.float64)
-    logP_delete_n = np.zeros([niterations], np.float64)
-    logP_switch_n = np.zeros([niterations], np.float64)
-    for iteration in range(nequil):
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
-    for iteration in range(niterations):
-        # Equilibrate
-        [positions, velocities] = simulate(topology_proposal.old_system, positions)
-
-        # Check that positions are not NaN
-        if(np.any(np.isnan(positions / unit.angstroms))):
-            raise Exception("Positions became NaN during equilibration")
-
-        # Delete atoms
-        [positions, logP_delete, potential_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
-
-        # Check that positions are not NaN
-        if(np.any(np.isnan(positions / unit.angstroms))):
-            raise Exception("Positions became NaN on NCMC deletion")
-
-        # Insert atoms
-        [positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
-
-        # Check that positions are not NaN
-        if(np.any(np.isnan(positions / unit.angstroms))):
-            raise Exception("Positions became NaN on NCMC insertion")
-
-        # Compute probability of switching geometries.
-        logP_switch = - (potential_insert - potential_delete)
-
-        # Compute total probability
-        logP_delete_n[iteration] = logP_delete
-        logP_insert_n[iteration] = logP_insert
-        logP_switch_n[iteration] = logP_switch
-
-    # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
-    logP_n = logP_delete_n + logP_insert_n + logP_switch_n
-    work_n = - logP_n
-    from pymbar import EXP
-    [df, ddf] = EXP(work_n)
-    return df, ddf
-
-def plot_ncmc_logP(mol_name, ncmc_type, mean, sigma):
-    x = mean.keys()
-    y = [mean[steps] for steps in x]
-    dy = [sigma[steps] for steps in x]
+    x = logps.keys()
+    x.sort()
+    y = [logps[steps].mean() for steps in x]
+    dy = [logps[steps].std() for steps in x]
     plt.fill_between(x, [mean - dev for mean, dev in zip(y, dy)], [mean + dev for mean, dev in zip(y, dy)])
     plt.plot(x, y, 'k')
+    plt.xscale('log')
 
-    plt.title("Log acceptance probability of {0} NCMC for {1}".format(ncmc_type, mol_name))
-    plt.ylabel('logP NCMC')
+    plt.title("Log acceptance probability of {0} ExpandedEnsemble for {1}".format(scheme, molecule_name))
+    plt.ylabel('logP')
     plt.xlabel('ncmc steps')
-    plt.savefig('{0}_{1}NCMC_logP'.format(mol_name, ncmc_type))
-    print('Saved plot to {0}_{1}NCMC_logP.png'.format(mol_name, ncmc_type))
+    plt.savefig('{0}_{1}_{2}{3}_logP'.format(ENV, molecule_name, scheme, component))
+    print('Saved plot to {0}_{1}_{2}{3}_logP.png'.format(ENV, molecule_name, scheme, component))
     plt.clf()
 
-def benchmark_ncmc_null_protocols():
+def benchmark_exen_ncmc_protocol(analyses, molecule_name, scheme):
     """
-    Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
+    For each combination of system and scheme, results are analyzed for
+    the following:
+    * Over the whole range of total steps:
+        * Plot mean and standard deviation of NCMC logP as a function of
+          total steps
+        * Plot mean and standard deviation of EXEN logP as a function of
+          total steps
+
+    Arguments:
+    ----------
+        analyses : dict { int : perses.Analysis }
+            key : number of total NCMC steps
+            value : analysis object contained stored information
+        molecule_name : str
+            The molecule featured in the NullTestSystem being analyzed
+            in ['naphthalene','butane','propane']
+        scheme : str
+            Which NCMC scheme is being used
+            in ['hybrid','two-stage']
+
+    Creates 2 plots every time it is called
+    """
+    components = {
+        'logp_accept' : 'EXEN',
+        'logp_ncmc' : 'NCMC',
+    }
+
+    for component in components.keys():
+        print('Finding {0} over nsteps for {1} with {2} NCMC'.format(component, molecule_name, scheme))
+        logps = dict()
+        for nsteps, analysis in analyses.items():
+            ee_sam = analysis._ncfile.groups['ExpandedEnsembleSampler']
+            niterations = ee_sam.variables[component].shape[0]
+            logps[nsteps] = np.zeros(niterations, np.float64)
+            for n in range(niterations):
+                logps[nsteps][n] = ee_sam.variables[component][n]
+        plot_logPs(logps, molecule_name, scheme, components[component])
+
+def benchmark_ncmc_work_during_protocol():
+    """
+    Run 50 iterations of ExpandedEnsembleSampler for NullTestSystems
+    over a range of total NCMC steps [0, 1, 10, 100, 1000, 10000].
+
+    Benchmark is repeated for Naphthalene, Butane, and Propane test
+    systems, using two-stage and hybrid NCMC.
+
+    For each combination of system and scheme, results are analyzed for
+    the following:
+    * For a given total number of steps:
+        * For NCMC steps 100 and above, plot work done by ncmc integrator
+          over the course of the protocol
+        * Plot histograms of the contributions of each component to the
+          overall log acceptance probability
+    * Over the whole range of total steps:
+        * Plot mean and standard deviation of NCMC logP as a function of
+          total steps
+        * Plot mean and standard deviation of EXEN logP as a function of
+          total steps
     """
     from perses.tests.testsystems import NaphthaleneTestSystem, ButaneTestSystem, PropaneTestSystem
+    from perses.analysis import Analysis
+    import netCDF4 as netcdf
+    import pickle
+    import codecs
     molecule_names = {
         'naphthalene' : NaphthaleneTestSystem,
         'butane' : ButaneTestSystem,
         'propane' : PropaneTestSystem,
     }
-    for molecule_name, NullProposal in molecule_names.items():
-        print('Now testing {0} null transformations'.format(molecule_name))
-        mean = dict()
-        sigma = dict()
-        for ncmc_nsteps in [0, 1, 10, 100]:#, 1000, 10000]:
-            print('Running {0} hybrid NCMC steps for {1} iterations'.format(ncmc_nsteps, niterations))
-            mean[ncmc_nsteps], sigma[ncmc_nsteps] = check_hybrid_null_elimination(NullProposal, ncmc_nsteps=ncmc_nsteps)
-        plot_ncmc_logP(molecule_name, 'hybrid', mean, sigma)
+    methods = {
+        'hybrid' : ['geometry-ncmc-geometry', functions_hybrid],
+        'two-stage' : ['ncmc-geometry-ncmc', functions_twostage],
+    }
 
-        mean = dict()
-        sigma = dict()
-        for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
-            print('Running {0} delete-insert NCMC steps for {1} iterations'.format(ncmc_nsteps, niterations))
-            mean[ncmc_nsteps], sigma[ncmc_nsteps] = check_alchemical_null_elimination(NullProposal, ncmc_nsteps=ncmc_nsteps)
-        plot_ncmc_logP(molecule_name, 'two-stage', mean, sigma)
+    for molecule_name, NullProposal in molecule_names.items():
+        print('\nNow testing {0} null transformations'.format(molecule_name))
+        for name, [scheme, functions] in methods.items():
+            analyses = dict()
+            for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+                print('Running {0} {2} ExpandedEnsemble steps for {1} iterations'.format(ncmc_nsteps, niterations, name))
+                testsystem = NullProposal(storage_filename='{0}_{1}-{2}steps.nc'.format(molecule_name, name, ncmc_nsteps), scheme=scheme, options={'functions' : functions, 'nsteps' : ncmc_nsteps})
+                testsystem.exen_samplers[ENV].verbose = False
+                testsystem.exen_samplers[ENV].sampler.verbose = False
+                if name == 'hybrid':
+                    testsystem.exen_samplers[ENV].ncmc_engine.softening = 0.0
+                testsystem.exen_samplers[ENV].run(niterations=niterations)
+
+                analysis = Analysis(testsystem.storage_filename)
+                print(analysis.get_environments())
+                if ncmc_nsteps > 99:
+                    analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_{2}_steps.pdf'.format(molecule_name, name, ncmc_nsteps))
+                analysis.plot_exen_logp_components()
+                analyses[ncmc_nsteps] = analysis
+            benchmark_exen_ncmc_protocol(analyses, molecule_name, name)
+
 
 if __name__ == "__main__":
-    benchmark_ncmc_null_protocols()
-
+    benchmark_ncmc_work_during_protocol()
