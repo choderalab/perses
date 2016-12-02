@@ -33,7 +33,7 @@ from functools import partial
 from pkg_resources import resource_filename
 from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
-from perses.tests.utils import sanitizeSMILES
+from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
@@ -1044,6 +1044,7 @@ class AblAffinityTestSystem(PersesTestSystem):
 
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
+        molecules = canonicalize_SMILES(molecules)
 
         # Create a system generator for desired forcefields
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -1677,6 +1678,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         super(SmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
+        molecules = canonicalize_SMILES(molecules)
         environments = ['explicit', 'vacuum']
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres

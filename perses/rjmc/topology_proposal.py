@@ -1463,27 +1463,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             receptor_topology._periodicBoxVectors = copy.deepcopy(topology._periodicBoxVectors)
         return receptor_topology
 
-
-    def _smiles_to_oemol(self, smiles_string):
-        """
-        Convert the SMILES string into an OEMol
-
-        Returns
-        -------
-        oemols : np.array of type object
-            array of oemols
-        """
-        mol = oechem.OEMol()
-        oechem.OESmilesToMol(mol, smiles_string)
-        mol.SetTitle("MOL")
-        oechem.OEAddExplicitHydrogens(mol)
-        oechem.OETriposAtomNames(mol)
-        oechem.OETriposBondTypeNames(mol)
-        omega = oeomega.OEOmega()
-        omega.SetMaxConfs(1)
-        omega(mol)
-        return mol
-
     @staticmethod
     def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree, bond_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember):
         """
@@ -1554,7 +1533,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         forward_probability = molecule_probabilities[proposed_smiles_idx]
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
         logp = np.log(reverse_probability) - np.log(forward_probability)
-        proposed_mol = self._smiles_to_oemol(proposed_smiles)
+        from perses.tests.utils import smiles_to_oemol
+        proposed_mol = smiles_to_oemol(proposed_smiles)
         return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):
