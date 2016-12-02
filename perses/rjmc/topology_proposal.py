@@ -1059,14 +1059,25 @@ class SystemGenerator(object):
         Metadata associated with the SystemGenerator.
     use_antechamber : bool, optional, default=True
         If True, will add the GAFF residue template generator.
+    barostat : MonteCarloBarostat, optional, default=None
+        If provided, a matching barostat will be added to the generated system.
     """
 
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
         if use_antechamber:
             self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+        self._barostat = None
+        if barostat is not None:
+            pressure = barostat.getDefaultPressure()
+            if hasattr(barostat, 'getDefaultTemperature'):
+                temperature = barostat.getDefaultTemperature()
+            else:
+                temperature = barostat.getTemperature()
+            frequency = barostat.getFrequency()
+            self._barostat = (pressure, temperature, frequency)
 
     def getForceField(self):
         """
@@ -1109,6 +1120,14 @@ class SystemGenerator(object):
             msg += "\n"
             msg += "PDB file written as 'BuildSystem-failure.pdb'"
             raise Exception(msg)
+
+        # Add barostat if requested.
+        if self._barostat is not None:
+            MAXINT = np.iinfo(np.int32).max
+            barostat = openmm.MonteCarloBarostat(*self._barostat)
+            seed = np.random.randint(MAXINT)
+            barostat.setRandomNumberSeed(seed)
+            system.addForce(barostat)
 
         # DEBUG: See if any torsions have duplicate atoms.
         #from perses.tests.utils import check_system
