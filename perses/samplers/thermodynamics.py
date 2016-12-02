@@ -67,7 +67,7 @@ class ThermodynamicState(object):
     >>> state = ThermodynamicState(system=system, temperature=298.0*units.kelvin)
 
     Get the inverse temperature
-    
+
     >>> beta = state.beta
 
     Specify an NPT state at 298 K and 1 atm pressure.
@@ -139,8 +139,14 @@ class ThermodynamicState(object):
                     break
             if barostat:
                 # Set temperature.
-                # TODO: Set pressure too, once that option is available.
-                barostat.setTemperature(temperature)
+                if hasattr(barostat, 'setDefaultTemperature'):
+                    barostat.setDefaultTemperature(temperature)
+                elif hasattr(barostat, 'setTemperature'):
+                    barostat.setTemperature(temperature)
+                else:
+                    raise Exception("barostat does not have 'setTemperature' or 'setDefaultTemperature' interfaces!")
+                # Set pressure
+                barostat.setDefaultPressure(pressure)
             else:
                 # Create barostat.
                 barostat = mm.MonteCarloBarostat(pressure, temperature)
