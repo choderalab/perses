@@ -1069,6 +1069,8 @@ class SystemGenerator(object):
         self._forcefield = app.ForceField(*self._forcefield_xmls)
         if use_antechamber:
             self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+        if 'removeCMMotion' not in self._forcefield_kwargs:
+            self._forcefield_kwargs['removeCMMotion'] = False
         self._barostat = None
         if barostat is not None:
             pressure = barostat.getDefaultPressure()
