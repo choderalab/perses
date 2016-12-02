@@ -145,6 +145,8 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     def __init__(self, constraints=app.HBonds, **kwargs):
         super(AlanineDipeptideTestSystem, self).__init__(**kwargs)
         environments = ['explicit', 'implicit', 'vacuum']
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
 
         # Use sterics in proposals
         self.geometry_engine.use_sterics = True
@@ -155,10 +157,11 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints },
-            use_antechamber=False)
+            use_antechamber=False, barostat=barostat)
         system_generators['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : constraints },
             use_antechamber=False)
@@ -205,8 +208,6 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         thermodynamic_states['explicit'] = ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
         thermodynamic_states['implicit'] = ThermodynamicState(system=systems['implicit'], temperature=temperature)
         thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
@@ -442,15 +443,18 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         super(T4LysozymeMutationTestSystem, self).__init__(**kwargs)
 #        environments = ['explicit-complex', 'explicit-receptor', 'implicit-complex', 'implicit-receptor', 'vacuum-complex', 'vacuum-receptor']
         environments = ['explicit-complex', 'explicit-receptor', 'vacuum-complex', 'vacuum-receptor']
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-receptor'] = system_generators['explicit']
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'amber99_obc.xml'],
@@ -566,8 +570,6 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in ['receptor', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
             #thermodynamic_states['implicit' + '-' + component] = ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
@@ -656,6 +658,8 @@ class MybTestSystem(PersesTestSystem):
     def __init__(self, **kwargs):
         super(MybTestSystem, self).__init__(**kwargs)
         environments = ['explicit-complex', 'explicit-peptide', 'implicit-complex', 'implicit-peptide', 'vacuum-complex', 'vacuum-peptide']
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
 
         # Use sterics in proposals
         self.geometry_engine.use_sterics = True
@@ -666,6 +670,7 @@ class MybTestSystem(PersesTestSystem):
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
@@ -736,8 +741,6 @@ class MybTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in ['peptide', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
             thermodynamic_states['implicit' + '-' + component] = ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
@@ -846,10 +849,11 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         from perses.rjmc.topology_proposal import SystemGenerator
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
@@ -1045,10 +1049,11 @@ class AblAffinityTestSystem(PersesTestSystem):
         from perses.rjmc.topology_proposal import SystemGenerator
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
@@ -1105,8 +1110,6 @@ class AblAffinityTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in components:
             for solvent in solvents:
                 environment = solvent + '-' + component
@@ -1258,10 +1261,11 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         print('Creating system generators...')
         from perses.rjmc.topology_proposal import SystemGenerator
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
@@ -1322,8 +1326,6 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         print('Defining thermodynamic states...')
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in components:
             for solvent in solvents:
                 environment = solvent + '-' + component
@@ -1470,10 +1472,11 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         print('Creating system generators...')
         from perses.rjmc.topology_proposal import SystemGenerator
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
@@ -1543,8 +1546,6 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         print('Defining thermodynamic states...')
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in components:
             for solvent in solvents:
                 environment = solvent + '-' + component
@@ -1677,14 +1678,17 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
         environments = ['explicit', 'vacuum']
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         system_generators = dict()
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints })
+            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }, barostat=barostat)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
 
@@ -1726,8 +1730,6 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         thermodynamic_states['explicit'] = ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
         thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
@@ -2176,7 +2178,7 @@ class ButaneTestSystem(NullTestSystem):
             Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
             Default will use a hybrid NCMC method
 
-    Only one environment ('vacuum') is currently implemented; however all 
+    Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
