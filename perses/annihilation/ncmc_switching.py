@@ -170,7 +170,7 @@ class NCMCEngine(object):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         system : simtk.unit.System
             Real fully-interacting system.
@@ -266,6 +266,14 @@ class NCMCEngine(object):
 
         # Return the alchemically-modified system in fully-interacting form.
         alchemical_system = alchemical_factory.createPerturbedSystem()
+
+        # Disable barostat so that it isn't used during NCMC
+        # In principle, it is OK to use the barostat using GHMC, but not VV.
+        # For safety, we disable it anyway.
+        for force in alchemical_system.getForces():
+            if hasattr(force, 'setFrequency'):
+                force.setFrequency(0)
+
         return alchemical_system
 
     def _integrate_switching(self, integrator, context, topology, indices, iteration, direction):
@@ -279,7 +287,7 @@ class NCMCEngine(object):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         topology : openmm.app.Topology
             Alchemical topology being modified
@@ -315,7 +323,7 @@ class NCMCEngine(object):
 
             # Perform NCMC integration.
             for step in range(self.nsteps):
-                # Take a step. 
+                # Take a step.
                 integrator.step(1)
 
                 # Store accumulated work
@@ -428,7 +436,7 @@ class NCMCEngine(object):
 
         Returns
         -------
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         """
         # Create a context on the specified platform.
@@ -478,7 +486,7 @@ class NCMCEngine(object):
             and alchemical systems of the same chemical state
         alchemical_system : simtk.openmm.System
             The system with appropriate atoms alchemically modified
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
@@ -581,9 +589,9 @@ class NCMCHybridEngine(NCMCEngine):
     [positions, new_old_positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, proposed_positions)
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, 
-                 nsteps=default_nsteps, timestep=default_timestep, 
-                 constraint_tolerance=None, platform=None, 
+    def __init__(self, temperature=default_temperature, functions=None,
+                 nsteps=default_nsteps, timestep=default_timestep,
+                 constraint_tolerance=None, platform=None,
                  write_ncmc_interval=None, integrator_type='GHMC',
                  storage=None, softening=0.1):
         """
@@ -639,7 +647,7 @@ class NCMCHybridEngine(NCMCEngine):
         ----------
         itegrator : NCMCAlchemicalIntegrator subclasses
             NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context 
+        context : openmm.Context
             Alchemical context
         unmodified_old_system : simtk.unit.System
             Real fully-interacting system.
@@ -720,6 +728,14 @@ class NCMCHybridEngine(NCMCEngine):
         # Return the alchemically-modified system in fully-interacting form.
 #        alchemical_system, _, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
         alchemical_system, alchemical_topology, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
+
+        # Disable barostat so that it isn't used during NCMC
+        # In principle, it is OK to use the barostat using GHMC, but not VV.
+        # For safety, we disable it anyway.
+        for force in alchemical_system.getForces():
+            if hasattr(force, 'setFrequency'):
+                force.setFrequency(0)
+        
         return [unmodified_old_system, unmodified_new_system,
                 alchemical_system, alchemical_topology, alchemical_positions, final_atom_map,
                 initial_atom_map]
@@ -1144,7 +1160,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable('pstep', 0)
 
         if nsteps == 0:
-            self.beginIfBlock('step = 0')            
+            self.beginIfBlock('step = 0')
             # Initialize alchemical state
             self.addAlchemicalResetStep()
             self.setGlobalVariableByName("total_work", 0.0)
@@ -1199,7 +1215,7 @@ class NCMCVVAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.endBlock()
 
             # All steps, including initial step
-            self.beginIfBlock('step < nsteps')        
+            self.beginIfBlock('step < nsteps')
             # Accumulate protocol work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()
@@ -1295,7 +1311,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addGlobalVariable("psteps", steps_per_propagation) # total number of propagation steps
 
         if nsteps == 0:
-            self.beginIfBlock('step = 0')            
+            self.beginIfBlock('step = 0')
             # Initialize alchemical state
             self.addAlchemicalResetStep()
             self.setGlobalVariableByName("total_work", 0.0)
@@ -1343,7 +1359,7 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.endBlock()
 
             # All steps, including initial step
-            self.beginIfBlock('step < nsteps')        
+            self.beginIfBlock('step < nsteps')
             # Accumulate protocol work
             self.addComputeGlobal("Eold", "energy")
             self.addAlchemicalPerturbationStep()

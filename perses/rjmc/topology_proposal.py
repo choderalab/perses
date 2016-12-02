@@ -1059,14 +1059,27 @@ class SystemGenerator(object):
         Metadata associated with the SystemGenerator.
     use_antechamber : bool, optional, default=True
         If True, will add the GAFF residue template generator.
+    barostat : MonteCarloBarostat, optional, default=None
+        If provided, a matching barostat will be added to the generated system.
     """
 
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
         if use_antechamber:
             self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+        if 'removeCMMotion' not in self._forcefield_kwargs:
+            self._forcefield_kwargs['removeCMMotion'] = False
+        self._barostat = None
+        if barostat is not None:
+            pressure = barostat.getDefaultPressure()
+            if hasattr(barostat, 'getDefaultTemperature'):
+                temperature = barostat.getDefaultTemperature()
+            else:
+                temperature = barostat.getTemperature()
+            frequency = barostat.getFrequency()
+            self._barostat = (pressure, temperature, frequency)
 
     def getForceField(self):
         """
@@ -1109,6 +1122,14 @@ class SystemGenerator(object):
             msg += "\n"
             msg += "PDB file written as 'BuildSystem-failure.pdb'"
             raise Exception(msg)
+
+        # Add barostat if requested.
+        if self._barostat is not None:
+            MAXINT = np.iinfo(np.int32).max
+            barostat = openmm.MonteCarloBarostat(*self._barostat)
+            seed = np.random.randint(MAXINT)
+            barostat.setRandomNumberSeed(seed)
+            system.addForce(barostat)
 
         # DEBUG: See if any torsions have duplicate atoms.
         #from perses.tests.utils import check_system
@@ -1442,27 +1463,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             receptor_topology._periodicBoxVectors = copy.deepcopy(topology._periodicBoxVectors)
         return receptor_topology
 
-
-    def _smiles_to_oemol(self, smiles_string):
-        """
-        Convert the SMILES string into an OEMol
-
-        Returns
-        -------
-        oemols : np.array of type object
-            array of oemols
-        """
-        mol = oechem.OEMol()
-        oechem.OESmilesToMol(mol, smiles_string)
-        mol.SetTitle("MOL")
-        oechem.OEAddExplicitHydrogens(mol)
-        oechem.OETriposAtomNames(mol)
-        oechem.OETriposBondTypeNames(mol)
-        omega = oeomega.OEOmega()
-        omega.SetMaxConfs(1)
-        omega(mol)
-        return mol
-
     @staticmethod
     def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree, bond_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember):
         """
@@ -1533,7 +1533,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         forward_probability = molecule_probabilities[proposed_smiles_idx]
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
         logp = np.log(reverse_probability) - np.log(forward_probability)
-        proposed_mol = self._smiles_to_oemol(proposed_smiles)
+        from perses.tests.utils import smiles_to_oemol
+        proposed_mol = smiles_to_oemol(proposed_smiles)
         return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):

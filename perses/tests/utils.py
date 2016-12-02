@@ -375,6 +375,27 @@ def enumerate_undefined_stereocenters(molecule, verbose=False):
 
     return molecules
 
+def smiles_to_oemol(smiles_string, title="MOL"):
+    """
+    Convert the SMILES string into an OEMol
+
+    Returns
+    -------
+    oemols : np.array of type object
+    array of oemols
+    """
+    from openeye import oechem, oeomega
+    mol = oechem.OEMol()
+    oechem.OESmilesToMol(mol, smiles_string)
+    mol.SetTitle(title)
+    oechem.OEAddExplicitHydrogens(mol)
+    oechem.OETriposAtomNames(mol)
+    oechem.OETriposBondTypeNames(mol)
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega(mol)
+    return mol
+    
 def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     """
     Sanitize set of SMILES strings by ensuring all are canonical isomeric SMILES.
@@ -453,6 +474,33 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
 
     sanitized_smiles_list = list(sanitized_smiles_set)
     return sanitized_smiles_list
+
+def canonicalize_SMILES(smiles_list):
+    """Ensure all SMILES strings end up in canonical form.
+    Stereochemistry must already have been expanded.
+    SMILES strings are converted to a OpenEye Topology and back again.
+    Parameters
+    ----------
+    smiles_list : list of str
+        List of SMILES strings
+    Returns
+    -------
+    canonical_smiles_list : list of str
+        List of SMILES strings, after canonicalization.
+    """
+
+    # Round-trip each molecule to a Topology to end up in canonical form
+    from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue, generateTopologyFromOEMol
+    from openeye import oechem
+    canonical_smiles_list = list()
+    for smiles in smiles_list:
+        molecule = smiles_to_oemol(smiles)
+        topology = generateTopologyFromOEMol(molecule)
+        residues = [ residue for residue in topology.residues() ]
+        new_molecule = generateOEMolFromTopologyResidue(residues[0])
+        new_smiles = oechem.OECreateIsoSmiString(new_molecule)
+        canonical_smiles_list.append(new_smiles)
+    return canonical_smiles_list
 
 def test_sanitizeSMILES():
     """

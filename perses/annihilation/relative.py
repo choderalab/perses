@@ -26,6 +26,26 @@ class HybridTopologyFactory(object):
             softening: float, 0 - 1
                        minimum fraction of bond angle, and torsion forces
         """
+        # Assert that number of forces and ordering of forces are same for system1 and system2
+        systems_have_same_force_order = True
+        if (system1.getNumForces() != system2.getNumForces()):
+            systems_have_same_force_order = False
+        for (force1, force2) in zip(system1.getForces(), system2.getForces()):
+            if force1.__class__.__name__ != force2.__class__.__name__:
+                systems_have_same_force_order = False
+        if not systems_have_same_force_order:
+            msg = 'system1 and system2 must have the same number and ordering of Force objects\n'
+            msg += '\n'
+            msg += 'system1 forces:\n'
+            for (force_index, force) in enumerate(system1.getForces()):
+                msg += '%6d : %s\n' % (force_index, force.__class__.__name__)
+            msg += '\n'
+            msg += 'system2 forces:\n'
+            for (force_index, force) in enumerate(system2.getForces()):
+                msg += '%6d : %s\n' % (force_index, force.__class__.__name__)
+            msg += '\n'
+            raise Exception(msg)
+
         self.softcore_alpha=0.5
         self.softcore_beta=12*unit.angstrom**2
         self.system1 = copy.deepcopy(system1)
@@ -152,7 +172,7 @@ class HybridTopologyFactory(object):
             atom_i = sys2_indices_in_system[atom2_i]
             atom_j = sys2_indices_in_system[atom2_j]
             custom_force.addBond(atom_i, atom_j, [length2, self.softening*K2, length2, K2])
-    
+
         for index1 in unique_bonds1:
             [atom1_i, atom1_j, length1, K1] = force1.getBondParameters(index1)
             atom_i = sys1_indices_in_system[atom1_i]
@@ -180,13 +200,13 @@ class HybridTopologyFactory(object):
         for atoms, index in bonds.items():
             [atom_i, atom_j, length, K] = force.getBondParameters(index)
             force.setBondParameters(index, atom_i, atom_j, length, 0*K)
- 
+
         shared_bonds = self._harmonic_bond_find_shared(common2, sys2_indices_in_system, mapping2, bonds, bonds1, bonds2)
-    
+
         custom_force = self._harmonic_bond_custom_force()
         system.addForce(custom_force)
 
-        self._harmonic_bond_add_core(shared_bonds, sys2_indices_in_system, force1, force2, custom_force)    
+        self._harmonic_bond_add_core(shared_bonds, sys2_indices_in_system, force1, force2, custom_force)
         self._harmonic_bond_add_unique(unique_bonds2, unique_bonds1, force2, force1, sys2_indices_in_system, sys1_indices_in_system, custom_force)
         system.removeForce(this_index)
 
@@ -275,9 +295,9 @@ class HybridTopologyFactory(object):
             [atom_i, atom_j, atom_k, angle, K] = force.getAngleParameters(index)
             force.setAngleParameters(index, atom_i, atom_j, atom_k, angle, 0*K)
 
-        custom_force = self._harmonic_angle_custom_force() 
+        custom_force = self._harmonic_angle_custom_force()
         system.addForce(custom_force)
-    
+
         self._harmonic_angle_add_core(shared_angles, sys1_indices_in_system, force1, force2, custom_force)
         self._harmonic_angle_add_unique(unique_angles2, unique_angles1, force2, force1, sys2_indices_in_system, sys1_indices_in_system, custom_force)
         system.removeForce(this_index)
@@ -838,12 +858,12 @@ class HybridTopologyFactory(object):
 
         # Create new positions array.
         positions = self._create_new_positions_array(topology, positions, sys1_indices_in_system, sys2_indices_in_system)
- 
+
         # Build a list of Force objects in system.
         forces = [ system.getForce(index) for index in range(system.getNumForces()) ]
         forces1 = { system1.getForce(index).__class__.__name__ : system1.getForce(index) for index in range(system1.getNumForces()) }
         forces2 = { system2.getForce(index).__class__.__name__ : system2.getForce(index) for index in range(system2.getNumForces()) }
-    
+
         # Process forces.
         for force in forces:
             # Get force name.
