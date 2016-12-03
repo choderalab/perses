@@ -71,6 +71,7 @@ class GeometryEngine(object):
         """
         return 0.0
 
+
 class FFAllAngleGeometryEngine(GeometryEngine):
     """
     This is an implementation of GeometryEngine which uses all valence terms and OpenMM
@@ -290,7 +291,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     r = self._propose_bond(bond, beta)
                 bond_k = bond.type.k
                 sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
+                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
                 logp_r = self._bond_logq(r, bond, beta) - logZ_r
             else:
                 if direction == 'forward':
@@ -306,7 +307,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 theta = self._propose_angle(angle, beta)
             angle_k = angle.type.k
             sigma_theta = units.sqrt(1/(beta*angle_k))
-            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta/units.radians))) # CHECK DOMAIN AND UNITS
+            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
             logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
 
             #propose a torsion angle and calcualate its probability
@@ -469,53 +470,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             return None
         relevant_bond_with_units = self._add_bond_units(relevant_bond)
         return relevant_bond_with_units
-
-    def _get_internal_from_omm(self, atom_coords, bond_coords, angle_coords, torsion_coords):
-        #master system, will be used for all three
-        sys = openmm.System()
-        platform = openmm.Platform.getPlatformByName("Reference")
-        for i in range(4):
-            sys.addParticle(1.0*units.amu)
-
-        #first, the bond length:
-        bond_sys = openmm.System()
-        bond_sys.addParticle(1.0*units.amu)
-        bond_sys.addParticle(1.0*units.amu)
-        bond_force = openmm.CustomBondForce("r")
-        bond_force.addBond(0, 1, [])
-        bond_sys.addForce(bond_force)
-        bond_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
-        bond_context = openmm.Context(bond_sys, bond_integrator, platform)
-        bond_context.setPositions([atom_coords, bond_coords])
-        bond_state = bond_context.getState(getEnergy=True)
-        r = bond_state.getPotentialEnergy()
-        del bond_sys, bond_context, bond_integrator
-
-        #now, the angle:
-        angle_sys = copy.deepcopy(sys)
-        angle_force = openmm.CustomAngleForce("theta")
-        angle_force.addAngle(0,1,2,[])
-        angle_sys.addForce(angle_force)
-        angle_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
-        angle_context = openmm.Context(angle_sys, angle_integrator, platform)
-        angle_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
-        angle_state = angle_context.getState(getEnergy=True)
-        theta = angle_state.getPotentialEnergy()
-        del angle_sys, angle_context, angle_integrator
-
-        #finally, the torsion:
-        torsion_sys = copy.deepcopy(sys)
-        torsion_force = openmm.CustomTorsionForce("theta")
-        torsion_force.addTorsion(0,1,2,3,[])
-        torsion_sys.addForce(torsion_force)
-        torsion_integrator = openmm.VerletIntegrator(1*units.femtoseconds)
-        torsion_context = openmm.Context(torsion_sys, torsion_integrator, platform)
-        torsion_context.setPositions([atom_coords, bond_coords, angle_coords, torsion_coords])
-        torsion_state = torsion_context.getState(getEnergy=True)
-        phi = torsion_state.getPotentialEnergy()
-        del torsion_sys, torsion_context, torsion_integrator
-
-        return r, theta, phi
 
     def _get_bond_constraint(self, atom1, atom2, system):
         """
@@ -768,8 +722,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from perses.rjmc import coordinate_numba
         torsion_scan_init = time.time()
         positions_copy = copy.deepcopy(positions)
-        positions_copy = positions_copy.in_units_of(units.nanometers)
-        positions_copy = positions_copy / units.nanometers
+        positions_copy = positions_copy.value_in_unit(units.nanometers)
         positions_copy = positions_copy.astype(np.float64)
         r = r.value_in_unit(units.nanometers)
         theta = theta.value_in_unit(units.radians)
@@ -784,7 +737,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._torsion_coordinate_time += torsion_scan_time
         return xyzs_quantity, phis
 
-    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+    def _torsion_log_probability_mass_function(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -885,12 +838,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal.
         """
-        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
-        phi_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
-        logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
-        phi = phis[phi_idx]
-        return phi, logp
-
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        division = units.Quantity(2*np.pi/n_divisions, unit=units.radian)
+        phi_median_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
+        phi_min = phis[phi_median_idx] - division/2.0
+        phi_max = phis[phi_median_idx] + division/2.0
+        phi = np.random.uniform(phi_min.value_in_unit(units.radian), phi_max.value_in_unit(units.radian))
+        logp = logp_torsions[phi_median_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions
+        return units.Quantity(phi, unit=units.radian), logp
 
     def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
         """
@@ -920,10 +875,92 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         torsion_logp : float
             the logp of this torsion
         """
-        logp_torsions, phis = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
         phi_idx = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
         torsion_logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         return torsion_logp
+
+class SplineTorsionGeometryEngine(FFAllAngleGeometryEngine):
+    """
+    A class using splines for the torsion part.
+    """
+
+    def __init__(self):
+        raise NotImplementedError("This functionality is incomplete.")
+
+    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
+        """
+        Use a spline fit to the torsion profile to get a logp
+        Parameters
+        ----------
+        growth_context
+        torsion
+        positions
+        r
+        theta
+        phi
+        beta
+        n_divisions
+
+        Returns
+        -------
+
+        """
+        import scipy.interpolate as interpolate
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        spline = interpolate.UnivariateSpline(phis, np.exp(logp_torsions), k=4)
+        Z = spline.integral(-np.pi, np.pi)
+        p_phi = spline(phi) / Z
+        return np.log(p_phi)
+
+    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+        """
+
+        Parameters
+        ----------
+        growth_context
+        torsion
+        positions
+        r
+        theta
+        beta
+        n_divisions
+
+        Returns
+        -------
+
+        """
+        import scipy.interpolate as interpolate
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        spline = interpolate.UnivariateSpline(phis, np.exp(logp_torsions), k=4)
+        Z = spline.integral(-np.pi, np.pi)
+        #now need to find the max of the spline (for constructing a majorizing function)
+        spline_derivative = spline.derivative(1)
+        spline_second_derivative = spline.derivative(2)
+        potential_extrema = spline_derivative.roots()
+        second_derivative_at_roots = spline_second_derivative(potential_extrema)
+        maxima_indices = np.where(second_derivative_at_roots < 0.0)
+        max_index = np.argmax(spline(second_derivative_at_roots[maxima_indices]))
+        max_phi = second_derivative_at_roots[max_index]
+        max_value = spline(max_phi) / Z #needed for majorizing function
+
+        phi = 0.0
+        logp = 0.0
+        accepted = False
+        n_rejected = 0
+        #now perform rejection sampling
+        while not accepted:
+            phi_samp = np.random.uniform(-np.pi, np.pi)
+            runif = np.random.uniform(0.0, max_value + 1.0)
+            p_phi_samp = spline(phi_samp) / Z
+            if p_phi_samp > runif:
+                phi = phi_samp
+                logp = np.log(p_phi_samp)
+                accepted = True
+            else:
+                n_rejected+=1
+        print(n_rejected)
+        return units.Quantity(phi, unit=units.radians), logp
 
 
 class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
@@ -932,6 +969,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
     """
 
     def __init__(self, torsion_kappa=8.0, max_confs=1, n_trials=10, strict_stereo=False):
+        raise NotImplementedError("This GeometryEngine is not currently supported.")
         self._kappa = torsion_kappa
         self._oemols = {}
         self._max_confs = max_confs
@@ -1071,7 +1109,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
                     r = self._propose_bond(bond, beta)
                 bond_k = bond.type.k
                 sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
+                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom)))) # CHECK DOMAIN AND UNITS
                 logp_r = self._bond_logq(r, bond, beta) - logZ_r
             else:
                 constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
@@ -1356,6 +1394,7 @@ class OmegaFFGeometryEngine(FFAllAngleGeometryEngine):
         """
         pass
 
+
 class PredAtomTopologyIndex(oechem.OEUnaryAtomPred):
 
     def __init__(self, topology_index):
@@ -1399,7 +1438,7 @@ class BootstrapParticleFilter(object):
             How often to resample particles. default 10
         """
 
-        raise NotImplementedError
+        raise NotImplementedError("The implementation of this GeometryEngine is not complete")
         self._system = growth_context.getSystem()
         self._beta = beta
         self._growth_stage = 0
@@ -1727,7 +1766,7 @@ class OmegaGeometryEngine(GeometryEngine):
         self._proposal_sigma = 1.0
         self._reference_oemols = {}
         self._metadata = metadata
-        raise NotImplementedError
+        raise NotImplementedError("This GeometryEngine is not currently supported.")
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -2311,6 +2350,7 @@ class PredHBond(oechem.OEUnaryBondPred):
         else:
             return False
 
+
 class ProposalOrderTools(object):
     """
     This is an internal utility class for determining the order of atomic position proposals.
@@ -2506,73 +2546,6 @@ class ProposalOrderTools(object):
         # Recode topological torsions as parmed Dihedral objects
         topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
         return topological_torsions
-
-class BondOnlyProposalOrder(ProposalOrderTools):
-    """
-    A class similar to ProposalOrderTools, but only uses bonds (no angles or torsions)
-    to decide proposal order and bond choice.
-    """
-
-    def determine_proposal_order(self, direction='forward'):
-        """
-        Determine the proposal order of this system pair.
-        This includes the choice of a bond As such, a logp is returned,
-        but this is typically 0 except in rings
-
-        Parameters
-        ----------
-        direction : str, optional
-            whether to determine the forward or reverse proposal order
-
-        Returns
-        -------
-        atoms_bonds : OrderedDict
-            parmed.Atom : parmed.Atom atom : chosen_bonded_atom
-        logp_bond_choice : float
-            log probability of the chosen torsions
-        """
-        atoms_bonds = collections.OrderedDict()
-        logp_bond_choice = 0.0
-        if direction=='forward':
-            structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
-            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_new_atoms]
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
-        elif direction=='reverse':
-            structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
-            new_atoms = [structure.atoms[idx] for idx in self._topology_proposal.unique_old_atoms]
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
-        else:
-            raise ValueError("direction parameter must be either forward or reverse.")
-
-        while(len(new_atoms))>0:
-            eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-            if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
-                raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
-            for atom in eligible_atoms:
-                chosen_bond_atom, logp_choice = self._choose_bond_partner(atoms_with_positions, atom)
-                atoms_bonds[atom] = chosen_bond_atom
-                logp_bond_choice += logp_choice
-                new_atoms.remove(atom)
-                atoms_with_positions.append(atom)
-        return atoms_bonds, logp_bond_choice
-
-    def _choose_bond_partner(self, atoms_with_positions, atom):
-        """
-        Choose a bond partner to atom that has positions.
-
-        Parameters
-        ----------
-        atoms_with_positoins
-        atom
-
-        Returns
-        -------
-
-        """
-        potential_bond_partners = [a for a in atom.bond_partners if a in atoms_with_positions]
-        logp_choice = np.log(1.0/len(potential_bond_partners))
-        chosen_bonded_atom = np.random.choice(potential_bond_partners)
-        return chosen_bonded_atom, logp_choice
 
 
 class NoTorsionError(Exception):
