@@ -1070,9 +1070,17 @@ def run_geometry_engine(index=0):
     geometry_engine.pdb_filename_prefix = 't13geometry-proposal'
     test_pdb_file = open("%s_to_%s_%d.pdb" % (molecule_name_1, molecule_name_2, index), 'w')
 
+    def remove_nonbonded_force(system):
+        """Remove NonbondedForce from specified system."""
+        force_indices_to_remove = list()
+        for [force_index, force] in enumerate(system.getForces()):
+            if force.__class__.__name__ == 'NonbondedForce':
+                force_indices_to_remove.append(force_index)
+        for force_index in force_indices_to_remove[::-1]:
+            system.removeForce(force_index)
+
     valence_system = copy.deepcopy(sys2)
-    valence_system.removeForce(3)
-    valence_system.removeForce(3)
+    remove_nonbonded_force(valence_system)
     integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
     integrator_1 = openmm.VerletIntegrator(1*unit.femtoseconds)
     ctx_1 = openmm.Context(sys1, integrator_1)

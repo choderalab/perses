@@ -33,7 +33,7 @@ from functools import partial
 from pkg_resources import resource_filename
 from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
-from perses.tests.utils import sanitizeSMILES
+from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
@@ -145,6 +145,8 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
     def __init__(self, constraints=app.HBonds, **kwargs):
         super(AlanineDipeptideTestSystem, self).__init__(**kwargs)
         environments = ['explicit', 'implicit', 'vacuum']
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
 
         # Use sterics in proposals
         self.geometry_engine.use_sterics = True
@@ -155,10 +157,11 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints },
-            use_antechamber=False)
+            use_antechamber=False, barostat=barostat)
         system_generators['implicit'] = SystemGenerator(['amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : constraints },
             use_antechamber=False)
@@ -205,8 +208,6 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         thermodynamic_states['explicit'] = ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
         thermodynamic_states['implicit'] = ThermodynamicState(system=systems['implicit'], temperature=temperature)
         thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
@@ -442,15 +443,18 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         super(T4LysozymeMutationTestSystem, self).__init__(**kwargs)
 #        environments = ['explicit-complex', 'explicit-receptor', 'implicit-complex', 'implicit-receptor', 'vacuum-complex', 'vacuum-receptor']
         environments = ['explicit-complex', 'explicit-receptor', 'vacuum-complex', 'vacuum-receptor']
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['explicit-complex'] = system_generators['explicit']
         system_generators['explicit-receptor'] = system_generators['explicit']
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'amber99_obc.xml'],
@@ -566,8 +570,6 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in ['receptor', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
             #thermodynamic_states['implicit' + '-' + component] = ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
@@ -656,6 +658,8 @@ class MybTestSystem(PersesTestSystem):
     def __init__(self, **kwargs):
         super(MybTestSystem, self).__init__(**kwargs)
         environments = ['explicit-complex', 'explicit-peptide', 'implicit-complex', 'implicit-peptide', 'vacuum-complex', 'vacuum-peptide']
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
 
         # Use sterics in proposals
         self.geometry_engine.use_sterics = True
@@ -666,6 +670,7 @@ class MybTestSystem(PersesTestSystem):
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
@@ -736,8 +741,6 @@ class MybTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in ['peptide', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
             thermodynamic_states['implicit' + '-' + component] = ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
@@ -846,10 +849,11 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         from perses.rjmc.topology_proposal import SystemGenerator
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
@@ -1040,15 +1044,17 @@ class AblAffinityTestSystem(PersesTestSystem):
 
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
+        molecules = canonicalize_SMILES(molecules)
 
         # Create a system generator for desired forcefields
         from perses.rjmc.topology_proposal import SystemGenerator
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
@@ -1105,8 +1111,6 @@ class AblAffinityTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in components:
             for solvent in solvents:
                 environment = solvent + '-' + component
@@ -1258,10 +1262,11 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         print('Creating system generators...')
         from perses.rjmc.topology_proposal import SystemGenerator
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
@@ -1322,8 +1327,6 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         print('Defining thermodynamic states...')
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in components:
             for solvent in solvents:
                 environment = solvent + '-' + component
@@ -1470,10 +1473,11 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         print('Creating system generators...')
         from perses.rjmc.topology_proposal import SystemGenerator
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, barostat=barostat)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
             use_antechamber=True)
@@ -1543,8 +1547,6 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
         print('Defining thermodynamic states...')
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         for component in components:
             for solvent in solvents:
                 environment = solvent + '-' + component
@@ -1676,15 +1678,19 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         super(SmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
+        molecules = canonicalize_SMILES(molecules)
         environments = ['explicit', 'vacuum']
+        temperature = 300*unit.kelvin
+        pressure = 1.0*unit.atmospheres
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
         system_generators = dict()
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'],
-            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints })
+            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }, barostat=barostat)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
 
@@ -1726,8 +1732,6 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         from perses.samplers.thermodynamics import ThermodynamicState
         thermodynamic_states = dict()
-        temperature = 300*unit.kelvin
-        pressure = 1.0*unit.atmospheres
         thermodynamic_states['explicit'] = ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
         thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
@@ -1997,15 +2001,12 @@ class NullTestSystem(PersesTestSystem):
     Uses a custom ProposalEngine to only match subset of atoms, requiring
     geometry to build in the rest
 
-    geometry_engine.write_proposal_pdb set to True
+    geometry_engine.write_proposal_pdb set to False
 
     Constructor:
-    NullTestSystem(mol_name, storage_filename="null.nc", exen_pdb_filename=None)
+    NullTestSystem(storage_filename="null.nc", exen_pdb_filename=None)
 
     Arguments:
-        mol_name, string
-            MUST be in ['naphthalene', 'butane']
-            Name of small molecule for null transformation
         storage_filename, OPTIONAL, string
             Default is "null.nc"
             Storage must be provided in order to analyze testsystem acceptance rates
@@ -2013,27 +2014,28 @@ class NullTestSystem(PersesTestSystem):
             Default is None
             If value is not None, will write pdbfile after every ExpandedEnsemble
             iteration
+        scheme, OPTIONAL, string
+            Default is 'ncmc-geometry-ncmc'
+            Scheme to be used by ExpandedEnsembleSampler
+            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
+            Default will run NCMC on old and new system separately
 
     Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
 
     """
-    def __init__(self, mol_name, storage_filename="null.nc", exen_pdb_filename=None):
-        if mol_name not in ['naphthalene', 'butane']:
-            raise(IOError("NullTestSystem molecule name can only be naphthalene or butane, given {0}".format(mol_name)))
+    def __init__(self, storage_filename="null.nc", exen_pdb_filename=None, scheme='ncmc-geometry-ncmc', options=None):
 
         super(NullTestSystem, self).__init__(storage_filename=storage_filename)
 
-        if mol_name == 'naphthalene':
-            smiles = 'c1ccc2ccccc2c1'
-            from perses.rjmc.topology_proposal import NaphthaleneProposalEngine as NullProposal
-        elif mol_name == 'butane':
-            smiles = 'CCCC'
-            from perses.rjmc.topology_proposal import ButaneProposalEngine as NullProposal
+        if options is None:
+            options = {'nsteps':0}
+        if 'nsteps' not in options.keys():
+            options['nsteps'] = 0
 
-        environments = ['vacuum']
+        environments = ['vacuum', 'explicit']
 
-        self.geometry_engine.write_proposal_pdb = True
+#        self.geometry_engine.write_proposal_pdb = True
 
         system_generators = dict()
         topologies = dict()
@@ -2044,20 +2046,32 @@ class NullTestSystem(PersesTestSystem):
         exen_samplers = dict()
 
         from perses.rjmc.topology_proposal import SystemGenerator
-        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromSMILES
+        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromIUPAC
         from perses.samplers.thermodynamics import ThermodynamicState
         from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
 
         for key in environments:
+            gaff_xml_filename = get_data_filename('data/gaff.xml')
             if key == "vacuum":
                 forcefield_kwargs = {'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None}
-                gaff_xml_filename = get_data_filename('data/gaff.xml')
-            system_generator = SystemGenerator([gaff_xml_filename], forcefield_kwargs=forcefield_kwargs)
+                ff_list = [gaff_xml_filename]
+            if key == "explicit":
+                ff_list = [gaff_xml_filename, 'tip3p.xml']
+                forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : app.HBonds }
+            system_generator = SystemGenerator(ff_list, forcefield_kwargs=forcefield_kwargs)
             system_generators[key] = system_generator
 
-            proposal_engine = NullProposal(system_generator)
-            initial_molecule = createOEMolFromSMILES(smiles=smiles)
-            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+            proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
+            initial_molecule = createOEMolFromIUPAC(iupac_name=self.mol_name)
+            initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
+
+            if key == "explicit":
+                modeller = app.Modeller(initial_topology, initial_positions)
+                modeller.addSolvent(system_generators[key].getForceField(), model='tip3p', padding=9.0*unit.angstrom)
+                initial_topology = modeller.getTopology()
+                initial_positions = modeller.getPositions()
+                initial_system = system_generators[key].build_system(initial_topology)
+
             initial_topology._state_key = proposal_engine._fake_states[0]
 
             temperature = 300*unit.kelvin
@@ -2067,11 +2081,13 @@ class NullTestSystem(PersesTestSystem):
             sampler_state = SamplerState(system=initial_system, positions=initial_positions)
 
             mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
-            mcmc_sampler.nsteps = 5
+            mcmc_sampler.nsteps = 500
             mcmc_sampler.timestep = 1.0*unit.femtosecond
             mcmc_sampler.verbose = True
 
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options={'nsteps':0}, storage=self.storage)
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme=scheme, options=options, storage=self.storage)
+            if scheme == 'geometry-ncmc-geometry':
+                exen_sampler.ncmc_engine.softening = 1.0
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')
@@ -2117,16 +2133,24 @@ class NaphthaleneTestSystem(NullTestSystem):
             Default is None
             If value is not None, will write pdbfile after every ExpandedEnsemble
             iteration
+        scheme, OPTIONAL, string
+            Default is 'geometry-ncmc-geometry'
+            Scheme to be used by ExpandedEnsembleSampler
+            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
+            Default will use a hybrid NCMC method
 
     Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
-    def __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
+    def __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
         """
-        __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None):
+        __init__(self, storage_filename="naphthalene.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
         """
-        super(NaphthaleneTestSystem, self).__init__('naphthalene', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+        from perses.rjmc.topology_proposal import NaphthaleneProposalEngine
+        self.NullProposal = NaphthaleneProposalEngine
+        self.mol_name = 'naphthalene'
+        super(NaphthaleneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
 
 class ButaneTestSystem(NullTestSystem):
     """
@@ -2150,20 +2174,70 @@ class ButaneTestSystem(NullTestSystem):
             Default is None
             If value is not None, will write pdbfile after every ExpandedEnsemble
             iteration
+        scheme, OPTIONAL, string
+            Default is 'geometry-ncmc-geometry'
+            Scheme to be used by ExpandedEnsembleSampler
+            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
+            Default will use a hybrid NCMC method
 
     Only one environment ('vacuum') is currently implemented; however all
     samplers are saved in dictionaries for consistency with other testsystems
     """
 
-    def __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
+    def __init__(self, storage_filename="butane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
         """
-        __init__(self, storage_filename="butane.nc", exen_pdb_filename=None):
+        __init__(self, storage_filename="butane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
         """
-        super(ButaneTestSystem, self).__init__('butane', storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename)
+        from perses.rjmc.topology_proposal import ButaneProposalEngine
+        self.NullProposal = ButaneProposalEngine
+        self.mol_name = 'butane'
+        super(ButaneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
+
+class PropaneTestSystem(NullTestSystem):
+    """
+    Test turning Propane into Propane in vacuum
+    Currently only trying to test ExpandedEnsemble sampler, therefore
+    SAMS sampler and MultiTargetDesign are not implemented at this time
+
+    Uses a custom ProposalEngine to map CH3-CH2, have geometry build in the
+    other CH3
+
+    geometry_engine.write_proposal_pdb set to True
+
+    Constructor:
+    ButaneTestSystem(storage_filename="propane.nc", exen_pdb_filename=None)
+
+    Arguments:
+        storage_filename, OPTIONAL, string
+            Default is "propane.nc"
+            Storage must be provided in order to analyze testsystem acceptance rates
+        exen_pdb_filename, OPTIONAL, string
+            Default is None
+            If value is not None, will write pdbfile after every ExpandedEnsemble
+            iteration
+        scheme, OPTIONAL, string
+            Default is 'geometry-ncmc-geometry'
+            Scheme to be used by ExpandedEnsembleSampler
+            Must be in ['geometry-ncmc-geometry','ncmc-geometry-ncmc','geometry-ncmc']
+            Default will use a hybrid NCMC method
+
+    Only one environment ('vacuum') is currently implemented; however all
+    samplers are saved in dictionaries for consistency with other testsystems
+    """
+
+    def __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry', options=None):
+        """
+        __init__(self, storage_filename="propane.nc", exen_pdb_filename=None, scheme='geometry-ncmc-geometry'):
+        """
+        from perses.rjmc.topology_proposal import PropaneProposalEngine
+        self.NullProposal = PropaneProposalEngine
+        self.mol_name = 'propane'
+        super(PropaneTestSystem, self).__init__(storage_filename=storage_filename, exen_pdb_filename=exen_pdb_filename, scheme=scheme, options=options)
+
 
 def run_null_system(testsystem):
     """
-    Intended for use with NaphthaleneTestSystem or ButaneTestSystem ONLY
+    Intended for use with NullTestSystem subclasses ONLY
 
     Runs TestSystem ExpandedEnsemble sampler ONLY
     Uses BAR to check whether the free energies of the two states
@@ -2172,8 +2246,8 @@ def run_null_system(testsystem):
 
     Arguments:
     ----------
-    testsystem : NaphthaleneTestSystem or ButantTestSystem
-        Only these two test systems have the proposal_engine._fake_states
+    testsystem : NaphthaleneTestSystem, ButantTestSystem, or PropaneTestSystem
+        Only these three test systems have the proposal_engine._fake_states
         attribute, which differentiates between 2 states of a null proposal
 
     CURRENTLY:
@@ -2188,8 +2262,8 @@ def run_null_system(testsystem):
         move netcdf import to analysis for general use
         move BAR import to analysis, define use of BAR to be generalized
     """
-    if type(testsystem) not in [NaphthaleneTestSystem, ButaneTestSystem]:
-        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem or ButantTestSystem; given {0}".format(type(testsystem))))
+    if not issubclass(type(testsystem), NullTestSystem):
+        raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem, ButantTestSystem or PropaneTestSystem; given {0}".format(type(testsystem))))
 
     import netCDF4 as netcdf
     import pickle
@@ -2199,14 +2273,18 @@ def run_null_system(testsystem):
         testsystem.exen_samplers[key].run(niterations=100)
         # until a switch is accepted, only the initial state will have an item
         # in the number_of_state_visits dict
-#        while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
-#            testsystem.exen_samplers[key].run(niterations=10)
+        while len(testsystem.exen_samplers[key].number_of_state_visits.keys()) == 1:
+            testsystem.exen_samplers[key].run(niterations=10)
         # after a switch has been accepted, run approximately the same number of
         # steps again, to end up with roughly equal number of proposals starting
         # from each state
-#        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
+        testsystem.exen_samplers[key].run(niterations=testsystem.exen_samplers[key].nrejected)
         print(testsystem.exen_samplers[key].number_of_state_visits)
         print("Acceptances in {0} iterations: {1}".format(testsystem.exen_samplers[key].iteration, testsystem.exen_samplers[key].naccepted))
+
+        from perses.analysis import Analysis
+        analysis = Analysis(testsystem.storage_filename)
+        analysis.plot_exen_logp_components()
 
         ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
         ee_sam = ncfile.groups['ExpandedEnsembleSampler']
@@ -2568,16 +2646,13 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    #run_alanine_system(sterics=False)
-    testsystem = ButaneTestSystem()
+    testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc', options = {'nsteps':100})
     run_null_system(testsystem)
-#    run_alanine_system(sterics=True)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
-    run_valence_system()
+    #run_valence_system()
     #run_t4_inhibitors()
     #run_imidazole()
-    #run_constph_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
     #run_kinase_inhibitors()
