@@ -462,6 +462,7 @@ def test_torsion_scan():
 def test_torsion_log_discrete_pdf():
     """
     Compare the discrete log pdf for the torsion created by the GeometryEngine to one calculated manually in Python.
+
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
@@ -482,11 +483,15 @@ def test_torsion_log_discrete_pdf():
     torsion_with_units = geometry_engine._add_torsion_units(torsion)
 
     #Calculate the torsion log pmf according to the geometry engine
-    torsion_log_pmf, phis = geometry_engine._torsion_log_probability_mass_function(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+    torsion_log_discrete_pdf, phis = geometry_engine._torsion_log_probability_mass_function(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
 
-    #
-    manual_torsion_log_pmf = calculate_torsion_potential_manually(beta, torsion_with_units, phis)
-    deviation = np.abs(torsion_log_pmf - manual_torsion_log_pmf)
+    #Calculate the torsion potential manually using Python
+    manual_torsion_log_discrete_pdf = calculate_torsion_potential_manually(beta, torsion_with_units, phis)
+
+    #Get the absolute difference in the geometry engine discrete log pdf and the manually computed one
+    deviation = np.abs(torsion_log_discrete_pdf - manual_torsion_log_discrete_pdf)
+
+    #check that the difference is less than 1.0e-4 at all points
     if np.max(deviation) > 1.0e-4:
         raise Exception("Torsion pmf didn't match expected.")
 
