@@ -612,26 +612,73 @@ def test_propose_torsion():
     if pval < 0.05:
         raise Exception("Torsion may not have been drawn from the correct distribution.")
 
-def create_cdf(log_pmf, phis, n_divisions):
+def create_cdf(log_probability_mass_function, phis, n_divisions):
     """
-    Create a cdf callable for scipy.stats.kstest
+    Create a callable CDF function for the scipy KS test
+
+    Arguments
+    ---------
+    log_probability_mass_function : array of float
+        The log probability mass function of the torsion angles
+    phis : array of float
+        Corresponding angles for the log pmf above
+    n_divisions : int
+        Number of divisions of the [-pi,pi) interval
+
+    Returns
+    ------
+    torsion_cdf : function
+        A function that, given a set of samples, will calculate the CDF and return as an array of floats
     """
-    p_phis = np.exp(log_pmf)
+
+    #exponentiate the log probability mass function and integrate it to get the normalizing constant
+    p_phis = np.exp(log_probability_mass_function)
     dphi = 2.0*np.pi/n_divisions
     normalizing_constant = 0.0
     for idx, phi in enumerate(phis):
         normalizing_constant += p_phis[idx]*dphi
+
+    #create a function that, given a set of phi points, will calcualate the CDF of each point
     def torsion_cdf(phi_array):
+        """
+        Given a set of phi points, will calcualate the CDF of each point. Since the probability density function
+        is a histogram, this involves adding up all prior bin areas, plus whatever fraction of a bin is left until the
+        sample point.
+
+        Arguments
+        ----------
+        phi_array : array of floats
+            array of phis whose CDF we are interested in
+
+        Returns
+        -------
+        cdf_vals : array of floats
+            value of the CDF at each ofthe corresponding input phis
+        """
+        #initialize an array of zeros
         cdf_vals = np.zeros_like(phi_array)
+
+        #loop through each phi in the input set of phis
         for idx, phi in enumerate(phi_array):
+
+            #initialize the cdf value to 0
             cdfval = 0.0
+
+            #find the nearest phi index in the set of phis
             nearest_phi_idx = np.argmin(np.abs(phi-phis))
+
+            #take the value of that phi
             nearest_phi = phis[nearest_phi_idx]
+
+            #for each full bin before the sample value, add its area
             for i in range(nearest_phi_idx):
                 cdfval += p_phis[i]*dphi
-            #find the width of the last partial bin in the CDF
+
+            #find the width of the last partial bin in the CDF before the sample value and add it to the cdf value
             final_bin_dphi = phi - (nearest_phi - dphi / 2.0)
             cdfval += p_phis[nearest_phi_idx]*final_bin_dphi
+
+            #normalize the cdf value
             cdf_vals[idx] = cdfval / normalizing_constant
         return cdf_vals
 
