@@ -462,7 +462,6 @@ def test_torsion_scan():
 def test_torsion_log_discrete_pdf():
     """
     Compare the discrete log pdf for the torsion created by the GeometryEngine to one calculated manually in Python.
-
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
@@ -530,24 +529,43 @@ def calculate_torsion_discrete_log_pdf_manually(beta, torsion, phis):
 
 def test_torsion_logp():
     """
-    Test the torsion_logp method in GeometryEngine
+    Test that the continuous torsion log pdf integrates to one
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
+
+    #take typical numbers for the number of divisions and the number of test points
     n_divisions = 360
     n_divisions_test = 740
+
+    #instantiate the geometry engine
     geometry_engine = FFAllAngleGeometryEngine()
+
+    #Create a valence test system with a bond, angle, and torsion
     testsystem = FourAtomValenceTestSystem(bond=True, angle=True, torsion=True)
+
+    #Extract the internal coordinates from this, and wrap them in units
     internals = testsystem.internal_coordinates
     r = unit.Quantity(internals[0], unit=unit.nanometer)
     theta = unit.Quantity(internals[1], unit=unit.radian)
+
+    #Extract the torsion from the parmed structure representation (there's only one, so index 0)
     torsion = testsystem.structure.dihedrals[0]
-    torsion_with_units = geometry_engine._add_torsion_units(torsion)
+
+    #Create a set of n_divisions_test phis evenly spaced from -pi to pi
     phis = unit.Quantity(np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions_test), unit=unit.radians)
+
+    #initialize an array for the continuous torsion log pdf
     log_pdf = np.zeros(n_divisions_test)
+
+    #calculate the continuous log pdf of the torsion at each test point using the geometry engine with n_divisions
     for i in range(n_divisions_test):
         log_pdf[i] = geometry_engine._torsion_logp(testsystem._context, torsion, testsystem.positions, r, theta, phis[i], beta, n_divisions=n_divisions)
+
+    #exponentiate and integrate the continuous torsion log pdf
     pdf = np.exp(log_pdf)
     torsion_sum = np.trapz(pdf, phis)
+
+    #Ensure that the absolute difference between the integral and one is less than 0.001 (accounting for numerical issues)
     if np.abs(1.0 - torsion_sum) > 1.0e-3:
         raise Exception("The torsion continuous distribution does not integrate to one.")
 
