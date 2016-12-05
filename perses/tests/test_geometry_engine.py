@@ -571,29 +571,43 @@ def test_torsion_logp():
 
 def test_propose_torsion():
     """
-    Test the proposal of a simple torsion angle.
+    Test, using the kolmogorov-smirnov test, that the torsion angles drawn via the geometry engine match the expected
+    distribution.
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     import scipy.stats as stats
-    import scipy.integrate as integrate
+
+    #choose a reasonable number of divisions and samples
     n_divisions = 96
     n_samples = 1000
+
+    #instantiate the geometry engine and a test system with a bond, angle, and torsion
     geometry_engine = FFAllAngleGeometryEngine()
     testsystem = FourAtomValenceTestSystem(bond=True, angle=True, torsion=True)
+
+    #Retrieve the internal coordinates and assign the appropriate units
     internals = testsystem.internal_coordinates
     r = unit.Quantity(internals[0], unit=unit.nanometer)
     theta = unit.Quantity(internals[1], unit=unit.radian)
+
+    #retrieve the torsion of interest (0--there is only one) from the parmed structure
     torsion = testsystem.structure.dihedrals[0]
-    torsion_with_units = geometry_engine._add_torsion_units(torsion)
+
+    #calculate the log probability mass function for an array of phis
     logp_phis, phis = geometry_engine._torsion_log_probability_mass_function(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+
+    #remove units from phis
     phis_without_units = phis.value_in_unit(unit.radians)
+
+    #create a cumulative distribution function for use in the ks test
     cdf_func = create_cdf(logp_phis, phis_without_units, n_divisions)
-    #Then, draw a set of samples from the same distribution:
+
+    #Draw a set of samples from the torsion distribution using the GeometryEngine
     torsion_samples = unit.Quantity(np.zeros(n_samples), unit=unit.radian)
     for i in range(n_samples):
         torsion_samples[i], logp = geometry_engine._propose_torsion(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
 
-    #now check if the samples match the logp:
+    #now check if the samples match the logp using the Kolmogorov-Smirnov test
     (dval, pval) = stats.kstest(torsion_samples, cdf_func)
     if pval < 0.05:
         raise Exception("Torsion may not have been drawn from the correct distribution.")
