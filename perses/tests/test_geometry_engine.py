@@ -486,7 +486,7 @@ def test_torsion_log_discrete_pdf():
     torsion_log_discrete_pdf, phis = geometry_engine._torsion_log_probability_mass_function(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
 
     #Calculate the torsion potential manually using Python
-    manual_torsion_log_discrete_pdf = calculate_torsion_potential_manually(beta, torsion_with_units, phis)
+    manual_torsion_log_discrete_pdf = calculate_torsion_discrete_log_pdf_manually(beta, torsion_with_units, phis)
 
     #Get the absolute difference in the geometry engine discrete log pdf and the manually computed one
     deviation = np.abs(torsion_log_discrete_pdf - manual_torsion_log_discrete_pdf)
@@ -495,21 +495,38 @@ def test_torsion_log_discrete_pdf():
     if np.max(deviation) > 1.0e-4:
         raise Exception("Torsion pmf didn't match expected.")
 
-def calculate_torsion_potential_manually(beta, torsion, phis):
+def calculate_torsion_discrete_log_pdf_manually(beta, torsion, phis):
     """
-    Manually calculate the torsion potential
+    Manually calculate the torsion potential for a series of phis and a given beta.
+
+    Arguments
+    ---------
+    beta : float
+        inverse temperature
+    torsion : parmed.Dihedral object
+        the torsion of interest
+    phis : array of float
+        the series of torsion angles at which to evaluate the torsion probability
     """
+    #initialize array for the log unnormalized probabilities
     torsion_logq = np.zeros(len(phis))
+
+    #get the parameters of the torsion
     torsion_k = torsion.type.phi_k
     torsion_per = torsion.type.per
     torsion_phase = torsion.type.phase
+
+    #loop through the phis and calculate the log unnormalized probability at each
     for i in range(len(phis)):
         torsion_logq[i] = -1.0*beta*torsion_k*(1+unit.cos(torsion_per*phis[i] - torsion_phase))
-    #torsion_logq -= max(torsion_logq)
+
+    #get the unnormalized probabilities and the normalizing constant
     q = np.exp(torsion_logq)
     Z = np.sum(q)
-    torsion_log_pmf = torsion_logq-np.log(Z)
-    return torsion_log_pmf
+
+    #subtract off the log of the normalizing constant to get the log probabilities
+    torsion_discrete_log_pdf = torsion_logq-np.log(Z)
+    return torsion_discrete_log_pdf
 
 def test_torsion_logp():
     """
