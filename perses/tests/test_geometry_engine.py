@@ -85,6 +85,26 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
     """
     This testsystem has 4 particles, and the potential for a bond, angle, torsion term.
     The particles are 0-1-2-3 atom-bond-angle-torsion
+
+    Arguments
+    ---------
+    bond : Boolean, default True
+        Whether to include the bond force term
+    angle : Boolean, default True
+        Whether to include the angle force term
+    torsion : Boolean, default True
+        Whether to include the torsion force term
+
+    Properties
+    ----------
+    internal_coordinates : array of floats
+        The r, theta, phi internal coordinates of atom 0
+    bond_parameters : tuple of (Quantity, Quantity)
+        The equilibrium bond length and equilibrium constant, in nanometers and kJ/(mol*nm^2), atoms 0-1
+    angle_parameters : tuple of (Quantity, Quantity)
+        The equilibrium angle and constant, in radians and kJ/(mol*rad^2), atoms 0-1-2
+    torsion_parameters : tuple of (int, Quantity, Quantity)
+        The periodicity, along with the phase and force constant in radians and kJ/mol respectively, atoms 0-1-2-3
     """
 
     def __init__(self, bond=True, angle=True, torsion=True):
