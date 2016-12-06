@@ -54,6 +54,8 @@ class GeometryTestSystem(object):
         list of indices for the growth order
     positions : [n,3] ndarray of float
         positions of atoms
+    energy : Quantity, kJ/mol
+        The current potential energy of the system calculated with OpenMM
     """
 
     @property
@@ -84,7 +86,8 @@ class GeometryTestSystem(object):
 class FourAtomValenceTestSystem(GeometryTestSystem):
     """
     This testsystem has 4 particles, and the potential for a bond, angle, torsion term.
-    The particles are 0-1-2-3 atom-bond-angle-torsion
+    The particles are 0-1-2-3 atom-bond-angle-torsion. The positions for the atoms were taken
+    from an earlier test for the geometry engine.
 
     Arguments
     ---------
@@ -108,13 +111,15 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
     """
 
     def __init__(self, bond=True, angle=True, torsion=True):
-        #make a simple topology
+
+        #make a simple set of positions. These are taken from another test used for testing the torsions in GeometryEngine
         self._default_positions = unit.Quantity(np.zeros([4,3]), unit=unit.nanometer)
         self._default_positions[0] = unit.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
         self._default_positions[1] = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
         self._default_positions[2] = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
         self._default_positions[3] = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
 
+        #use parameters taken from various parts of the AlanineDipeptideTestSystem
         self._default_r0 = unit.Quantity(value=0.1522, unit=unit.nanometer)
         self._default_bond_k = unit.Quantity(value=265265.60000000003, unit=unit.kilojoule/(unit.nanometer**2*unit.mole))
         self._default_angle_theta0 = unit.Quantity(value=1.91113635, unit=unit.radian)
@@ -123,6 +128,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         self._default_torsion_phase = unit.Quantity(value=np.pi/2.0, unit=unit.radians)
         self._default_torsion_k = unit.Quantity(value=20.0, unit=unit.kilojoule/unit.mole)
 
+        #set up a topology with the appropriate atoms (make them all carbon)
         self._topology = app.Topology()
         new_chain = self._topology.addChain("0")
         new_res = self._topology.addResidue("MOL", new_chain)
@@ -131,35 +137,45 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         atom3 = self._topology.addAtom("C3", app.Element.getByAtomicNumber(6), new_res, 2)
         atom4 = self._topology.addAtom("C4", app.Element.getByAtomicNumber(6), new_res, 3)
 
-
+        #add the bonds to make a linear molecule 1-2-3-4
         self._topology.addBond(atom1, atom2)
         self._topology.addBond(atom2, atom3)
         self._topology.addBond(atom3, atom4)
 
+        #create a system using the same particle information
         self._system = openmm.System()
         indices = [self._system.addParticle(CARBON_MASS) for i in range(4)]
 
+        #the growth order includes only the 0th atom, since there are only four atoms total
         self._growth_order = [0]
 
+        #if the user has specified that a bond force should be used, add it with the appropriate constants
         if bond:
             bond_force = openmm.HarmonicBondForce()
             self._system.addForce(bond_force)
             bond_force.addBond(0, 1, self._default_r0, self._default_bond_k)
 
+        #if the user has specified that an angle force should be used, add it with the appropriate constants
         if angle:
             angle_force = openmm.HarmonicAngleForce()
             self._system.addForce(angle_force)
             angle_force.addAngle(0, 1, 2, self._default_angle_theta0, self._default_angle_k)
 
+        #if the user has specified that a torsion force should be used, add it with the appropriate constants
         if torsion:
             torsion_force = openmm.PeriodicTorsionForce()
             self._system.addForce(torsion_force)
             torsion_force.addTorsion(0, 1, 2, 3, self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
 
+        #Now make a ParmEd structure from the topology and system, which will include relevant force parameters
         self._structure = parmed.openmm.load_topology(self._topology, self._system)
+
+        #initialize class memers with the appropriate values
         self._positions = self._default_positions
         self._integrator = openmm.VerletIntegrator(1)
-        self._platform = openmm.Platform.getPlatformByName("Reference")
+        self._platform = openmm.Platform.getPlatformByName("Reference") #use reference for stability
+
+        #create a context and set positions so we can get potential energies
         self._context = openmm.Context(self._system, self._integrator, self._platform)
         self._context.setPositions(self._positions)
 
