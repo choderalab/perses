@@ -29,6 +29,12 @@ from nose.plugins.attrib import attr
 
 from perses.rjmc import coordinate_numba
 
+#correct p-value threshold for some multiple hypothesis testing
+pval_base = 0.01
+ntests = 3.0
+ncommits = 10000.0
+
+pval_threshold = pval_base / (ntests * ncommits)
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
@@ -241,7 +247,7 @@ def test_propose_angle():
     #the Kolomogorov-Smirnov test. The null hypothesis is that they are drawn from the same
     #distribution (the test passes).
     (dval, pval) = stats.kstest(angle_array,'norm', args=(theta0_without_units, sigma_without_units))
-    if pval < 0.05:
+    if pval_threshold < 0.05:
         raise Exception("The angle may be drawn from the wrong distribution. p= %f" % pval)
 
 def test_propose_bond():
@@ -277,7 +283,7 @@ def test_propose_bond():
     #the Kolomogorov-Smirnov test. The null hypothesis is that they are drawn from the same
     #distribution (the test passes).
     (dval, pval) = stats.kstest(bond_array, 'norm', args=(r0_without_units, sigma_without_units))
-    if pval < 0.05:
+    if pval_threshold < 0.05:
         raise Exception("The bond may be drawn from the wrong distribution. p= %f" % pval)
 
 def test_bond_logq():
@@ -645,7 +651,7 @@ def test_propose_torsion():
 
     #now check if the samples match the logp using the Kolmogorov-Smirnov test
     (dval, pval) = stats.kstest(torsion_samples, cdf_func)
-    if pval < 0.05:
+    if pval_threshold < 0.05:
         raise Exception("Torsion may not have been drawn from the correct distribution.")
 
 def create_cdf(log_probability_mass_function, phis, n_divisions):
