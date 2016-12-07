@@ -1168,7 +1168,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
         if not atom_expr:
-            self.atom_expr = oechem.OEExprOpts_AtomicNumber #oechem.OEExprOpts_Aromaticity #| oechem.OEExprOpts_RingMember
+            self.atom_expr = oechem.OEExprOpts_AtomicNumber # | oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         else:
             self.atom_expr = atom_expr
 
@@ -1262,7 +1262,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         #map the atoms between the new and old molecule only:
         if self.verbose: print('Generating atom map...')
         timer_start = time.time()
-        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol)
+        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr)
         if self.verbose: print('Atom map took %.3f s' % (time.time() - timer_start))
 
         #adjust the log proposal for the alignment:
@@ -1559,7 +1559,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 proposed_mol = oechem.OEMol()
                 oechem.OESmilesToMol(current_mol, molecule_smiles_list[i])
                 oechem.OESmilesToMol(proposed_mol, molecule_smiles_list[j])
-                atom_map = self._get_mol_atom_map(current_mol, proposed_mol)
+                atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr)
                 if not atom_map:
                     n_atoms_matching = 0
                     continue
