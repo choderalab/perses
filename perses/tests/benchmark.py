@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 ################################################################################
 # NUMBER OF ATTEMPTS
 ################################################################################
-niterations = 50
+niterations = 1000
 ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
@@ -143,7 +143,7 @@ def benchmark_ncmc_work_during_protocol():
         * Plot mean and standard deviation of EXEN logP as a function of
           total steps
     """
-    from perses.tests.testsystems import NaphthaleneTestSystem, ButaneTestSystem, PropaneTestSystem
+    from perses.tests.testsystems import NaphthaleneTestSystem, ButaneTestSystem, PropaneTestSystem, check_null_deltaG
     from perses.analysis import Analysis
     import netCDF4 as netcdf
     import pickle
@@ -152,6 +152,7 @@ def benchmark_ncmc_work_during_protocol():
         'naphthalene' : NaphthaleneTestSystem,
         'butane' : ButaneTestSystem,
         'propane' : PropaneTestSystem,
+    #    't4' : T4LysozymeInhibitorsTestSystem,
     }
     methods = {
         'hybrid' : ['geometry-ncmc-geometry', functions_hybrid],
@@ -162,7 +163,7 @@ def benchmark_ncmc_work_during_protocol():
         print('\nNow testing {0} null transformations'.format(molecule_name))
         for name, [scheme, functions] in methods.items():
             analyses = dict()
-            for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+            for ncmc_nsteps in [0]:#, 1, 10, 100, 1000, 10000]:
                 print('Running {0} {2} ExpandedEnsemble steps for {1} iterations'.format(ncmc_nsteps, niterations, name))
                 testsystem = NullProposal(storage_filename='{0}_{1}-{2}steps.nc'.format(molecule_name, name, ncmc_nsteps), scheme=scheme, options={'functions' : functions, 'nsteps' : ncmc_nsteps})
                 testsystem.exen_samplers[ENV].verbose = False
@@ -170,14 +171,22 @@ def benchmark_ncmc_work_during_protocol():
                 if name == 'hybrid':
                     testsystem.exen_samplers[ENV].ncmc_engine.softening = 1.0
                 testsystem.exen_samplers[ENV].run(niterations=niterations)
+                try:
+                    check_null_deltaG(testsystem)
+                except Exception as e:
+                    print(e)
 
-                analysis = Analysis(testsystem.storage_filename)
-                print(analysis.get_environments())
-                if ncmc_nsteps > 99:
-                    analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_{2}_steps.pdf'.format(molecule_name, name, ncmc_nsteps))
-                analysis.plot_exen_logp_components()
-                analyses[ncmc_nsteps] = analysis
-            benchmark_exen_ncmc_protocol(analyses, molecule_name, name)
+#                analysis = Analysis(testsystem.storage_filename)
+#                print(analysis.get_environments())
+#                if ncmc_nsteps > 99:
+#                    analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_{2}_steps.pdf'.format(molecule_name, name, ncmc_nsteps))
+#                analysis.plot_exen_logp_components()
+#                analyses[ncmc_nsteps] = analysis
+#                try:
+#                    check_null_deltaG(testsystem)
+#                except Exception as e:
+#                    print(e)
+#            benchmark_exen_ncmc_protocol(analyses, molecule_name, name)
 
 
 if __name__ == "__main__":
