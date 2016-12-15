@@ -286,10 +286,6 @@ def benchmark_ncmc_work_during_protocol():
                     analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_{2}_steps.pdf'.format(molecule_name, name, ncmc_nsteps))
                 analysis.plot_exen_logp_components()
                 analyses[ncmc_nsteps] = analysis
-                try:
-                    check_null_deltaG(testsystem)
-                except Exception as e:
-                    print(e)
             benchmark_exen_ncmc_protocol(analyses, molecule_name, name)
 
 def benchmark_logp_0ncmc_schemes():
