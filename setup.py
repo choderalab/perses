@@ -80,13 +80,12 @@ setup(name='perses',
       zip_safe=False,
       ext_modules=extensions,
       install_requires=[
-        #'openmm >=7.0.1', # doesn't work with conda openmm >=7.0.1 (JDC)
-        'openmm',
+        'openmm >=7.1.0',
+        'alchemy >=1.2.3'
         'numpy',
         'scipy',
         'numexpr',
         'openmoltools',
-        'alchemy >=1.2.0',
         'openmmtools',
         'numexpr',
         'netcdf4',
