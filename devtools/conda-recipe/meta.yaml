@@ -18,10 +18,10 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.0.1
+    - openmm >=7.1.0
     - parmed
     - openmoltools
-    - alchemy >=1.2.0
+    - alchemy >=1.2.3
     - openmmtools
     - numba
     - netcdf4
@@ -40,10 +40,10 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.0.1
+    - openmm >=7.1.0
     - parmed
     - openmoltools
-    - alchemy >=1.2.0
+    - alchemy >=1.2.3
     - openmmtools
     - numba
     - netcdf4
