@@ -12,8 +12,8 @@ addons:
       #- g++-multilib
       #- gcc-multilib
 branches:
-  only:
-    - master
+  except:
+    - /^(?i:notest)-.*$/
 
 install:
   #add random sleep from 1-10s to try to prevent overloading the anaconda servers
