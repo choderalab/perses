@@ -735,7 +735,7 @@ class NCMCHybridEngine(NCMCEngine):
         for force in alchemical_system.getForces():
             if hasattr(force, 'setFrequency'):
                 force.setFrequency(0)
-        
+
         return [unmodified_old_system, unmodified_new_system,
                 alchemical_system, alchemical_topology, alchemical_positions, final_atom_map,
                 initial_atom_map]
@@ -765,17 +765,16 @@ class NCMCHybridEngine(NCMCEngine):
             The final positions are equivalent to the proposed positions after 0 steps of alchemical switching
         initial_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
             Positions of the atoms at the beginning of the NCMC switching.
-        potential : float
-            The difference in potential energies between the old system and
-            positions and new system with proposed positions.
+        logP : float
+            The log acceptance probability of the switch
         """
         # Special case of instantaneous insertion/deletion.
         final_positions = copy.deepcopy(proposed_positions)
         from perses.tests.utils import compute_potential
-        potential_del = -self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
-        potential_ins = -self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
-        potential = potential_ins - potential_del
-        return [final_positions, initial_positions, potential]
+        potential_old = self.beta * compute_potential(topology_proposal.old_system, initial_positions, platform=self.platform)
+        potential_new = self.beta * compute_potential(topology_proposal.new_system, proposed_positions, platform=self.platform)
+        logP = -(potential_new - potential_old)
+        return [final_positions, initial_positions, logP]
 
     def integrate(self, topology_proposal, initial_positions, proposed_positions, platform=None, iteration=None):
         """
