@@ -1359,7 +1359,7 @@ class SAMSSampler(object):
     >>> sams_sampler.run() # doctest: +ELLIPSIS
     ...
     """
-    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='two-stage', storage=None):
+    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='two-stage', storage=None, second_stage_start=None):
         """
         Create a SAMS Sampler.
 
@@ -1374,19 +1374,40 @@ class SAMSSampler(object):
         update_method : str, optional, default='default'
             SAMS update algorithm
         storage : NetCDFStorageView, optional, default=None
+        second_state_start : int, optional, default None
+            At what iteration number to switch to the optimal gain decay
 
         """
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
+        self.chemical_states = self.sampler.proposal_engine.chemical_state_list
+
+        #initialize the logZ dictionary with zeroes for each chemical state
+        self.logZ = {chemical_state : 0.0 for chemical_state in self.chemical_states}
+
+        #Initialize log target probabilities with log(1/n_states)
+        self.log_target_probabilities = {chemical_state : np.log(len(self.chemical_states)) for chemical_state in self.chemical_states}
+
+        #If initial weights are specified, override any weight with what is provided
+        #However, if the chemical state is not in the reachable chemical state list,throw an exception
         if logZ is not None:
-            self.logZ = logZ
-        else:
-            self.logZ = dict()
+            for (chemical_state, logZ_value) in logZ:
+                if chemical_state not in self.chemical_states:
+                    raise ValueError("Provided a logZ initial value for an un-proposable chemical state")
+                self.logZ[chemical_state] = logZ_value
+
         if log_target_probabilities is not None:
-            self.log_target_probabilities = log_target_probabilities
-        else:
-            self.log_target_probabilities = dict()
+            for (chemical_state, log_target_probability) in log_target_probabilities:
+                if chemical_state not in self.chemical_states:
+                    raise ValueError("Provided a log target probability for an un-proposable chemical state.")
+                self.log_target_probabilities[chemical_state] = log_target_probability
+
+            #normalize target probabilities
+            #this is likely not necessary, but it is copying the algorithm in Ref 1
+            log_sum_target_probabilities = np.log(np.sum(np.exp(list(self.log_target_probabilities.values()))))
+            self.log_target_probabilities = {chemical_state : log_target_probability - log_sum_target_probabilities for chemical_state, log_target_probability in self.log_target_probabilities}
+
         self.update_method = update_method
 
         self.storage = None
@@ -1396,6 +1417,10 @@ class SAMSSampler(object):
         # Initialize.
         self.iteration = 0
         self.verbose = False
+
+        self.second_stage_start = 0
+        if second_stage_start is not None:
+            self.second_stage_start = second_stage_start
 
     @property
     def state_keys(self):
@@ -1425,7 +1450,7 @@ class SAMSSampler(object):
             gamma = 1.0 / float(self.iteration+1)
         elif self.update_method == 'two-stage':
             # Keep gamma large until second stage is activated.
-            if not hasattr(self, 'second_stage_start') or (self.iteration < self.second_stage_start):
+            if self.iteration < self.second_stage_start:
                 # First stage.
                 gamma = 1.0
                 # TODO: Determine when to switch to second stage
