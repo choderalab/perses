@@ -214,7 +214,7 @@ class ProposalEngine(object):
 
     @property
     def chemical_state_list(self):
-        return []
+        raise NotImplementedError("This ProposalEngine does not expose a list of possible chemical states.")
 
 class PolymerProposalEngine(ProposalEngine):
     def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True):
