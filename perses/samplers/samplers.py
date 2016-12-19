@@ -1383,6 +1383,9 @@ class SAMSSampler(object):
         self.sampler = sampler
         self.chemical_states = self.sampler.proposal_engine.chemical_state_list
 
+        #Select a reference state that will always be subtracted (ensure that dict ordering does not change)
+        self._reference_state = self.chemical_states[0]
+
         #initialize the logZ dictionary with zeroes for each chemical state
         self.logZ = {chemical_state : 0.0 for chemical_state in self.chemical_states}
 
@@ -1459,7 +1462,12 @@ class SAMSSampler(object):
                 gamma = 1.0 / float(self.iteration - self.second_stage_start + 1)
         else:
             raise Exception("SAMS update method '%s' unknown." % self.update_method)
+
+        #get the (t-1/2) update from equatino 9 in ref 1
         self.logZ[state_key] += gamma / np.exp(self.log_target_probabilities[state_key])
+
+        #the second step of the (t-1/2 update), subtracting the reference state from everything else.
+        self.logZ = {state_key : logZ_estimate - self.logZ[self._reference_state] for state_key, logZ_estimate in self.logZ}
 
         # Update log weights for sampler.
         self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }
