@@ -2081,7 +2081,7 @@ class NullTestSystem(PersesTestSystem):
             sampler_state = SamplerState(system=initial_system, positions=initial_positions)
 
             mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
-            mcmc_sampler.nsteps = 500
+            mcmc_sampler.nsteps = 5#00
             mcmc_sampler.timestep = 1.0*unit.femtosecond
             mcmc_sampler.verbose = True
 
@@ -2265,9 +2265,6 @@ def run_null_system(testsystem):
     if not issubclass(type(testsystem), NullTestSystem):
         raise(NotImplementedError("run_null_system is only compatible with NaphthaleneTestSystem, ButantTestSystem or PropaneTestSystem; given {0}".format(type(testsystem))))
 
-    import netCDF4 as netcdf
-    import pickle
-    import codecs
     for key in testsystem.environments: # only one key: vacuum
         # run a single iteration to generate item in number_of_state_visits dict
         testsystem.exen_samplers[key].run(niterations=100)
@@ -2286,6 +2283,13 @@ def run_null_system(testsystem):
         analysis = Analysis(testsystem.storage_filename)
         analysis.plot_exen_logp_components()
 
+        check_null_deltaG(testsystem)
+
+def check_null_deltaG(testsystem):
+    import netCDF4 as netcdf
+    import pickle
+    import codecs
+    for key in testsystem.environments: # only one key: vacuum
         ncfile = netcdf.Dataset(testsystem.storage_filename, 'r')
         ee_sam = ncfile.groups['ExpandedEnsembleSampler']
         niterations = ee_sam.variables['logp_accept'].shape[0]
