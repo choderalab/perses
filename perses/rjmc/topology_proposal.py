@@ -239,10 +239,12 @@ class PolymerProposalEngine(ProposalEngine):
             mapping
         """
         # old_topology : simtk.openmm.app.Topology
-        old_topology = copy.deepcopy(current_topology)
+        old_topology = app.Topology()
+        self._append_topology(old_topology, current_topology)
 
         # new_topology : simtk.openmm.app.Topology
-        new_topology = copy.deepcopy(current_topology)
+        new_topology = app.Topology()
+        self._append_topology(new_topology, current_topology)
 
         # Check that old_topology and old_system have same number of atoms.
         old_system = current_system
@@ -1692,7 +1694,8 @@ class NullProposalEngine(SmallMoleculeSetProposalEngine):
         old_key = current_topology._state_key
         new_key = [key for key in self._fake_states if key != old_key][0]
 
-        new_topology = copy.deepcopy(current_topology)
+        new_topology = app.Topology()
+        self._append_topology(new_topology, current_topology)
         new_topology._state_key = new_key
         new_system = copy.deepcopy(current_system)
         atom_map = self._make_skewed_atom_map(current_topology)
