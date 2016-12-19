@@ -1378,6 +1378,7 @@ class SAMSSampler(object):
             At what iteration number to switch to the optimal gain decay
 
         """
+        from scipy.misc import logsumexp
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
@@ -1408,7 +1409,7 @@ class SAMSSampler(object):
 
             #normalize target probabilities
             #this is likely not necessary, but it is copying the algorithm in Ref 1
-            log_sum_target_probabilities = np.log(np.sum(np.exp(list(self.log_target_probabilities.values()))))
+            log_sum_target_probabilities = logsumexp((list(self.log_target_probabilities.values())))
             self.log_target_probabilities = {chemical_state : log_target_probability - log_sum_target_probabilities for chemical_state, log_target_probability in self.log_target_probabilities}
 
         self.update_method = update_method
