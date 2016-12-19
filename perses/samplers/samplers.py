@@ -1440,9 +1440,9 @@ class SAMSSampler(object):
 
         # Add state key to dictionaries if we haven't visited this state before.
         if state_key not in self.logZ:
-            self.logZ[state_key] = 0.0
+            raise ValueError("A new state key was added during the run; this is not currently supported.")
         if state_key not in self.log_target_probabilities:
-            self.log_target_probabilities[state_key] = 0.0
+            raise ValueError("A new state key was added during the run; this is not currently supported.")
 
         # Update estimates of logZ.
         if self.update_method == 'one-stage':
