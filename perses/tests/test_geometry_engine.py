@@ -1374,7 +1374,7 @@ def run_logp_reverse():
     logp_reverse = geometry_engine.logp_reverse(sm_top_proposal, pos2, pos1, beta)
     print(logp_proposal)
     print(logp_reverse)
-    print(logp_reverse-logp_proposal)
+    print(logp_reverse+logp_proposal)
 
 def _get_capped_amino_acid(amino_acid='ALA'):
     import tempfile

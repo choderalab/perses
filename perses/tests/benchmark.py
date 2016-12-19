@@ -106,31 +106,29 @@ class BenchmarkExEnSampler(ExpandedEnsembleSampler):
         of NCMC positions
         New positions for new topology are calculated by running two-stage
         ncmc_engine with direction='insert'
+
+        NOTE: This requires options['nsteps'] = 0
+
         """
         geometry_old_positions = positions
         geometry_new_positions, geometry_logp_propose = self._geometry_forward(topology_proposal, geometry_old_positions)
+        geometry_logp_reverse = self._geometry_reverse(topology_proposal, geometry_new_positions, geometry_old_positions)
 
         self.ncmc_engine = self.hybrid_ncmc_engine
         hybrid_ncmc_new_positions, hybrid_ncmc_old_positions, hybrid_ncmc_logp = self._ncmc_hybrid(topology_proposal, positions, geometry_new_positions)
-        hybrid_geometry_logp_reverse = self._geometry_reverse(topology_proposal, hybrid_ncmc_new_positions, hybrid_ncmc_old_positions)
-        hybrid_geometry_logp = hybrid_geometry_logp_reverse - geometry_logp_propose
-        hybrid_logp_accept = topology_proposal.logp_proposal + hybrid_geometry_logp + hybrid_ncmc_logp + new_log_weight - old_log_weight
+        hybrid_logp_accept = topology_proposal.logp_proposal + geometry_logp_propose + hybrid_ncmc_logp + geometry_logp_reverse + (new_log_weight - old_log_weight)
         if True:
-            print("hybrid    logp_accept = %+10.4e [%+10.4e = geometry_logp, %+10.4e = ncmc_logp]"
-                % (hybrid_logp_accept, hybrid_geometry_logp, hybrid_ncmc_logp))
+            print("hybrid    logp_accept = %+10.4e [ncmc = %+10.4e, geometry = %+10.4e]"
+                % (hybrid_logp_accept, hybrid_ncmc_logp, geometry_logp_propose + geometry_logp_reverse))
         del(self.ncmc_engine)
 
         self.ncmc_engine = self.two_ncmc_engine
-        two_ncmc_old_positions, two_ncmc_elimination_logp, potential_delete = self._ncmc_delete(topology_proposal, positions)
-        geometry_old_positions = two_ncmc_old_positions
-        two_geometry_logp_reverse = self._geometry_reverse(topology_proposal, geometry_new_positions, geometry_old_positions)
-        two_geometry_logp = two_geometry_logp_reverse - geometry_logp_propose
-        two_ncmc_new_positions, two_ncmc_introduction_logp, potential_insert = self._ncmc_insert(topology_proposal, geometry_new_positions)
-        switch_logp = - (potential_insert - potential_delete)
-        two_logp_accept = topology_proposal.logp_proposal + two_geometry_logp + switch_logp + two_ncmc_elimination_logp + two_ncmc_introduction_logp + new_log_weight - old_log_weight
+        two_ncmc_old_positions, two_ncmc_elimination_logp = self._ncmc_delete(topology_proposal, geometry_old_positions)
+        two_ncmc_new_positions, two_ncmc_introduction_logp = self._ncmc_insert(topology_proposal, geometry_new_positions)
+        two_logp_accept = topology_proposal.logp_proposal + two_ncmc_elimination_logp + geometry_logp_propose + geometry_logp_reverse + two_ncmc_introduction_logp + (new_log_weight - old_log_weight)
         if True:
-            print("two-stage logp_accept = %+10.4e [%+10.4e = geometry_logp, %+10.4e = switch_logp + ncmc_elimination_logp + ncmc_introduction_logp]\n" 
-                % (two_logp_accept, two_geometry_logp, (switch_logp + two_ncmc_elimination_logp + two_ncmc_introduction_logp)))
+            print("two-stage logp_accept = %+10.4e [ncmc = %+10.4e, geometry = %+10.4e]\n"
+                % (two_logp_accept, two_ncmc_elimination_logp + two_ncmc_introduction_logp, geometry_logp_propose + geometry_logp_reverse))
         del(self.ncmc_engine)
 
         return hybrid_logp_accept, hybrid_ncmc_new_positions, two_logp_accept, two_ncmc_new_positions

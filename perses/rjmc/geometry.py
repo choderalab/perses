@@ -141,14 +141,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         Returns
         -------
         logp : float
-            The log probability of the proposal for the given transformation
+            The log contribution to the acceptance probability
         """
         if not top_proposal.unique_old_atoms:
             return 0.0
         new_coordinates = new_coordinates.in_units_of(units.nanometers)
         old_coordinates = old_coordinates.in_units_of(units.nanometers)
         logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
-        return logp_proposal
+        return -logp_proposal
 
     def _write_partial_pdb(self, pdbfile, topology, positions, atoms_with_positions, model_index):
         """
