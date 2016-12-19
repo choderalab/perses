@@ -117,7 +117,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
         logP_insert_n[iteration] = logP_insert
-        print("Iteration %5d : delete %16.8f kT | insert %16.8f kT | work %16.8f kT" % (iteration, logP_delete, logP_insert, -(logP_delete + logP_insert)))
+        #print("Iteration %5d : delete %16.8f kT | insert %16.8f kT | work %16.8f kT" % (iteration, logP_delete, logP_insert, -(logP_delete + logP_insert)))
 
     # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
     logP_n = logP_delete_n + logP_insert_n
@@ -327,7 +327,7 @@ def test_ncmc_engine_molecule():
             f.description = "Testing two-stage null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+#@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
@@ -353,7 +353,7 @@ def test_ncmc_hybrid_engine_molecule():
             f.description = "Testing hybrid null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+#@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_alchemical_elimination_peptide():
     """
     Test alchemical elimination for the alanine dipeptide.
