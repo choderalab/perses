@@ -1382,35 +1382,42 @@ class SAMSSampler(object):
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
-        self.chemical_states = self.sampler.proposal_engine.chemical_state_list
+        try:
+            self.chemical_states = self.sampler.proposal_engine.chemical_state_list
+        except NotImplementedError:
+            logger.warn("The proposal engine has not properly implemented the chemical state property; SAMS will add states on the fly.")
 
-        #Select a reference state that will always be subtracted (ensure that dict ordering does not change)
-        self._reference_state = self.chemical_states[0]
+        if self.chemical_states:
+            #Select a reference state that will always be subtracted (ensure that dict ordering does not change)
+            self._reference_state = self.chemical_states[0]
 
-        #initialize the logZ dictionary with zeroes for each chemical state
-        self.logZ = {chemical_state : 0.0 for chemical_state in self.chemical_states}
+            #initialize the logZ dictionary with zeroes for each chemical state
+            self.logZ = {chemical_state : 0.0 for chemical_state in self.chemical_states}
 
-        #Initialize log target probabilities with log(1/n_states)
-        self.log_target_probabilities = {chemical_state : np.log(len(self.chemical_states)) for chemical_state in self.chemical_states}
+            #Initialize log target probabilities with log(1/n_states)
+            self.log_target_probabilities = {chemical_state : np.log(len(self.chemical_states)) for chemical_state in self.chemical_states}
 
-        #If initial weights are specified, override any weight with what is provided
-        #However, if the chemical state is not in the reachable chemical state list,throw an exception
-        if logZ is not None:
-            for (chemical_state, logZ_value) in logZ:
-                if chemical_state not in self.chemical_states:
-                    raise ValueError("Provided a logZ initial value for an un-proposable chemical state")
-                self.logZ[chemical_state] = logZ_value
+            #If initial weights are specified, override any weight with what is provided
+            #However, if the chemical state is not in the reachable chemical state list,throw an exception
+            if logZ is not None:
+                for (chemical_state, logZ_value) in logZ:
+                    if chemical_state not in self.chemical_states:
+                        raise ValueError("Provided a logZ initial value for an un-proposable chemical state")
+                    self.logZ[chemical_state] = logZ_value
 
-        if log_target_probabilities is not None:
-            for (chemical_state, log_target_probability) in log_target_probabilities:
-                if chemical_state not in self.chemical_states:
-                    raise ValueError("Provided a log target probability for an un-proposable chemical state.")
-                self.log_target_probabilities[chemical_state] = log_target_probability
+            if log_target_probabilities is not None:
+                for (chemical_state, log_target_probability) in log_target_probabilities:
+                    if chemical_state not in self.chemical_states:
+                        raise ValueError("Provided a log target probability for an un-proposable chemical state.")
+                    self.log_target_probabilities[chemical_state] = log_target_probability
 
-            #normalize target probabilities
-            #this is likely not necessary, but it is copying the algorithm in Ref 1
-            log_sum_target_probabilities = logsumexp((list(self.log_target_probabilities.values())))
-            self.log_target_probabilities = {chemical_state : log_target_probability - log_sum_target_probabilities for chemical_state, log_target_probability in self.log_target_probabilities}
+                #normalize target probabilities
+                #this is likely not necessary, but it is copying the algorithm in Ref 1
+                log_sum_target_probabilities = logsumexp((list(self.log_target_probabilities.values())))
+                self.log_target_probabilities = {chemical_state : log_target_probability - log_sum_target_probabilities for chemical_state, log_target_probability in self.log_target_probabilities}
+        else:
+            self.logZ = dict()
+            self.log_target_probabilities = dict()
 
         self.update_method = update_method
 
@@ -1444,9 +1451,11 @@ class SAMSSampler(object):
 
         # Add state key to dictionaries if we haven't visited this state before.
         if state_key not in self.logZ:
-            raise ValueError("A new state key was added during the run; this is not currently supported.")
+            logger.warn("A new state key is being added to the logZ; note that this makes the resultant algorithm different from SAMS")
+            self.logZ[state_key] = 0.0
         if state_key not in self.log_target_probabilities:
-            raise ValueError("A new state key was added during the run; this is not currently supported.")
+            logger.warn("A new state key is being added to the target probabilities; note that this makes the resultant algorithm different from SAMS")
+            self.log_target_probabilities[state_key] = 0.0
 
         # Update estimates of logZ.
         if self.update_method == 'one-stage':
@@ -1464,11 +1473,13 @@ class SAMSSampler(object):
         else:
             raise Exception("SAMS update method '%s' unknown." % self.update_method)
 
-        #get the (t-1/2) update from equatino 9 in ref 1
+        #get the (t-1/2) update from equation 9 in ref 1
         self.logZ[state_key] += gamma / np.exp(self.log_target_probabilities[state_key])
 
-        #the second step of the (t-1/2 update), subtracting the reference state from everything else.
-        self.logZ = {state_key : logZ_estimate - self.logZ[self._reference_state] for state_key, logZ_estimate in self.logZ}
+        if self._reference_state:
+            #the second step of the (t-1/2 update), subtracting the reference state from everything else.
+            #we can only do this for cases where all states have been enumerated
+            self.logZ = {state_key : logZ_estimate - self.logZ[self._reference_state] for state_key, logZ_estimate in self.logZ}
 
         # Update log weights for sampler.
         self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }
