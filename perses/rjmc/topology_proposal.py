@@ -162,6 +162,11 @@ class ProposalEngine(object):
     verbose : bool, optional, default=False
         If True, print verbose debugging output
 
+    Properties
+    ----------
+    chemical_state_list : list of str
+        a list of all the chemical states that this proposal engine may visit.
+
     """
 
     def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False):
@@ -206,6 +211,10 @@ class ProposalEngine(object):
             The chemical_state_key
         """
         pass
+
+    @property
+    def chemical_state_list(self):
+        raise NotImplementedError("This ProposalEngine does not expose a list of possible chemical states.")
 
 class PolymerProposalEngine(ProposalEngine):
     def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True):
@@ -1582,6 +1591,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             self._storage.write_array('probability_matrix', probability_matrix)
 
         return probability_matrix
+
+    @property
+    def chemical_state_list(self):
+        return self._smiles_list
 
     @staticmethod
     def clean_molecule_list(smiles_list, atom_opts, bond_opts):

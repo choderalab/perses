@@ -2646,11 +2646,11 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc', options = {'nsteps':100})
-    run_null_system(testsystem)
+    #testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc', options = {'nsteps':100})
+    #run_null_system(testsystem)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
-    #run_valence_system()
+    run_valence_system()
     #run_t4_inhibitors()
     #run_imidazole()
     #run_constph_abl()
