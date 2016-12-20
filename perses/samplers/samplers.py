@@ -1382,6 +1382,8 @@ class SAMSSampler(object):
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
+        self.chemical_states = None
+        self._reference_state = None
         try:
             self.chemical_states = self.sampler.proposal_engine.chemical_state_list
         except NotImplementedError:
@@ -1479,10 +1481,10 @@ class SAMSSampler(object):
         if self._reference_state:
             #the second step of the (t-1/2 update), subtracting the reference state from everything else.
             #we can only do this for cases where all states have been enumerated
-            self.logZ = {state_key : logZ_estimate - self.logZ[self._reference_state] for state_key, logZ_estimate in self.logZ}
+            self.logZ = {state_key : logZ_estimate - self.logZ[self._reference_state] for state_key, logZ_estimate in self.logZ.items()}
 
         # Update log weights for sampler.
-        self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys() }
+        self.sampler.log_weights = { state_key : - self.logZ[state_key] for state_key in self.logZ.keys()}
 
         if self.storage:
             self.storage.write_object('logZ', self.logZ, iteration=self.iteration)
