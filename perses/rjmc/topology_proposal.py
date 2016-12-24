@@ -162,6 +162,10 @@ class ProposalEngine(object):
     verbose : bool, optional, default=False
         If True, print verbose debugging output
 
+    Properties
+    ----------
+    chemical_state_list : list of str
+         a list of all the chemical states that this proposal engine may visit.
     """
 
     def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False):
@@ -206,6 +210,10 @@ class ProposalEngine(object):
             The chemical_state_key
         """
         pass
+
+    @property
+    def chemical_state_list(self):
+        raise NotImplementedError("This ProposalEngine does not expose a list of possible chemical states.")
 
     def _append_topology(self, destination_topology, source_topology, exclude_residue_name=None):
         """
@@ -1506,7 +1514,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map
 
-
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=True):
         """
         Simple method that randomly chooses a molecule unformly.
@@ -1588,6 +1595,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             self._storage.write_array('probability_matrix', probability_matrix)
 
         return probability_matrix
+
+    @property
+    def chemical_state_list(self):
+         return self._smiles_list
 
     @staticmethod
     def clean_molecule_list(smiles_list, atom_opts, bond_opts):
