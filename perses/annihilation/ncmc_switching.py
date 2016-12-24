@@ -195,6 +195,7 @@ class NCMCEngine(object):
         initial_unmodified_potential = self.beta * compute_potential(system, initial_positions, platform=self.platform)
 
         if direction == 'insert':
+            # Part of Eq. 31 of acceptance criteria from perses document
             logP = - (final_unmodified_potential - final_alchemical_potential) - initial_alchemical_potential
 
             # Check potentials are finite
@@ -205,6 +206,7 @@ class NCMCEngine(object):
                 raise NaNException(msg)
 
         elif direction == 'delete':
+            # Part of Eq. 31 of acceptance criteria from perses document
             logP = - (initial_alchemical_potential - initial_unmodified_potential) + final_alchemical_potential
 
             # Check potentials are finite
@@ -647,7 +649,8 @@ class NCMCHybridEngine(NCMCEngine):
         final_alchemical_potential = integrator.getGlobalVariableByName("final_reduced_potential")
         final_unmodified_potential = self.beta * compute_potential(unmodified_new_system, final_positions, platform=self.platform)
 
-        logP_alchemical_correction = - ( (initial_alchemical_potential - initial_unmodified_potential) + (final_unmodified_potential - final_alchemical_potential) )
+        # Eqs. 32 and 36 of perses acceptance criteria
+        logP_alchemical_correction = - final_unmodified_potential + final_alchemical_potential - initial_alchemical_potential + initial_unmodified_potential
 
         return logP_alchemical_correction
 
