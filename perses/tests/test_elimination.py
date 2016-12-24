@@ -295,7 +295,7 @@ def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    molecule_names = ['imatinib', 'pentane', 'biphenyl']
+    molecule_names = ['pentane', 'biphenyl', 'imatinib']
     if os.environ.get("TRAVIS", None) == 'true':
         molecule_names = ['pentane']
 
@@ -332,7 +332,7 @@ def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    molecule_names = ['imatinib', 'pentane', 'biphenyl']
+    molecule_names = ['pentane', 'biphenyl', 'imatinib']
     if os.environ.get("TRAVIS", None) == 'true':
         molecule_names = ['pentane']
 
