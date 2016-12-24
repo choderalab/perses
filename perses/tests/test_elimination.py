@@ -74,6 +74,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
         'lambda_angles' : '1.0', # don't soften angles
         'lambda_torsions' : 'lambda'
     }
+
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
     ncmc_engine = NCMCEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
@@ -89,7 +90,6 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     niterations = 50 # number of round-trip switching trials
     logP_insert_n = np.zeros([niterations], np.float64)
     logP_delete_n = np.zeros([niterations], np.float64)
-    logP_switch_n = np.zeros([niterations], np.float64)
     for iteration in range(nequil):
         [positions, velocities] = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
@@ -101,30 +101,26 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
             raise Exception("Positions became NaN during equilibration")
 
         # Delete atoms
-        [positions, logP_delete, potential_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
+        [positions, logP_delete] = ncmc_engine.integrate(topology_proposal, positions, direction='delete')
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
             raise Exception("Positions became NaN on NCMC deletion")
 
         # Insert atoms
-        [positions, logP_insert, potential_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
+        [positions, logP_insert] = ncmc_engine.integrate(topology_proposal, positions, direction='insert')
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
             raise Exception("Positions became NaN on NCMC insertion")
 
-        # Compute probability of switching geometries.
-        logP_switch = - (potential_insert - potential_delete)
-
         # Compute total probability
         logP_delete_n[iteration] = logP_delete
         logP_insert_n[iteration] = logP_insert
-        logP_switch_n[iteration] = logP_switch
-        #print("Iteration %5d : delete %16.8f kT | insert %16.8f kT | geometry switch %16.8f" % (iteration, logP_delete, logP_insert, logP_switch))
+        #print("Iteration %5d : delete %16.8f kT | insert %16.8f kT | work %16.8f kT" % (iteration, logP_delete, logP_insert, -(logP_delete + logP_insert)))
 
     # Check free energy difference is withing NSIGMA_MAX standard errors of zero.
-    logP_n = logP_delete_n + logP_insert_n + logP_switch_n
+    logP_n = logP_delete_n + logP_insert_n
     work_n = - logP_n
     from pymbar import EXP
     [df, ddf] = EXP(work_n)
@@ -135,8 +131,6 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
         msg += str(logP_delete_n) + '\n'
         msg += 'insert logP:\n'
         msg += str(logP_insert_n) + '\n'
-        msg += 'switch logP:\n'
-        msg += str(logP_switch_n) + '\n'
         msg += 'logP:\n'
         msg += str(logP_n) + '\n'
         raise Exception(msg)
@@ -166,7 +160,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
     }
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCHybridEngine
-    ncmc_engine = NCMCHybridEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps, softening=0.7)
+    ncmc_engine = NCMCHybridEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -213,6 +207,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
 def test_alchemical_elimination_mutation():
     """
     Test alchemical elimination for mutations.
+
     """
 
     ff_filename = "amber99sbildn.xml"
@@ -220,16 +215,18 @@ def test_alchemical_elimination_mutation():
 
     # Create peptide.
     from openmmtools import testsystems
-    testsystem = testsystems.AlanineDipeptideVacuum()
+    testsystem = testsystems.AlanineDipeptideVacuum(constraints=None)
     [topology, system, positions] = [testsystem.topology, testsystem.system, testsystem.positions]
 
     # Create forcefield.
     ff = app.ForceField(ff_filename)
-    chain_id = ' '
+    chain_id = '1'
     allowed_mutations = [[('2','GLY')]]
 
     from perses.rjmc.topology_proposal import SystemGenerator
-    system_generator = SystemGenerator([ff_filename])
+    system_generator = SystemGenerator([ff_filename],
+        forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
+        use_antechamber=False, barostat=None)
 
     # Create a topology proposal fro mutating ALA -> GLY
     from perses.rjmc.topology_proposal import PointMutationEngine
@@ -250,7 +247,7 @@ def test_alchemical_elimination_mutation():
 
 def test_ncmc_alchemical_integrator_stability_molecules():
     """
-    Test NCMCAlchemicalIntegrator
+    Test NCMCAlchemicalIntegrator with various molecules
 
     """
     molecule_names = ['pentane', 'biphenyl', 'imatinib']
@@ -298,7 +295,7 @@ def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    molecule_names = ['imatinib', 'pentane', 'biphenyl']
+    molecule_names = ['pentane', 'biphenyl', 'imatinib']
     if os.environ.get("TRAVIS", None) == 'true':
         molecule_names = ['pentane']
 
@@ -327,15 +324,15 @@ def test_ncmc_engine_molecule():
             old_chemical_state_key='', new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
         for ncmc_nsteps in [0, 1, 50]:
             f = partial(check_alchemical_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
-            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
+            f.description = "Testing two-stage null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+#@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    molecule_names = ['imatinib', 'pentane', 'biphenyl']
+    molecule_names = ['pentane', 'biphenyl', 'imatinib']
     if os.environ.get("TRAVIS", None) == 'true':
         molecule_names = ['pentane']
 
@@ -353,10 +350,10 @@ def test_ncmc_hybrid_engine_molecule():
             old_chemical_state_key='', new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
         for ncmc_nsteps in [0, 1, 50]:
             f = partial(check_hybrid_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
-            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
+            f.description = "Testing hybrid null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+#@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_alchemical_elimination_peptide():
     """
     Test alchemical elimination for the alanine dipeptide.
