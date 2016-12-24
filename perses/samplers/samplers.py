@@ -1041,7 +1041,7 @@ class ExpandedEnsembleSampler(object):
         logp_accept = topology_proposal.logp_proposal + geometry_logp_reverse + ncmc_logp - geometry_logp_propose + (new_log_weight - old_log_weight)
         if self.verbose:
             print("logp_accept = %+10.4e [logp_proposal = %+10.4e, geometry_logp_reverse = %+10.4e, ncmc_logp = %+10.4e, (-)geometry_logp_propose = %+10.4e, logp_weight = %+10.4e]"
-                % (logp_accept, topology_proposal.logp_proposal, geometry_logp_reverse, ncmc_logp, -geometry_logp_propose, new_log_weight - old_log_weight)
+                % (logp_accept, topology_proposal.logp_proposal, geometry_logp_reverse, ncmc_logp, -geometry_logp_propose, new_log_weight - old_log_weight))
         # Write to storage.
         if self.storage:
             # Total acceptance
@@ -1100,7 +1100,7 @@ class ExpandedEnsembleSampler(object):
         logp_accept = topology_proposal.logp_proposal + ncmc_elimination_logp + geometry_logp_reverse - geometry_logp_propose + ncmc_introduction_logp + new_log_weight - old_log_weight
         if self.verbose:
             print("logp_accept = %+10.4e [logp_proposal %+10.4e, ncmc_elimination_logp %+10.4e, geometry_logp_reverse %+10.4e, (-)geometry_logp_propose %+10.4e, ncmc_introduction_logp %+10.4e, logp_weight %+10.4e]"
-                % (logp_accept, topology_proposal.logp_proposal, ncmc_elimination_logp, geometry_logp_reverse, -geometry_logp_propose, ncmc_introduction_logp, (new_log_weight - old_log_weight)))
+                % (logp_accept, topology_proposal.logp_proposal, ncmc_elimination_logp, geometry_logp_reverse, -geometry_logp_propose, ncmc_introduction_logp, new_log_weight - old_log_weight))
 
         elapsed_time = time.time() - initial_time
 
