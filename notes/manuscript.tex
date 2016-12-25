@@ -1,0 +1,508 @@
+% PRL look and style (easy on the eyes)
+\RequirePackage[hyphens]{url}
+\documentclass[aps,pre,twocolumn,nofootinbib,superscriptaddress,linenumbers,11point]{revtex4-1}
+% Two-column style (for submission/review/editing)
+%\documentclass[aps,prl,preprint,nofootinbib,superscriptaddress,linenumbers]{revtex4-1}
+
+%\usepackage{palatino}
+
+% Change to a sans serif font.
+% See LaTeX font catalogue: http://www.tug.dk/FontCatalogue/sansseriffonts.html
+\usepackage[sfdefault,lf]{carlito}
+\renewcommand*\familydefault{\sfdefault} %% Only if the base font of the document is to be sans serif
+\usepackage[T1]{fontenc}
+%\usepackage[font=sf,justification=justified]{caption}
+\usepackage[font=sf]{floatrow}
+
+% Rework captions to use sans serif font.
+\makeatletter
+\renewcommand\@make@capt@title[2]{%
+ \@ifx@empty\float@link{\@firstofone}{\expandafter\href\expandafter{\float@link}}%
+  {\textbf{#1}}\sf\@caption@fignum@sep#2\quad
+}%
+\makeatother
+
+\usepackage{listings} % For code examples
+\usepackage[usenames,dvipsnames,svgnames,table]{xcolor}
+
+\usepackage{minted}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+%\usepackage[mathbf,mathcal]{euler}
+%\usepackage{citesort}
+\usepackage{dcolumn}
+\usepackage{boxedminipage}
+\usepackage{verbatim}
+\usepackage[colorlinks=true,citecolor=blue,linkcolor=blue]{hyperref}
+
+\usepackage{subfigure}  % use for side-by-side figures
+
+% The figures are in a figures/ subdirectory.
+\graphicspath{{figures/}}
+
+% italicized boldface for math (e.g. vectors)
+\newcommand{\bfv}[1]{{\mbox{\boldmath{$#1$}}}}
+% non-italicized boldface for math (e.g. matrices)
+\newcommand{\bfm}[1]{{\bf #1}}          
+
+%\newcommand{\bfm}[1]{{\mbox{\boldmath{$#1$}}}}
+%\newcommand{\bfm}[1]{{\bf #1}}
+%\newcommand{\expect}[1]{\left \langle #1 \right \rangle}                % <.> for denoting expectations over realizations of an experiment or thermal averages
+
+% Define some useful commands we will use repeatedly.
+\newcommand{\T}{\mathrm{T}}                                % T used in matrix transpose
+\newcommand{\tauarrow}{\stackrel{\tau}{\rightarrow}}       % the symbol tau over a right arrow
+\newcommand{\expect}[1]{\langle #1 \rangle}                % <.> for denoting expectations over realizations of an experiment or thermal averages
+\newcommand{\estimator}[1]{\hat{#1}}                       % estimator for some quantity from a finite dataset.
+\newcommand{\code}[1]{{\tt #1}}
+
+% log probability
+\newcommand{\logP}{{\log \mathsf{P}}}
+
+% Molecules
+\newcommand{\newmol}{{\mathcal{M}_\mathrm{new}}}
+\newcommand{\oldmol}{{\mathcal{M}_\mathrm{old}}}
+
+% vectors
+\newcommand{\x}{\bfv{x}}
+\newcommand{\y}{\bfv{y}}
+\newcommand{\f}{\bfv{f}}
+
+\newcommand{\bfc}{\bfm{c}}
+\newcommand{\hatf}{\hat{f}}
+
+%\newcommand{\bTheta}{\bfm{\Theta}}
+%\newcommand{\btheta}{\bfm{\theta}}
+%\newcommand{\bhatf}{\bfm{\hat{f}}}
+%\newcommand{\Cov}[1] {\mathrm{cov}\left( #1 \right)}
+%\newcommand{\Ept}[1] {{\mathrm E}\left[ #1 \right]}
+%\newcommand{\Eptk}[2] {{\mathrm E}\left[ #2 \,|\, #1\right]}
+%\newcommand{\T}{\mathrm{T}}                                % T used in matrix transpose
+%\newcommand{\conc}[1] {\left[ \mathrm{#1} \right]}
+
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\argmax}{argmax}
+\newcommand*{\argminl}{\argmin\limits}
+\newcommand*{\argmaxl}{\argmax\limits}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% DOCUMENT
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% TITLE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\title{Using stochastic approximation and self-adjusted mixture sampling for molecular design:\\
+Some collected notes}
+
+\author{Patrick B. Grinaway}
+ \email{patrick.grinaway@choderalab.org}
+ \affiliation{Computational and Systems Biology Program, Sloan Kettering Institute, Memorial Sloan Kettering Cancer Center, New York, NY 10065}
+
+\author{Julie M. Behr}
+ \email{julie.behr@choderalab.org}
+ \affiliation{Computational and Systems Biology Program, Sloan Kettering Institute, Memorial Sloan Kettering Cancer Center, New York, NY 10065}
+
+\author{Zhiqiang Tan}
+ \email{ztan@stat.rutgers.edu}
+ \affiliation{Department of Statistics, Rutgers University, Piscataway, NJ 08854}
+
+\author{John D. Chodera}
+ \thanks{Corresponding author}
+ \email{john.chodera@choderalab.org}
+ \affiliation{Computational and Systems Biology Program, Sloan Kettering Institute, Memorial Sloan Kettering Cancer Center, New York, NY 10065}
+
+\date{\today}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ABSTRACT
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{abstract}
+
+We collect some notes on using stochastic approximation with multiple self-adjusted mixture sampling simulations for molecular design problems.\\
+
+% KEYWORDS
+\emph{Keywords: stochastic approximation; molecular simulation; computer aided ligand design; expanded ensemble; self-adjusted mixture sampling}
+
+\end{abstract}
+
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FIGURE: ONE-COLUMN
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\begin{figure}[tbp]
+%\resizebox{0.9\textwidth}{!}{\includegraphics{toc-graphic.pdf}}
+%\caption{\label{figure:example} {\bf Example figure.} 
+%This is an example figure.
+%Shaded regions denote 95\% confidence intervals.
+%}
+%\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% INTRODUCTION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Maximizing ligand binding affinity for a protein}
+\label{section:problem-summary}
+
+Suppose we are trying to design a ligand that maximizes the binding affinity to a target protein.
+Let the index $j \in \{1, \ldots, m\}$ denote the ligand identity.
+
+We define two systems with associated probability densities:
+
+Suppose we have a protein:ligand:solvent system with probability density
+\begin{eqnarray}
+p_{1j}(x) &=& e^{\zeta_{1j}^*} q_{1j}(x) \:\:,\:\: j = 1,\ldots, m
+\end{eqnarray}
+where we note the dimensionality of $x$ may depend on the index $j$.
+
+We also have a ligand:solvent system with probability density
+\begin{eqnarray}
+p_{2j}(x) &=& e^{\zeta_{2j}^*} q_{2j}(x) \: j = 1,\ldots, m
+\end{eqnarray}
+
+Consider the expanded ensembles
+\begin{eqnarray}
+(j, x)_1 &\sim& Q_1(\zeta_1, \zeta_2) \equiv \pi_{1j}(\zeta_1, \zeta_2) e^{-\zeta_{1j}} q_{1j}(x) \\
+(j, x)_2 &\sim& Q_2(\zeta_1, \zeta_2) \equiv \pi_{2j}(\zeta_1, \zeta_2) e^{-\zeta_{2j}} q_{2j}(x)
+\end{eqnarray}
+
+To identify ligands with high binding affinity for a protein, we propose to design a chain with the limiting marginal distribution proportional to the binding affinity
+\begin{eqnarray}
+p_{1j}, \: p_{2j} \propto K_j &\equiv& e^{\zeta_{2j}^* - \zeta_{1j}^*}
+\end{eqnarray}
+
+To do this, we allow the $\pi$ to depend on $\zeta_1 \equiv \{\zeta_{11}, \ldots, \zeta_{1m}\}$ and $\zeta_2 \equiv \{\zeta_{21}, \ldots, \zeta_{2m}\}$ such that
+\begin{eqnarray}
+\pi_{1j} = \pi_{2j} \equiv \pi_j(\zeta_1, \zeta_2)
+\end{eqnarray}
+Specifically, we propose
+\begin{eqnarray}
+\pi_{1j} \pi_{2j} &\equiv& e^{\zeta_{2j} - \zeta_{1j}} = \frac{e^{\zeta_{2j} - \zeta_{1j}}}{\sum_{k=1}^m e^{\zeta_{2k} - \zeta_{1k}}}
+\end{eqnarray}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% THE ALGORITHM
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{The algorithm}
+\label{section:the-algorithm}
+
+The algorithm is as follows:
+At iteration $n$,
+\begin{itemize}
+  \item Sample from the expanded ensemble defined by $Q_1$ and $Q_2$ for the current $(\zeta_1^{(n-1)}, \zeta_2^{(n-1)})$.
+  \begin{eqnarray}
+  (l, x)_1 &\sim& Q_1(\zeta_1^{(n-1)}, \zeta_2^{(n-1)}) \\
+  (l, x)_2 &\sim& Q_2(\zeta_1^{(n-1)}, \zeta_2^{(n-1)})  
+  \end{eqnarray}
+  \item Update estimates of $(\zeta_1^{(n-1)}, \zeta_2^{(n-1)})$.
+  \begin{eqnarray}
+  \zeta_{1j}^{(n)} &=& \zeta_{1j}^{(n-1)} + n^{-1} \frac{\delta_j(l_1)}{\pi_j(\zeta_1^{(n-1)},\zeta_2^{(n-1)})} \\
+  \zeta_{2j}^{(n)} &=& \zeta_{2j}^{(n-1)} + n^{-1} \frac{\delta_j(l_2)}{\pi_j(\zeta_1^{(n-1)},\zeta_2^{(n-1)})}
+  \end{eqnarray}
+  Set $\zeta_{11}^{(n)} = \zeta_{21}^{(n)} = 0$.
+\end{itemize}
+
+{\bf NOTE: It may simplify things to break out the update of $\pi_j^{(n)}$ into an explicit recursion step instead of explicitly writing $\pi_j(\zeta_1,\zeta_2)$.}
+
+{\bf NOTE: It would be best if we can abandon using $\pi_j$ and instead work in log space as $g_j \equiv - \log \pi_j$ instead, since any implementation involving $\pi_j$ directly will run into numerical underflow/overflow issues otherwise.}
+
+See a simple example of this algorithm in action for a set of Gaussian distributions \href{https://github.com/choderalab/perses/blob/master/notebooks/Harmonic%20oscillators%20example.ipynb}{at this link}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ANOTHER POSSIBILITY
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Another possibility}
+\label{section:another-possibility}
+
+Set $\pi_{1j}(\zeta_1,\zeta_2) \propto e^{\zeta_{2j} -\zeta_{1j}}$ but $\pi_{2j}(\zeta_1,\zeta_2) \propto 1$.
+
+With this choice, we have
+\begin{eqnarray}
+(j, x)_1 &\sim& Q_1(\zeta_1, \zeta_2) \equiv e^{-\zeta_{2j}} q_{1j}(x) \\
+(j, x)_2 &\sim& Q_2(\zeta_1, \zeta_2) \equiv e^{-\zeta_{2j}} q_{2j}(x)
+\end{eqnarray}
+
+The corresponding algorithm is as follows:
+At iteration $n$,
+\begin{itemize}
+  \item Sample $(l, x)_2$ from the expanded ensemble defined by $Q_2$ for the current $\zeta_2^{(n-1)}$.
+  \begin{eqnarray}
+  (l, x)_2 &\sim& Q_2(\zeta_1,\zeta_2) \equiv e^{-\zeta_{2j}} q_{2j}(x)
+  \end{eqnarray}
+  \item Update estimate of $\zeta_2^{(n-1)}$.
+  \begin{eqnarray}
+  \zeta_{2j}^{(n)} &=& \zeta_{2j}^{(n-1)} + n^{-1} \frac{\delta_j(l_2)}{m^{-1}}
+  \end{eqnarray}
+  Set $\zeta_{21}^{(n)} = 0$.
+  \item Sample $(l, x)_1$ from the expanded ensemble defined by $Q_1$ for the current $\zeta_2^{(n)}$.
+  \begin{eqnarray}
+  (l, x)_1 &\sim& Q_1(\zeta_1,\zeta_2) \equiv e^{-\zeta_{2j}} q_{1j}(x)
+  \end{eqnarray}
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% GENERALIZATION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Generalization of the design problem}
+\label{section:generalization}
+
+More generally, consider we have $s$ different probability densities
+\begin{eqnarray}
+p_{ij}(x) &=& e^{\zeta_{ij}^*} q_{ij}(x) \:\:,\:\: i = 1,\ldots, s\:\:, \:\: j = 1,\ldots, m
+\end{eqnarray}
+and we desire to design a chain where the marginal distributions of all $s$ chains are
+\begin{eqnarray}
+p_{ij} &\propto& \prod_{i'=1}^s e^{-\theta_s \zeta_{i'j}^*} = \exp\left[ - \sum_{i'=1}^s \theta_s \zeta_{i'j}^* \right] \forall i = 1,\ldots, s
+\end{eqnarray}
+where the \emph{design vector} $\Theta \equiv \{ \theta_1, \ldots, \theta_s \}$ specifies how different targets and antitargets are used in weighting the design constraints.
+
+We postulate that we can do this by defining $\pi_i(Z)$ for $Z \equiv \{\zeta_1, \ldots, \zeta_s\}$ as
+\begin{eqnarray}
+p_{ij}(Z | \Theta) &\propto& \exp\left[ - \sum_{i'=1}^s \theta_s \zeta_{i'j} \right]
+\end{eqnarray}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% The sampling scheme
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{The sampling scheme}
+\label{section:sampling scheme}
+
+Suppose we are proposing a transition from a molecule $\mathcal{M}_\mathrm{old}$ to $\mathcal{M}_\mathrm{new}$, where the initial molecule has configuration $x \equiv (x_\mathrm{core}, x_\mathrm{old})$ and the new molecule has configuration $x' \equiv (x_\mathrm{core}', x_\mathrm{new}')$:
+\begin{eqnarray}
+\mathcal{T} \: : \: (x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) \rightarrow (x_\mathrm{core}', x_\mathrm{new}', \mathcal{M}_\mathrm{new})
+\end{eqnarray}
+
+{\color{red}[JDC: We still need to incorporate the stochastic nature in the order of atom and torsion proposals into the $\phi$ terms.]}
+
+\subsection*{Hybrid scheme}
+
+Starting from $(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old})$, the proposal scheme is:
+\begin{enumerate}
+\item $\mathcal{M}_\mathrm{new} \sim P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})$
+\item $x_\mathrm{new} \sim \phi(x_\mathrm{new} | x_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})$
+\item $(x'_\mathrm{new}, x'_\mathrm{old}, x'_\mathrm{core}) \sim \Phi(x \rightarrow x' | \mathcal{M}_\mathrm{old} \rightarrow \mathcal{M}_\mathrm{new})$
+\item Accept $(x'_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new})$ with probability $\min\left\{1, \mathcal{A}[\mathcal{T}]\right\}$.
+\end{enumerate}
+\begin{widetext}
+We impose super-detailed balance:
+\begin{eqnarray}
+\pi(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) \mathcal{P}[\mathcal{T}] \mathcal{A}[\mathcal{T}] = \pi(x'_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new}) \mathcal{P}[\tilde{\mathcal{T}}] \mathcal{A}[\tilde{\mathcal{T}}]
+\end{eqnarray}
+\begin{eqnarray}
+&& \pi(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) \, P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old}) \, \phi(x_\mathrm{new} | x_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new}) \, \Phi(x \rightarrow x' | \mathcal{M}_\mathrm{old} \rightarrow \mathcal{M}_\mathrm{new}) \, \mathcal{A}[\mathcal{T}] \nonumber \\
+&=& \pi(x'_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new}) \, P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new}) \, \phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old}) \, \Phi(x' \rightarrow x | \mathcal{M}_\mathrm{new} \rightarrow \mathcal{M}_\mathrm{old}) \, \mathcal{A}[\tilde{\mathcal{T}}]
+\end{eqnarray}
+Collecting terms to compute the acceptance criteria:
+\begin{eqnarray}
+\frac{\mathcal{A}[\mathcal{T}]}{\mathcal{A}[\tilde{\mathcal{T}}]} &=& \frac{\pi(x'_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new})}{\pi(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old})} \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x_\mathrm{new} | x_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} \frac{\Phi(x' \rightarrow x | \mathcal{M}_\mathrm{new} \rightarrow \mathcal{M}_\mathrm{old})}{\Phi(x \rightarrow x' | \mathcal{M}_\mathrm{old} \rightarrow \mathcal{M}_\mathrm{new})} \\
+&=& \frac{e^{-u(x'_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new}) + g(\mathcal{M}_\mathrm{new})}}{e^{-u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) + g(\mathcal{M}_\mathrm{old})}} \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x_\mathrm{new} | x_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} e^{-\Delta S[x \rightarrow x' | \mathcal{M}_\mathrm{old} \rightarrow \mathcal{M}_\mathrm{new}]} \\
+&=& \frac{e^{-u(x'_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new}) + g(\mathcal{M}_\mathrm{new})}}{e^{-u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) + g(\mathcal{M}_\mathrm{old})}} \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x_\mathrm{new} | x_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} e^{-w[x \rightarrow x' | \lambda = 0 \rightarrow 1]} \frac{e^{-u(x, \lambda=0)}}{e^{-u(x', \lambda=1)}} \label{equation:hybrid-acceptance-criteria}
+\end{eqnarray}
+\end{widetext}
+
+\subsection*{Two-stage scheme}
+
+Starting from $(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old})$, the proposal scheme is:
+\begin{enumerate}
+\item $\mathcal{M}_\mathrm{new} \sim P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})$
+\item $(x'_\mathrm{old}, x'_\mathrm{core}) \sim \Phi_\mathrm{delete}(x \rightarrow x' | \mathcal{M}_\mathrm{old})$
+\item $x'_\mathrm{new} \sim \phi(x'_\mathrm{new} | x'_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})$
+\item $(x''_\mathrm{new}, x''_\mathrm{core}) \sim \Phi_\mathrm{insert}(x' \rightarrow x'' | \mathcal{M}_\mathrm{new})$
+\item Accept $(x''_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new})$ with probability $\min\left\{1, \mathcal{A}[\mathcal{T}]\right\}$.
+\end{enumerate}
+\begin{widetext}
+We impose super-detailed balance:
+\begin{eqnarray}
+\pi(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) \mathcal{P}[\mathcal{T}] \mathcal{A}[\mathcal{T}] = \pi(x''_\mathrm{core}, x''_\mathrm{new}, \mathcal{M}_\mathrm{new}) \mathcal{P}[\tilde{\mathcal{T}}] \mathcal{A}[\tilde{\mathcal{T}}]
+\end{eqnarray}
+\begin{eqnarray}
+&& \pi(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) \, P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old}) \, \Phi_\mathrm{delete}(x \rightarrow x' | \mathcal{M}_\mathrm{old}) \, \phi(x'_\mathrm{new} | x'_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new}) \, \Phi_\mathrm{insert}(x' \rightarrow x'' | \mathcal{M}_\mathrm{new}) \, \mathcal{A}[\mathcal{T}] \nonumber \\
+&=& \pi(x''_\mathrm{core}, x''_\mathrm{new}, \mathcal{M}_\mathrm{new}) \, P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new}) \Phi_\mathrm{delete}(x'' \rightarrow x' | \mathcal{M}_\mathrm{new}) \, \phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old}) \, \Phi_\mathrm{insert}(x' \rightarrow x | \mathcal{M}_\mathrm{old}) \, \mathcal{A}[\tilde{\mathcal{T}}] \nonumber \\
+\end{eqnarray}
+Collecting terms to compute the acceptance criteria:
+\begin{eqnarray}
+\lefteqn{\frac{\mathcal{A}[\mathcal{T}]}{\mathcal{A}[\tilde{\mathcal{T}}]}} \nonumber \\
+&=& \frac{\pi(x''_\mathrm{core}, x''_\mathrm{new}, \mathcal{M}_\mathrm{new})}{\pi(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old})} \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} \frac{\Phi_\mathrm{delete}(x'' \rightarrow x' | \mathcal{M}_\mathrm{new})}{\Phi_\mathrm{insert}(x' \rightarrow x'' | \mathcal{M}_\mathrm{new})} \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x'_\mathrm{new} | x'_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} \frac{\Phi_\mathrm{insert}(x' \rightarrow x | \mathcal{M}_\mathrm{old})}{\Phi_\mathrm{delete}(x \rightarrow x' | \mathcal{M}_\mathrm{old})} \\
+&=& \frac{e^{-u(x''_\mathrm{core}, x''_\mathrm{new}, \mathcal{M}_\mathrm{new}) + g(\mathcal{M}_\mathrm{new})}}{e^{-u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) + g(\mathcal{M}_\mathrm{old})}} \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} e^{-\Delta S_\mathrm{insert}[x' \rightarrow x'' | \mathcal{M}_\mathrm{new}]} \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x'_\mathrm{new} | x'_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} e^{-\Delta S_\mathrm{delete}[x \rightarrow x' | \mathcal{M}_\mathrm{old}]} \\
+&=& \frac{e^{-u(x''_\mathrm{core}, x''_\mathrm{new}, \mathcal{M}_\mathrm{new}) + g(\mathcal{M}_\mathrm{new})}}{e^{-u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) + g(\mathcal{M}_\mathrm{old})}} \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x'_\mathrm{new} | x'_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} \nonumber \\
+&\times& e^{-w_\mathrm{insert}[x' \rightarrow x'' | \mathcal{M}_\mathrm{new}]} \: \frac{e^{-u(x'_\mathrm{core}, x'_\mathrm{new}; \mathcal{M}_\mathrm{new},\lambda=0)}}{e^{-u(x''_\mathrm{core}, x''_\mathrm{new};\mathcal{M}_\mathrm{new}, \lambda=1)}} \: e^{-w_\mathrm{delete}[x \rightarrow x' | \mathcal{M}_\mathrm{old}]} \frac{e^{-u(x_\mathrm{core}, x_\mathrm{old};\mathcal{M}_\mathrm{old},\lambda=1)}}{e^{-u(x'_\mathrm{core}, x'_\mathrm{old};\mathcal{M}_\mathrm{old},\lambda=0)}} \\
+&=& \frac{e^{g(\mathcal{M}_\mathrm{new})}}{e^{g(\mathcal{M}_\mathrm{old})}} \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x'_\mathrm{new} | x'_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} e^{-w_\mathrm{insert}[x' \rightarrow x'' | \mathcal{M}_\mathrm{new}]} e^{-w_\mathrm{delete}[x \rightarrow x' | \mathcal{M}_\mathrm{old}]} \nonumber \\
+&\times& \frac{e^{-u(x''_\mathrm{core}, x''_\mathrm{new}, \mathcal{M}_\mathrm{new})}}{e^{-u(x''_\mathrm{core}, x''_\mathrm{new};\mathcal{M}_\mathrm{new}, \lambda=1)}} \cdot \frac{e^{-u(x_\mathrm{core}, x_\mathrm{old};\mathcal{M}_\mathrm{old},\lambda=1)}}{e^{-u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old})}} \cdot \frac{e^{-u(x'_\mathrm{core}, x'_\mathrm{new}; \mathcal{M}_\mathrm{new},\lambda=0)}}{e^{-u(x'_\mathrm{core}, x'_\mathrm{old};\mathcal{M}_\mathrm{old},\lambda=0)}} \label{equation:two-stage-acceptance-criteria}
+\end{eqnarray}
+\end{widetext}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%Software implementation of the sampling scheme
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Sampling scheme implementation}
+
+\subsection*{Hybrid scheme}
+
+\subsubsection*{Implementation}
+
+We break the {\bf hybrid} acceptance criteria (Eq.~\ref{equation:hybrid-acceptance-criteria}) into the following components:
+\begin{itemize}
+\item The {\bf stationary probability} from the initial and final chemical states, which is computed in the {\tt ExpandedEnsembleSampler}:
+\begin{eqnarray}
+\logP_\mathrm{stationary} &=& \log \frac{e^{-u(x'_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new}) + g(\mathcal{M}_\mathrm{new})}}{e^{-u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) + g(\mathcal{M}_\mathrm{old})}} \label{equation:hybrid-stationary} \\
+&=& \logP_\mathrm{final} - \logP_\mathrm{initial}
+\end{eqnarray}
+which we further decompose into the {\bf initial} and {\bf final} log probabilities of chemical states:
+\begin{eqnarray}
+\logP_\mathrm{final} &=& -u(x'_\mathrm{core}, x'_\mathrm{new}, \mathcal{M}_\mathrm{new}) + g(\mathcal{M}_\mathrm{new}) \\
+\logP_\mathrm{initial} &=& -u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) + g(\mathcal{M}_\mathrm{old})
+\end{eqnarray}
+\item The {\bf chemical proposal probabilities}, which are computed by the {\tt ProposalEngine}:
+\begin{eqnarray}
+\logP_\mathrm{chemical} &=& \log \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} \label{equation:hybrid-chemical-state-proposal}
+\end{eqnarray}
+\item The {\bf geometry proposal probabilities}, computed by the {\tt GeometryEngine}:
+\begin{eqnarray}
+\logP_\mathrm{geometry} &=& \log \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x_\mathrm{new} | x_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} \label{equation:hybrid-geometry} \\
+&=& \logP_\mathrm{reverse} - \logP_\mathrm{forward}
+\end{eqnarray}
+which we further decompose into {\bf reverse} and {\bf forward} geometry proposal probabilities:
+\begin{eqnarray}
+\logP_\mathrm{reverse} &=& \log \phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old}) \\
+\logP_\mathrm{forward} &=& \log \phi(x_\mathrm{new} | x_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})
+\end{eqnarray}
+and finally the {\bf NCMC} component, computed by the {\tt NCMCEngine}:
+\begin{eqnarray}
+\logP_\mathrm{NCMC} &=& \log e^{-\Delta S[x \rightarrow x' | \mathcal{M}_\mathrm{old} \rightarrow \mathcal{M}_\mathrm{new}]}  \label{equation:hybrid-ncmc} \\
+&=& \log \left[ e^{-w[x \rightarrow x' | \lambda = 0 \rightarrow 1]} \frac{e^{-u(x, \lambda=0)}}{e^{-u(x', \lambda=1)}} \right] \\
+&=& \logP_\mathrm{work} + \logP_\mathrm{energy}
+\end{eqnarray}
+which we further decompose into {\bf work} and {\bf energy} change contributions
+\begin{eqnarray}
+\logP_\mathrm{work} &=& -w[x \rightarrow x' | \lambda = 0 \rightarrow 1] \\
+\logP_\mathrm{energy} &=& u(x', \lambda=1) - u(x, \lambda=0)
+\end{eqnarray}
+{\color{red} JDC: Check that the energy component here is really the reduced potential for both GHMC and VV, rather than the total reduced energy.}
+ski
+\end{itemize}
+With this definition of terms, the overall acceptance probability is therefore given as
+\begin{eqnarray}
+\logP_\mathrm{accept} &=& \logP_\mathrm{final} - \logP_\mathrm{initial} + \logP_\mathrm{chemical} \nonumber \\
+&+& \logP_\mathrm{reverse} - \logP_\mathrm{forward} \nonumber \\
+&+& \logP_\mathrm{work} + \logP_\mathrm{energy}
+\end{eqnarray}
+
+\subsubsection*{Testing}
+
+We use several kinds of tests to ensure that the quantities described above are computed correctly.
+
+\noindent {\tt \bf check\_alchemical\_null\_elimination}: This test ensures that the NCMC work is computed correctly by performing a \emph{null transformation} in which the overall free energy change should be zero.
+We can show that the expectation of the exponentiated work should be given by the exponentiated free energy difference (due to Jarzynski~\cite{jarzynski:prl:1997:neq-fe}):
+\begin{eqnarray}
+\lefteqn{E_{0 \rightarrow 1}[e^{-w[x \rightarrow x' | \lambda = 0 \rightarrow 1]}]} \nonumber \\ 
+&=& \sum_{x_0\cdots x_N} P_{0 \rightarrow 1}[x \rightarrow x'] e^{-w[x \rightarrow x' | \lambda = 0 \rightarrow 1]} \nonumber \\
+&=& \sum_{x_0\cdots x_N} \pi_0(x_0) \left[ \prod_{n=1}^N K_n(x_{n-1}, x_n) \right] e^{- \sum_{n=1}^N (u_{n}(x_n) - u_{n-1}(x_n))} \nonumber \\
+&=& \sum_{x_0\cdots x_N}  \pi_0(x_0) \left[ \prod_{n=1}^N K_n(x_{n-1}, x_n) \right] \prod_{n=1}^N \frac{q_n(x_n)}{q_{n-1}(x_n)} \nonumber \\
+&=& \sum_{x_0\cdots x_N} \pi_0(x_0) \left[ \prod_{n=1}^N K_n(x_{n-1}, x_n) \right] \prod_{n=1}^N \frac{Z_n \pi_n(x_n)}{Z_{n-1} \pi_{n-1}(x_n)} \nonumber \\
+&=& \frac{Z_N}{Z_0} \sum_{x_0\cdots x_N} \pi_0(x_1) K_0(x_0, x_1) \left[ \prod_{n=2}^N K_n(x_{n-1}, x_n) \right] \prod_{n=1}^N \frac{\pi_n(x_n)}{\pi_{n-1}(x_n)} \nonumber \\
+&=& \frac{Z_N}{Z_0} \sum_{x_1\cdots x_N} \pi_0(x_1) \frac{\pi_1(x_1)}{\pi_0(x_1)} \left[ \prod_{n=2}^N K_n(x_{n-1}, x_n) \right] \prod_{n=1}^N \frac{\pi_n(x_n)}{\pi_{n-1}(x_n)} \nonumber \\
+&=& \frac{Z_N}{Z_0} = e^{-(f_N - f_0)} = e^{-\Delta f_{0 \rightarrow 1}}
+\end{eqnarray}
+We can test the $\logP_{work}$ component using the one-sided EXP estimator
+\begin{eqnarray}
+\Delta f_{0 \rightarrow 1} = - \log E_{0 \rightarrow 1}\left[ \exp{\logP_\mathrm{work}} \right] 
+\end{eqnarray}
+Note that we are only testing the {\bf work} contribution here.
+The differential path action ($\log \Delta S = \logP_\mathrm{work} + \logP_\mathrm{energy}$) obeys different statistics.
+{\color{red}[JDC: Is there a similar test we could apply to $\log \Delta S$?]}
+
+The EXP estimator can produce heavily biased estimates, making the uncertainty estimates unreliable~\cite{shirts:jcp:2005:comparison-of-estimators}, so instead use the bidirectional BAR estimator to estimate switches in both directions when possible~\cite{bennett:jcp:1976:fe-estimate}.
+This also ensures that the NCMC method obeys the correct symmetry relations when run forward and backward.
+In particular, the protocol must be \emph{symmetric} unless additional corrections for selecting the same protocol and its time-reverse are included~\cite{ncmc}.
+
+\noindent {\tt \bf check\_harmonic\_oscillator\_ncmc}: The same principles as above, applied to a harmonic oscillator.
+This scheme tests only the {\tt NCMCIntegrator}, rather than the whole {\tt NCMCEngine}.
+
+\subsection*{Two-stage scheme}
+
+\subsubsection*{Implementation}
+
+We break the {\bf two-stage} acceptance criteria (Eq~\ref{equation:two-stage-acceptance-criteria}) into the following components:
+\begin{itemize}
+\item The {\bf stationary probability} from the initial and final chemical states, which is computed in the {\tt ExpandedEnsembleSampler}:
+\begin{eqnarray}
+\logP_\mathrm{stationary} &=& \log \frac{e^{-u(x''_\mathrm{core}, x''_\mathrm{new}, \mathcal{M}_\mathrm{new}) + g(\mathcal{M}_\mathrm{new})}}{e^{-u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) + g(\mathcal{M}_\mathrm{old})}} \label{equation:two-stage-stationary} \\
+&=& \logP_\mathrm{final} - \logP_\mathrm{initial}
+\end{eqnarray}
+which we further decompose into the {\bf initial} and {\bf final} log probabilities of chemical states:
+\begin{eqnarray}
+\logP_\mathrm{final} &=& -u(x''_\mathrm{core}, x''_\mathrm{new}, \mathcal{M}_\mathrm{new}) + g(\mathcal{M}_\mathrm{new}) \\
+\logP_\mathrm{initial} &=& -u(x_\mathrm{core}, x_\mathrm{old}, \mathcal{M}_\mathrm{old}) + g(\mathcal{M}_\mathrm{old})
+\end{eqnarray}
+\item The {\bf chemical proposal probabilities}, which are computed by the {\tt ProposalEngine}:
+\begin{eqnarray}
+\logP_\mathrm{chemical} &=& \log \frac{P(\mathcal{M}_\mathrm{old} | \mathcal{M}_\mathrm{new})}{P(\mathcal{M}_\mathrm{new} | \mathcal{M}_\mathrm{old})} \label{equation:two-stage-chemical-state-proposal}
+\end{eqnarray}
+\item The {\bf geometry proposal probabilities}, computed by the {\tt GeometryEngine}:
+\begin{eqnarray}
+\logP_\mathrm{geometry} &=& \log \frac{\phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old})}{\phi(x'_\mathrm{new} | x'_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})} \label{equation:two-stage-geometry} \\
+&=& \logP_\mathrm{reverse} - \logP_\mathrm{forward}
+\end{eqnarray}
+which we further decompose into {\bf reverse} and {\bf forward} geometry proposal probabilities:
+\begin{eqnarray}
+\logP_\mathrm{reverse} &=& \log \phi(x'_\mathrm{old} | x'_\mathrm{core}, \mathcal{M}_\mathrm{new}, \mathcal{M}_\mathrm{old}) \\
+\logP_\mathrm{forward} &=& \log \phi(x'_\mathrm{new} | x'_\mathrm{core}, \mathcal{M}_\mathrm{old}, \mathcal{M}_\mathrm{new})
+\end{eqnarray}
+and finally the {\bf NCMC} components, computed by the {\tt NCMCEngine}, where there are now two stages ({\bf delete} and {\bf insert}):
+\begin{eqnarray}
+\logP_\mathrm{delete} &=& \log e^{-\Delta S_\mathrm{delete}[x \rightarrow x' | \mathcal{M}_\mathrm{old}]}  \label{equation:two-stage-ncmc-delete} \\
+&=& \log \left[ e^{-w_\mathrm{delete}[x \rightarrow x' | \mathcal{M}_\mathrm{old}]} \frac{e^{-u(x, \mathcal{M}_\mathrm{old}, \lambda=1)}}{e^{-u(x', \mathcal{M}_\mathrm{old}, \lambda=0)}} \right] \nonumber \\
+&=& \logP_\mathrm{delete~work} + \logP_\mathrm{delete~energy} \\
+\logP_\mathrm{insert} &=& \log e^{-\Delta S_\mathrm{insert}[x' \rightarrow x' | \mathcal{M}_\mathrm{new}]}  \label{equation:two-stage-ncmc-insert} \\
+&=& \log \left[ e^{-w_\mathrm{insert}[x' \rightarrow x'' | \mathcal{M}_\mathrm{new}]} \frac{e^{-u(x', \mathcal{M}_\mathrm{new}, \lambda=0)}}{e^{-u(x'', \mathcal{M}_\mathrm{new}, \lambda=1)}} \right] \nonumber \\
+&=& \logP_\mathrm{insert~work} + \logP_\mathrm{insert~energy}
+\end{eqnarray}
+which we further decompose into {\bf work} and {\bf energy} change contributions for the separate {\bf delete} and {\bf insert} NCMC stages:
+\begin{eqnarray}
+\logP_\mathrm{delete~work} &=& -w_\mathrm{delete}[x \rightarrow x' | \mathcal{M}_{old}] \\
+\logP_\mathrm{delete~energy} &=& u(x', \oldmol, \lambda=0) - u(x, \oldmol, \lambda=1) \nonumber \\
+\logP_\mathrm{insert~work} &=& -w_\mathrm{insert}[x' \rightarrow x'' | \mathcal{M}_{new}] \\
+\logP_\mathrm{insert~energy} &=& u(x'', \newmol, \lambda=1) - u(x', \newmol, \lambda=0) \nonumber
+\end{eqnarray}
+{\color{red} JDC: Check that the energy component here is really the reduced potential for both GHMC and VV, rather than the total reduced energy.}
+ski
+\end{itemize}
+With this definition of terms, the overall acceptance probability is therefore given as
+\begin{eqnarray}
+\logP_\mathrm{accept} &=& \logP_\mathrm{final} - \logP_\mathrm{initial} + \logP_\mathrm{chemical} \nonumber \\
+&+& \logP_\mathrm{reverse} - \logP_\mathrm{forward} \nonumber \\
+&+& \logP_\mathrm{work} + \logP_\mathrm{energy}
+\end{eqnarray}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ACKNOWLEDGMENTS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgments}
+
+We are grateful to many people.
+JDC acknowledges a Louis V.~Gerstner Young Investigator Award, NIH core grant P30-CA008748, and the Sloan Kettering Institute for funding during the course of this work.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% BIBLIOGRAPHY
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\bibliographystyle{prsty} 
+\bibliography{chodera-research.bib}
+
+\end{document}
