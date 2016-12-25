@@ -45,7 +45,7 @@ class TopologyProposal(object):
     old_system : simtk.openmm.System object
         openm System of the current state
     logp_proposal : float
-        log probability of the proposal
+        contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
     new_to_old_atom_map : dict
         {new_atom_idx : old_atom_idx} map for the two systems
     chemical_state_key : str
@@ -66,7 +66,7 @@ class TopologyProposal(object):
     old_positions : [n, 3] np.array, Quantity
         positions of the old system
     logp_proposal : float
-        log probability of the proposal
+        contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
     new_to_old_atom_map : dict
         {new_atom_idx : old_atom_idx} map for the two systems
     old_to_new_atom_map : dict
@@ -165,8 +165,7 @@ class ProposalEngine(object):
     Properties
     ----------
     chemical_state_list : list of str
-        a list of all the chemical states that this proposal engine may visit.
-
+         a list of all the chemical states that this proposal engine may visit.
     """
 
     def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False):
@@ -215,6 +214,36 @@ class ProposalEngine(object):
     @property
     def chemical_state_list(self):
         raise NotImplementedError("This ProposalEngine does not expose a list of possible chemical states.")
+
+    def _append_topology(self, destination_topology, source_topology, exclude_residue_name=None):
+        """
+        Add the source OpenMM Topology to the destination Topology.
+
+        Parameters
+        ----------
+        destination_topology : simtk.openmm.app.Topology
+            The Topology to which the contents of `source_topology` are to be added.
+        source_topology : simtk.openmm.app.Topology
+            The Topology to be added.
+        exclude_residue_name : str, optional, default=None
+            If specified, any residues matching this name are excluded.
+
+        """
+        newAtoms = {}
+        for chain in source_topology.chains():
+            newChain = destination_topology.addChain(chain.id)
+            for residue in chain.residues():
+                if (residue.name == exclude_residue_name):
+                    continue
+                newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
+                for atom in residue.atoms():
+                    newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                    newAtoms[atom] = newAtom
+        for bond in source_topology.bonds():
+            if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+                continue
+            # TODO: Preserve bond order info using extended OpenMM API
+            destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
 
 class PolymerProposalEngine(ProposalEngine):
     def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True):
@@ -684,7 +713,6 @@ class PolymerProposalEngine(ProposalEngine):
 
 class PointMutationEngine(PolymerProposalEngine):
     """
-
     Arguments
     --------
     wildtype_topology : openmm.app.Topology
@@ -720,6 +748,12 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True):
         super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
+
+        # Check that provided topology has specified chain.
+        chain_ids_in_topology = [ chain.id for chain in wildtype_topology.chains() ]
+        if chain_id not in chain_ids_in_topology:
+            raise Exception("Specified chain_id '%s' not found in provided wildtype_topology. Choices are: %s" % (chain_id, str(chain_ids_in_topology)))
+
         self._wildtype = wildtype_topology
         self._max_point_mutants = max_point_mutants
         self._ff = system_generator.forcefield
@@ -1393,36 +1427,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_idx = atoms[0].index
         return mol_start_idx, len(list(atoms))
 
-    def _append_topology(self, destination_topology, source_topology, exclude_residue_name=None):
-        """
-        Add the source OpenMM Topology to the destination Topology.
-
-        Parameters
-        ----------
-        destination_topology : simtk.openmm.app.Topology
-            The Topology to which the contents of `source_topology` are to be added.
-        source_topology : simtk.openmm.app.Topology
-            The Topology to be added.
-        exclude_residue_name : str, optional, default=None
-            If specified, any residues matching this name are excluded.
-
-        """
-        newAtoms = {}
-        for chain in source_topology.chains():
-            newChain = destination_topology.addChain(chain.id)
-            for residue in chain.residues():
-                if (residue.name == exclude_residue_name):
-                    continue
-                newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
-                for atom in residue.atoms():
-                    newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                    newAtoms[atom] = newAtom
-        for bond in source_topology.bonds():
-            if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
-                continue
-            # TODO: Preserve bond order info using extended OpenMM API
-            destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
-
     def _build_new_topology(self, current_receptor_topology, oemol_proposed):
         """
         Construct a new topology
@@ -1509,11 +1513,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map
 
-
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=True):
         """
-        Simple method that randomly chooses a molecule unformly.
-        Symmetric proposal, so logp is 0. Override with a mixin.
+        Propose a new molecule given the current molecule.
+
+        The current scheme uses a probability matrix computed via _calculate_probability_matrix.
 
         Arguments
         ---------
@@ -1534,9 +1538,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
              The SMILES of the proposed molecule
         mol : oechem.OEMol
             The next molecule to simulate
-        logp : float
-            The log probability of the choice
+        logp_proposal : float
+            contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
+            log [P(Mold | Mnew) / P(Mnew | Mold)]
         """
+        # Compute contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
+        # log [P(Mold | Mnew) / P(Mnew | Mold)]
         current_smiles_idx = self._smiles_list.index(molecule_smiles)
         molecule_probabilities = self._probability_matrix[current_smiles_idx, :]
         proposed_smiles_idx = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
@@ -1560,7 +1567,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         Returns
         -------
         probability_matrix : [n, n] np.ndarray
-            matrix of probabilities of proposal from row to column
+            probability_matrix[Mold, Mnew] is the probability of choosing molecule Mnew given the current molecule is Mold
+
         """
         n_smiles = len(molecule_smiles_list)
         probability_matrix = np.zeros([n_smiles, n_smiles])
@@ -1594,7 +1602,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     @property
     def chemical_state_list(self):
-        return self._smiles_list
+         return self._smiles_list
 
     @staticmethod
     def clean_molecule_list(smiles_list, atom_opts, bond_opts):
