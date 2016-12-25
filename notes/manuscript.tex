@@ -393,7 +393,6 @@ which we further decompose into {\bf work} and {\bf energy} change contributions
 \logP_\mathrm{energy} &=& u(x', \lambda=1) - u(x, \lambda=0)
 \end{eqnarray}
 {\color{red} JDC: Check that the energy component here is really the reduced potential for both GHMC and VV, rather than the total reduced energy.}
-ski
 \end{itemize}
 With this definition of terms, the overall acceptance probability is therefore given as
 \begin{eqnarray}
@@ -485,8 +484,9 @@ ski
 With this definition of terms, the overall acceptance probability is therefore given as
 \begin{eqnarray}
 \logP_\mathrm{accept} &=& \logP_\mathrm{final} - \logP_\mathrm{initial} + \logP_\mathrm{chemical} \nonumber \\
+&+& \logP_\mathrm{delete~work} + \logP_\mathrm{delete~energy} \nonumber \\
 &+& \logP_\mathrm{reverse} - \logP_\mathrm{forward} \nonumber \\
-&+& \logP_\mathrm{work} + \logP_\mathrm{energy}
+&+& \logP_\mathrm{insert~work} + \logP_\mathrm{insert~energy}
 \end{eqnarray}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
