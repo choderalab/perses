@@ -20,6 +20,7 @@ have concluded.
 * `examples/` - Contains examples for various systems and methods of simulation
 * `attic/` - some old code that may be useful as part of the new setup
 * `devtools/` - Continuous integration and packaging utilities
+* `notes/` - LaTeX notes deriving acceptance criteria and stochastic approximation methods
 
 ## Authors
 
