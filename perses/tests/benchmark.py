@@ -67,7 +67,7 @@ def plot_logPs(logps, molecule_name, scheme, component):
             Which logP is being plotted
             in ['NCMC','EXEN']
     """
-    x = logps.keys()
+    x = list(logps.keys())
     x.sort()
     y = [logps[steps].mean() for steps in x]
     dy = [logps[steps].std() for steps in x]
@@ -107,20 +107,25 @@ def benchmark_exen_ncmc_protocol(analyses, molecule_name, scheme):
     Creates 2 plots every time it is called
     """
     components = {
-        'logp_accept' : 'EXEN',
-        'logp_ncmc' : 'NCMC',
+        'logP_accept' : 'logP_accept',
+        'logP_work' : 'logP_work',
+        'logP_work_delete' : 'logP_work_delete',
+        'logP_work_insert' : 'logP_work_insert',
     }
 
     for component in components.keys():
-        print('Finding {0} over nsteps for {1} with {2} NCMC'.format(component, molecule_name, scheme))
-        logps = dict()
-        for nsteps, analysis in analyses.items():
-            ee_sam = analysis._ncfile.groups['ExpandedEnsembleSampler']
-            niterations = ee_sam.variables[component].shape[0]
-            logps[nsteps] = np.zeros(niterations, np.float64)
-            for n in range(niterations):
-                logps[nsteps][n] = ee_sam.variables[component][n]
-        plot_logPs(logps, molecule_name, scheme, components[component])
+        try:
+            print('Finding {0} over nsteps for {1} with {2} NCMC'.format(component, molecule_name, scheme))
+            logps = dict()
+            for nsteps, analysis in analyses.items():
+                ee_sam = analysis._ncfile.groups['ExpandedEnsembleSampler']
+                niterations = ee_sam.variables[component].shape[0]
+                logps[nsteps] = np.zeros(niterations, np.float64)
+                for n in range(niterations):
+                    logps[nsteps][n] = ee_sam.variables[component][n]
+            plot_logPs(logps, molecule_name, scheme, components[component])
+        except Exception as e:
+            print(e)
 
 def benchmark_ncmc_work_during_protocol():
     """
