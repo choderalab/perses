@@ -874,8 +874,8 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         #
         # Metropolized symplectic step.
         #
-        self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputeSum("kinetic", "0.5*m*v*v")
+        self.addComputeGlobal("Eold", "kinetic + energy")
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
         self.addComputePerDof("v", "v + 0.5*dt*f/m")
@@ -885,7 +885,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
         self.addConstrainVelocities()
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Enew", "ke + energy")
+        self.addComputeGlobal("Enew", "kinetic + energy")
         # Compute acceptance probability
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
         self.beginIfBlock("accept != 1")
@@ -1165,7 +1165,6 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             # GHMC variables
             self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
             self.addPerDofVariable("sigma", 0)
-            self.addGlobalVariable("ke", 0)  # kinetic energy
             self.addPerDofVariable("vold", 0)  # old velocities
             self.addPerDofVariable("xold", 0)  # old positions
             self.addGlobalVariable("accept", 0)  # accept or reject

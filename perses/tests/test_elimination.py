@@ -220,7 +220,7 @@ def test_alchemical_elimination_mutation():
 
     # Create forcefield.
     ff = app.ForceField(ff_filename)
-    chain_id = 'A'
+    chain_id = '1'
     allowed_mutations = [[('2','GLY')]]
 
     from perses.rjmc.topology_proposal import SystemGenerator
