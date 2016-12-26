@@ -4,7 +4,6 @@ import copy
 import logging
 import traceback
 from simtk import openmm, unit
-from openmmtools.integrators import GHMCIntegrator
 from perses.storage import NetCDFStorageView
 from perses.tests.utils import quantity_is_finite
 
@@ -303,15 +302,34 @@ class NCMCEngine(object):
                 positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                 self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(self.nsteps+1))
 
+            print('_integrate_switching')
+            print('positions', context.getState(getPositions=True).getPositions(asNumpy=True))
+            print('velocities', context.getState(getVelocities=True).getVelocities(asNumpy=True))
+            print('forces', context.getState(getForces=True).getForces(asNumpy=True))
+
             # Perform NCMC integration.
+            print('step %5d : current reduced potential = %12.3f kT | initial_reduced_potential = %12.3f kT' % (-1, self.beta * context.getState(getEnergy=True).getPotentialEnergy(), integrator.getGlobalVariableByName('initial_reduced_potential')))
             for step in range(nsteps):
                 # Take a step.
-                integrator.step(1)
+                try:
+                    integrator.step(1)
+                except Exception as e:
+                    print(e)
+                    for index in range(integrator.getNumGlobalVariables()):
+                        name = integrator.getGlobalVariableName(index)
+                        val = integrator.getGlobalVariable(index)
+                        print(name, val)
+                    for index in range(integrator.getNumPerDofVariables()):
+                        name = integrator.getPerDofVariableName(index)
+                        val = integrator.getPerDofVariable(index)
+                        print(name, val)
 
                 # Store accumulated work
                 total_work[step+1] = integrator.getTotalWork(context)
                 shadow_work[step+1] = integrator.getShadowWork(context)
                 protocol_work[step+1] = integrator.getProtocolWork(context)
+
+                print('step %5d : current reduced potential = %12.3f kT | initial_reduced_potential = %12.3f kT' % (step, self.beta * context.getState(getEnergy=True).getPotentialEnergy(), integrator.getGlobalVariableByName('initial_reduced_potential')))
 
                 # Write trajectory frame.
                 if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
@@ -365,6 +383,9 @@ class NCMCEngine(object):
         integrator : simtk.openmm.CustomIntegrator
             NCMC switching integrator to annihilate or introduce particles alchemically.
         """
+        # DEBUG
+        print('timestep: %s' % self.timestep)
+
         # Create an NCMC velocity Verlet integrator.
         if self.integrator_type == 'VV':
             integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, steps_per_propagation=self.steps_per_propagation, timestep=self.timestep, direction=direction)
@@ -397,16 +418,42 @@ class NCMCEngine(object):
         context : openmm.Context
             Alchemical context
         """
+
         # Create a context on the specified platform.
         if self.platform is not None:
             context = openmm.Context(system, integrator, self.platform)
         else:
             context = openmm.Context(system, integrator)
+        print('before setpositions:')
+        print('positions', context.getState(getPositions=True).getPositions(asNumpy=True))
+        print('velocities', context.getState(getVelocities=True).getVelocities(asNumpy=True))
         context.setPositions(positions)
+        print('after setpositions:')
+        print('positions', context.getState(getPositions=True).getPositions(asNumpy=True))
+        print('velocities', context.getState(getVelocities=True).getVelocities(asNumpy=True))
         context.applyConstraints(integrator.getConstraintTolerance())
+        print('after applyConstraints:')
+        print('positions', context.getState(getPositions=True).getPositions(asNumpy=True))
+        print('velocities', context.getState(getVelocities=True).getVelocities(asNumpy=True))
         # Set velocities to temperature and apply velocity constraints.
+        print('after setVelocitiesToTemperature:')
         context.setVelocitiesToTemperature(self.temperature)
+        print('positions', context.getState(getPositions=True).getPositions(asNumpy=True))
+        print('velocities', context.getState(getVelocities=True).getVelocities(asNumpy=True))
         context.applyVelocityConstraints(integrator.getConstraintTolerance())
+        print('after applyVelocityConstraints:')
+        print('positions', context.getState(getPositions=True).getPositions(asNumpy=True))
+        print('velocities', context.getState(getVelocities=True).getVelocities(asNumpy=True))
+
+        state = context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True)
+        def write_file(filename, contents):
+            outfile = open(filename, 'w')
+            outfile.write(contents)
+            outfile.close()
+        write_file('system.xml', openmm.XmlSerializer.serialize(system))
+        write_file('integrator.xml', openmm.XmlSerializer.serialize(integrator))
+        write_file('state.xml', openmm.XmlSerializer.serialize(state))
+
         return context
 
     def _get_functions(self, system):
@@ -568,7 +615,6 @@ class NCMCHybridEngine(NCMCEngine):
         """
         if functions is None:
             functions = default_hybrid_functions
-        self.softening = 1.0 # WARNING: It is dangerous to set this to anything else.
         super(NCMCHybridEngine, self).__init__(temperature=temperature, functions=functions, nsteps=nsteps,
                                                timestep=timestep, constraint_tolerance=constraint_tolerance,
                                                platform=platform, write_ncmc_interval=write_ncmc_interval,
@@ -623,8 +669,7 @@ class NCMCHybridEngine(NCMCEngine):
                                                    unmodified_new_system,
                                                    old_topology, new_topology,
                                                    old_positions,
-                                                   new_positions, atom_map,
-                                                   softening=self.softening)
+                                                   new_positions, atom_map)
 
         # Return the alchemically-modified system in fully-interacting form.
         alchemical_system, alchemical_topology, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
@@ -745,13 +790,13 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.nsteps = nsteps
 
         # Make a list of parameters in the system
-        self.system_parameters = list()
+        self.system_parameters = set()
         self.alchemical_functions = functions
         for force_index in range(system.getNumForces()):
             force = system.getForce(force_index)
             if hasattr(force, 'getNumGlobalParameters'):
                 for parameter_index in range(force.getNumGlobalParameters()):
-                    self.system_parameters.append(force.getGlobalParameterName(parameter_index))
+                    self.system_parameters.add(force.getGlobalParameterName(parameter_index))
 
     def addAlchemicalResetStep(self):
         """
@@ -1199,11 +1244,11 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             self.addWorkResetStep()
             self.addAlchemicalResetStep()
             # Execute initial propagation steps for symmetry
-            self.addComputeGlobal('pstep', '0')
-            self.beginWhileBlock('pstep < psteps')
+            #self.addComputeGlobal('pstep', '0')
+            #self.beginWhileBlock('pstep < psteps')
             self.addGHMCStep()
-            self.addComputeGlobal('pstep', 'pstep+1')
-            self.endBlock()
+            #self.addComputeGlobal('pstep', 'pstep+1')
+            #self.endBlock()
             # End block
             self.endBlock()
 
@@ -1212,11 +1257,11 @@ class NCMCGHMCAlchemicalIntegrator(NCMCAlchemicalIntegrator):
             # Accumulate protocol work
             self.addAlchemicalPerturbationStep()
             # Execute propagation steps.
-            self.addComputeGlobal('pstep', '0')
-            self.beginWhileBlock('pstep < psteps')
+            #self.addComputeGlobal('pstep', '0')
+            #self.beginWhileBlock('pstep < psteps')
             self.addGHMCStep()
-            self.addComputeGlobal('pstep', 'pstep+1')
-            self.endBlock()
+            #self.addComputeGlobal('pstep', 'pstep+1')
+            #self.endBlock()
             # Increment step
             self.addComputeGlobal('step', 'step+1')
             # Compute total work

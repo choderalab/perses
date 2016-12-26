@@ -786,7 +786,7 @@ class ExpandedEnsembleSampler(object):
         log_weights : dict of object : float
             Log weights to use for expanded ensemble biases.
         scheme : str, optional, default='ncmc-geometry-ncmc'
-            Update scheme. One of ['ncmc-geometry-ncmc', 'geometry-ncmc-geometry', 'geometry-ncmc']
+            Update scheme. One of ['ncmc-geometry-ncmc', 'geometry-ncmc-geometry']
         options : dict, optional, default=dict()
             Options for initializing switching scheme, such as 'timestep', 'nsteps', 'functions' for NCMC
         platform : simtk.openmm.Platform, optional, default=None
@@ -821,7 +821,7 @@ class ExpandedEnsembleSampler(object):
             self._switching_nsteps = options['nsteps']
         else:
             self._switching_nsteps = 0
-        if scheme in ['ncmc-geometry-ncmc','geometry-ncmc']:
+        if scheme in ['ncmc-geometry-ncmc']:
             from perses.annihilation.ncmc_switching import NCMCEngine
             self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
         elif scheme=='geometry-ncmc-geometry':
@@ -1042,26 +1042,34 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
 
+        from perses.tests.utils import compute_potential
+
         logP_chemical = topology_proposal.logp_proposal
 
         old_positions = positions
+        initial_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.old_system, old_positions, platform=self.ncmc_engine.platform)
+        logP_initial = initial_reduced_potential + old_log_weight
 
         geometry_new_positions, logP_forward = self._geometry_forward(topology_proposal, old_positions)
 
-        ncmc_new_positions, ncmc_old_positions, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, positions, geometry_new_positions)
+        # DEBUG
+        from simtk.openmm.app import PDBFile
+        pdbfile = open('rjmc.pdb', 'w')
+        PDBFile.writeModel(topology_proposal.old_topology, old_positions, pdbfile, 0)
+        PDBFile.writeModel(topology_proposal.new_topology, geometry_new_positions, pdbfile, 1)
+        pdbfile.close()
+
+        ncmc_new_positions, ncmc_old_positions, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, old_positions, geometry_new_positions)
 
         new_positions = ncmc_new_positions
 
         logP_reverse = self._geometry_reverse(topology_proposal, ncmc_new_positions, ncmc_old_positions)
 
-        from perses.tests.utils import compute_potential
-        initial_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.old_system, old_positions, platform=self.ncmc_engine.platform)
         final_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.new_system, new_positions, platform=self.ncmc_engine.platform)
-        logP_initial = initial_reduced_potential + old_log_weight
         logP_final = final_reduced_potential + new_log_weight
 
         # Compute total log acceptance probability according to Eq. 46
-        logp_accept = logP_final - logP_initial + logP_chemical + logP_reverse - logP_forward + logP_work + logP_energy
+        logP_accept = logP_final - logP_initial + logP_chemical + logP_reverse - logP_forward + logP_work + logP_energy
         if self.verbose:
             print("logP_accept = %+10.4e [logP_final = %+10.4e, -logP_initial = %+10.4e, logP_chemical = %10.4e, logP_reverse = %+10.4e, -logP_forward = %+10.4e, logP_work = %+10.4e, logP_energy = %+10.4e]"
                 % (logP_accept, logP_final, -logP_initial, logP_chemical, logP_reverse, -logP_forward, logP_work, logP_energy))
