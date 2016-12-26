@@ -375,9 +375,6 @@ class NCMCEngine(object):
         integrator : simtk.openmm.CustomIntegrator
             NCMC switching integrator to annihilate or introduce particles alchemically.
         """
-        # DEBUG
-        print('timestep: %s' % self.timestep)
-
         # Create an NCMC velocity Verlet integrator.
         if self.integrator_type == 'VV':
             integrator = NCMCVVAlchemicalIntegrator(self.temperature, alchemical_system, functions, nsteps=self.nsteps, steps_per_propagation=self.steps_per_propagation, timestep=self.timestep, direction=direction)
