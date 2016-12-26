@@ -58,6 +58,20 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         # TODO: Preserve bond order info using extended OpenMM API
         destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
 
+def deepcopy_topology(source_topology):
+    """
+    Drop-in replacement for copy.deepcopy(topology) that fixes backpointer issues.
+
+    Parameters
+    ----------
+    source_topology : simtk.openmm.app.Topology
+        The Topology to be added.
+
+    """
+    topology = app.Topology()
+    append_topology(topology, source_topology)
+    return topology
+
 from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
     """

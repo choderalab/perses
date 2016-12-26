@@ -3,6 +3,7 @@ from simtk import unit
 import simtk.openmm.app as app
 import numpy as np
 import copy
+from perses.rjmc.topology_proposal import deepcopy_topology
 
 ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
 
@@ -13,7 +14,7 @@ def unique(atom_list):
         return tuple(atom_list)
 
 class HybridTopologyFactory(object):
-    def __init__(self, system1, system2, topology1, topology2, positions1, positions2, atom_mapping_1to2, softening=0.1):
+    def __init__(self, system1, system2, topology1, topology2, positions1, positions2, atom_mapping_1to2, softening=1.0):
         """
         Arguments:
             system1
@@ -61,8 +62,9 @@ class HybridTopologyFactory(object):
             for k,v in atom_mapping_1to2.items():
                 if k != v:
                     self.return_self = False
-        self.topology1 = copy.deepcopy(topology1)
-        self.topology2 = copy.deepcopy(topology2)
+
+        self.topology1 = deepcopy_topology(topology1)
+        self.topology2 = deepcopy_topology(topology2)
 
         system2_atoms = dict()
         for atom2 in self.topology2.atoms():
@@ -794,16 +796,15 @@ class HybridTopologyFactory(object):
         if self.return_self:
             return [self.system1, self.topology1, self.positions1, self.atom_mapping_2to1, sys1_indices_in_system]
 
-        topology1 = copy.deepcopy(self.topology1)
-        self.topology1 = topology1
-        topology2 = copy.deepcopy(self.topology2)
-        self.topology2 = topology2
+        self.topology1 = deepcopy_topology(self.topology1)
+        self.topology2 = deepcopy_topology(self.topology2)
 
         system2_atoms = self.system2_atoms
         system1_atoms = self.system1_atoms
 
         system = copy.deepcopy(self.system1)
         topology = copy.deepcopy(self.topology1)
+        topology = deepcopy_topology(self.topology1)
         positions = copy.deepcopy(self.positions1)
 
         system_atoms = dict()
