@@ -1048,7 +1048,7 @@ class ExpandedEnsembleSampler(object):
 
         old_positions = positions
         initial_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.old_system, old_positions, platform=self.ncmc_engine.platform)
-        logP_initial = initial_reduced_potential + old_log_weight
+        logP_initial = -initial_reduced_potential + old_log_weight
 
         geometry_new_positions, logP_forward = self._geometry_forward(topology_proposal, old_positions)
 
@@ -1066,7 +1066,7 @@ class ExpandedEnsembleSampler(object):
         logP_reverse = self._geometry_reverse(topology_proposal, ncmc_new_positions, ncmc_old_positions)
 
         final_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.new_system, new_positions, platform=self.ncmc_engine.platform)
-        logP_final = final_reduced_potential + new_log_weight
+        logP_final = -final_reduced_potential + new_log_weight
 
         # Compute total log acceptance probability according to Eq. 46
         logP_accept = logP_final - logP_initial + logP_chemical + logP_reverse - logP_forward + logP_work + logP_energy
@@ -1117,6 +1117,11 @@ class ExpandedEnsembleSampler(object):
 
         initial_time = time.time()
         old_positions = positions
+
+        from perses.tests.utils import compute_potential
+        initial_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.old_system, old_positions, platform=self.ncmc_engine.platform)
+        logP_initial = -initial_reduced_potential + old_log_weight
+
         ncmc_old_positions, logP_delete_work, logP_delete_energy = self._ncmc_delete(topology_proposal, old_positions)
 
         geometry_old_positions = ncmc_old_positions
@@ -1127,11 +1132,8 @@ class ExpandedEnsembleSampler(object):
         ncmc_new_positions, logP_insert_work, logP_insert_energy = self._ncmc_insert(topology_proposal, geometry_new_positions)
         new_positions = ncmc_new_positions
 
-        from perses.tests.utils import compute_potential
-        initial_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.old_system, old_positions, platform=self.ncmc_engine.platform)
         final_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.new_system, new_positions, platform=self.ncmc_engine.platform)
-        logP_initial = initial_reduced_potential + old_log_weight
-        logP_final = final_reduced_potential + new_log_weight
+        logP_final = -final_reduced_potential + new_log_weight
 
         elapsed_time = time.time() - initial_time
 

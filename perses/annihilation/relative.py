@@ -803,7 +803,6 @@ class HybridTopologyFactory(object):
         system1_atoms = self.system1_atoms
 
         system = copy.deepcopy(self.system1)
-        topology = copy.deepcopy(self.topology1)
         topology = deepcopy_topology(self.topology1)
         positions = copy.deepcopy(self.positions1)
 
