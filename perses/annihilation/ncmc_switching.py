@@ -302,13 +302,7 @@ class NCMCEngine(object):
                 positions = context.getState(getPositions=True).getPositions(asNumpy=True)
                 self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(self.nsteps+1))
 
-            print('_integrate_switching')
-            print('positions', context.getState(getPositions=True).getPositions(asNumpy=True))
-            print('velocities', context.getState(getVelocities=True).getVelocities(asNumpy=True))
-            print('forces', context.getState(getForces=True).getForces(asNumpy=True))
-
             # Perform NCMC integration.
-            print('step %5d : current reduced potential = %12.3f kT | initial_reduced_potential = %12.3f kT' % (-1, self.beta * context.getState(getEnergy=True).getPotentialEnergy(), integrator.getGlobalVariableByName('initial_reduced_potential')))
             for step in range(nsteps):
                 # Take a step.
                 try:
@@ -328,8 +322,6 @@ class NCMCEngine(object):
                 total_work[step+1] = integrator.getTotalWork(context)
                 shadow_work[step+1] = integrator.getShadowWork(context)
                 protocol_work[step+1] = integrator.getProtocolWork(context)
-
-                print('step %5d : current reduced potential = %12.3f kT | initial_reduced_potential = %12.3f kT' % (step, self.beta * context.getState(getEnergy=True).getPotentialEnergy(), integrator.getGlobalVariableByName('initial_reduced_potential')))
 
                 # Write trajectory frame.
                 if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
