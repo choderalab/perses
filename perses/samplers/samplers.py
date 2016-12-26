@@ -1068,6 +1068,11 @@ class ExpandedEnsembleSampler(object):
                 % (logP_accept, logP_final, -logP_initial, logP_chemical, logP_reverse, -logP_forward, logP_work, logP_energy))
         # Write to storage.
         if self.storage:
+            self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
+            self.storage.write_quantity('logP_ncmc_work', logP_work, iteration=self.iteration)
+            self.storage.write_quantity('logP_geometry', logP_reverse - logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_geometry_and_energy', logP_energy + logP_reverse - logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_target', logP_final - logP_initial, iteration=self.iteration)
             self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
             self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
             self.storage.write_quantity('logP_chemical', logP_chemical, iteration=self.iteration)
@@ -1137,6 +1142,11 @@ class ExpandedEnsembleSampler(object):
                 % (logP_accept, logP_final, -logP_initial, logP_chemical, logP_delete_work, logP_delete_energy, logP_reverse, -logP_forward, logP_insert_work, logP_insert_energy))
         # Write to storage.
         if self.storage:
+            self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
+            self.storage.write_quantity('logP_ncmc_work', logP_delete_work + logP_insert_work, iteration=self.iteration)
+            self.storage.write_quantity('logP_geometry', logP_reverse - logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_geometry_and_energy', logP_delete_energy + logP_insert_energy + logP_reverse - logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_target', logP_final - logP_initial, iteration=self.iteration)
             self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
             self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
             self.storage.write_quantity('logP_chemical', logP_chemical, iteration=self.iteration)

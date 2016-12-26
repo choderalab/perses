@@ -106,19 +106,12 @@ class Analysis(object):
             environments)
 
         """
-        components = [
-            'logP_final',
-            'logP_initial',
-            'logP_chemical',
-            'logP_reverse',
-            'logP_forward',
-            'logP_work',
-            'logP_energy',
-            'logP_delete_work',
-            'logP_delete_energy',
-            'logP_insert_work',
-            'logP_insert_energy',
-        ]
+
+        # Build a list of all logP components:
+        components = list()
+        for name in ee_sam.variables.keys():
+            if name.startswith('logP_'):
+                components.append(name)
 
         ee_sam = self._ncfile.groups['ExpandedEnsembleSampler']
         if filename_prefix is None:
@@ -162,7 +155,7 @@ class Analysis(object):
                 modname = envname
                 work = dict()
                 for direction in ['delete', 'insert']:
-                    varname = '/' + modname + '/' + 'work_' + direction
+                    varname = '/' + modname + '/' + 'total_work_' + direction
                     try:
                         # TODO: For now, we analyze all but the last sample, so that this can be run on active simulations.
                         # Later, we should find some way to omit the last sample only if it is nonsensical.

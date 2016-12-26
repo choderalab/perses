@@ -154,9 +154,9 @@ def benchmark_ncmc_work_during_protocol():
     import pickle
     import codecs
     molecule_names = {
-        'naphthalene' : NaphthaleneTestSystem,
-        'butane' : ButaneTestSystem,
         'propane' : PropaneTestSystem,
+        'butane' : ButaneTestSystem,
+        #'naphthalene' : NaphthaleneTestSystem,
     }
     methods = {
         'hybrid' : ['geometry-ncmc-geometry', functions_hybrid],
@@ -167,13 +167,12 @@ def benchmark_ncmc_work_during_protocol():
         print('\nNow testing {0} null transformations'.format(molecule_name))
         for name, [scheme, functions] in methods.items():
             analyses = dict()
-            for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+            #for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+            for ncmc_nsteps in [0, 1, 10, 100, 1000]:
                 print('Running {0} {2} ExpandedEnsemble steps for {1} iterations'.format(ncmc_nsteps, niterations, name))
                 testsystem = NullProposal(storage_filename='{0}_{1}-{2}steps.nc'.format(molecule_name, name, ncmc_nsteps), scheme=scheme, options={'functions' : functions, 'nsteps' : ncmc_nsteps})
                 testsystem.exen_samplers[ENV].verbose = False
                 testsystem.exen_samplers[ENV].sampler.verbose = False
-                if name == 'hybrid':
-                    testsystem.exen_samplers[ENV].ncmc_engine.softening = 1.0
                 testsystem.exen_samplers[ENV].run(niterations=niterations)
 
                 analysis = Analysis(testsystem.storage_filename)
