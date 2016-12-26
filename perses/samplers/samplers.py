@@ -1052,13 +1052,6 @@ class ExpandedEnsembleSampler(object):
 
         geometry_new_positions, logP_forward = self._geometry_forward(topology_proposal, old_positions)
 
-        # DEBUG
-        from simtk.openmm.app import PDBFile
-        pdbfile = open('rjmc.pdb', 'w')
-        PDBFile.writeModel(topology_proposal.old_topology, old_positions, pdbfile, 0)
-        PDBFile.writeModel(topology_proposal.new_topology, geometry_new_positions, pdbfile, 1)
-        pdbfile.close()
-
         ncmc_new_positions, ncmc_old_positions, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, old_positions, geometry_new_positions)
 
         new_positions = ncmc_new_positions
