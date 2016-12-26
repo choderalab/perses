@@ -28,6 +28,36 @@ try:
 except ImportError:
     from commands import getoutput  # If python 2
 
+def append_topology(destination_topology, source_topology, exclude_residue_name=None):
+    """
+    Add the source OpenMM Topology to the destination Topology.
+
+    Parameters
+    ----------
+    destination_topology : simtk.openmm.app.Topology
+        The Topology to which the contents of `source_topology` are to be added.
+    source_topology : simtk.openmm.app.Topology
+        The Topology to be added.
+    exclude_residue_name : str, optional, default=None
+        If specified, any residues matching this name are excluded.
+
+    """
+    newAtoms = {}
+    for chain in source_topology.chains():
+        newChain = destination_topology.addChain(chain.id)
+        for residue in chain.residues():
+            if (residue.name == exclude_residue_name):
+                continue
+            newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
+            for atom in residue.atoms():
+                newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                newAtoms[atom] = newAtom
+    for bond in source_topology.bonds():
+        if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+            continue
+        # TODO: Preserve bond order info using extended OpenMM API
+        destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+
 from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
     """
@@ -215,36 +245,6 @@ class ProposalEngine(object):
     def chemical_state_list(self):
         raise NotImplementedError("This ProposalEngine does not expose a list of possible chemical states.")
 
-    def _append_topology(self, destination_topology, source_topology, exclude_residue_name=None):
-        """
-        Add the source OpenMM Topology to the destination Topology.
-
-        Parameters
-        ----------
-        destination_topology : simtk.openmm.app.Topology
-            The Topology to which the contents of `source_topology` are to be added.
-        source_topology : simtk.openmm.app.Topology
-            The Topology to be added.
-        exclude_residue_name : str, optional, default=None
-            If specified, any residues matching this name are excluded.
-
-        """
-        newAtoms = {}
-        for chain in source_topology.chains():
-            newChain = destination_topology.addChain(chain.id)
-            for residue in chain.residues():
-                if (residue.name == exclude_residue_name):
-                    continue
-                newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
-                for atom in residue.atoms():
-                    newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                    newAtoms[atom] = newAtom
-        for bond in source_topology.bonds():
-            if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
-                continue
-            # TODO: Preserve bond order info using extended OpenMM API
-            destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
-
 class PolymerProposalEngine(ProposalEngine):
     def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True):
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
@@ -267,13 +267,14 @@ class PolymerProposalEngine(ProposalEngine):
             probabilities, as well as old and new topologies and atom
             mapping
         """
+
         # old_topology : simtk.openmm.app.Topology
         old_topology = app.Topology()
-        self._append_topology(old_topology, current_topology)
+        append_topology(old_topology, current_topology)
 
         # new_topology : simtk.openmm.app.Topology
         new_topology = app.Topology()
-        self._append_topology(new_topology, current_topology)
+        append_topology(new_topology, current_topology)
 
         # Check that old_topology and old_system have same number of atoms.
         old_system = current_system
@@ -688,6 +689,16 @@ class PolymerProposalEngine(ProposalEngine):
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        if len(matches)==0:
+            from perses.tests.utils import describe_oemol
+            msg = 'No matches found in _get_mol_atom_matches.\n'
+            msg += '\n'
+            msg += 'oegraphmol_current:\n'
+            msg += describe_oemol(oegraphmol_current)
+            msg += '\n'
+            msg += 'oegraphmol_proposed:\n'
+            msg += describe_oemol(oegraphmol_proposed)
+            raise Exception(msg)
         match = np.random.choice(matches)
         new_to_old_atom_map = {}
         for matchpair in match.GetAtoms():
@@ -1447,8 +1458,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oemol_proposed.SetTitle(self._residue_name)
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
-        self._append_topology(new_topology, current_receptor_topology)
-        self._append_topology(new_topology, mol_topology)
+        append_topology(new_topology, current_receptor_topology)
+        append_topology(new_topology, mol_topology)
         # Copy periodic box vectors.
         if current_receptor_topology._periodicBoxVectors != None:
             new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
@@ -1472,7 +1483,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             Topology without small molecule
         """
         receptor_topology = app.Topology()
-        self._append_topology(receptor_topology, topology, exclude_residue_name=self._residue_name)
+        append_topology(receptor_topology, topology, exclude_residue_name=self._residue_name)
         # Copy periodic box vectors.
         if topology._periodicBoxVectors != None:
             receptor_topology._periodicBoxVectors = copy.deepcopy(topology._periodicBoxVectors)
@@ -1703,7 +1714,7 @@ class NullProposalEngine(SmallMoleculeSetProposalEngine):
         new_key = [key for key in self._fake_states if key != old_key][0]
 
         new_topology = app.Topology()
-        self._append_topology(new_topology, current_topology)
+        append_topology(new_topology, current_topology)
         new_topology._state_key = new_key
         new_system = copy.deepcopy(current_system)
         atom_map = self._make_skewed_atom_map(current_topology)
