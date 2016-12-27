@@ -41,7 +41,7 @@ functions_hybrid = {
     'lambda_torsions' : 'lambda',
 }
 functions_twostage = {
-    'lambda_sterics' : '(2*lambda)^(1./12.) * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+    'lambda_sterics' : '(2*lambda)^(1./6.) * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
     'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
     'lambda_bonds' : '1.0',
     'lambda_angles' : '1.0',
@@ -158,16 +158,14 @@ def benchmark_ncmc_work_during_protocol():
     import codecs
     molecule_names = {
         'propane' : PropaneTestSystem,
-        'butane' : ButaneTestSystem,
-        'naphthalene' : NaphthaleneTestSystem,
+        #'butane' : ButaneTestSystem,
+        #'naphthalene' : NaphthaleneTestSystem,
     }
     methods = {
         'hybrid' : ['geometry-ncmc-geometry', functions_hybrid],
         'two-stage' : ['ncmc-geometry-ncmc', functions_twostage],
     }
 
-    #logP_range = None # don't restrict plot range
-    logP_range = 20 # limit logP plotted x-axis to [-logP_range, +logP_range]
     for molecule_name, NullProposal in molecule_names.items():
         print('\nNow testing {0} null transformations'.format(molecule_name))
         for name, [scheme, functions] in methods.items():
@@ -184,7 +182,7 @@ def benchmark_ncmc_work_during_protocol():
                 print(analysis.get_environments())
                 if ncmc_nsteps > 9:
                     analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_{2}_steps.pdf'.format(molecule_name, name, ncmc_nsteps))
-                analysis.plot_exen_logp_components(logP_range=logP_range)
+                analysis.plot_exen_logp_components()
                 analyses[ncmc_nsteps] = analysis
             benchmark_exen_ncmc_protocol(analyses, molecule_name, name)
 

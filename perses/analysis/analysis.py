@@ -80,7 +80,7 @@ class Analysis(object):
         # TODO
         pass
 
-    def plot_exen_logp_components(self, filename_prefix=None, logP_range=None, nbins=20):
+    def plot_exen_logp_components(self, filename_prefix=None, logP_range=10, nbins=20):
         """
         Generate histograms of each component of Expanded Ensemble log acceptance probability
         Components may include:
@@ -91,7 +91,7 @@ class Analysis(object):
             logp_switch                       (not present in 'geometry-ncmc-geometry' scheme)
             logp_ncmc_elimination             ('ncmc-geometry-ncmc' scheme only)
             logp_ncmc_introduction            (not present in 'geometry-ncmc-geometry' scheme)
-            logp_ncmc                         ('geometry-ncmc-geometry' scheme only)
+           logp_ncmc                         ('geometry-ncmc-geometry' scheme only)
             new_log_weight
             old_log_weight
 
@@ -133,22 +133,24 @@ class Analysis(object):
                 for n in range(niterations):
                     logps[component][n] = ee_sam.variables[component][n]
             plt.figure(figsize=(8,12))
-            nrows = int(np.ceil(len(logps.keys())/2 + len(logps.keys())%2))
+            nrows = len(logps.keys())
             ncols = 2
-            for spot, component in enumerate(logps.keys()):
-                row = int(spot/2)
-                col = spot%2
+            for row, component in enumerate(logps.keys()):
+                # Full range
+                col = 0
                 plt.subplot2grid((nrows,ncols),(row,col))
-                if logP_range is not None:
-                    plt.hist(logps[component], range=[-logP_range, +logP_range], bins=nbins)                    
-                else:
-                    plt.hist(logps[component], bins=nbins)
+                plt.hist(logps[component], bins=nbins)
                 plt.title(component)
-                #plt.xlabel(component)
+
+                # Limited range
+                col = 1
+                plt.subplot2grid((nrows,ncols),(row,col))
+                plt.hist(logps[component], range=[-logP_range, +logP_range], bins=nbins)                    
+                plt.title(component)
+
             plt.tight_layout()
             pdf.savefig()
             plt.close()
-
 
     def plot_ncmc_work(self, filename):
         """Generate plots of NCMC work.
