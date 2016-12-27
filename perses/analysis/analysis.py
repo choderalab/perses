@@ -107,13 +107,14 @@ class Analysis(object):
 
         """
 
+        ee_sam = self._ncfile.groups['ExpandedEnsembleSampler']
+
         # Build a list of all logP components:
         components = list()
         for name in ee_sam.variables.keys():
             if name.startswith('logP_'):
                 components.append(name)
 
-        ee_sam = self._ncfile.groups['ExpandedEnsembleSampler']
         if filename_prefix is None:
             filename_prefix = self.storage_filename.split('.')[0]
         filename = '{0}-logP-components.pdf'.format(filename_prefix)

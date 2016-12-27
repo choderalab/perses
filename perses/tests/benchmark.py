@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 ################################################################################
 # NUMBER OF ATTEMPTS
 ################################################################################
-niterations = 50
+niterations = 200
 ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
@@ -106,12 +106,14 @@ def benchmark_exen_ncmc_protocol(analyses, molecule_name, scheme):
 
     Creates 2 plots every time it is called
     """
-    components = {
-        'logP_accept' : 'logP_accept',
-        'logP_work' : 'logP_work',
-        'logP_work_delete' : 'logP_work_delete',
-        'logP_work_insert' : 'logP_work_insert',
-    }
+
+    # Build a list of all logP components:
+    components = dict()
+    for nsteps, analysis in analyses.items():
+        ee_sam = analysis._ncfile.groups['ExpandedEnsembleSampler']
+        for name in ee_sam.variables.keys():
+            if name.startswith('logP_'):
+                components[name] = name
 
     for component in components.keys():
         try:
