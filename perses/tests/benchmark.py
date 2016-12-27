@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 ################################################################################
 # NUMBER OF ATTEMPTS
 ################################################################################
-niterations = 50
+niterations = 200
 ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
@@ -41,7 +41,7 @@ functions_hybrid = {
     'lambda_torsions' : 'lambda',
 }
 functions_twostage = {
-    'lambda_sterics' : '(2*lambda) * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+    'lambda_sterics' : '(2*lambda)^(1./12.) * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
     'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
     'lambda_bonds' : '1.0',
     'lambda_angles' : '1.0',
@@ -75,7 +75,7 @@ def plot_logPs(logps, molecule_name, scheme, component):
     plt.plot(x, y, 'k')
     plt.xscale('log')
 
-    plt.title("Log acceptance probability of {0} ExpandedEnsemble for {1}".format(scheme, molecule_name))
+    plt.title("{0} {1} {2} {3}".format(ENV, molecule_name, scheme, component))
     plt.ylabel('logP')
     plt.xlabel('ncmc steps')
     plt.tight_layout()
@@ -166,6 +166,8 @@ def benchmark_ncmc_work_during_protocol():
         'two-stage' : ['ncmc-geometry-ncmc', functions_twostage],
     }
 
+    #logP_range = None # don't restrict plot range
+    logP_range = 20 # limit logP plotted x-axis to [-logP_range, +logP_range]
     for molecule_name, NullProposal in molecule_names.items():
         print('\nNow testing {0} null transformations'.format(molecule_name))
         for name, [scheme, functions] in methods.items():
@@ -180,9 +182,9 @@ def benchmark_ncmc_work_during_protocol():
 
                 analysis = Analysis(testsystem.storage_filename)
                 print(analysis.get_environments())
-                if ncmc_nsteps > 99:
+                if ncmc_nsteps > 9:
                     analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_{2}_steps.pdf'.format(molecule_name, name, ncmc_nsteps))
-                analysis.plot_exen_logp_components()
+                analysis.plot_exen_logp_components(logP_range=logP_range)
                 analyses[ncmc_nsteps] = analysis
             benchmark_exen_ncmc_protocol(analyses, molecule_name, name)
 

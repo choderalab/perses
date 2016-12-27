@@ -80,7 +80,7 @@ class Analysis(object):
         # TODO
         pass
 
-    def plot_exen_logp_components(self, filename_prefix=None):
+    def plot_exen_logp_components(self, filename_prefix=None, logP_range=None):
         """
         Generate histograms of each component of Expanded Ensemble log acceptance probability
         Components may include:
@@ -99,6 +99,8 @@ class Analysis(object):
         ----------
         filename_prefix : str, OPTIONAL, default = None
             if specified, each plot is saved as '{0}-{1}'.format(filename_prefix, component)
+        logP__range : float, optional, default=None
+            If specified, will set logP range to [-logP_range, +logP_range]
         Each histogram will be saved to {component name}.png
         TODO: include input filename
             storage ncfile has different hierarchy depending on which samplers are defined;
@@ -135,7 +137,10 @@ class Analysis(object):
                 row = int(spot/2)
                 col = spot%2
                 plt.subplot2grid((nrows,ncols),(row,col))
-                plt.hist(logps[component])
+                if logP_range is not None:
+                    plt.hist(logps[component], range=[-logP_range, +logP_range])                    
+                else:
+                    plt.hist(logps[component])
                 plt.title(component)
                 #plt.xlabel(component)
             plt.tight_layout()
