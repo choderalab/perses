@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 ################################################################################
 # NUMBER OF ATTEMPTS
 ################################################################################
-niterations = 200
+niterations = 50
 ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
@@ -36,16 +36,16 @@ beta = 1.0/kT
 functions_hybrid = {
     'lambda_sterics' : 'lambda',
     'lambda_electrostatics' : 'lambda',
-    'lambda_bonds' : 'lambda',#'1.0',
-    'lambda_angles' : 'lambda',#'0.1*lambda+0.9',
-    'lambda_torsions' : 'lambda',#'0.7*lambda+0.3'
+    'lambda_bonds' : 'lambda',
+    'lambda_angles' : 'lambda',
+    'lambda_torsions' : 'lambda',
 }
 functions_twostage = {
-    'lambda_sterics' : '(2*lambda)^4 * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+    'lambda_sterics' : '(2*lambda) * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
     'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-    'lambda_bonds' : '1.0', # don't soften bonds
-    'lambda_angles' : '0.1*lambda+0.9',
-    'lambda_torsions' : '0.7*lambda+0.3'
+    'lambda_bonds' : '1.0',
+    'lambda_angles' : '1.0',
+    'lambda_torsions' : '1.0'
 }
 
 def plot_logPs(logps, molecule_name, scheme, component):
@@ -78,6 +78,7 @@ def plot_logPs(logps, molecule_name, scheme, component):
     plt.title("Log acceptance probability of {0} ExpandedEnsemble for {1}".format(scheme, molecule_name))
     plt.ylabel('logP')
     plt.xlabel('ncmc steps')
+    plt.tight_layout()
     plt.savefig('{0}_{1}_{2}{3}_logP'.format(ENV, molecule_name, scheme, component))
     print('Saved plot to {0}_{1}_{2}{3}_logP.png'.format(ENV, molecule_name, scheme, component))
     plt.clf()
@@ -158,7 +159,7 @@ def benchmark_ncmc_work_during_protocol():
     molecule_names = {
         'propane' : PropaneTestSystem,
         'butane' : ButaneTestSystem,
-        #'naphthalene' : NaphthaleneTestSystem,
+        'naphthalene' : NaphthaleneTestSystem,
     }
     methods = {
         'hybrid' : ['geometry-ncmc-geometry', functions_hybrid],

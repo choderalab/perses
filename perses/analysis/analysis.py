@@ -138,6 +138,7 @@ class Analysis(object):
                 plt.hist(logps[component])
                 plt.title(component)
                 #plt.xlabel(component)
+            plt.tight_layout()
             pdf.savefig()
             plt.close()
 
@@ -220,6 +221,7 @@ class Analysis(object):
                         if row == 1: plt.xlabel('work / kT')
                         plt.title("total %s work" % direction)
 
+                    plt.tight_layout()
                     pdf.savefig()  # saves the current figure into a pdf page
                     plt.close()
 
