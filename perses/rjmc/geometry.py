@@ -1325,6 +1325,8 @@ class GeometrySystemGenerator(object):
         ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                                   # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
+        default_growth_index = max(growth_indices) # default value of growth index to use in System that is returned
+
         # Nonbonded sterics and electrostatics.
         # TODO: Allow user to select whether electrostatics or sterics components are included in the nonbonded interaction energy.
         self._nonbondedEnergy = "select(step({}+0.1 - growth_idx), U_sterics + U_electrostatics, 0);"
@@ -1356,20 +1358,20 @@ class GeometrySystemGenerator(object):
         modified_bond_force.addPerBondParameter("r0")
         modified_bond_force.addPerBondParameter("K")
         modified_bond_force.addPerBondParameter("growth_idx")
-        modified_bond_force.addGlobalParameter(parameter_name, 0)
+        modified_bond_force.addGlobalParameter(parameter_name, default_growth_index)
 
         modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(parameter_name))
         modified_angle_force.addPerAngleParameter("theta0")
         modified_angle_force.addPerAngleParameter("K")
         modified_angle_force.addPerAngleParameter("growth_idx")
-        modified_angle_force.addGlobalParameter(parameter_name, 0)
+        modified_angle_force.addGlobalParameter(parameter_name, default_growth_index)
 
         modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(parameter_name))
         modified_torsion_force.addPerTorsionParameter("periodicity")
         modified_torsion_force.addPerTorsionParameter("phase")
         modified_torsion_force.addPerTorsionParameter("k")
         modified_torsion_force.addPerTorsionParameter("growth_idx")
-        modified_torsion_force.addGlobalParameter(parameter_name, 0)
+        modified_torsion_force.addGlobalParameter(parameter_name, default_growth_index)
 
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
@@ -1413,7 +1415,7 @@ class GeometrySystemGenerator(object):
             custom_bond_force.addPerBondParameter("sigma")
             custom_bond_force.addPerBondParameter("epsilon")
             custom_bond_force.addPerBondParameter("growth_idx")
-            custom_bond_force.addGlobalParameter(parameter_name, 0)
+            custom_bond_force.addGlobalParameter(parameter_name, default_growth_index)
             growth_system.addForce(custom_bond_force)
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
@@ -1436,7 +1438,7 @@ class GeometrySystemGenerator(object):
             modified_sterics_force.addPerParticleParameter("sigma")
             modified_sterics_force.addPerParticleParameter("epsilon")
             modified_sterics_force.addPerParticleParameter("growth_idx")
-            modified_sterics_force.addGlobalParameter(parameter_name, 0)
+            modified_sterics_force.addGlobalParameter(parameter_name, default_growth_index)
             growth_system.addForce(modified_sterics_force)
             # Translate nonbonded method to cutoff methods.
             reference_nonbonded_force = reference_forces['NonbondedForce']
@@ -1487,12 +1489,12 @@ class GeometrySystemGenerator(object):
     def get_modified_system(self):
         """
         Create a modified system with parameter_name parameter. When 0, only core atoms are interacting;
-        for each integer above 0, an additional atom is made interacting, with order determined by growth_index
+        for each integer above 0, an additional atom is made interacting, with order determined by growth_index.
 
         Returns
         -------
         growth_system : simtk.openmm.System object
-            System with the appropriate modifications
+            System with the appropriate modifications, with growth parameter set to maximum.
         """
         return self._growth_system
 
@@ -1760,9 +1762,8 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         #Extract the forces from the system to use for adding auxiliary angles and torsions
         reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
 
-
-        # Zero all parameters
-        self.set_growth_parameter_index(0)
+        # Ensure 'canonical form' of System has all parameters turned on, or else we'll run into nonbonded exceptions
+        self.set_growth_parameter_index(max(self._growth_indices))
 
         # Add extra ring-closing torsions, if requested.
         if add_extra_torsions:
