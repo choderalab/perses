@@ -1325,7 +1325,7 @@ class GeometrySystemGenerator(object):
         ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                                   # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
-        default_growth_index = max(growth_indices) # default value of growth index to use in System that is returned
+        default_growth_index = len(growth_indices) # default value of growth index to use in System that is returned
 
         # Nonbonded sterics and electrostatics.
         # TODO: Allow user to select whether electrostatics or sterics components are included in the nonbonded interaction energy.
@@ -1763,7 +1763,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
 
         # Ensure 'canonical form' of System has all parameters turned on, or else we'll run into nonbonded exceptions
-        self.set_growth_parameter_index(max(self._growth_indices))
+        self.set_growth_parameter_index(len(self._growth_indices))
 
         # Add extra ring-closing torsions, if requested.
         if add_extra_torsions:
