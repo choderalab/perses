@@ -1326,6 +1326,7 @@ class GeometrySystemGenerator(object):
                                   # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
         default_growth_index = len(growth_indices) # default value of growth index to use in System that is returned
+        self.current_growth_index = default_growth_index
 
         # Nonbonded sterics and electrostatics.
         # TODO: Allow user to select whether electrostatics or sterics components are included in the nonbonded interaction energy.
@@ -1485,6 +1486,7 @@ class GeometrySystemGenerator(object):
         # TODO: Set default force global parameters if context is not None.
         if context is not None:
             context.setParameter(self._growth_parameter_name, growth_parameter_index)
+        self.current_growth_index = growth_parameter_index
 
     def get_modified_system(self):
         """
@@ -1763,6 +1765,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
 
         # Ensure 'canonical form' of System has all parameters turned on, or else we'll run into nonbonded exceptions
+        self.current_growth_index = -1
         self.set_growth_parameter_index(len(self._growth_indices))
 
         # Add extra ring-closing torsions, if requested.
@@ -1780,6 +1783,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         """
         Set the growth parameter index
         """
+        self.current_growth_index = growth_index
         for (growth_force, reference_force) in zip(self._growth_system.getForces(), self._reference_system.getForces()):
             force_name = growth_force.__class__.__name__
             if (force_name == 'HarmonicBondForce'):
@@ -1815,8 +1819,8 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
                     parameters = reference_force.getExceptionParameters(exception_index)
                     this_growth_index = self._calculate_growth_idx(parameters[:2], self._growth_indices)
                     if (growth_index < this_growth_index):
-                        parameters[2] *= 0.0
-                        parameters[4] *= 0.0
+                        parameters[2] *= 1.0e-6 # WORKAROUND // TODO: Change to zero when OpenMM issue is fixed
+                        parameters[4] *= 1.0e-6 # WORKAROUND // TODO: Change to zero when OpenMM issue is fixed
                     growth_force.setExceptionParameters(exception_index, *parameters)
 
             # Update parameters in context
