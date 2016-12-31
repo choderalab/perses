@@ -1886,9 +1886,16 @@ class ButaneProposalEngine(NullProposalEngine):
         self._fake_states = ["butane-A", "butane-B"]
         self.smiles = 'CCCC'
 
-    def _make_skewed_atom_map(self, topology):
+    def _make_skewed_atom_map_old(self, topology):
         """
         Custom definition for the atom map between butane and butane
+
+        (disabled)
+
+        MAP:
+
+                   H - C - CH- C - C - H
+          H - C - CH - C - CH- H
 
         If a regular atom map was constructed (via oechem.OEMCSSearch), all
         atoms would be matched, and the geometry engine would have nothing
@@ -1926,6 +1933,58 @@ class ButaneProposalEngine(NullProposalEngine):
             ccbond[1].index : ccbond[0].index,
             hydrogen0.index : hydrogen1.index,
             hydrogen1.index : hydrogen0.index,
+        }
+        return atom_map
+
+    def _make_skewed_atom_map(self, topology):
+        """
+        Custom definition for the atom map between butane and butane
+
+        MAP:
+        
+        C - C - C - C
+            C - C - C - C
+
+        Arguments:
+        ----------
+        topology : app.Topology object
+            topology of butane
+            Only one topology is needed, because current and proposed are
+            identical
+        Returns:
+        --------
+        atom_map : dict
+            maps the atom indices of 2 carbons to each other
+        """
+
+        carbons = [ atom for atom in topology.atoms() if (atom.element == app.element.carbon) ]
+        neighbors = { carbon : set() for carbon in carbons }
+        for (atom1,atom2) in topology.bonds():
+            if (atom1.element == app.element.carbon) and (atom2.element == app.element.carbon):
+                neighbors[atom1].add(atom2)
+                neighbors[atom2].add(atom1)
+        end_carbons = list()
+        for carbon in carbons:
+            if len(neighbors[carbon]) == 1:
+                end_carbons.append(carbon)
+        
+        # Extract linear chain of carbons
+        carbon_chain = list()
+        last_carbon = end_carbons[0]
+        carbon_chain.append(last_carbon)
+        finished = False
+        while (not finished):
+            next_carbons = list(neighbors[last_carbon].difference(carbon_chain))
+            if len(next_carbons) == 0:
+                finished = True
+            else:
+                carbon_chain.append(next_carbons[0])
+                last_carbon = next_carbons[0]
+
+        atom_map = {
+            carbon_chain[0].index : carbon_chain[2].index,
+            carbon_chain[1].index : carbon_chain[1].index,
+            carbon_chain[2].index : carbon_chain[0].index,
         }
         return atom_map
 

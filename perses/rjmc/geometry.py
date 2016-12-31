@@ -251,6 +251,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             platform_name = 'CPU'
         else:
             platform_name = 'Reference'
+
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)

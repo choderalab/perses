@@ -22,7 +22,9 @@ import matplotlib.pyplot as plt
 ################################################################################
 # NUMBER OF ATTEMPTS
 ################################################################################
+nequil = 10
 niterations = 200
+use_sterics = False
 ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
@@ -174,9 +176,22 @@ def benchmark_ncmc_work_during_protocol():
             for ncmc_nsteps in [0, 1, 10, 100, 1000]:
                 print('Running {0} {2} ExpandedEnsemble steps for {1} iterations'.format(ncmc_nsteps, niterations, name))
                 testsystem = NullProposal(storage_filename='{0}_{1}-{2}steps.nc'.format(molecule_name, name, ncmc_nsteps), scheme=scheme, options={'functions' : functions, 'nsteps' : ncmc_nsteps})
-                testsystem.exen_samplers[ENV].geometry_engine.use_sterics = True # DEBUG
-                testsystem.exen_samplers[ENV].verbose = False
-                testsystem.exen_samplers[ENV].sampler.verbose = False
+                testsystem.exen_samplers[ENV].geometry_engine.use_sterics = use_sterics
+                testsystem.mcmc_samplers[ENV].verbose = True
+                testsystem.exen_samplers[ENV].verbose = True
+                testsystem.mcmc_samplers[ENV].timestep = 1.0 * unit.femtoseconds
+
+                # DEBUG
+                #testsystem.exen_samplers[ENV].geometry_engine.write_proposal_pdb = True
+                #testsystem.exen_samplers[ENV].geometry_engine.pdb_filename_prefix = '{0}_{1}-{2}steps'.format(molecule_name, name, ncmc_nsteps)
+
+                # Equilibrate
+                # WARNING: We can't equilibrate because it messes up the iteration counters and storage iterations for exen samplers
+                #print('Equilibration...')
+                #testsystem.mcmc_samplers[ENV].run(niterations=nequil)
+
+                # Collect data on switching
+                print('Production...')
                 testsystem.exen_samplers[ENV].run(niterations=niterations)
 
                 analysis = Analysis(testsystem.storage_filename)

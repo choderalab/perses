@@ -2086,8 +2086,6 @@ class NullTestSystem(PersesTestSystem):
             mcmc_sampler.verbose = True
 
             exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme=scheme, options=options, storage=self.storage)
-            if scheme == 'geometry-ncmc-geometry':
-                exen_sampler.ncmc_engine.softening = 1.0
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')

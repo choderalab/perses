@@ -1069,10 +1069,8 @@ class ExpandedEnsembleSampler(object):
         # Write to storage.
         if self.storage:
             self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
+            # Write components to storage
             self.storage.write_quantity('logP_ncmc_work', logP_work, iteration=self.iteration)
-            self.storage.write_quantity('logP_geometry', logP_reverse - logP_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_geometry_and_energy', logP_energy + logP_reverse - logP_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_target', logP_final - logP_initial, iteration=self.iteration)
             self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
             self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
             self.storage.write_quantity('logP_chemical', logP_chemical, iteration=self.iteration)
@@ -1080,6 +1078,11 @@ class ExpandedEnsembleSampler(object):
             self.storage.write_quantity('logP_forward', logP_forward, iteration=self.iteration)
             self.storage.write_quantity('logP_work', logP_work, iteration=self.iteration)
             self.storage.write_quantity('logP_energy', logP_energy, iteration=self.iteration)
+            # Write some aggregate statistics to storage to make contributions to acceptance probability easier to analyze
+            self.storage.write_quantity('logP_groups_chemical', logP_chemical, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_geometry', logP_reverse - logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_work_and_energy', logP_work + logP_energy, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
 
         return logP_accept, new_positions
 
@@ -1143,10 +1146,7 @@ class ExpandedEnsembleSampler(object):
         # Write to storage.
         if self.storage:
             self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
-            self.storage.write_quantity('logP_ncmc_work', logP_delete_work + logP_insert_work, iteration=self.iteration)
-            self.storage.write_quantity('logP_geometry', logP_reverse - logP_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_geometry_and_energy', logP_delete_energy + logP_insert_energy + logP_reverse - logP_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_target', logP_final - logP_initial, iteration=self.iteration)
+            # Write components
             self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
             self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
             self.storage.write_quantity('logP_chemical', logP_chemical, iteration=self.iteration)
@@ -1156,6 +1156,11 @@ class ExpandedEnsembleSampler(object):
             self.storage.write_quantity('logP_forward', logP_forward, iteration=self.iteration)
             self.storage.write_quantity('logP_insert_work', logP_delete_work, iteration=self.iteration)
             self.storage.write_quantity('logP_insert_energy', logP_delete_energy, iteration=self.iteration)
+            # Write groups for easier analysis
+            self.storage.write_quantity('logP_groups_geometry', logP_reverse - logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_chemical', logP_chemical, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_ncmc', logP_delete_work + logP_insert_work + logP_delete_energy + logP_insert_energy, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
 
         return logP_accept, new_positions
 

@@ -80,20 +80,9 @@ class Analysis(object):
         # TODO
         pass
 
-    def plot_exen_logp_components(self, filename_prefix=None, logP_range=10, nbins=20):
+    def plot_exen_logp_components(self, filename_prefix=None, logP_range=20, nbins=20):
         """
         Generate histograms of each component of Expanded Ensemble log acceptance probability
-        Components may include:
-            logp_topology_proposal
-            logp_geometry
-                logp_geometry_propose
-                logp_geometry_reverse
-            logp_switch                       (not present in 'geometry-ncmc-geometry' scheme)
-            logp_ncmc_elimination             ('ncmc-geometry-ncmc' scheme only)
-            logp_ncmc_introduction            (not present in 'geometry-ncmc-geometry' scheme)
-           logp_ncmc                         ('geometry-ncmc-geometry' scheme only)
-            new_log_weight
-            old_log_weight
 
         Arguments:
         ----------
@@ -113,10 +102,13 @@ class Analysis(object):
 
         ee_sam = self._ncfile.groups['ExpandedEnsembleSampler']
 
-        # Build a list of all logP components:
+        # Build a list of all logP components to plot:
         components = list()
+        # Always show logP_accept
+        components.append('logP_accept') 
+        # Summarize other logP groups
         for name in ee_sam.variables.keys():
-            if name.startswith('logP_'):
+            if name.startswith('logP_groups'):
                 components.append(name)
 
         if filename_prefix is None:
@@ -132,21 +124,30 @@ class Analysis(object):
                 logps[component] = np.zeros(niterations, np.float64)
                 for n in range(niterations):
                     logps[component][n] = ee_sam.variables[component][n]
+                # Drop NaNs
+                logps[component] = logps[component][~np.isnan(logps[component][:])]
+                    
             plt.figure(figsize=(8,12))
             nrows = len(logps.keys())
             ncols = 2
-            for row, component in enumerate(logps.keys()):
+            for row, component in enumerate(components):
                 # Full range
-                col = 0
-                plt.subplot2grid((nrows,ncols),(row,col))
-                plt.hist(logps[component], bins=nbins)
-                plt.title(component)
+                try:
+                    col = 0
+                    plt.subplot2grid((nrows,ncols),(row,col))
+                    plt.hist(logps[component], bins=nbins)
+                    plt.title(component)
+                except Exception as e:
+                    print(e)
 
                 # Limited range
-                col = 1
-                plt.subplot2grid((nrows,ncols),(row,col))
-                plt.hist(logps[component], range=[-logP_range, +logP_range], bins=nbins)                    
-                plt.title(component)
+                try:
+                    col = 1
+                    plt.subplot2grid((nrows,ncols),(row,col))
+                    plt.hist(logps[component], range=[-logP_range, +logP_range], bins=nbins)                    
+                    plt.title(component)
+                except Exception as e:
+                    print(e)
 
             plt.tight_layout()
             pdf.savefig()
