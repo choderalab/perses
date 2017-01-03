@@ -22,7 +22,9 @@ import matplotlib.pyplot as plt
 ################################################################################
 # NUMBER OF ATTEMPTS
 ################################################################################
-niterations = 50
+nequil = 10
+niterations = 200
+use_sterics = False
 ENV = 'vacuum'
 ################################################################################
 # CONSTANTS
@@ -36,16 +38,16 @@ beta = 1.0/kT
 functions_hybrid = {
     'lambda_sterics' : 'lambda',
     'lambda_electrostatics' : 'lambda',
-    'lambda_bonds' : 'lambda',#'1.0',
-    'lambda_angles' : 'lambda',#'0.1*lambda+0.9',
-    'lambda_torsions' : 'lambda',#'0.7*lambda+0.3'
+    'lambda_bonds' : 'lambda',
+    'lambda_angles' : 'lambda',
+    'lambda_torsions' : 'lambda',
 }
 functions_twostage = {
-    'lambda_sterics' : '(2*lambda)^4 * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+    'lambda_sterics' : '(2*lambda)^(1./6.) * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
     'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-    'lambda_bonds' : '1.0', # don't soften bonds
-    'lambda_angles' : '0.1*lambda+0.9',
-    'lambda_torsions' : '0.7*lambda+0.3'
+    'lambda_bonds' : '1.0',
+    'lambda_angles' : '1.0',
+    'lambda_torsions' : '1.0'
 }
 
 def plot_logPs(logps, molecule_name, scheme, component):
@@ -67,7 +69,7 @@ def plot_logPs(logps, molecule_name, scheme, component):
             Which logP is being plotted
             in ['NCMC','EXEN']
     """
-    x = logps.keys()
+    x = list(logps.keys())
     x.sort()
     y = [logps[steps].mean() for steps in x]
     dy = [logps[steps].std() for steps in x]
@@ -75,9 +77,10 @@ def plot_logPs(logps, molecule_name, scheme, component):
     plt.plot(x, y, 'k')
     plt.xscale('log')
 
-    plt.title("Log acceptance probability of {0} ExpandedEnsemble for {1}".format(scheme, molecule_name))
+    plt.title("{0} {1} {2} {3}".format(ENV, molecule_name, scheme, component))
     plt.ylabel('logP')
     plt.xlabel('ncmc steps')
+    plt.tight_layout()
     plt.savefig('{0}_{1}_{2}{3}_logP'.format(ENV, molecule_name, scheme, component))
     print('Saved plot to {0}_{1}_{2}{3}_logP.png'.format(ENV, molecule_name, scheme, component))
     plt.clf()
@@ -106,21 +109,28 @@ def benchmark_exen_ncmc_protocol(analyses, molecule_name, scheme):
 
     Creates 2 plots every time it is called
     """
-    components = {
-        'logp_accept' : 'EXEN',
-        'logp_ncmc' : 'NCMC',
-    }
+
+    # Build a list of all logP components:
+    components = dict()
+    for nsteps, analysis in analyses.items():
+        ee_sam = analysis._ncfile.groups['ExpandedEnsembleSampler']
+        for name in ee_sam.variables.keys():
+            if name.startswith('logP_'):
+                components[name] = name
 
     for component in components.keys():
-        print('Finding {0} over nsteps for {1} with {2} NCMC'.format(component, molecule_name, scheme))
-        logps = dict()
-        for nsteps, analysis in analyses.items():
-            ee_sam = analysis._ncfile.groups['ExpandedEnsembleSampler']
-            niterations = ee_sam.variables[component].shape[0]
-            logps[nsteps] = np.zeros(niterations, np.float64)
-            for n in range(niterations):
-                logps[nsteps][n] = ee_sam.variables[component][n]
-        plot_logPs(logps, molecule_name, scheme, components[component])
+        try:
+            print('Finding {0} over nsteps for {1} with {2} NCMC'.format(component, molecule_name, scheme))
+            logps = dict()
+            for nsteps, analysis in analyses.items():
+                ee_sam = analysis._ncfile.groups['ExpandedEnsembleSampler']
+                niterations = ee_sam.variables[component].shape[0]
+                logps[nsteps] = np.zeros(niterations, np.float64)
+                for n in range(niterations):
+                    logps[nsteps][n] = ee_sam.variables[component][n]
+            plot_logPs(logps, molecule_name, scheme, components[component])
+        except Exception as e:
+            print(e)
 
 def benchmark_ncmc_work_during_protocol():
     """
@@ -149,9 +159,9 @@ def benchmark_ncmc_work_during_protocol():
     import pickle
     import codecs
     molecule_names = {
-        'naphthalene' : NaphthaleneTestSystem,
+        #'propane' : PropaneTestSystem,
         'butane' : ButaneTestSystem,
-        'propane' : PropaneTestSystem,
+        #'naphthalene' : NaphthaleneTestSystem,
     }
     methods = {
         'hybrid' : ['geometry-ncmc-geometry', functions_hybrid],
@@ -162,18 +172,31 @@ def benchmark_ncmc_work_during_protocol():
         print('\nNow testing {0} null transformations'.format(molecule_name))
         for name, [scheme, functions] in methods.items():
             analyses = dict()
-            for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+            #for ncmc_nsteps in [0, 1, 10, 100, 1000, 10000]:
+            for ncmc_nsteps in [0, 1, 10, 100, 1000]:
                 print('Running {0} {2} ExpandedEnsemble steps for {1} iterations'.format(ncmc_nsteps, niterations, name))
                 testsystem = NullProposal(storage_filename='{0}_{1}-{2}steps.nc'.format(molecule_name, name, ncmc_nsteps), scheme=scheme, options={'functions' : functions, 'nsteps' : ncmc_nsteps})
-                testsystem.exen_samplers[ENV].verbose = False
-                testsystem.exen_samplers[ENV].sampler.verbose = False
-                if name == 'hybrid':
-                    testsystem.exen_samplers[ENV].ncmc_engine.softening = 1.0
+                testsystem.exen_samplers[ENV].geometry_engine.use_sterics = use_sterics
+                testsystem.mcmc_samplers[ENV].verbose = True
+                testsystem.exen_samplers[ENV].verbose = True
+                testsystem.mcmc_samplers[ENV].timestep = 1.0 * unit.femtoseconds
+
+                # DEBUG
+                #testsystem.exen_samplers[ENV].geometry_engine.write_proposal_pdb = True
+                #testsystem.exen_samplers[ENV].geometry_engine.pdb_filename_prefix = '{0}_{1}-{2}steps'.format(molecule_name, name, ncmc_nsteps)
+
+                # Equilibrate
+                # WARNING: We can't equilibrate because it messes up the iteration counters and storage iterations for exen samplers
+                #print('Equilibration...')
+                #testsystem.mcmc_samplers[ENV].run(niterations=nequil)
+
+                # Collect data on switching
+                print('Production...')
                 testsystem.exen_samplers[ENV].run(niterations=niterations)
 
                 analysis = Analysis(testsystem.storage_filename)
                 print(analysis.get_environments())
-                if ncmc_nsteps > 99:
+                if ncmc_nsteps > 9:
                     analysis.plot_ncmc_work('{0}_{1}-ncmc_work_over_{2}_steps.pdf'.format(molecule_name, name, ncmc_nsteps))
                 analysis.plot_exen_logp_components()
                 analyses[ncmc_nsteps] = analysis

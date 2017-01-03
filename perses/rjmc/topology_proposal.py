@@ -28,6 +28,50 @@ try:
 except ImportError:
     from commands import getoutput  # If python 2
 
+def append_topology(destination_topology, source_topology, exclude_residue_name=None):
+    """
+    Add the source OpenMM Topology to the destination Topology.
+
+    Parameters
+    ----------
+    destination_topology : simtk.openmm.app.Topology
+        The Topology to which the contents of `source_topology` are to be added.
+    source_topology : simtk.openmm.app.Topology
+        The Topology to be added.
+    exclude_residue_name : str, optional, default=None
+        If specified, any residues matching this name are excluded.
+
+    """
+    newAtoms = {}
+    for chain in source_topology.chains():
+        newChain = destination_topology.addChain(chain.id)
+        for residue in chain.residues():
+            if (residue.name == exclude_residue_name):
+                continue
+            newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
+            for atom in residue.atoms():
+                newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                newAtoms[atom] = newAtom
+    for bond in source_topology.bonds():
+        if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+            continue
+        # TODO: Preserve bond order info using extended OpenMM API
+        destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+
+def deepcopy_topology(source_topology):
+    """
+    Drop-in replacement for copy.deepcopy(topology) that fixes backpointer issues.
+
+    Parameters
+    ----------
+    source_topology : simtk.openmm.app.Topology
+        The Topology to be added.
+
+    """
+    topology = app.Topology()
+    append_topology(topology, source_topology)
+    return topology
+
 from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
     """
@@ -45,7 +89,7 @@ class TopologyProposal(object):
     old_system : simtk.openmm.System object
         openm System of the current state
     logp_proposal : float
-        log probability of the proposal
+        contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
     new_to_old_atom_map : dict
         {new_atom_idx : old_atom_idx} map for the two systems
     chemical_state_key : str
@@ -66,7 +110,7 @@ class TopologyProposal(object):
     old_positions : [n, 3] np.array, Quantity
         positions of the old system
     logp_proposal : float
-        log probability of the proposal
+        contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
     new_to_old_atom_map : dict
         {new_atom_idx : old_atom_idx} map for the two systems
     old_to_new_atom_map : dict
@@ -165,8 +209,7 @@ class ProposalEngine(object):
     Properties
     ----------
     chemical_state_list : list of str
-        a list of all the chemical states that this proposal engine may visit.
-
+         a list of all the chemical states that this proposal engine may visit.
     """
 
     def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False):
@@ -238,13 +281,14 @@ class PolymerProposalEngine(ProposalEngine):
             probabilities, as well as old and new topologies and atom
             mapping
         """
+
         # old_topology : simtk.openmm.app.Topology
         old_topology = app.Topology()
-        self._append_topology(old_topology, current_topology)
+        append_topology(old_topology, current_topology)
 
         # new_topology : simtk.openmm.app.Topology
         new_topology = app.Topology()
-        self._append_topology(new_topology, current_topology)
+        append_topology(new_topology, current_topology)
 
         # Check that old_topology and old_system have same number of atoms.
         old_system = current_system
@@ -659,6 +703,16 @@ class PolymerProposalEngine(ProposalEngine):
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        if len(matches)==0:
+            from perses.tests.utils import describe_oemol
+            msg = 'No matches found in _get_mol_atom_matches.\n'
+            msg += '\n'
+            msg += 'oegraphmol_current:\n'
+            msg += describe_oemol(oegraphmol_current)
+            msg += '\n'
+            msg += 'oegraphmol_proposed:\n'
+            msg += describe_oemol(oegraphmol_proposed)
+            raise Exception(msg)
         match = np.random.choice(matches)
         new_to_old_atom_map = {}
         for matchpair in match.GetAtoms():
@@ -684,7 +738,6 @@ class PolymerProposalEngine(ProposalEngine):
 
 class PointMutationEngine(PolymerProposalEngine):
     """
-
     Arguments
     --------
     wildtype_topology : openmm.app.Topology
@@ -720,6 +773,12 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True):
         super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
+
+        # Check that provided topology has specified chain.
+        chain_ids_in_topology = [ chain.id for chain in wildtype_topology.chains() ]
+        if chain_id not in chain_ids_in_topology:
+            raise Exception("Specified chain_id '%s' not found in provided wildtype_topology. Choices are: %s" % (chain_id, str(chain_ids_in_topology)))
+
         self._wildtype = wildtype_topology
         self._max_point_mutants = max_point_mutants
         self._ff = system_generator.forcefield
@@ -1393,36 +1452,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_idx = atoms[0].index
         return mol_start_idx, len(list(atoms))
 
-    def _append_topology(self, destination_topology, source_topology, exclude_residue_name=None):
-        """
-        Add the source OpenMM Topology to the destination Topology.
-
-        Parameters
-        ----------
-        destination_topology : simtk.openmm.app.Topology
-            The Topology to which the contents of `source_topology` are to be added.
-        source_topology : simtk.openmm.app.Topology
-            The Topology to be added.
-        exclude_residue_name : str, optional, default=None
-            If specified, any residues matching this name are excluded.
-
-        """
-        newAtoms = {}
-        for chain in source_topology.chains():
-            newChain = destination_topology.addChain(chain.id)
-            for residue in chain.residues():
-                if (residue.name == exclude_residue_name):
-                    continue
-                newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
-                for atom in residue.atoms():
-                    newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                    newAtoms[atom] = newAtom
-        for bond in source_topology.bonds():
-            if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
-                continue
-            # TODO: Preserve bond order info using extended OpenMM API
-            destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
-
     def _build_new_topology(self, current_receptor_topology, oemol_proposed):
         """
         Construct a new topology
@@ -1443,8 +1472,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oemol_proposed.SetTitle(self._residue_name)
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
-        self._append_topology(new_topology, current_receptor_topology)
-        self._append_topology(new_topology, mol_topology)
+        append_topology(new_topology, current_receptor_topology)
+        append_topology(new_topology, mol_topology)
         # Copy periodic box vectors.
         if current_receptor_topology._periodicBoxVectors != None:
             new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
@@ -1468,7 +1497,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             Topology without small molecule
         """
         receptor_topology = app.Topology()
-        self._append_topology(receptor_topology, topology, exclude_residue_name=self._residue_name)
+        append_topology(receptor_topology, topology, exclude_residue_name=self._residue_name)
         # Copy periodic box vectors.
         if topology._periodicBoxVectors != None:
             receptor_topology._periodicBoxVectors = copy.deepcopy(topology._periodicBoxVectors)
@@ -1509,11 +1538,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map
 
-
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=True):
         """
-        Simple method that randomly chooses a molecule unformly.
-        Symmetric proposal, so logp is 0. Override with a mixin.
+        Propose a new molecule given the current molecule.
+
+        The current scheme uses a probability matrix computed via _calculate_probability_matrix.
 
         Arguments
         ---------
@@ -1534,9 +1563,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
              The SMILES of the proposed molecule
         mol : oechem.OEMol
             The next molecule to simulate
-        logp : float
-            The log probability of the choice
+        logp_proposal : float
+            contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
+            log [P(Mold | Mnew) / P(Mnew | Mold)]
         """
+        # Compute contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
+        # log [P(Mold | Mnew) / P(Mnew | Mold)]
         current_smiles_idx = self._smiles_list.index(molecule_smiles)
         molecule_probabilities = self._probability_matrix[current_smiles_idx, :]
         proposed_smiles_idx = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
@@ -1560,7 +1592,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         Returns
         -------
         probability_matrix : [n, n] np.ndarray
-            matrix of probabilities of proposal from row to column
+            probability_matrix[Mold, Mnew] is the probability of choosing molecule Mnew given the current molecule is Mold
+
         """
         n_smiles = len(molecule_smiles_list)
         probability_matrix = np.zeros([n_smiles, n_smiles])
@@ -1594,7 +1627,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     @property
     def chemical_state_list(self):
-        return self._smiles_list
+         return self._smiles_list
 
     @staticmethod
     def clean_molecule_list(smiles_list, atom_opts, bond_opts):
@@ -1695,7 +1728,7 @@ class NullProposalEngine(SmallMoleculeSetProposalEngine):
         new_key = [key for key in self._fake_states if key != old_key][0]
 
         new_topology = app.Topology()
-        self._append_topology(new_topology, current_topology)
+        append_topology(new_topology, current_topology)
         new_topology._state_key = new_key
         new_system = copy.deepcopy(current_system)
         atom_map = self._make_skewed_atom_map(current_topology)
@@ -1853,9 +1886,16 @@ class ButaneProposalEngine(NullProposalEngine):
         self._fake_states = ["butane-A", "butane-B"]
         self.smiles = 'CCCC'
 
-    def _make_skewed_atom_map(self, topology):
+    def _make_skewed_atom_map_old(self, topology):
         """
         Custom definition for the atom map between butane and butane
+
+        (disabled)
+
+        MAP:
+
+                   H - C - CH- C - C - H
+          H - C - CH - C - CH- H
 
         If a regular atom map was constructed (via oechem.OEMCSSearch), all
         atoms would be matched, and the geometry engine would have nothing
@@ -1893,6 +1933,58 @@ class ButaneProposalEngine(NullProposalEngine):
             ccbond[1].index : ccbond[0].index,
             hydrogen0.index : hydrogen1.index,
             hydrogen1.index : hydrogen0.index,
+        }
+        return atom_map
+
+    def _make_skewed_atom_map(self, topology):
+        """
+        Custom definition for the atom map between butane and butane
+
+        MAP:
+        
+        C - C - C - C
+            C - C - C - C
+
+        Arguments:
+        ----------
+        topology : app.Topology object
+            topology of butane
+            Only one topology is needed, because current and proposed are
+            identical
+        Returns:
+        --------
+        atom_map : dict
+            maps the atom indices of 2 carbons to each other
+        """
+
+        carbons = [ atom for atom in topology.atoms() if (atom.element == app.element.carbon) ]
+        neighbors = { carbon : set() for carbon in carbons }
+        for (atom1,atom2) in topology.bonds():
+            if (atom1.element == app.element.carbon) and (atom2.element == app.element.carbon):
+                neighbors[atom1].add(atom2)
+                neighbors[atom2].add(atom1)
+        end_carbons = list()
+        for carbon in carbons:
+            if len(neighbors[carbon]) == 1:
+                end_carbons.append(carbon)
+        
+        # Extract linear chain of carbons
+        carbon_chain = list()
+        last_carbon = end_carbons[0]
+        carbon_chain.append(last_carbon)
+        finished = False
+        while (not finished):
+            next_carbons = list(neighbors[last_carbon].difference(carbon_chain))
+            if len(next_carbons) == 0:
+                finished = True
+            else:
+                carbon_chain.append(next_carbons[0])
+                last_carbon = next_carbons[0]
+
+        atom_map = {
+            carbon_chain[0].index : carbon_chain[2].index,
+            carbon_chain[1].index : carbon_chain[1].index,
+            carbon_chain[2].index : carbon_chain[0].index,
         }
         return atom_map
 

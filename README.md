@@ -1,5 +1,4 @@
 * travis-ci builds: [![Travis Build Status](https://travis-ci.org/choderalab/perses.svg?branch=master)](https://travis-ci.org/choderalab/perses)
-* Jenkins GPU tests: [![Build Status](https://jenkins.choderalab.org/buildStatus/icon?job=test-perses-linux)](https://jenkins.choderalab.org/job/test-perses-linux/)
 * Landscape.io code health: [![Code Health](https://landscape.io/github/choderalab/perses/master/landscape.svg?style=flat)](https://landscape.io/github/choderalab/perses/master)
 
 # Perses
@@ -20,6 +19,7 @@ have concluded.
 * `examples/` - Contains examples for various systems and methods of simulation
 * `attic/` - some old code that may be useful as part of the new setup
 * `devtools/` - Continuous integration and packaging utilities
+* `notes/` - LaTeX notes deriving acceptance criteria and stochastic approximation methods
 
 ## Authors
 

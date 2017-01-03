@@ -395,7 +395,7 @@ def smiles_to_oemol(smiles_string, title="MOL"):
     omega.SetMaxConfs(1)
     omega(mol)
     return mol
-    
+
 def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     """
     Sanitize set of SMILES strings by ensuring all are canonical isomeric SMILES.
@@ -524,6 +524,29 @@ def test_sanitizeSMILES():
         isosmiles = OECreateIsoSmiString(molecule)
         if (smiles != isosmiles):
             raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
+
+def describe_oemol(mol):
+    """
+    Render the contents of an OEMol to a string.
+
+    Parameters
+    ----------
+    mol : OEMol
+        Molecule to describe
+
+    Returns
+    -------
+    description : str
+        The description
+    """
+    description = ""
+    description += "ATOMS:\n"
+    for atom in mol.GetAtoms():
+        description += "%8d %5s %5d\n" % (atom.GetIdx(), atom.GetName(), atom.GetAtomicNum())
+    description += "BONDS:\n"
+    for bond in mol.GetBonds():
+        description += "%8d %8d\n" % (bond.GetBgnIdx(), bond.GetEndIdx())
+    return description
 
 def compute_potential(system, positions, platform=None):
     """

@@ -196,7 +196,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             }
         proposal_engines = dict()
         chain_id = ' '
-        allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','PHE')]]
+        allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','ILE')]]
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 
@@ -362,7 +362,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':50}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -2086,8 +2086,6 @@ class NullTestSystem(PersesTestSystem):
             mcmc_sampler.verbose = True
 
             exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme=scheme, options=options, storage=self.storage)
-            if scheme == 'geometry-ncmc-geometry':
-                exen_sampler.ncmc_engine.softening = 1.0
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')

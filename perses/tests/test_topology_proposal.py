@@ -358,10 +358,14 @@ def test_mutate_from_every_amino_to_every_other():
 
     pm_top_engine = topology_proposal.PointMutationEngine(current_topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants)
 
-    old_topology = copy.deepcopy(current_topology)
-    new_topology = copy.deepcopy(current_topology)
+    from perses.rjmc.topology_proposal import append_topology
+    old_topology = app.Topology()
+    append_topology(old_topology, current_topology)
+    new_topology = app.Topology()
+    append_topology(new_topology, current_topology)
 
     old_chemical_state_key = pm_top_engine.compute_state_key(old_topology)
+
 
     for chain in new_topology.chains():
         if chain.id == chain_id:
@@ -374,7 +378,8 @@ def test_mutate_from_every_amino_to_every_other():
         matching_amino_found = 0
         for proposed_amino in aminos:
             pm_top_engine._allowed_mutations = [[(str(proposed_location+1),proposed_amino)]]
-            new_topology = copy.deepcopy(current_topology)
+            new_topology = app.Topology()
+            append_topology(new_topology, current_topology)
             old_system = current_system
             old_topology_natoms = sum([1 for atom in old_topology.atoms()])
             old_system_natoms = old_system.getNumParticles()

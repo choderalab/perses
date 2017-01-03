@@ -923,7 +923,7 @@ def test_mutate_quick():
         final_state = minimize_context.getState(getEnergy=True, getPositions=True)
         final_potential = final_state.getPotentialEnergy()
         current_positions = final_state.getPositions()
-        print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
+        #print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
 
         for k, proposed_amino in enumerate(aminos):
             pm_top_engine._allowed_mutations = [[('2',proposed_amino)]]
@@ -937,10 +937,10 @@ def test_mutate_quick():
             context = openmm.Context(new_system, integrator, platform)
             context.setPositions(new_positions)
             state = context.getState(getEnergy=True)
-            print(compute_potential_components(context))
+            #print(compute_potential_components(context))
             potential = state.getPotentialEnergy()
             potential_without_units = potential / potential.unit
-            print(str(potential))
+            #print(str(potential))
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
 
@@ -987,7 +987,7 @@ def test_mutate_from_all_to_all():
         final_state = minimize_context.getState(getEnergy=True, getPositions=True)
         final_potential = final_state.getPotentialEnergy()
         current_positions = final_state.getPositions()
-        print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
+        #print("Minimized initial structure from %s to %s" % (str(initial_potential), str(final_potential)))
 
         for k, proposed_amino in enumerate(aminos):
             pm_top_engine._allowed_mutations = [[('2',proposed_amino)]]
@@ -1001,10 +1001,10 @@ def test_mutate_from_all_to_all():
             context = openmm.Context(new_system, integrator, platform)
             context.setPositions(new_positions)
             state = context.getState(getEnergy=True)
-            print(compute_potential_components(context))
+            #print(compute_potential_components(context))
             potential = state.getPotentialEnergy()
             potential_without_units = potential / potential.unit
-            print(str(potential))
+            #print(str(potential))
             if np.isnan(potential_without_units):
                 raise Exception("Energy after proposal is NaN")
 
