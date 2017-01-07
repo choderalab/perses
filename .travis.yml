@@ -81,5 +81,4 @@ deploy:
   local_dir: /home/travis/miniconda/conda-bld/linux-64/
   # Control which branches deploy
   on:
-    branch: ** # all branches
-    #condition: $MY_ENV = super_awesome
+    all_branches: true
