@@ -80,5 +80,4 @@ deploy:
   # Only upload conda builds
   local_dir: /home/travis/miniconda/conda-bld/linux-64/
   # Control which branches deploy
-  on:
-    all_branches: true
+  all_branches: true
