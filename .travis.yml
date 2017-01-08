@@ -63,18 +63,18 @@ env:
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
     - secure: "RRvLDPu9mPoNaRWIseaJdgShOXI+PaHPWKAIJvW7VYWcAS6iEN7W4Fj4zD5hkocQxc3ou97EtkgID+ApH10bSGKxCykyU0urSY9jsSOJX2m0AE19X0dVr6ySIQkwCWE6kUMVlvQYQo80fM2EMElD+btr4G9XBAhArAO7HvZHkoQ="
 
-after_success:
-  - echo "after_success"
-  - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then source devtools/travis-ci/after_success.sh; fi
+#after_success:
+#  - echo "after_success"
+#  - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then source devtools/travis-ci/after_success.sh; fi
 
 deploy:
-  skip_cleanup: true # Don't delete build artifacts
   provider: s3
   access_key_id:
     secure: cIpxIKe+RTQcyy1Z8dvh16vSRVIWQas+l5KuoSbFGQBUrZY6kCoqW4RwHNp7fx24odhhz10oCiOuI2G4wi2ctjouIlLhCn3QIfxW0xqui1U+Uizc+Vlu7/cKU1ssz0fhG5YNJ8s3TV00EpoKDKw6nFM144QRdUU/y0a2OPKY+3Y=
   secret_access_key:
     secure: NFiNCkthiAeHg3ONFpuZZNBgkz/vION9oPfwCBaiQrsshuNFJEPBPafnyb1xjFiwdFf4SRYAgbkVFKYi/vnJ8ArCYcxgUMYUfde5pPqMlISGHt2WexZVIXTHRDnUGV+xpLqAyzDEq0NRFTb081jViVL0AA3XOnVwdtc7Pm3pTJA=
   bucket: perses-ci
-  local_dir: /home/travis/miniconda/conda-bld/linux-64/
+  skip_cleanup: true # Don't delete build artifacts
+  #local_dir: /home/travis/miniconda/conda-bld/linux-64/
   on:
     all_branches: true
