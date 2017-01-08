@@ -75,6 +75,6 @@ deploy:
     secure: NFiNCkthiAeHg3ONFpuZZNBgkz/vION9oPfwCBaiQrsshuNFJEPBPafnyb1xjFiwdFf4SRYAgbkVFKYi/vnJ8ArCYcxgUMYUfde5pPqMlISGHt2WexZVIXTHRDnUGV+xpLqAyzDEq0NRFTb081jViVL0AA3XOnVwdtc7Pm3pTJA=
   bucket: perses-ci
   skip_cleanup: true # Don't delete build artifacts
-  #local_dir: /home/travis/miniconda/conda-bld/linux-64/
+  local_dir: /home/travis/miniconda/conda-bld/linux-64/
   on:
     all_branches: true
