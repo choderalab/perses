@@ -38,13 +38,13 @@ script:
   # Build the recipe
   - conda build devtools/conda-recipe
   # Install the package
-  - conda install --yes --use-local ${PACKAGENAME}-dev
+  #- conda install --yes --use-local ${PACKAGENAME}-dev
   # Install testing dependencies
-  - conda install --yes --quiet pip nose nose-timer
+  #- conda install --yes --quiet pip nose nose-timer
   # Install and test openeye tools
-  - pip install $OPENEYE_CHANNEL OpenEye-toolkits==2016.6.1 && python -c "import openeye; print(openeye.__version__)"
+  #- pip install $OPENEYE_CHANNEL OpenEye-toolkits==2016.6.1 && python -c "import openeye; print(openeye.__version__)"
   # Test the package
-  - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
+  #- cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
 
 env:
   matrix:
