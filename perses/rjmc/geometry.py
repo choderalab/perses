@@ -1921,12 +1921,23 @@ class ProposalOrderTools(object):
                 The log torsion cchoice probability associated with these added torsions.
 
             """
+            from scipy import special
             logp_torsion_choice = 0.0
             while(len(new_atoms))>0:
                 eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
+
+                #randomize positions
+                eligible_atoms_in_order = np.random.choice(eligible_atoms, size=len(eligible_atoms), replace=False)
+
+                #the logp of this choice is log(1/n!)
+                #gamma is (n-1)!, log-gamma is more numerically stable.
+                logp_torsion_choice += -special.gammaln(len(eligible_atoms)+1)
+
                 if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
                     raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
-                for atom in eligible_atoms:
+
+                #choose the torsions
+                for atom in eligible_atoms_in_order:
                     chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
                     atoms_torsions[atom] = chosen_torsion
                     logp_torsion_choice += logp_choice
@@ -1957,12 +1968,16 @@ class ProposalOrderTools(object):
         """
         eligible_atoms = []
         for atom in new_atoms:
-            #get array of booleans to see if a bond partner has a position
-            has_bonded_position = [a in atoms_with_positions for a in atom.bond_partners]
-            #if at least one does, then the atom is ready to be proposed.
-            if np.sum(has_bonded_position) > 0:
-                eligible_atoms.append(atom)
-        return eligible_atoms
+            #get all topological torsions for the appropriate atom
+            torsions = self._get_topological_torsions(atoms_with_positions, atom)
+
+            #go through the topological torsions (atom1 is always the new atom), and if one of them has
+            #atoms 2, 3, 4 in atoms_with_positions, the atom is eligible.
+            for torsion in torsions:
+                if torsion.atom2 in atoms_with_positions and torsion.atom3 in atoms_with_positions and torsion.atom4 in atoms_with_positions:
+                    eligible_atoms.append(atom)
+
+        return list(set(eligible_atoms))
 
     def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
         """
