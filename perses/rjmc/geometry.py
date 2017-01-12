@@ -1931,7 +1931,7 @@ class ProposalOrderTools(object):
 
                 #the logp of this choice is log(1/n!)
                 #gamma is (n-1)!, log-gamma is more numerically stable.
-                logp_torsion_choice += special.gammaln(len(eligible_atoms)+1)
+                logp_torsion_choice += -special.gammaln(len(eligible_atoms)+1)
 
                 if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
                     raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
@@ -1977,7 +1977,7 @@ class ProposalOrderTools(object):
                 if torsion.atom2 in atoms_with_positions and torsion.atom3 in atoms_with_positions and torsion.atom4 in atoms_with_positions:
                     eligible_atoms.append(atom)
 
-        return eligible_atoms
+        return list(set(eligible_atoms))
 
     def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
         """
