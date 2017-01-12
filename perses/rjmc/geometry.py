@@ -1957,11 +1957,15 @@ class ProposalOrderTools(object):
         """
         eligible_atoms = []
         for atom in new_atoms:
-            #get array of booleans to see if a bond partner has a position
-            has_bonded_position = [a in atoms_with_positions for a in atom.bond_partners]
-            #if at least one does, then the atom is ready to be proposed.
-            if np.sum(has_bonded_position) > 0:
-                eligible_atoms.append(atom)
+            #get all topological torsions for the appropriate atom
+            torsions = self._get_topological_torsions(atoms_with_positions, atom)
+
+            #go through the topological torsions (atom1 is always the new atom), and if one of them has
+            #atoms 2, 3, 4 in atoms_with_positions, the atom is eligible.
+            for torsion in torsions:
+                if torsion.atom2 in atoms_with_positions and torsion.atom3 in atoms_with_positions and torsion.atom4 in atoms_with_positions:
+                    eligible_atoms.append(atom)
+
         return eligible_atoms
 
     def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
