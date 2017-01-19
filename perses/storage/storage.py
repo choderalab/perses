@@ -213,7 +213,7 @@ class NetCDFStorage(object):
         """
 
         nc_path = "/{envname}/{modname}/{varname}".format(envname=envname, modname=modname, varname=varname)
-        
+
         if iteration is not None:
             pickled = self._ncfile[nc_path][iteration]
         else:

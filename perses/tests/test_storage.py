@@ -110,17 +110,24 @@ def test_write_object():
     """
     tmpfile = tempfile.NamedTemporaryFile()
     storage = NetCDFStorage(tmpfile.name, mode='w')
-    view = NetCDFStorageView(storage, 'envname', 'modname')
+
+    #use names we might encounter in simulation
+    envname = 'vacuum'
+    modname = 'ExpandedEnsembleSampler'
+    varname = 'energy'
+
+
+    view = NetCDFStorageView(storage, envname, modname)
 
     obj = { 0 : 0 }
     view.write_object('singleton', obj)
 
     for iteration in range(10):
         obj = { 'iteration' : iteration }
-        view.write_object('varname', obj, iteration=iteration)
+        view.write_object(varname, obj, iteration=iteration)
 
     for iteration in range(10):
-        obj = storage.get_object('/envname/modname/varname', iteration=iteration)
+        obj = storage.get_object(envname, modname, varname, iteration=iteration)
         assert ('iteration' in obj)
         assert (obj['iteration'] == iteration)
 
@@ -174,3 +181,6 @@ def test_storage_with_samplers():
             f.description = "Testing designer for %s with environment %s" % (testsystem_name, environment)
             #yield f
             f()
+
+if __name__=="__main__":
+    test_write_object()
