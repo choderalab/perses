@@ -124,14 +124,14 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     #print("df = %12.6f +- %12.5f kT" % (df, ddf))
     if (abs(df) > NSIGMA_MAX * ddf):
         msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
-        msg += 'delete logP:\n'
-        msg += str(logP_delete_n) + '\n'
-        msg += 'insert logP:\n'
-        msg += str(logP_insert_n) + '\n'
-        msg += 'switch logP:\n'
-        msg += str(logP_switch_n) + '\n'
-        msg += 'logP:\n'
-        msg += str(logP_n) + '\n'
+        #msg += 'delete logP:\n'
+        #msg += str(logP_delete_n) + '\n'
+        #msg += 'insert logP:\n'
+        #msg += str(logP_insert_n) + '\n'
+        #msg += 'switch logP:\n'
+        #msg += str(logP_switch_n) + '\n'
+        #msg += 'logP:\n'
+        #msg += str(logP_n) + '\n'
         raise Exception(msg)
 
 def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
