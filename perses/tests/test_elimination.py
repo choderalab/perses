@@ -88,6 +88,8 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     nequil = 5 # number of equilibration iterations
     niterations = 50 # number of round-trip switching trials
     logP_work_n = np.zeros([niterations], np.float64)
+    logP_insert_n = np.zeros([niterations], np.float64)
+    logP_delete_n = np.zeros([niterations], np.float64)
     for iteration in range(nequil):
         [positions, velocities] = simulate(topology_proposal.old_system, positions)
     for iteration in range(niterations):
@@ -114,6 +116,8 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
 
         # Store log probability associated with work
         logP_work_n[iteration] = logP_delete_work + logP_insert_work
+        logP_insert_n[iteration] = logP_insert_work
+        logP_delete_n[iteration] = logP_delete_work
         #print("Iteration %5d : work %16.8f kT (delete %16.8f kT | insert %16.8f kT) | energy %16.8f kT (delete %16.8f kT | insert %16.8f kT)"
         #    % (iteration, logP_delete_work + logP_insert_work, logP_delete_work, logP_insert_work, logP_delete_energy + logP_insert_energy, logP_delete_energy, logP_insert_energy))
 
@@ -124,14 +128,12 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     #print("df = %12.6f +- %12.5f kT" % (df, ddf))
     if (abs(df) > NSIGMA_MAX * ddf):
         msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
-        #msg += 'delete logP:\n'
-        #msg += str(logP_delete_n) + '\n'
-        #msg += 'insert logP:\n'
-        #msg += str(logP_insert_n) + '\n'
-        #msg += 'switch logP:\n'
-        #msg += str(logP_switch_n) + '\n'
-        #msg += 'logP:\n'
-        #msg += str(logP_n) + '\n'
+        msg += 'logP_delete_n:\n'
+        msg += str(logP_delete_n) + '\n'
+        msg += 'logP_insert_n:\n'
+        msg += str(logP_insert_n) + '\n'
+        msg += 'logP_work_n:\n'
+        msg += str(logP_work_n) + '\n'
         raise Exception(msg)
 
 def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
@@ -199,8 +201,8 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
     #print("df = %12.6f +- %12.5f kT" % (df, ddf))
     if (abs(df) > NSIGMA_MAX * ddf):
         msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
-        msg += 'logP:\n'
-        msg += str(logP_n) + '\n'
+        msg += 'logP_work_n:\n'
+        msg += str(logP_work_n) + '\n'
         raise Exception(msg)
 
 # TODO: Re-enable this test once PointMutationEngine can return size of chemical space
