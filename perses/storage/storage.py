@@ -191,11 +191,15 @@ class NetCDFStorage(object):
         else:
             ncgrp.variables[varname] = pickled
 
-    def get_object(self, varname, iteration=None):
+    def get_object(self, envname, modname, varname, iteration=None):
         """Get the serialized Python object.
 
         Parameters
         ----------
+        envname : str
+            The name of the environment for the variable
+        modname : str
+            The name of the module for the variable
         varname : str
             The variable name to be stored
         iteration : int, optional, default=None
@@ -207,10 +211,13 @@ class NetCDFStorage(object):
             The retrieved object
 
         """
+
+        nc_path = "/{envname}/{modname}/{varname}".format(envname=envname, modname=modname, varname=varname)
+
         if iteration is not None:
-            pickled = self._ncfile['/envname/modname/varname'][iteration]
+            pickled = self._ncfile[nc_path][iteration]
         else:
-            pickled = self._ncfile['/envname/modname/varname'][0]
+            pickled = self._ncfile[nc_path][0]
 
         obj = pickle.loads(codecs.decode(pickled.encode(), "base64"))
         return obj
