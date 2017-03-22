@@ -918,7 +918,7 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.addConstrainPositions()
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
         self.addConstrainVelocities()
-        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeSum("kinetic", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "kinetic + energy")
         # Compute acceptance probability
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
