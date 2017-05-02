@@ -344,9 +344,9 @@ class NCMCEngine(object):
                         print(name, val)
 
                 # Store accumulated work
-                total_work[step + 1] = integrator.getTotalWork(context)
-                shadow_work[step + 1] = integrator.getShadowWork(context)
-                protocol_work[step + 1] = integrator.getProtocolWork(context)
+                total_work[step + 1] = integrator.getTotalWork()
+                shadow_work[step + 1] = integrator.getShadowWork()
+                protocol_work[step + 1] = integrator.getProtocolWork()
 
                 # Write trajectory frame.
                 if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step + 1) == 0):
@@ -376,7 +376,7 @@ class NCMCEngine(object):
         # Store final positions and log acceptance probability.
         final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
         assert quantity_is_finite(final_positions) == True
-        logP_NCMC = integrator.getLogAcceptanceProbability(context)
+        logP_NCMC = integrator.getLogAcceptanceProbability()
         return final_positions, logP_NCMC
 
     def _choose_integrator(self, functions):
@@ -854,8 +854,6 @@ class NCMCAlchemicalIntegrator(NonequilibriumLangevinIntegrator):
             Number of steps in nonequilibrium protocol. Default 100
         """
 
-        self.addGlobalVariable("initial_reduced_potential", 0)
-        self.addGlobalVariable("final_reduced_potential", 0)
         super(NCMCAlchemicalIntegrator, self).__init__(
             alchemical_functions,
             splitting=splitting,
@@ -866,6 +864,9 @@ class NCMCAlchemicalIntegrator(NonequilibriumLangevinIntegrator):
             measure_shadow_work=False,
             measure_heat=True,
             nsteps_neq=100)
+
+        self.addGlobalVariable("initial_reduced_potential", 0)
+        self.addGlobalVariable("final_reduced_potential", 0)
 
     def alchemical_reset_step(self):
         """

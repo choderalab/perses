@@ -1,2 +1,2 @@
-from perses.annihilation.ncmc_switching import NCMCEngine, NCMCVVAlchemicalIntegrator, NCMCGHMCAlchemicalIntegrator
+from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.annihilation.relative import HybridTopologyFactory

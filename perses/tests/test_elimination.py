@@ -67,16 +67,25 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     geometry : bool, optional, default=None
         If True, will also use geometry engine in the middle of the null transformation.
     """
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '1.0', # don't soften angles
-        'lambda_torsions' : 'lambda'
+    delete_functions = {
+        'lambda_sterics': '2*(1-lambda) * step(0.5 - (1-lambda)) + (1.0 - step(0.5 - (1-lambda)))',
+        'lambda_electrostatics': '2*((1-lambda) - 0.5) * step((1-lambda) - 0.5)',
+        'lambda_bonds': '1',
+        'lambda_angles': '1',
+        'lambda_torsions': '(1-lambda)'
     }
+
+    insert_functions = {
+        'lambda_sterics': '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+        'lambda_electrostatics': '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_bonds': '1',
+        'lambda_angles': '1',
+        'lambda_torsions': 'lambda'
+    }
+
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    ncmc_engine = NCMCEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
+    ncmc_engine = NCMCEngine(temperature=temperature, insert_functions=insert_functions, delete_functions=delete_functions, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
