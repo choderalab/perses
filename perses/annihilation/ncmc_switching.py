@@ -842,28 +842,28 @@ class NCMCAlchemicalIntegrator(NonequilibriumLangevinIntegrator):
             self.setGlobalVariableByName("naccept", 0)
             self.setGlobalVariableByName("ntrials", 0)
 
-    def getStatistics(self, context):
+    def getStatistics(self):
         if (self._metropolized_integrator):
             return (self.getGlobalVariableByName("naccept"), self.getGlobalVariableByName("ntrials"))
         else:
             return (0, 0)
 
-    def getTotalWork(self, context):
+    def getTotalWork(self):
         """Retrieve accumulated total work (in units of kT)
         """
         return self.getGlobalVariableByName("total_work")
 
-    def getShadowWork(self, context):
+    def getShadowWork(self):
         """Retrieve accumulated shadow work (in units of kT)
         """
         return self.getGlobalVariableByName("shadow_work")
 
-    def getProtocolWork(self, context):
+    def getProtocolWork(self):
         """Retrieve accumulated protocol work (in units of kT)
         """
         return self.getGlobalVariableByName("protocol_work")
 
-    def getLogAcceptanceProbability(self, context):
+    def getLogAcceptanceProbability(self):
         logp_accept = -1.0 * self.getGlobalVariableByName("total_work")
         return logp_accept
 
