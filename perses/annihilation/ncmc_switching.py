@@ -6,7 +6,8 @@ import traceback
 from simtk import openmm, unit
 from perses.storage import NetCDFStorageView
 from perses.tests.utils import quantity_is_finite
-from openmmtools.integrators import NonequilibriumLangevinIntegrator
+from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator
+
 
 default_insert_functions = {
     'lambda_sterics': '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
@@ -768,7 +769,7 @@ class NCMCHybridEngine(NCMCEngine):
         return [final_positions, new_old_positions, logP_work, logP_energy]
 
 
-class NCMCAlchemicalIntegrator(NonequilibriumLangevinIntegrator):
+class NCMCAlchemicalIntegrator(AlchemicalNonequilibriumLangevinIntegrator):
     """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
     A variable named lambda is switched from 0 to 1 linearly throughout the nsteps of the protocol.
     The functions can use this to create more complex protocols for other global parameters.
@@ -873,14 +874,14 @@ class NCMCAlchemicalIntegrator(NonequilibriumLangevinIntegrator):
         Reset the lambda and other values to their start.
         """
         super(NCMCAlchemicalIntegrator, self).alchemical_reset_step()
-        self.addComputeGlobal("initial_reduced_potential", "energy/kT")
+        self.addComputeGlobal("initial_reduced_potential", "energy")
 
     def alchemical_perturbation_step(self):
         """
         Add the alchemical perturbation step. Also calculate final_reduced_potential
         """
         super(NCMCAlchemicalIntegrator, self).alchemical_perturbation_step()
-        self.addComputeGlobal("final_reduced_potential", "energy/kT")
+        self.addComputeGlobal("final_reduced_potential", "energy")
 
     def get_step(self):
         return self.getGlobalVariableByName("step")
@@ -910,22 +911,22 @@ class NCMCAlchemicalIntegrator(NonequilibriumLangevinIntegrator):
         """Retrieve accumulated total work (in units of kT)
         """
         if self._measure_shadow_work:
-            return self.getGlobalVariableByName("shadow_work") + self.getGlobalVariableByName("protocol_work")
+            return self.getGlobalVariableByName("shadow_work") * unit.kilojoule_per_mole / self.kT + self.getGlobalVariableByName("protocol_work") * unit.kilojoule_per_mole  / self.kT
         else:
-            return self.getGlobalVariableByName("protocol_work")
+            return self.getGlobalVariableByName("protocol_work") * unit.kilojoule_per_mole / self.kT
 
     def getShadowWork(self):
         """Retrieve accumulated shadow work (in units of kT)
         """
         if self._measure_shadow_work:
-            return self.getGlobalVariableByName("shadow_work")
+            return self.getGlobalVariableByName("shadow_work") * unit.kilojoule_per_mole / self.kT
         else:
             return 0
 
     def getProtocolWork(self):
         """Retrieve accumulated protocol work (in units of kT)
         """
-        return self.getGlobalVariableByName("protocol_work")
+        return self.getGlobalVariableByName("protocol_work") * unit.kilojoule_per_mole / self.kT
 
     def getLogAcceptanceProbability(self):
         logp_accept = -1.0 * self.getTotalWork()
