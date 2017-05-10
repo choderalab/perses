@@ -5,6 +5,9 @@
 
 Experiments with expanded ensemble simulation to explore chemical and mutational space.
 
+## License
+This software is licensed under the [MIT license](https://opensource.org/licenses/MIT), a permissive open source license.
+
 ## Notice
 
 Please be aware that this code is made available in the spirit of open science, but is currently pre-alpha--that is,
