@@ -2,7 +2,7 @@
    sphinx-quickstart on Sun May 14 17:09:48 2017.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
-   
+
 .. caution::
 
     This is module is undergoing heavy development. None of the API calls are final.

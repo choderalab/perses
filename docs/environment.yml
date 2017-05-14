@@ -3,11 +3,23 @@ channels:
     - omnia
 dependencies:
     - python
-    - cython
-    - numpy
-    - scipy
     - setuptools
-    - six
-    - openmm
+    - numpy 1.10.*
+    - scipy
+    - numexpr
+    - autograd
+    - pymbar
+    - openmm >=7.1.0
     - parmed
+    - openmoltools
+    - alchemy >=1.2.3
+    - openmmtools
+    - numba
+    - netcdf4
+    - matplotlib
+    - seaborn
+    - pdbfixer
+    - mdtraj
+    - parmed # for testing/debugging
+    - pdbfixer
     - numpydoc
