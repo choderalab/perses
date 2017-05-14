@@ -1,6 +1,7 @@
 name: perses
 channels:
     - omnia
+    - omnia/label/dev
 dependencies:
     - python
     - setuptools
