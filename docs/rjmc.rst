@@ -37,7 +37,7 @@ OpenMM System generation utilities
 Geometry proposal engines
 -------------------------
 
-.. currentmodule:: perses.rjmc.geomtry
+.. currentmodule:: perses.rjmc.geometry
 .. autosummary::
     :nosignatures:
     :toctree: api/generated/

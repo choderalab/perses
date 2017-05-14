@@ -8,7 +8,7 @@ Tools for nonequilibrium alchemical transformations
 Nonequilibrium switching
 ------------------------
 
-.. currentmodule:: perses.annihilation
+.. currentmodule:: perses.annihilation.ncmc_switching
 .. autosummary::
     :nosignatures:
     :toctree: api/generated/
