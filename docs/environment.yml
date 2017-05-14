@@ -4,16 +4,17 @@ channels:
 dependencies:
     - python
     - setuptools
+    - openmm >=7.1.0
+    - alchemy >=1.2.3
     - numpy
     - scipy
     - numexpr
+    - openmoltools
+    - openmmtools
+    - netcdf4
     - autograd
     - pymbar
-    - openmm
     - parmed
-    - openmoltools
-    - alchemy
-    - openmmtools
     - numba
     - netcdf4
     - matplotlib
@@ -22,4 +23,5 @@ dependencies:
     - mdtraj
     - parmed
     - pdbfixer
+    - six
     - numpydoc
