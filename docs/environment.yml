@@ -1,0 +1,28 @@
+name: perses
+channels:
+    - omnia
+    - omnia/label/dev
+dependencies:
+    - python
+    - setuptools
+    - openmm >=7.1.0
+    - alchemy >=1.2.3
+    - numpy
+    - scipy
+    - numexpr
+    - openmoltools
+    - openmmtools
+    - netcdf4
+    - autograd
+    - pymbar
+    - parmed
+    - numba
+    - netcdf4
+    - matplotlib
+    - seaborn
+    - pdbfixer
+    - mdtraj
+    - parmed
+    - pdbfixer
+    - six
+    - numpydoc
