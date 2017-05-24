@@ -803,3 +803,111 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['standard_torsion_force'].addAngle([hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
                                                                             torsion_parameters[5], torsion_parameters[6]])
+
+    def handle_nonbonded(self):
+        """
+
+        """
+        old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
+        new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
+        hybrid_to_old_map = {value : key for key, value in self._old_to_hybrid_map}
+        hybrid_to_new_map = {value : key for key, value in self._new_to_hybrid_map}
+
+
+        #We have to loop through the particles in the system, because nonbonded force does not accept index
+        for particle_index in range(self._hybrid_system.getNumParticles()):
+
+            if particle_index in self._atom_classes['unique_old_atoms']:
+                #get the parameters in the old system
+                old_index = hybrid_to_old_map[particle_index]
+                [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
+
+                #add the particle to the hybrid custom sterics and electrostatics.
+                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, 1.0, 0.0])
+                self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0])
+
+                #add the particle to the regular nonbonded force as well, so that the intra-unique interactions are
+                #unmodified:
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+
+            elif particle_index in self._atom_classes['unique_new_atoms']:
+                #get the parameters in the new system
+                new_index = hybrid_to_new_map[particle_index]
+                [charge, sigma, epsilon] = new_system_nonbonded_force.getParticleParameters(new_index)
+
+                #add the particle to the hybrid custom sterics and electrostatics
+                self._hybrid_system_forces['core_sterics_force'].addParticle([1.0, 0.0, sigma, epsilon])
+                self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0, charge])
+
+                #add the particle to the regular nonbonded force as well, so that intra-unique interactions are
+                #unmodified:
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+
+            elif particle_index in self._atom_classes['core_atoms']:
+                #get the parameters in the new and old systems:
+                old_index = hybrid_to_old_map[particle_index]
+                [charge_old, sigma_old, epsilon_old] = old_system_nonbonded_force.getParticleParameters(old_index)
+                new_index = hybrid_to_new_map[particle_index]
+                [charge_new, sigma_new, epsilon_new] = new_system_nonbonded_force.getParticleParameters(new_index)
+
+                #add the particle to the custom forces, interpolating between the two parameters
+                self._hybrid_system_forces['custom_sterics_force'].addParticle([sigma_old, epsilon_old, sigma_new, epsilon_new])
+                self._hybrid_system_forces['custom_electrostatics_force'].addParticle([charge_old, charge_new])
+
+                #still add the particle to the regular nonbonded force, but with zeroed out parameters.
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
+
+            #otherwise, the particle is in the environment
+            else:
+                #the parameters will be the same in new and old system, so just take the old parameters
+                old_index = hybrid_to_old_map[particle_index]
+                [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
+
+                #add the particle to the hybrid custom sterics and electrostatics, but they dont change
+                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, epsilon])
+                self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, charge])
+
+                #add the environment atoms to the regular nonbonded force as well:
+                self._hybrid_system['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+
+
+    def _handle_interaction_groups(self):
+        """
+        Create the appropriate interaction groups for the custom nonbonded forces. The groups are:
+
+        1) Unique-old - core
+        2) Unique-old - environment
+        3) Unique-new - core
+        4) Unique-new - environment
+        5) Core - environment
+
+        Unique-old and Unique new are prevented from interacting this way, and intra-unique interactions occur in an
+        unmodified nonbonded force.
+
+        Must be called after particles are added to the Nonbonded forces
+        """
+        #get the force objects for convenience:
+        electrostatics_custom_force = self._hybrid_system_forces['core_electrostatics_force']
+        sterics_custom_force = self._hybrid_system_forces['core_sterics_force']
+
+        #also prepare the atom classes
+        core_atoms = self._atom_classes['core_atoms']
+        unique_old_atoms = self._atom_classes['unique_old_atoms']
+        unique_new_atoms = self._atom_classes['unique_new_atoms']
+        environment_atoms = self._atom_classes['environment_atoms']
+
+
+        electrostatics_custom_force.addInteractionGroup(unique_old_atoms, core_atoms)
+        sterics_custom_force.addInteractionGroup(unique_old_atoms, core_atoms)
+
+        electrostatics_custom_force.addInteractionGroup(unique_old_atoms, environment_atoms)
+        sterics_custom_force.addInteractionGroup(unique_old_atoms, environment_atoms)
+
+        electrostatics_custom_force.addInteractionGroup(unique_new_atoms, core_atoms)
+        sterics_custom_force.addInteractionGroup(unique_new_atoms, core_atoms)
+
+        electrostatics_custom_force.addInteractionGroup(unique_new_atoms, environment_atoms)
+        sterics_custom_force.addInteractionGroup(unique_new_atoms, environment_atoms)
+
+        electrostatics_custom_force.addInteractionGroup(core_atoms, environment_atoms)
+        sterics_custom_force.addInteractionGroup(core_atoms, environment_atoms)
