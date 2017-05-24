@@ -946,3 +946,78 @@ class HybridTopologyFactory(object):
                 else:
                     #if it should be excluded, then set chargeprod to 0, sigma to 1, eps to 0
                     nonbonded_force.addException(particle1, particle2, 0.0, 1.0, 0.0)
+
+    def _handle_original_exceptions(self):
+        """
+        This method ensures that exceptions present in the original systems are present in the hybrid appropriately.
+        """
+        #get what we need to find the exceptions from the new and old systems:
+        old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
+        new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
+        hybrid_to_old_map = {value: key for key, value in self._old_to_hybrid_map}
+        hybrid_to_new_map = {value: key for key, value in self._new_to_hybrid_map}
+
+        #first, loop through the old system's exceptions and add them to the hybrid appropriately:
+        for exception_index in range(old_system_nonbonded_force.getNumExceptions()):
+            [index1_old, index2_old, chargeProd_old, sigma_old, epsilon_old] = old_system_nonbonded_force.getExceptionParameters(exception_index)
+
+            #get hybrid indices:
+            index1_hybrid = self._old_to_hybrid_map[index1_old]
+            index2_hybrid = self._old_to_hybrid_map[index2_old]
+            index_set = {index1_hybrid, index2_hybrid}
+
+            #in this case, the interaction is only covered by the regular nonbonded force, and as such will be copied to that force
+            if index_set.issubset(self._atom_classes['environment']) or index_set.issubset(self._atom_classes['unique_old_atoms']):
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+
+            #otherwise, check if one of the atoms in the set is in the unique_old_group:
+            elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) > 0:
+                #if it is, we should add it to the CustomBondForce for the nonbonded exceptions, and have it fade out
+                #Currently, we keep sigma at the same value
+                #TODO: Figure out whether this is the right thing.
+                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond([index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, 0.0, sigma_old, 0.0]])
+
+            #If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
+            #In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
+            else:
+                #first get the new indices.
+                index1_new = hybrid_to_old_map[index1_hybrid]
+                index2_new = hybrid_to_old_map[index2_hybrid]
+
+                #get the exception parameters:
+                [index1_new, index2_new, chargeProd_new, sigma_new, epsilon_new] = self._find_exception(new_system_nonbonded_force, index1_new, index2_new)
+
+                #Now add a term to the CustomBondForce to interpolate between the new and old systems:
+                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond([index1_hybrid, index2_hybrid,
+                                                                                 [chargeProd_old, sigma_old,
+                                                                                  epsilon_old, chargeProd_new,
+                                                                                  sigma_new, epsilon_new]]
+
+
+        def _find_exception(self, force, index1, index2):
+        """
+        Find the exception that corresponds to the given indices in the given system
+
+        Parameters
+        ----------
+        force : openmm.NonbondedForce object
+            System containing the exceptions
+        index1 : int
+            The index of the first atom (order is unimportant)
+        index2 : int
+            The index of the second atom (order is unimportant)
+
+        Returns
+        -------
+        exception_parameters : list
+            List of exception parameters
+        """
+        index_set = {index1, index2}
+
+        #loop through the exceptions and try to find one matching the criteria
+        for exception_idx in range(force.getNumExceptions()):
+            exception_parameters = force.getExceptionParameters(exception_idx)
+            if index_set==set(exception_parameters[:2]):
+                return exception_parameters
+
+        raise ValueError("The provided force does not have an exception between those particles.")
