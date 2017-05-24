@@ -636,3 +636,170 @@ class HybridTopologyFactory(object):
             #otherwise, we just add the same parameters as those in the old system.
             else:
                 self._hybrid_system_forces['standard_bond_force'].addBond([index1_hybrid, index2_hybrid, r0_old, k_old])
+
+        #now loop through the new system to get the interactions that are unique to it.
+        for bond_index in range(new_system_bond_force.getNumBonds()):
+            #get each set of bond parameters
+            [index1_new, index2_new, r0_new, k_new] = old_system_bond_force.getBondParameters(bond_index)
+
+            #convert indices to hybrid, since that is how we represent atom classes:
+            index1_hybrid = self._new_to_hybrid_map[index1_new]
+            index2_hybrid = self._new_to_hybrid_map[index2_new]
+            index_set = {index1_hybrid, index2_hybrid}
+
+            #if the intersection of this set and unique new atoms contains anything, the bond is unique to the new system and must be added
+            #all other bonds in the new system have been accounted for already.
+            if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
+                self._hybrid_system_forces['standard_bond_force'].addBond([index1_hybrid, index2_hybrid, r0_new, k_new])
+
+    def _find_angle_parameters(self, angle_force, indices):
+        """
+        Convenience function to find the angle parameters corresponding to a particular set of indices
+
+        Parameters
+        ----------
+        angle_force : openmm.HarmonicAngleForce
+            The force where the angle of interest may be found.
+        indices : list of int
+            The indices (any order) of the angle atoms
+        Returns
+        -------
+        angle_parameters : list
+            list of angle parameters
+        """
+        index_set = set(indices)
+
+        #now loop through and try to find the angle:
+        for angle_index in range(angle_force.getNumAngles()):
+            angle_parameters = angle_force.getAngleParameters(angle_index)
+
+            #get a set representing the angle indices
+            angle_parameter_indices = set(angle_parameters[:3])
+
+            if index_set==angle_parameter_indices:
+                return angle_parameters
+
+        raise ValueError("The provided force does not contain the angle of interest.")
+
+    def _find_torsion_parameters(self, torsion_force, indices):
+        """
+        Convenience function to find the torsion parameters corresponding to a particular set of indices.
+
+        Parameters
+        ----------
+        torsion_force : openmm.PeriodicTorsionForce
+            torsion force where the torsion of interest may be found
+        indices : list of int
+            The indices (any order) of the atoms of the torsion
+
+        Returns
+        -------
+        torsion_parameters : list
+            torsion parameters
+        """
+        index_set = set(indices)
+
+        #now loop through and try to find the torsion:
+        for torsion_index in range(torsion_force.getNumTorsions()):
+            torsion_parameters = torsion_force.getTorsionParameters(torsion_index)
+
+            #get a set representing the torsion indices:
+            torsion_parameter_indices = set(torsion_parameters[:4])
+
+            if index_set==torsion_parameter_indices:
+                return torsion_parameters
+
+        raise ValueError("The torsion of interest was not found.")
+
+    def handle_harmonic_angles(self):
+        """
+        This method adds the appropriate interaction for all angles in the hybrid system. The scheme used, as with bonds, is:
+
+        1) If the three atoms are all in the core, then we add to the CustomAngleForce and interpolate between the two
+            parameters
+        2) Otherwise, we add the angle to a regular angle force.
+        """
+        old_system_angle_force = self._old_system_forces['HarmonicAngleForce']
+        new_system_angle_force = self._new_system_forces['HarmonicAngleForce']
+
+        #first, loop through all the angles in the old system to determine what to do with them. We will only use the
+        #custom angle force if all atoms are part of "core." Otherwise, they are either unique to one system or never
+        #change.
+        for angle_index in range(old_system_angle_force.getNumAngles()):
+            angle_parameters = old_system_angle_force.getAngleParameters(angle_index)
+
+            #get the indices in the hybrid system
+            hybrid_index_set = {self._old_to_hybrid_map[old_index] for old_index in angle_parameters[:3]}
+            #make a list because python set objects can't be indexed
+            hybrid_index_list = list(hybrid_index_set)
+
+            #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
+            #interpolate
+            if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                #get the new indices so we can get the new angle parameters
+                new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in angle_parameters[:3]]
+                new_angle_parameters = self._find_angle_parameters(new_system_angle_force, new_indices)
+
+                #add to the hybrid force:
+                #the parameters at indices 3 and 4 represent theta0 and k, respectively.
+                hybrid_force_parameters = [angle_parameters[3], angle_parameters[4], new_angle_parameters[3], new_angle_parameters[4]]
+                self._hybrid_system_forces['core_angle_force'].addAngle([hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters])
+
+            #otherwise, just add the parameters to the regular force:
+            else:
+                self._hybrid_system_forces['standard_angle_force'].addAngle([hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2], angle_parameters[3],
+                                                                            angle_parameters[4]])
+
+        #finally, loop through the new system force to add any unique new angles
+        for angle_index in range(new_system_angle_force.getNumAngles()):
+            angle_parameters = new_system_angle_force.getAngleParameters(angle_index)
+
+            #get the indices in the hybrid system
+            hybrid_index_set = {self._old_to_hybrid_map[new_index] for new_index in angle_parameters[:3]}
+            #make a list because python set objects can't be indexed
+            hybrid_index_list = list(hybrid_index_set)
+
+            #if the intersection of this hybrid set with the unique new atoms is nonempty, it must be added:
+            if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
+                self._hybrid_system_forces['standard_angle_force'].addAngle([hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2], angle_parameters[3],
+                                                                            angle_parameters[4]])
+
+    def handle_periodic_torsion_force(self):
+        """
+        Handle the torsions in the hybrid system in the same way as the angles and bonds.
+        """
+        old_system_torsion_force = self._old_system_forces['PeriodicTorsionForce']
+        new_system_torsion_force = self._new_system_forces['PeriodicTorsionForce']
+
+        #first, loop through all the torsions in the old system to determine what to do with them. We will only use the
+        #custom torsion force if all atoms are part of "core." Otherwise, they are either unique to one system or never
+        #change.
+        for torsion_index in range(old_system_torsion_force.getNumAngles()):
+            torsion_parameters = old_system_torsion_force.getAngleParameters(torsion_index)
+
+            #get the indices in the hybrid system
+            hybrid_index_set = {self._old_to_hybrid_map[old_index] for old_index in torsion_parameters[:4]}
+            #make a list because python set objects can't be indexed
+            hybrid_index_list = list(hybrid_index_set)
+
+            #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
+            #interpolate
+            if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                #get the new indices so we can get the new angle parameters
+                new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in torsion_parameters[:4]]
+                new_torsion_parameters = self._find_torsion_parameters(new_system_torsion_force, new_indices)
+
+                #add to the hybrid force:
+                #the parameters at indices 3 and 4 represent theta0 and k, respectively.
+                hybrid_force_parameters = [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6],
+                                           new_torsion_parameters[4], new_torsion_parameters[5],
+                                           new_torsion_parameters[6]]
+                self._hybrid_system_forces['core_torsion_force'].addTorsion([hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters])
+
+            #otherwise, just add the parameters to the regular force:
+            else:
+                self._hybrid_system_forces['standard_torsion_force'].addAngle([hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
+                                                                            torsion_parameters[5], torsion_parameters[6]])
