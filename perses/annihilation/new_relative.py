@@ -3,7 +3,9 @@ import simtk.openmm.app as app
 import simtk.unit as unit
 import numpy as np
 import copy
+import enum
 
+InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'core', 'environment'])
 
 class HybridTopologyFactory(object):
     """
@@ -38,6 +40,7 @@ class HybridTopologyFactory(object):
         self._new_system = copy.deepcopy(topology_proposal.new_system)
         self._old_to_hybrid_map = {}
         self._new_to_hybrid_map = {}
+        self._hybrid_system_forces = {}
 
         #start by creating an empty system and topology. These will become the hybrid system and topology.
         self._hybrid_system = openmm.System()
@@ -235,14 +238,147 @@ class HybridTopologyFactory(object):
                 if constraint != constraint_from_old_system:
                     raise ValueError("Constraints are changing during switching.")
 
-    def _bond_force_handler(self, bond_force):
+    def _determine_interaction_group(self, atoms_in_interaction):
         """
-        This method decides how to add bond forces to the hybrid system, based on the compiled atom maps and
+        This method determines which interaction group the interaction should fall under. There are four groups:
+
+        Those involving unique old atoms: any interaction involving unique old atoms should be completely on at lambda=0
+            and completely off at lambda=1
+
+        Those involving unique new atoms: any interaction involving unique new atoms should be completely off at lambda=0
+            and completely on at lambda=1
+
+        Those involving core atoms and/or environment atoms: These interactions change their type, and should be the old
+            character at lambda=0, and the new character at lambda=1
+
+        Those involving only environment atoms: These interactions are unmodified.
+
         Parameters
         ----------
-        bond_force
+        atoms_in_interaction : list of int
+            List of (hybrid) indices of the atoms in this interaction
 
         Returns
         -------
-
+        interaction_group : InteractionGroup enum
+            The group to which this interaction should be assigned
         """
+        #make the interaction list a set to facilitate operations
+        atom_interaction_set = set(atoms_in_interaction)
+
+        #check if the interaction contains unique old atoms
+        if len(atom_interaction_set.intersection(self._atom_classes['unique_old_atoms'])) > 0:
+            return InteractionGroup.unique_old
+
+        #Do the same for new atoms
+        elif len(atom_interaction_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
+            return InteractionGroup.unique_new
+
+        #if the interaction set is a strict subset of the environment atoms, then it is in the environment group
+        #and should not be alchemically modified at all.
+        elif atom_interaction_set.issubset(self._atom_classes['environment_atoms']):
+            return InteractionGroup.environment
+
+        #having covered the cases of all-environment, unique old-containing, and unique-new-containing, anything else
+        #should belong to the last class--contains core atoms but not any unique atoms.
+        else:
+            return InteractionGroup.core
+
+    def _add_bond_force_terms(self):
+        """
+        This function adds the appropriate bond forces to the system (according to groups defined above). Note that it
+        does _not_ add the particles to the force. It only adds the force to facilitate another method adding the
+        particles to the force.
+        """
+        core_energy_expression = '(K/2)*(r-length)^2;'
+        core_energy_expression += 'K = (1-lambda_bonds)*K1 + lambda_bonds*K2;' # linearly interpolate spring constant
+        core_energy_expression += 'length = (1-lambda_bonds)*length1 + lambda_bonds*length2;' # linearly interpolate bond length
+
+        #create the force and add the relevant parameters
+        custom_core_force = openmm.CustomBondForce(core_energy_expression)
+        custom_core_force.addGlobalParameter('lambda_bonds', 0.0)
+        custom_core_force.addPerBondParameter('length1') # old bond length
+        custom_core_force.addPerBondParameter('K1') # old spring constant
+        custom_core_force.addPerBondParameter('length2') # new bond length
+        custom_core_force.addPerBondParameter('K2') #new spring constant
+
+        self._hybrid_system.addForce(custom_core_force)
+        self._hybrid_system_forces['core_bond_force'] = custom_core_force
+
+        #add a bond force for environment and unique atoms (bonds are never scaled for these):
+        standard_bond_force = openmm.HarmonicBondForce()
+        self._hybrid_system.addForce(standard_bond_force)
+        self._hybrid_system_forces['standard_bond_force'] = standard_bond_force
+
+
+    def _add_angle_force_terms(self):
+        """
+        This function adds the appropriate angle force terms to the hybrid system. It does not add particles
+        or parameters to the force; this is done elsewhere.
+        """
+        energy_expression  = '(K/2)*(theta-theta0)^2;'
+        energy_expression += 'K = (1.0-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
+        energy_expression += 'theta0 = (1.0-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
+
+        #create the force and add relevant parameters
+        custom_core_force = openmm.CustomAngleForce(energy_expression)
+        custom_core_force.addGlobalParameter('lambda_angles', 0.0)
+        custom_core_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
+        custom_core_force.addPerAngleParameter('K_1') # molecule1 spring constant
+        custom_core_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
+        custom_core_force.addPerAngleParameter('K_2') # molecule2 spring constant
+
+        #add the force to the system and the force dict.
+        self._hybrid_system.addForce(custom_core_force)
+        self._hybrid_system_forces['core_angle_force'] = custom_core_force
+
+        #add an angle term for environment/unique interactions--these are never scaled
+        standard_angle_force = openmm.HarmonicAngleForce()
+        self._hybrid_system.addForce(standard_angle_force)
+        self._hybrid_system_forces['standard_angle_force'] = standard_angle_force
+
+    def _add_torsion_force_terms(self):
+        """
+        This function adds the appropriate PeriodicTorsionForce terms to the system. Core torsions are interpolated,
+        while environment and unique torsions are always on.
+        """
+        energy_expression  = '(1-lambda_torsions)*U1 + lambda_torsions*U2;'
+        energy_expression += 'U1 = K1*(1+cos(periodicity1*theta-phase1));'
+        energy_expression += 'U2 = K2*(1+cos(periodicity2*theta-phase2));'
+
+        #create the force and add the relevant parameters
+        custom_core_force = openmm.CustomTorsionForce(energy_expression)
+        custom_core_force.addGlobalParameter('lambda_torsions', 0.0)
+        custom_core_force.addPerTorsionParameter('periodicity1') # molecule1 periodicity
+        custom_core_force.addPerTorsionParameter('phase1') # molecule1 phase
+        custom_core_force.addPerTorsionParameter('K1') # molecule1 spring constant
+        custom_core_force.addPerTorsionParameter('periodicity2') # molecule2 periodicity
+        custom_core_force.addPerTorsionParameter('phase2') # molecule2 phase
+        custom_core_force.addPerTorsionParameter('K2') # molecule2 spring constant
+
+        #create and add the torsion term for unique/environment atoms
+        standard_torsion_force = openmm.PeriodicTorsionForce()
+        self._hybrid_system.addForce(standard_torsion_force)
+        self._hybrid_system_forces['standard_torsion_force'] = standard_torsion_force
+
+    def _nonbonded_custom_sterics_common(self):
+        """
+        Get a custom sterics expression that is common to all nonbonded methods
+        """
+        sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
+        sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
+        sterics_addition += "softcore_alpha = %f;" % self.softcore_alpha
+        sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
+        sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+        return sterics_addition
+
+    def _nonbonded_custom_electro_common(self):
+        """
+        Get a custom electrostatics expression that is common to all nonbonded methods
+        """
+        electrostatics_addition = "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
+        electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
+        electrostatics_addition += "softcore_beta = %f;" % (self.softcore_beta / self.softcore_beta.in_unit_system(unit.md_unit_system).unit)
+        electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
+        electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
+        return electrostatics_addition
