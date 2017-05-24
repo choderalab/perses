@@ -356,14 +356,77 @@ class HybridTopologyFactory(object):
         custom_core_force.addPerTorsionParameter('phase2') # molecule2 phase
         custom_core_force.addPerTorsionParameter('K2') # molecule2 spring constant
 
+        #add the force to the system
+        self._hybrid_system.addForce(custom_core_force)
+        self._hybrid_system_forces['core_torsion_force'] = custom_core_force
+
         #create and add the torsion term for unique/environment atoms
         standard_torsion_force = openmm.PeriodicTorsionForce()
         self._hybrid_system.addForce(standard_torsion_force)
         self._hybrid_system_forces['standard_torsion_force'] = standard_torsion_force
 
+    def _add_nonbonded_force_terms(self, nonbonded_method):
+        """
+        Add the nonbonded force terms to the hybrid system. Note that as with the other forces,
+        this method does not add any interactions. It only sets up the forces.
+
+        Parameters
+        ----------
+        nonbonded_method : int
+            One of the openmm.NonbondedForce nonbonded methods.
+        """
+        # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
+        # Select functional form based on nonbonded method.
+        if nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
+            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_nocutoff()
+        elif nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, mm.NonbondedForce.CutoffNonPeriodic]:
+            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_cutoff(force)
+        elif nonbonded_method in [openmm.NonbondedForce.PME, mm.NonbondedForce.Ewald]:
+            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(force)
+        else:
+            raise Exception("Nonbonded method %s not supported yet." % str(nonbonded_method))
+        sterics_energy_expression += self._nonbonded_custom_sterics_common()
+        electrostatics_energy_expression += self._nonbonded_custom_electrostatics_common()
+
+        sterics_mixing_rules, electrostatics_mixing_rules = self._nonbonded_custom_mixing_rules()
+
+        # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
+        electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
+        electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0);
+        electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
+        electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
+
+        self._hybrid_system.addForce(electrostatics_custom_nonbonded_force)
+        self._hybrid_system_forces['core_electrostatics_force'] = electrostatics_custom_nonbonded_force
+
+        sterics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_sterics;" + sterics_energy_expression + sterics_mixing_rules)
+        sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0);
+        sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
+        sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
+        sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
+        sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
+
+        self._hybrid_system.addForce(sterics_custom_nonbonded_force)
+        self._hybrid_system_forces['core_sterics_force'] = sterics_custom_nonbonded_force
+
+        #Add a regular nonbonded force for all interactions that are not changing.
+        standard_nonbonded_force = openmm.NonbondedForce()
+        self._hybrid_system.addForce(standard_nonbonded_force)
+        self._hybrid_system_forces['standard_nonbonded_force'] = standard_nonbonded_force
+
+        #Add a CustomBondForce for exceptions:
+        custom_nonbonded_bond_force = self._nonbonded_custom_bond_force(sterics_energy_expression, electrostatics_energy_expression)
+        self._hybrid_system.addForce(custom_nonbonded_bond_force)
+        self._hybrid_system_forces['core_nonbonded_bond_force'] = custom_nonbonded_bond_force
+
     def _nonbonded_custom_sterics_common(self):
         """
         Get a custom sterics expression that is common to all nonbonded methods
+
+        Returns
+        -------
+        sterics_addition : str
+            The common softcore sterics energy expression
         """
         sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
         sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
@@ -372,9 +435,14 @@ class HybridTopologyFactory(object):
         sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
         return sterics_addition
 
-    def _nonbonded_custom_electro_common(self):
+    def _nonbonded_custom_electrostatics_common(self):
         """
         Get a custom electrostatics expression that is common to all nonbonded methods
+
+        Returns
+        -------
+        electrostatics_addition : str
+            The common electrostatics energy expression
         """
         electrostatics_addition = "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
         electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
@@ -382,3 +450,126 @@ class HybridTopologyFactory(object):
         electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
         electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
         return electrostatics_addition
+
+    def _nonbonded_custom_nocutoff(self):
+        """
+        Get a part of the nonbonded energy expression when there is no cutoff.
+
+        Returns
+        -------
+        sterics_energy_expression : str
+            The energy expression for U_sterics
+        electrostatics_energy_expression : str
+            The energy expression for electrostatics
+        """
+        # soft-core Lennard-Jones
+        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+        # soft-core Coulomb
+        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
+        return sterics_energy_expression, electrostatics_energy_expression
+
+    def _nonbonded_custom_cutoff(self, epsilon_solvent, r_cutoff):
+        """
+        Get the energy expressions for sterics and electrostatics under a reaction field assumption.
+
+        Parameters
+        ----------
+        epsilon_solvent : float
+            The reaction field dielectric
+        r_cutoff : float
+            The cutoff distance
+
+        Returns
+        -------
+        sterics_energy_expression : str
+            The energy expression for U_sterics
+        electrostatics_energy_expression : str
+            The energy expression for electrostatics
+        """
+        # soft-core Lennard-Jones
+        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+
+        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);"
+        k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
+        c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
+        electrostatics_energy_expression += "k_rf = %f;" % (k_rf / k_rf.in_unit_system(unit.md_unit_system).unit)
+        electrostatics_energy_expression += "c_rf = %f;" % (c_rf / c_rf.in_unit_system(unit.md_unit_system).unit)
+        return sterics_energy_expression, electrostatics_energy_expression
+
+    def _nonbonded_custom_ewald(self, alpha_ewald, delta, r_cutoff):
+        """
+        Get the energy expression for Ewald treatment.
+
+        Parameters
+        ----------
+        alpha_ewald : float
+            The Ewald alpha parameter
+        delta : float
+            The PME error tolerance
+        r_cutoff : float
+            The cutoff distance
+
+        Returns
+        -------
+        sterics_energy_expression : str
+            The energy expression for U_sterics
+        electrostatics_energy_expression : str
+            The energy expression for electrostatics
+        """
+        # soft-core Lennard-Jones
+        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+        if alpha_ewald == 0.0:
+            # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
+            alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
+        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
+        electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit)
+        return sterics_energy_expression, electrostatics_energy_expression
+
+    def _nonbonded_custom_mixing_rules(self):
+        """
+        Mixing rules for the custom nonbonded force.
+
+        Returns
+        -------
+        sterics_mixing_rules : str
+            The mixing expression for sterics
+        electrostatics_mixing_rules : str
+            The mixiing rules for electrostatics
+        """
+        # Define mixing rules.
+        sterics_mixing_rules = "epsilonA = sqrt(epsilonA1*epsilonA2);" # mixing rule for epsilon
+        sterics_mixing_rules += "epsilonB = sqrt(epsilonB1*epsilonB2);" # mixing rule for epsilon
+        sterics_mixing_rules += "sigmaA = 0.5*(sigmaA1 + sigmaA2);" # mixing rule for sigma
+        sterics_mixing_rules += "sigmaB = 0.5*(sigmaB1 + sigmaB2);" # mixing rule for sigma
+        electrostatics_mixing_rules = "chargeprodA = chargeA1*chargeA2;" # mixing rule for charges
+        electrostatics_mixing_rules += "chargeprodB = chargeB1*chargeB2;" # mixing rule for charges
+        return sterics_mixing_rules, electrostatics_mixing_rules
+
+    def _nonbonded_custom_bond_force(self, sterics_energy_expression, electrostatics_energy_expression):
+        """
+        Add a CustomBondForce to represent the exceptions in the NonbondedForce
+
+        Parameters
+        ----------
+        sterics_energy_expression : str
+            The complete energy expression being used for sterics
+        electrostatics_energy_expression : str
+            The complete energy expression being used for electrostatics
+
+        Returns
+        -------
+        custom_bond_force : openmm.CustomBondForce
+            The custom bond force for the nonbonded exceptions
+        """
+        #Create the force and add its relevant parameters.
+        custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
+        custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
+        custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
+        custom_bond_force.addPerBondParameter("chargeprodA")
+        custom_bond_force.addPerBondParameter("sigmaA")
+        custom_bond_force.addPerBondParameter("epsilonA")
+        custom_bond_force.addPerBondParameter("chargeprodB")
+        custom_bond_force.addPerBondParameter("sigmaB")
+        custom_bond_force.addPerBondParameter("epsilonB")
+
+        return custom_bond_force
