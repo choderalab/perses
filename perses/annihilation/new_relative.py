@@ -42,6 +42,10 @@ class HybridTopologyFactory(object):
         self._new_to_hybrid_map = {}
         self._hybrid_system_forces = {}
 
+        #prepare dicts of forces, which will be useful later
+        self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
+        self._new_system_forces = {type(force).__name__ : force for force in self._new_system.getForces()}
+
         #start by creating an empty system and topology. These will become the hybrid system and topology.
         self._hybrid_system = openmm.System()
         self._hybrid_topology = app.Topology()
@@ -310,7 +314,6 @@ class HybridTopologyFactory(object):
         self._hybrid_system.addForce(standard_bond_force)
         self._hybrid_system_forces['standard_bond_force'] = standard_bond_force
 
-
     def _add_angle_force_terms(self):
         """
         This function adds the appropriate angle force terms to the hybrid system. It does not add particles
@@ -573,3 +576,63 @@ class HybridTopologyFactory(object):
         custom_bond_force.addPerBondParameter("epsilonB")
 
         return custom_bond_force
+
+    def _find_bond_parameters(self, bond_force, index1, index2):
+        """
+        This is a convenience function to find bond parameters in another system given the two indices.
+
+        Parameters
+        ----------
+        bond_force : openmm.HarmonicBondForce
+            The bond force where the parameters should be found
+        index1 : int
+           Index1 (order does not matter) of the bond atoms
+        index2 : int
+           Index2 (order does not matter) of the bond atoms
+
+        Returns
+        -------
+        bond_parameters : list
+            List of relevant bond parameters
+        """
+        index_set = {index1, index2}
+        #loop through all the bonds:
+        for bond_index in range(bond_force.getNumBonds()):
+            [index1_term, index2_term, r0, k] = bond_force.getBondParameters(bond_index)
+            if index_set=={index1_term, index2_term}:
+                return [index1_term, index2_term, r0, k]
+
+        raise ValueError("The requested bond was not found.")
+
+    def handle_harmonic_bonds(self):
+        """
+        This method adds the appropriate interaction for all bonds in the hybrid system. The scheme used is:
+
+        1) If the two atoms are both in the core, then we add to the CustomBondForce and interpolate between the two
+            parameters
+        2) Otherwise, we add the bond to a regular bond force.
+        """
+        old_system_bond_force = self._old_system_forces['HarmonicBondForce']
+        new_system_bond_force = self._new_system_forces['HarmonicBondForce']
+
+        #first, loop through the old system bond forces and add relevant terms
+        for bond_index in range(old_system_bond_force.getNumBonds()):
+            #get each set of bond parameters
+            [index1_old, index2_old, r0_old, k_old] = old_system_bond_force.getBondParameters(bond_index)
+
+            #map the indices to the hybrid system, for which our atom classes are defined.
+            index1_hybrid = self._old_to_hybrid_map[index1_old]
+            index2_hybrid = self._old_to_hybrid_map[index2_old]
+            index_set = {index1_hybrid, index2_hybrid}
+
+            #now check if it is a subset of the core atoms (that is, both atoms are in the core)
+            #if it is, we need to find the parameters in the old system so that we can interpolate
+            if index_set.issubset(self._atom_classes['core_atoms']):
+                index1_new = self._topology_proposal.old_to_new_atom_map[index1_old]
+                index2_new = self._topology_proposal.old_to_new_atom_map[index2_old]
+                [index1, index2, r0_new, k_new] = self._find_bond_parameters(new_system_bond_force, index1_new, index2_new)
+                self._hybrid_system_forces['core_bond_force'].addBond([index1_hybrid, index2_hybrid,[r0_old, k_old, r0_new, k_new]])
+
+            #otherwise, we just add the same parameters as those in the old system.
+            else:
+                self._hybrid_system_forces['standard_bond_force'].addBond([index1_hybrid, index2_hybrid, r0_old, k_old])
