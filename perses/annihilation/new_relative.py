@@ -870,6 +870,9 @@ class HybridTopologyFactory(object):
                 #add the environment atoms to the regular nonbonded force as well:
                 self._hybrid_system['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
 
+        self._handle_interaction_groups()
+        self._handle_hybrid_exceptions()
+
 
     def _handle_interaction_groups(self):
         """
@@ -880,6 +883,7 @@ class HybridTopologyFactory(object):
         3) Unique-new - core
         4) Unique-new - environment
         5) Core - environment
+        6) Core - core
 
         Unique-old and Unique new are prevented from interacting this way, and intra-unique interactions occur in an
         unmodified nonbonded force.
@@ -911,3 +915,34 @@ class HybridTopologyFactory(object):
 
         electrostatics_custom_force.addInteractionGroup(core_atoms, environment_atoms)
         sterics_custom_force.addInteractionGroup(core_atoms, environment_atoms)
+
+        electrostatics_custom_force.addInteractionGroup(core_atoms, core_atoms)
+        sterics_custom_force.addInteractionGroup(core_atoms, core_atoms)
+
+    def _handle_hybrid_exceptions(self):
+        """
+        This method adds exceptions specifically to prevent double-counting forces, etc. It does not copy the exceptions
+        from the old and new systems into hybrid; that is for another method.
+        """
+        #prepare the atom classes
+        core_atoms = self._atom_classes['core_atoms']
+        unique_old_atoms = self._atom_classes['unique_old_atoms']
+        unique_new_atoms = self._atom_classes['unique_new_atoms']
+        environment_atoms = self._atom_classes['environment_atoms']
+
+        nonbonded_force = self._hybrid_system_forces['standard_nonbonded_force']
+
+        #loop through all pairs and add exceptions for those that should not interact with this force.
+        #the idea is to check whether the interaction should always be constant: if it should, then continue.
+        #Otherwise, add an exception, since the interaction is handled elsewhere.
+        for particle1 in self._hybrid_system.getNumParticles():
+            for particle2 in range(particle1):
+                if particle1 in unique_old_atoms and particle2 in unique_old_atoms:
+                    continue
+                elif particle1 in unique_new_atoms and particle2 in unique_new_atoms:
+                    continue
+                elif particle1 in environment_atoms and particle2 in environment_atoms:
+                    continue
+                else:
+                    #if it should be excluded, then set chargeprod to 0, sigma to 1, eps to 0
+                    nonbonded_force.addException(particle1, particle2, 0.0, 1.0, 0.0)
