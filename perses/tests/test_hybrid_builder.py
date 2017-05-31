@@ -242,16 +242,21 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
 
 
 def test_setup_hybrid_system():
+    from topology_proposal import TopologyProposal
+    import new_relative
     alanine_topology, alanine_positions, leucine_topology, leucine_positions, atom_map = build_two_residues()
 
     alanine_system = forcefield.createSystem(alanine_topology)
     leucine_system = forcefield.createSystem(leucine_topology)
 
     atom_map = {value : key for key, value in atom_map.items()}
-    hybrid = HybridTopologyFactory(leucine_system, alanine_system, leucine_topology, alanine_topology, leucine_positions, alanine_positions, atom_map, softening=0.0)
+    #hybrid = HybridTopologyFactory(leucine_system, alanine_system, leucine_topology, alanine_topology, leucine_positions, alanine_positions, atom_map, softening=0.0)
+    top_prop = TopologyProposal(new_topology=leucine_topology, new_system=leucine_system, old_topology=alanine_topology, old_system=alanine_system, new_to_old_atom_map=atom_map)
+    hybrid_factory = new_relative.HybridTopologyFactory(top_prop)
+
     [system, topology, positions, sys2_indices_in_system, sys1_indices_in_system] = hybrid.createPerturbedSystem()
 
-    compute_alchemical_correction(leucine_system, alanine_system, system, leucine_positions, positions, positions, alanine_positions)
+    compute_alchemical_correction(leucine_system, alanine_system, hybrid_new, leucine_positions, positions, positions, alanine_positions)
 
 if __name__ == '__main__':
     test_setup_hybrid_system()

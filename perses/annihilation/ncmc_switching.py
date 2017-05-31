@@ -653,15 +653,24 @@ class NCMCHybridEngine(NCMCEngine):
         new_topology = topology_proposal.new_topology
 
         # Create an alchemical factory.
-        from perses.annihilation.relative import HybridTopologyFactory
-        alchemical_factory = HybridTopologyFactory(unmodified_old_system,
-                                                   unmodified_new_system,
-                                                   old_topology, new_topology,
-                                                   old_positions,
-                                                   new_positions, atom_map)
+        #from perses.annihilation.relative import HybridTopologyFactory
+        #alchemical_factory = HybridTopologyFactory(unmodified_old_system,
+        #                                           unmodified_new_system,
+        #                                           old_topology, new_topology,
+        #                                           old_positions,
+        #                                           new_positions, atom_map)
+
+        from perses.annihilation.new_relative import HybridTopologyFactory
+        alchemical_factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
+        alchemical_system = alchemical_factory.hybrid_system
+        final_atom_map = alchemical_factory.new_to_hybrid_atom_map
+        initial_atom_map = alchemical_factory.old_to_hybrid_atom_map
+        alchemical_positions = alchemical_factory.hybrid_positions
+        alchemical_topology = alchemical_factory.omm_hybrid_topology
+
 
         # Return the alchemically-modified system in fully-interacting form.
-        alchemical_system, alchemical_topology, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
+        #alchemical_system, alchemical_topology, alchemical_positions, final_atom_map, initial_atom_map = alchemical_factory.createPerturbedSystem()
 
         # Disable barostat so that it isn't used during NCMC
         if self.disable_barostat:
