@@ -1,9 +1,13 @@
-* travis-ci builds: [![Travis Build Status](https://travis-ci.org/choderalab/perses.svg?branch=master)](https://travis-ci.org/choderalab/perses)
-* Landscape.io code health: [![Code Health](https://landscape.io/github/choderalab/perses/master/landscape.svg?style=flat)](https://landscape.io/github/choderalab/perses/master)
+[![Travis Build Status](https://travis-ci.org/choderalab/perses.svg?branch=master)](https://travis-ci.org/choderalab/perses)
+[![Code Health](https://landscape.io/github/choderalab/perses/master/landscape.svg?style=flat)](https://landscape.io/github/choderalab/perses/master)
+[![Documentation Status](https://readthedocs.org/projects/perses/badge/?version=latest)](http://perses.readthedocs.io/en/latest/?badge=latest)
 
 # Perses
 
 Experiments with expanded ensemble simulation to explore chemical and mutational space.
+
+## License
+This software is licensed under the [MIT license](https://opensource.org/licenses/MIT), a permissive open source license.
 
 ## Notice
 
