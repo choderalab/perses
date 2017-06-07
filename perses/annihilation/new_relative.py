@@ -24,6 +24,8 @@ class HybridTopologyFactory(object):
         on and are alchemically unmodified.
     """
 
+    _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
+
     def __init__(self, topology_proposal, current_positions, new_positions):
         """
         Initialize the Hybrid topology factory.
@@ -79,17 +81,31 @@ class HybridTopologyFactory(object):
             hybrid_idx = self._hybrid_system.addParticle(particle_mass)
             self._new_to_hybrid_map[particle_idx] = hybrid_idx
 
+        #check that if there is a barostat in the original system, it is added to the hybrid.
+        #We copy the barostat from the old system.
+        if "MonteCarloBarostat" in self._old_system_forces.keys():
+            barostat = copy.deepcopy(self._old_system_forces["MonteCarloBarostat"])
+            self._hybrid_system.addForce(barostat)
+
+        #Copy over the box vectors:
+        box_vectors = self._old_system.getDefaultPeriodicBoxVectors()
+        self._hybrid_system.setDefaultPeriodicBoxVectors(*box_vectors)
+
         #assign atoms to one of the classes described in the class docstring
         self._atom_classes = self._determine_atom_classes()
 
         #verify that no constraints are changing over the course of the switching.
         self._constraint_check()
 
+        #copy over relevant virtual sites
+        self._handle_virtual_sites()
+
         #call each of the methods to add the corresponding force terms and prepare the forces:
         self._add_bond_force_terms()
         self._add_angle_force_terms()
         self._add_torsion_force_terms()
         self._add_nonbonded_force_terms()
+        self._handle_constraints()
 
         #call each force preparation method to generate the actual interactions that we need:
         self.handle_harmonic_bonds()
@@ -102,6 +118,55 @@ class HybridTopologyFactory(object):
 
         #generate the topology representation
         self._hybrid_topology = self._create_topology()
+
+    def _force_sanity_check(self, force_name_list):
+        """
+        Make sure that there are no unknown forces in the system--these will not be handled by the hybrid topology
+        engine.
+
+        Parameters
+        ----------
+        force_name_list : list of str
+            list of the force names for
+        Returns
+        -------
+        unknown_forces_present : bool
+            Whether unknown forces are present in the system
+        """
+        force_name_set = set(force_name_list)
+        if len(force_name_set - self._known_forces) > 0:
+            return True
+        else:
+            return False
+
+    def _handle_virtual_sites(self):
+        """
+        Ensure that all virtual sites in old and new system are copied over to the hybrid system. Note that we do not
+        support virtual sites in the changing region.
+        """
+        old_system = self._topology_proposal.old_system
+        new_system = self._topology_proposal.new_system
+
+        #first loop through the old system, looking for virtual sites
+        for particle_idx in range(old_system.getNumParticles()):
+            hybrid_idx = self._old_to_hybrid_map[particle_idx]
+
+            #If it's a virtual site, make sure it is not in the unique or core atoms (unsupported).
+            if old_system.isVirtualSite(particle_idx):
+                if hybrid_idx not in self._atom_classes['environment']:
+                    raise Exception("Virtual sites in changing residue are unsupported.")
+                else:
+                    virtual_site = old_system.getVirtualSite(particle_idx)
+                    self._hybrid_system.setVirtualSite(hybrid_idx, virtual_site)
+
+        #Since all supported virtual sites are in the environment, which are by definition common to both the new and
+        #old systems, we only need to check that there are no virtual sites not in environment:
+        for particle_idx in range(new_system.getNumParticles()):
+            hybrid_idx = self._new_to_hybrid_map[particle_idx]
+
+            if new_system.isVirtualSite(particle_idx):
+                if hybrid_idx not in self._atom_classes['environment']:
+                    raise Exception("Virtual sites in changing residue are unsupported.")
 
     def _get_core_atoms(self):
         """
@@ -212,6 +277,32 @@ class HybridTopologyFactory(object):
         atom_classes['environment_atoms'] = environment_atoms
 
         return atom_classes
+
+    def _handle_constraints(self):
+        """
+        This method adds relevant constraints from the old and new systems. First, all constraints from the old system
+        are added. Then, constraints to atoms unique to the new system are added.
+        """
+        #we add all constraints from the old system first.
+        for constraint_idx in range(self._topology_proposal.old_system.getNumConstraints()):
+            atom1, atom2, constraint = self._topology_proposal.old_system.getConstraintParameters(constraint_idx)
+            atom1_hybrid = self._old_to_hybrid_map[atom1]
+            atom2_hybrid = self._old_to_hybrid_map[atom2]
+            self._hybrid_system.addConstraint(atom1_hybrid, atom2_hybrid, constraint)
+
+        #Now we loop through constraints in the new system, but only add constraints involving new system atoms
+        #since anything common to both was already added. Note that we do not have to worry about changing constraint
+        #lengths because we already checked that that doesn't happen.
+        for constraint_idx in range(self._topology_proposal.new_system.getNumConstraints()):
+            atom1, atom2, constraint = self._topology_proposal.new_system.getConstraintParameters(constraint_idx)
+            atom1_hybrid = self._new_to_hybrid_map[atom1]
+            atom2_hybrid = self._new_to_hybrid_map[atom2]
+
+            atom_set = {atom1_hybrid, atom2_hybrid}
+
+            #If there's a nonempty intersection with unique new atoms, this constraint wasn't added.
+            if len(atom_set.intersection(self._atom_classes['unique_new_atoms'])):
+                self._hybrid_system.addConstraint(atom1_hybrid, atom2_hybrid, constraint)
 
     def _constraint_check(self):
         """
@@ -738,9 +829,8 @@ class HybridTopologyFactory(object):
             angle_parameters = old_system_angle_force.getAngleParameters(angle_index)
 
             #get the indices in the hybrid system
-            hybrid_index_set = {self._old_to_hybrid_map[old_index] for old_index in angle_parameters[:3]}
-            #make a list because python set objects can't be indexed
-            hybrid_index_list = list(hybrid_index_set)
+            hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in angle_parameters[:3]]
+            hybrid_index_set = set(hybrid_index_list)
 
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
             #interpolate
@@ -765,9 +855,8 @@ class HybridTopologyFactory(object):
             angle_parameters = new_system_angle_force.getAngleParameters(angle_index)
 
             #get the indices in the hybrid system
-            hybrid_index_set = {self._old_to_hybrid_map[new_index] for new_index in angle_parameters[:3]}
-            #make a list because python set objects can't be indexed
-            hybrid_index_list = list(hybrid_index_set)
+            hybrid_index_list = [self._old_to_hybrid_map[new_index] for new_index in angle_parameters[:3]]
+            hybrid_index_set = set(hybrid_index_list)
 
             #if the intersection of this hybrid set with the unique new atoms is nonempty, it must be added:
             if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
@@ -789,9 +878,8 @@ class HybridTopologyFactory(object):
             torsion_parameters = old_system_torsion_force.getTorsionParameters(torsion_index)
 
             #get the indices in the hybrid system
-            hybrid_index_set = {self._old_to_hybrid_map[old_index] for old_index in torsion_parameters[:4]}
-            #make a list because python set objects can't be indexed
-            hybrid_index_list = list(hybrid_index_set)
+            hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in torsion_parameters[:4]]
+            hybrid_index_set = set(hybrid_index_list)
 
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
             #interpolate
@@ -809,6 +897,19 @@ class HybridTopologyFactory(object):
 
             #otherwise, just add the parameters to the regular force:
             else:
+                self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
+                                                                            torsion_parameters[5], torsion_parameters[6])
+
+        for torsion_index in range(new_system_torsion_force.getNumTorsions()):
+            torsion_parameters = new_system_torsion_force.getTorsionParameters(torsion_index)
+
+            #get the indices in the hybrid system:
+            hybrid_index_list = [self._new_to_hybrid_map[new_index] for new_index in torsion_parameters[:4]]
+            hybrid_index_set = set(hybrid_index_list)
+
+            #if any are part of the unique new atoms, we will add them to the standard torsion force:
+            if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
                 self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
                                                                             torsion_parameters[5], torsion_parameters[6])
@@ -990,12 +1091,16 @@ class HybridTopologyFactory(object):
                                                                                   epsilon_old, chargeProd_old,
                                                                                   sigma_old, epsilon_old])
 
+                #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
+                self._hybrid_system_forces['custom_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['custom_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+
             #If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             #In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
             else:
                 #first get the new indices.
-                index1_new = hybrid_to_old_map[index1_hybrid]
-                index2_new = hybrid_to_old_map[index2_hybrid]
+                index1_new = hybrid_to_new_map[index1_hybrid]
+                index2_new = hybrid_to_new_map[index2_hybrid]
 
                 #get the exception parameters:
                 [index1_new, index2_new, chargeProd_new, sigma_new, epsilon_new] = self._find_exception(
@@ -1007,6 +1112,10 @@ class HybridTopologyFactory(object):
                                                                                   epsilon_old, chargeProd_new,
                                                                                   sigma_new, epsilon_new])
 
+                #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
+                self._hybrid_system_forces['custom_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['custom_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+
         #now, loop through the new system to collect remaining interactions. The only that remain here are
         #uniquenew-uniquenew, uniquenew-core, and uniquenew-environment.
         for exception_index in range(new_system_nonbonded_force.getNumExceptions()):
@@ -1014,8 +1123,8 @@ class HybridTopologyFactory(object):
              epsilon_new] = old_system_nonbonded_force.getExceptionParameters(exception_index)
 
             #get hybrid indices:
-            index1_hybrid = self._old_to_hybrid_map[index1_new]
-            index2_hybrid = self._old_to_hybrid_map[index2_new]
+            index1_hybrid = self._new_to_hybrid_map[index1_new]
+            index2_hybrid = self._new_to_hybrid_map[index2_new]
             index_set = {index1_hybrid, index2_hybrid}
 
             #if it's a subset of unique_new_atoms, then this is an intra-unique interaction and should have its exceptions
@@ -1032,6 +1141,10 @@ class HybridTopologyFactory(object):
                                                                                  [chargeProd_new, sigma_new,
                                                                                   epsilon_new, chargeProd_new,
                                                                                   sigma_new, epsilon_new]])
+
+                #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
+                self._hybrid_system_forces['custom_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['custom_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
     def _find_exception(self, force, index1, index2):
         """
@@ -1090,7 +1203,7 @@ class HybridTopologyFactory(object):
         #Do the same for new indices. Note that this overwrites some coordinates, but as stated above, the assumption
         #is that these are the same.
         for new_index, hybrid_index in self._new_to_hybrid_map.items():
-            hybrid_positions_array[hybrid_index, :] = old_positions_without_units[new_index, :]
+            hybrid_positions_array[hybrid_index, :] = new_positions_without_units[new_index, :]
 
         return unit.Quantity(hybrid_positions_array, unit=unit.nanometers)
 
