@@ -1092,8 +1092,8 @@ class HybridTopologyFactory(object):
                                                                                   sigma_old, epsilon_old])
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
-                self._hybrid_system_forces['custom_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['custom_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             #In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
@@ -1113,14 +1113,14 @@ class HybridTopologyFactory(object):
                                                                                   sigma_new, epsilon_new])
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
-                self._hybrid_system_forces['custom_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['custom_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
         #now, loop through the new system to collect remaining interactions. The only that remain here are
         #uniquenew-uniquenew, uniquenew-core, and uniquenew-environment.
         for exception_index in range(new_system_nonbonded_force.getNumExceptions()):
             [index1_new, index2_new, chargeProd_new, sigma_new,
-             epsilon_new] = old_system_nonbonded_force.getExceptionParameters(exception_index)
+             epsilon_new] = new_system_nonbonded_force.getExceptionParameters(exception_index)
 
             #get hybrid indices:
             index1_hybrid = self._new_to_hybrid_map[index1_new]
@@ -1137,14 +1137,14 @@ class HybridTopologyFactory(object):
             #look for the final class- interactions between uniquenew-core and uniquenew-environment. They are treated
             #similarly: they are simply on and constant the entire time (as a valence term)
             elif len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond([index1_hybrid, index2_hybrid,
+                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
                                                                                  [chargeProd_new, sigma_new,
                                                                                   epsilon_new, chargeProd_new,
-                                                                                  sigma_new, epsilon_new]])
+                                                                                  sigma_new, epsilon_new])
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
-                self._hybrid_system_forces['custom_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['custom_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
     def _find_exception(self, force, index1, index2):
         """

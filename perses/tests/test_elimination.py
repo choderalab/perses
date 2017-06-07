@@ -62,6 +62,52 @@ def simulate_hybrid(hybrid_system,functions, lambda_value, positions, nsteps=500
     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
     return positions
 
+def generate_hybrid_test_topology():
+    """
+    This generates a hybrid test where old and new molecule are both naphthalene, but only have one ring in "common"
+
+    Returns
+    -------
+
+    """
+    temperature = 300.0 * unit.kelvin
+    kT = kB * temperature
+    beta = 1.0/kT
+    from perses.rjmc.topology_proposal import NaphthaleneProposalEngine, SystemGenerator, PropaneProposalEngine, ButaneProposalEngine
+    from perses.tests.utils import get_data_filename, oemol_to_omm_ff, createOEMolFromIUPAC
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+
+    geometry_engine = FFAllAngleGeometryEngine()
+    mol_name = "naphthalene"
+    initial_molecule = createOEMolFromIUPAC(iupac_name=mol_name)
+    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, mol_name)
+    forcefield_filenames = [get_data_filename("data/gaff.xml")]
+
+    system_generator = SystemGenerator(forcefield_filenames)
+
+    proposal_engine = NaphthaleneProposalEngine(system_generator,residue_name="naphthalene")
+
+    #Do this because code currently requires it:
+    initial_topology._state_key = proposal_engine._fake_states[0]
+
+    proposal = proposal_engine.propose(initial_system, initial_topology)
+
+    new_positions, _ = geometry_engine.propose(proposal, initial_positions, beta)
+
+    return proposal, new_positions
+
+def generate_naphthalene_hybrid_proposal():
+    """
+    Generate a naphthalene hybrid proposal for the hybrid test.
+    """
+    from perses.tests.utils import get_data_filename, oemol_to_omm_ff, createOEMolFromIUPAC
+
+    initial_molecule = createOEMolFromIUPAC("naphthalene")
+    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "naphthalene")
+
+
+
+
 def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
     Test alchemical elimination engine on null transformations, where some atoms are deleted and then reinserted in a cycle.
@@ -257,7 +303,7 @@ def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nstep
         msg += str(work_r) + '\n'
         raise Exception(msg)
 
-def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
+def check_hybrid_null_elimination(topology_proposal, positions, new_positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
     Test alchemical elimination engine on null transformations, where some atoms are deleted and then reinserted in a cycle.
 
@@ -285,11 +331,11 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
     ncmc_engine = NCMCHybridEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
-    if not (topology_proposal.old_system == topology_proposal.new_system):
-        raise Exception("topology_proposal must be a null transformation for this test (old_system == new_system)")
-    for (k,v) in topology_proposal.new_to_old_atom_map.items():
-        if k != v:
-            raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
+   # if not (topology_proposal.old_system == topology_proposal.new_system):
+   #     raise Exception("topology_proposal must be a null transformation for this test (old_system == new_system)")
+   # for (k,v) in topology_proposal.new_to_old_atom_map.items():
+   #     if k != v:
+   #         raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
 
     nequil = 5 # number of equilibration iterations
     niterations = 50 # number of round-trip switching trials
@@ -305,7 +351,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
             raise Exception("Positions became NaN during equilibration")
 
         # Hybrid NCMC from old to new
-        [positions, new_old_positions, logP_work, logP_energy] = ncmc_engine.integrate(topology_proposal, positions, positions)
+        [positions, new_old_positions, logP_work, logP_energy] = ncmc_engine.integrate(topology_proposal, positions, new_positions)
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
@@ -454,24 +500,17 @@ def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    molecule_names = ['biphenyl', 'imatinib']
+    molecule_names = ['naphthalene']
     if os.environ.get("TRAVIS", None) == 'true':
-        molecule_names = ['pentane']
+        molecule_names = ['naphthalene']
 
     for molecule_name in molecule_names:
         from perses.tests.utils import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
-        natoms = system.getNumParticles()
-        # Eliminate half of the molecule
-        # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
-        new_to_old_atom_map = { atom.index : atom.index for atom in topology.atoms() if str(atom.element.name) in ['carbon','nitrogen'] }
 
-        from perses.rjmc.topology_proposal import TopologyProposal
-        topology_proposal = TopologyProposal(
-            new_topology=topology, new_system=system, old_topology=topology, old_system=system,
-            old_chemical_state_key='', new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
+        topology_proposal, new_positions = generate_hybrid_test_topology()
         for ncmc_nsteps in [50]:
-            f = partial(check_hybrid_round_trip_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
+            f = partial(check_hybrid_null_elimination, topology_proposal, positions, new_positions, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
