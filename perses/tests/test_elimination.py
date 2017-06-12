@@ -480,18 +480,18 @@ def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    molecule_names = ['naphthalene']
+    mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]
     if os.environ.get("TRAVIS", None) == 'true':
-        molecule_names = ['naphthalene']
+        mols_and_refs = [['naphthalene', 'benzene']]
 
-    for molecule_name in molecule_names:
+    for mol_ref in mols_and_refs:
         from perses.tests.utils import createSystemFromIUPAC
-        [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
+        [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
 
-        topology_proposal, new_positions = generate_hybrid_test_topology()
+        topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
         for ncmc_nsteps in [0, 1, 50]:
             f = partial(check_hybrid_null_elimination, topology_proposal, positions, new_positions, ncmc_nsteps=ncmc_nsteps)
-            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
+            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
             yield f
 
 @skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
