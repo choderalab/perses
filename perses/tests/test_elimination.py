@@ -87,6 +87,79 @@ def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"
 
     return top_proposal, positions
 
+def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
+    """
+    Check that the hybrid topology, where both endpoints are identical, returns a free energy within NSIGMA_MAX of 0.
+    Parameters
+    ----------
+    topology_proposal
+    positions
+    ncmc_nsteps
+    NSIGMA_MAX
+
+    Returns
+    -------
+
+    """
+    from perses.annihilation import NCMCGHMCAlchemicalIntegrator
+    from new_relative import HybridTopologyFactory
+
+    #make the hybrid topology factory:
+    factory = HybridTopologyFactory(topology_proposal, positions, positions)
+
+    platform = openmm.Platform.getPlatformByName("Reference")
+
+    hybrid_system = factory.hybrid_system
+    hybrid_topology = factory.hybrid_topology
+    initial_hybrid_positions = factory.hybrid_positions
+
+    n_iterations = 50 #number of times to do NCMC protocol
+
+    #alchemical functions
+    functions = {
+        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
+        'lambda_torsions' : 'lambda'
+    }
+
+    w_f = np.zeros(n_iterations)
+    w_r = np.zeros(n_iterations)
+
+    #make the alchemical integrators:
+    #forward_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
+    #reverse_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
+
+    #first, do forward protocol (lambda=0 -> 1)
+    for i in range(n_iterations):
+        forward_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
+        equil_positions = simulate_hybrid(hybrid_system,functions, 0.0, initial_hybrid_positions)
+        context = openmm.Context(hybrid_system, forward_integrator, platform)
+        context.setPositions(equil_positions)
+        forward_integrator.step(ncmc_nsteps)
+        w_f[i] = -1.0 * forward_integrator.getLogAcceptanceProbability(context)
+        del context, forward_integrator
+
+    #now, reverse protocol
+    for i in range(n_iterations):
+        reverse_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
+        equil_positions = simulate_hybrid(hybrid_system,functions, 1.0, initial_hybrid_positions)
+        context = openmm.Context(hybrid_system, reverse_integrator, platform)
+        context.setPositions(equil_positions)
+        reverse_integrator.step(ncmc_nsteps)
+        w_r[i] = -1.0 * reverse_integrator.getLogAcceptanceProbability(context)
+        del context, reverse_integrator
+
+    from pymbar import BAR
+    [df, ddf] = BAR(w_f, w_r)
+    print("df = %12.6f +- %12.5f kT" % (df, ddf))
+    if (abs(df) > NSIGMA_MAX * ddf):
+        msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
+        msg += 'logP_work_n:\n'
+        msg += str(w_f) + '\n'
+        msg += str(w_r) + '\n'
+        raise Exception(msg)
 
 def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
@@ -345,7 +418,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
     work_n = - logP_work_n
     from pymbar import EXP
     [df, ddf] = EXP(work_n)
-    #print("df = %12.6f +- %12.5f kT" % (df, ddf))
+    print("df = %12.6f +- %12.5f kT" % (df, ddf))
     if (abs(df) > NSIGMA_MAX * ddf):
         msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
         msg += 'logP_work_n:\n'
@@ -481,6 +554,7 @@ def test_ncmc_hybrid_engine_molecule():
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
     mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]
+    #mols_and_refs = [['biphenyl','benzene']]
     if os.environ.get("TRAVIS", None) == 'true':
         mols_and_refs = [['naphthalene', 'benzene']]
 
@@ -490,7 +564,7 @@ def test_ncmc_hybrid_engine_molecule():
 
         topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
         for ncmc_nsteps in [0, 1, 50]:
-            f = partial(check_hybrid_null_elimination, topology_proposal, positions, new_positions, ncmc_nsteps=ncmc_nsteps)
+            f = partial(check_alchemical_hybrid_elimination_bar, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
             yield f
 
