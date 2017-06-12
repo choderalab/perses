@@ -68,7 +68,7 @@ def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"
     """
     from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC\
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
 
     mol = createOEMolFromIUPAC(mol_name)
     m, system, positions, topology = createSystemFromIUPAC(mol_name)
@@ -331,7 +331,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
             raise Exception("Positions became NaN during equilibration")
 
         # Hybrid NCMC from old to new
-        [_, new_old_positions, logP_work, logP_energy] = ncmc_engine.integrate(topology_proposal, positions, new_positions)
+        [_, new_old_positions, logP_work, logP_energy] = ncmc_engine.integrate(topology_proposal, positions, positions)
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
@@ -489,7 +489,7 @@ def test_ncmc_hybrid_engine_molecule():
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
 
         topology_proposal, new_positions = generate_hybrid_test_topology()
-        for ncmc_nsteps in [0]:
+        for ncmc_nsteps in [0, 1, 50]:
             f = partial(check_hybrid_null_elimination, topology_proposal, positions, new_positions, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
