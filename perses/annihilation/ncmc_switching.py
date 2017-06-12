@@ -715,7 +715,6 @@ class NCMCHybridEngine(NCMCEngine):
             The NCMC energy contribution to the log acceptance probability (Eq. 45)
         """
         direction = 'insert'
-
         # Create alchemical system.
         [unmodified_old_system,
          unmodified_new_system,
