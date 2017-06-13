@@ -87,6 +87,9 @@ class HybridTopologyFactory(object):
             barostat = copy.deepcopy(self._old_system_forces["MonteCarloBarostat"])
             self._hybrid_system.addForce(barostat)
 
+        #initialize unitless softcore beta
+        self.softcore_beta = self.softcore_beta / self.softcore_beta.in_unit_system(unit.md_unit_system).unit
+
         #Copy over the box vectors:
         box_vectors = self._old_system.getDefaultPeriodicBoxVectors()
         self._hybrid_system.setDefaultPeriodicBoxVectors(*box_vectors)
@@ -495,7 +498,8 @@ class HybridTopologyFactory(object):
 
         # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
         electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
-        electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0);
+        electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0)
+        electrostatics_custom_nonbonded_force.addGlobalParameter("softcore_beta", self.softcore_beta)
         electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
         electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
 
@@ -503,11 +507,14 @@ class HybridTopologyFactory(object):
         self._hybrid_system_forces['core_electrostatics_force'] = electrostatics_custom_nonbonded_force
 
         sterics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_sterics;" + sterics_energy_expression + sterics_mixing_rules)
-        sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0);
+        sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0)
+        sterics_custom_nonbonded_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
+
+
 
         self._hybrid_system.addForce(sterics_custom_nonbonded_force)
         self._hybrid_system_forces['core_sterics_force'] = sterics_custom_nonbonded_force
@@ -533,7 +540,7 @@ class HybridTopologyFactory(object):
         """
         sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
         sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
-        sterics_addition += "softcore_alpha = %f;" % self.softcore_alpha
+        #sterics_addition += "softcore_alpha = %f;" % self.softcore_alpha
         sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
         sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
         return sterics_addition
@@ -549,7 +556,7 @@ class HybridTopologyFactory(object):
         """
         electrostatics_addition = "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
         electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
-        electrostatics_addition += "softcore_beta = %f;" % (self.softcore_beta / self.softcore_beta.in_unit_system(unit.md_unit_system).unit)
+        #electrostatics_addition += "softcore_beta = %f;" % (self.softcore_beta / self.softcore_beta.in_unit_system(unit.md_unit_system).unit)
         electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
         electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
         return electrostatics_addition
@@ -668,12 +675,15 @@ class HybridTopologyFactory(object):
         custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
         custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
         custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
+        custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
+        custom_bond_force.addGlobalParameter("softcore_beta", self.softcore_beta)
         custom_bond_force.addPerBondParameter("chargeprodA")
         custom_bond_force.addPerBondParameter("sigmaA")
         custom_bond_force.addPerBondParameter("epsilonA")
         custom_bond_force.addPerBondParameter("chargeprodB")
         custom_bond_force.addPerBondParameter("sigmaB")
         custom_bond_force.addPerBondParameter("epsilonB")
+
 
         return custom_bond_force
 
