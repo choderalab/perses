@@ -184,8 +184,6 @@ class HybridTopologyFactory(object):
             The set of atoms (hybrid topology indexed) that are environment atoms.
         """
 
-        core_atoms = set()
-
         #In order to be either a core or environment atom, the atom must be mapped.
         mapped_old_atoms_set = set(self._topology_proposal.old_to_new_atom_map.keys())
         mapped_new_atoms_set = set(self._topology_proposal.old_to_new_atom_map.values())
@@ -628,11 +626,13 @@ class HybridTopologyFactory(object):
         """
         # soft-core Lennard-Jones
         sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+        if unit.is_quantity(alpha_ewald):
+            alpha_ewald = alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit
         if alpha_ewald == 0.0:
             # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
             alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
         electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
-        electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit)
+        electrostatics_energy_expression += "alpha_ewald = %f;" % alpha_ewald
         return sterics_energy_expression, electrostatics_energy_expression
 
     def _nonbonded_custom_mixing_rules(self):
