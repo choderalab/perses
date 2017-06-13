@@ -151,7 +151,37 @@ def oemol_to_omm_ff(oemol, molecule_name):
     positions = extractPositionsFromOEMOL(oemol)
     return system, positions, topology
 
+def compare_at_lambdas(context, functions):
+    """
+    Compare the energy components at all lambdas = 1 and 0.
+    """
 
+    #first, set all lambdas to 0
+    for parm in functions.keys():
+        context.setParameter(parm, 0.0)
+
+    energy_components_0 = compute_potential_components(context)
+
+    for parm in functions.keys():
+        context.setParameter(parm, 1.0)
+
+    energy_components_1 = compute_potential_components(context)
+
+    print("-----------------------")
+    print("Energy components at lambda=0")
+
+    for i in range(len(energy_components_0)):
+        name, value = energy_components_0[i]
+        print("%s\t%s" % (name, str(value)))
+
+    print("-----------------------")
+    print("Energy components at lambda=1")
+
+    for i in range(len(energy_components_1)):
+        name, value = energy_components_1[i]
+        print("%s\t%s" % (name, str(value)))
+
+    print("------------------------")
 
 def generate_gaff_xml():
     """
@@ -639,7 +669,6 @@ def smiles_to_topology(smiles):
     oechem.OETriposBondTypeNames(mol)
     topology = generateTopologyFromOEMol(mol)
     return topology, mol
-
 
 def check_system(system):
     """

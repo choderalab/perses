@@ -22,6 +22,21 @@ class HybridTopologyFactory(object):
         corresponding to the old system at lambda=0, and those corresponding to the new system at lambda=1
     environment_atom : these atoms are mapped, and are not part of a changing residue. Their interactions are always
         on and are alchemically unmodified.
+
+    Properties
+    ----------
+    hybrid_system : openmm.System
+        The hybrid system for simulation
+    new_to_hybrid_atom_map : dict of int : int
+        The mapping of new system atoms to hybrid atoms
+    old_to_hybrid_atom_map : dict of int : int
+        The mapping of old system atoms to hybrid atoms
+    hybrid_positions : [n, 3] np.ndarray
+        The positions of the hybrid system
+    hybrid_topology : mdtraj.Topology
+        The topology of the hybrid system
+    omm_hybrid_topology : openmm.app.Topology
+        The OpenMM topology object corresponding to the hybrid system
     """
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
