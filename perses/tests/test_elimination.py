@@ -87,6 +87,46 @@ def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"
 
     return top_proposal, positions
 
+def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+
+    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    import simtk.openmm.app as app
+    from openmoltools import forcefield_generators
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    mol = createOEMolFromIUPAC(mol_name)
+    m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
+
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    #map one of the rings
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
+
+    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
+    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
+    effective_atom_map = {value : value for value in atom_map.values()}
+
+    modeller = app.Modeller(top, pos)
+    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    topology = modeller.getTopology()
+    positions = modeller.getPositions()
+    system = forcefield.createSystem(topology, nonbondedMethod=app.PME)
+
+    n_atoms_old_system = unsolv_system.getNumParticles()
+    n_atoms_after_solvation = system.getNumParticles()
+
+    for i in range(n_atoms_old_system, n_atoms_after_solvation):
+        effective_atom_map[i] = i
+
+    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
+
+    return top_proposal, positions
+
+
 def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
     Check that the hybrid topology, where both endpoints are identical, returns a free energy within NSIGMA_MAX of 0.
@@ -554,6 +594,7 @@ def test_ncmc_hybrid_engine_molecule():
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
     mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene'], ['octane','propane']]
+    #mols_and_refs=[['pentane', 'propane']]
     if os.environ.get("TRAVIS", None) == 'true':
         mols_and_refs = [['naphthalene', 'benzene']]
 
@@ -562,6 +603,28 @@ def test_ncmc_hybrid_engine_molecule():
         [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
 
         topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
+        #topology_proposal, positions = generate_solvated_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
+        for ncmc_nsteps in [0, 1, 50]:
+            f = partial(check_alchemical_hybrid_elimination_bar, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
+            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
+            yield f
+
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+def test_ncmc_hybrid_explicit_engine_molecule():
+    """
+    Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
+    """
+    #mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene'], ['octane','propane']]
+    mols_and_refs=[['pentane', 'propane']]
+    if os.environ.get("TRAVIS", None) == 'true':
+        mols_and_refs = [['naphthalene', 'benzene']]
+
+    for mol_ref in mols_and_refs:
+        from perses.tests.utils import createSystemFromIUPAC
+        [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
+
+        #topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
+        topology_proposal, positions = generate_solvated_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
         for ncmc_nsteps in [0, 1, 50]:
             f = partial(check_alchemical_hybrid_elimination_bar, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
@@ -592,7 +655,8 @@ if __name__ == "__main__":
     #for x in test_ncmc_engine_molecule():
     #    print(x.description)
     #    x()
-    for x in test_ncmc_hybrid_engine_molecule():
+    #generate_solvated_hybrid_test_topology()
+    for x in test_ncmc_hybrid_explicit_engine_molecule():
         print(x.description)
         x()
 #    test_ncmc_alchemical_integrator_stability_molecules()
