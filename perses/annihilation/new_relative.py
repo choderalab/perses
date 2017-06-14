@@ -298,6 +298,29 @@ class HybridTopologyFactory(object):
 
         return atom_classes
 
+    def _translate_nonbonded_method_to_custom(self, standard_nonbonded_method):
+        """
+        Utility function to translate the nonbonded method enum from the standard nonbonded force to the custom version
+       `CutoffPeriodic`, `PME`, and `Ewald` all become `CutoffPeriodic`; `NoCutoff` becomes `NoCutoff`; `CutoffNonPeriodic` becomes `CutoffNonPeriodic`
+        Parameters
+        ----------
+        standard_nonbonded_method : openmm.NonbondedForce.NonbondedMethod
+            the nonbonded method of the standard force
+
+        Returns
+        -------
+        custom_nonbonded_method : openmm.CustomNonbondedForce.NonbondedMethod
+            the nonbonded method for the equivalent customnonbonded force
+        """
+        if standard_nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            return openmm.CustomNonbondedForce.CutoffPeriodic
+        elif standard_nonbonded_method == openmm.NonbondedForce.NoCutoff:
+            return openmm.CustomNonbondedForce.NoCutoff
+        elif standard_nonbonded_method == openmm.NonbondedForce.CutoffNonPeriodic:
+            return openmm.CustomNonbondedForce.CutoffNonPeriodic
+        else:
+            raise NotImplementedError("This nonbonded method is not supported.")
+
     def _handle_constraints(self):
         """
         This method adds relevant constraints from the old and new systems. First, all constraints from the old system
@@ -524,6 +547,8 @@ class HybridTopologyFactory(object):
 
         sterics_mixing_rules, electrostatics_mixing_rules = self._nonbonded_custom_mixing_rules()
 
+        custom_nonbonded_method = self._translate_nonbonded_method_to_custom(self._nonbonded_method)
+
         # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
         electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
         electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0)
@@ -531,7 +556,7 @@ class HybridTopologyFactory(object):
         electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
         electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
 
-        electrostatics_custom_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+        electrostatics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
 
         self._hybrid_system.addForce(electrostatics_custom_nonbonded_force)
         self._hybrid_system_forces['core_electrostatics_force'] = electrostatics_custom_nonbonded_force
@@ -544,7 +569,7 @@ class HybridTopologyFactory(object):
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
 
-        sterics_custom_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+        sterics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
 
 
         self._hybrid_system.addForce(sterics_custom_nonbonded_force)
@@ -556,6 +581,13 @@ class HybridTopologyFactory(object):
             self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(True)
             if self._use_dispersion_correction:
                 sterics_custom_nonbonded_force.setUseLongRangeCorrection(True)
+
+        if self._old_system_forces['NonbondedForce'].getUseSwitchingFunction():
+            switching_distance = self._old_system_forces['NonbondedForce'].getSwitchingDistance()
+            standard_nonbonded_force.setUseSwitchingFunction(True)
+            standard_nonbonded_force.setSwitchingDistance(switching_distance)
+            sterics_custom_nonbonded_force.setUseSwitchingFunction(True)
+            sterics_custom_nonbonded_force.setSwitchingDistance(switching_distance)
 
         #Add a CustomBondForce for exceptions:
         custom_nonbonded_bond_force = self._nonbonded_custom_bond_force(sterics_energy_expression, electrostatics_energy_expression)
