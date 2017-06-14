@@ -616,7 +616,7 @@ class HybridTopologyFactory(object):
         k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
         c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
         electrostatics_energy_expression += "k_rf = %f;" % (k_rf / k_rf.in_unit_system(unit.md_unit_system).unit)
-        electrostatics_energy_expression += "c_rf = %f;" % (c_rf / c_rf.in_unit_system(unit.md_unit_system).unit)
+        electrostatics_energy_expression += "c_rf = 0;"
         return sterics_energy_expression, electrostatics_energy_expression
 
     def _nonbonded_custom_ewald(self, alpha_ewald, delta, r_cutoff):
@@ -824,6 +824,8 @@ class HybridTopologyFactory(object):
         """
         index_set = set(indices)
 
+        torsion_parameters_list = list()
+
         #now loop through and try to find the torsion:
         for torsion_index in range(torsion_force.getNumTorsions()):
             torsion_parameters = torsion_force.getTorsionParameters(torsion_index)
@@ -832,9 +834,12 @@ class HybridTopologyFactory(object):
             torsion_parameter_indices = set(torsion_parameters[:4])
 
             if index_set==torsion_parameter_indices:
-                return torsion_parameters
+                torsion_parameters_list.append(torsion_parameters)
 
-        raise ValueError("The torsion of interest was not found.")
+        if len(torsion_parameters_list)==0:
+            raise ValueError("No torsion found matching the indices specified")
+
+        return torsion_parameters
 
     def handle_harmonic_angles(self):
         """
@@ -900,10 +905,11 @@ class HybridTopologyFactory(object):
         #custom torsion force if all atoms are part of "core." Otherwise, they are either unique to one system or never
         #change.
         for torsion_index in range(old_system_torsion_force.getNumTorsions()):
-            torsion_parameters = old_system_torsion_force.getTorsionParameters(torsion_index)
+            torsion_parameters_list = old_system_torsion_force.getTorsionParameters(torsion_index)
 
+            torsion_parameter_indices = torsion_parameters_list[0][:4]
             #get the indices in the hybrid system
-            hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in torsion_parameters[:4]]
+            hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in torsion_parameter_indices]
             hybrid_index_set = set(hybrid_index_list)
 
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
@@ -911,14 +917,19 @@ class HybridTopologyFactory(object):
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
                 #get the new indices so we can get the new angle parameters
                 new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in torsion_parameters[:4]]
-                new_torsion_parameters = self._find_torsion_parameters(new_system_torsion_force, new_indices)
+                new_torsion_parameters_list = self._find_torsion_parameters(new_system_torsion_force, new_indices)
 
-                #add to the hybrid force:
-                #the parameters at indices 3 and 4 represent theta0 and k, respectively.
-                hybrid_force_parameters = [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6],
-                                           new_torsion_parameters[4], new_torsion_parameters[5],
-                                           new_torsion_parameters[6]]
-                self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
+                #for old torsions, have the energy scale from full at lambda=0 to off at lambda=1
+                for torsion_parameters in torsion_parameters_list:
+                    hybrid_force_parameters = [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], 0.0, 0.0, 0.0]
+                    self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
+
+                #for new torsions, have the energy scale from 0 at lambda=0 to full at lambda=1
+                for torsion_parameters in new_torsion_parameters_list:
+                    #add to the hybrid force:
+                    #the parameters at indices 3 and 4 represent theta0 and k, respectively.
+                    hybrid_force_parameters = [0.0, 0.0, 0.0,torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
+                    self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
 
             #otherwise, just add the parameters to the regular force:
             else:
