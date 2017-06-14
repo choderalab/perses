@@ -41,7 +41,7 @@ class HybridTopologyFactory(object):
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    def __init__(self, topology_proposal, current_positions, new_positions):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False):
         """
         Initialize the Hybrid topology factory.
 
@@ -53,6 +53,8 @@ class HybridTopologyFactory(object):
             The positions of the "old system"
         new_positions : [m,3] np.ndarray of float
             The positions of the "new system"
+        use_dispersion_correction : bool, default False
+            Whether to use the long range correction in the custom sterics force. This is very expensive for NCMC.
         """
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
@@ -62,6 +64,8 @@ class HybridTopologyFactory(object):
         self._hybrid_system_forces = dict()
         self._old_positions = current_positions
         self._new_positions = new_positions
+
+        self._use_dispersion_correction = use_dispersion_correction
 
         self.softcore_alpha=0.5
         self.softcore_beta=12*unit.angstrom**2
@@ -489,6 +493,12 @@ class HybridTopologyFactory(object):
         nonbonded_method : int
             One of the openmm.NonbondedForce nonbonded methods.
         """
+
+        #Add a regular nonbonded force for all interactions that are not changing.
+        standard_nonbonded_force = openmm.NonbondedForce()
+        self._hybrid_system.addForce(standard_nonbonded_force)
+        self._hybrid_system_forces['standard_nonbonded_force'] = standard_nonbonded_force
+
         # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
         # Select functional form based on nonbonded method.
         if self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
@@ -497,11 +507,16 @@ class HybridTopologyFactory(object):
             epsilon_solvent = self._old_system_forces['NonbondedForce'].getReactionFieldDielectric()
             r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
             sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_cutoff(epsilon_solvent, r_cutoff)
+            standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
+            standard_nonbonded_force.setCutoffDistance(r_cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
             delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
             r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
             sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
+            standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+            standard_nonbonded_force.setEwaldErrorTolerance(delta)
+            standard_nonbonded_force.setCutoffDistance(r_cutoff)
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
         sterics_energy_expression += self._nonbonded_custom_sterics_common()
@@ -516,6 +531,8 @@ class HybridTopologyFactory(object):
         electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
         electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
 
+        electrostatics_custom_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+
         self._hybrid_system.addForce(electrostatics_custom_nonbonded_force)
         self._hybrid_system_forces['core_electrostatics_force'] = electrostatics_custom_nonbonded_force
 
@@ -527,15 +544,18 @@ class HybridTopologyFactory(object):
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
 
+        sterics_custom_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
 
 
         self._hybrid_system.addForce(sterics_custom_nonbonded_force)
         self._hybrid_system_forces['core_sterics_force'] = sterics_custom_nonbonded_force
 
-        #Add a regular nonbonded force for all interactions that are not changing.
-        standard_nonbonded_force = openmm.NonbondedForce()
-        self._hybrid_system.addForce(standard_nonbonded_force)
-        self._hybrid_system_forces['standard_nonbonded_force'] = standard_nonbonded_force
+
+        #set the use of dispersion correction to be the same between the new nonbonded force and the old one:
+        if self._old_system_forces['NonbondedForce'].getUseDispersionCorrection():
+            self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(True)
+            if self._use_dispersion_correction:
+                sterics_custom_nonbonded_force.setUseLongRangeCorrection(True)
 
         #Add a CustomBondForce for exceptions:
         custom_nonbonded_bond_force = self._nonbonded_custom_bond_force(sterics_energy_expression, electrostatics_energy_expression)
