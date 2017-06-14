@@ -704,6 +704,7 @@ class HybridTopologyFactory(object):
         if alpha_ewald == 0.0:
             # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
             alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
+            alpha_ewald = alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit
         electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
         electrostatics_energy_expression += "alpha_ewald = %f;" % alpha_ewald
         return sterics_energy_expression, electrostatics_energy_expression
@@ -1084,7 +1085,7 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, charge])
 
                 #add the environment atoms to the regular nonbonded force as well:
-                self._hybrid_system['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
 
         self._handle_interaction_groups()
         self._handle_hybrid_exceptions()
@@ -1293,8 +1294,8 @@ class HybridTopologyFactory(object):
             Positions of the hybrid system, in nm
         """
         #get unitless positions
-        old_positions_without_units = self._old_positions.value_in_unit(unit.nanometer)
-        new_positions_without_units = self._new_positions.value_in_unit(unit.nanometer)
+        old_positions_without_units = np.array(self._old_positions.value_in_unit(unit.nanometer))
+        new_positions_without_units = np.array(self._new_positions.value_in_unit(unit.nanometer))
 
         #determine the number of particles in the system
         n_atoms_hybrid = self._hybrid_system.getNumParticles()
