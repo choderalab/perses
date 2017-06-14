@@ -588,6 +588,12 @@ class HybridTopologyFactory(object):
             standard_nonbonded_force.setSwitchingDistance(switching_distance)
             sterics_custom_nonbonded_force.setUseSwitchingFunction(True)
             sterics_custom_nonbonded_force.setSwitchingDistance(switching_distance)
+            electrostatics_custom_nonbonded_force.setUseSwitchingFunction(True)
+            electrostatics_custom_nonbonded_force.setSwitchingDistance(switching_distance)
+        else:
+            standard_nonbonded_force.setUseSwitchingFunction(False)
+            electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False)
+            sterics_custom_nonbonded_force.setUseSwitchingFunction(False)
 
         #Add a CustomBondForce for exceptions:
         custom_nonbonded_bond_force = self._nonbonded_custom_bond_force(sterics_energy_expression, electrostatics_energy_expression)
