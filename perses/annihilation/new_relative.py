@@ -897,7 +897,7 @@ class HybridTopologyFactory(object):
         if len(torsion_parameters_list)==0:
             raise ValueError("No torsion found matching the indices specified")
 
-        return torsion_parameters
+        return torsion_parameters_list
 
     def handle_harmonic_angles(self):
         """
@@ -962,19 +962,29 @@ class HybridTopologyFactory(object):
         #first, loop through all the torsions in the old system to determine what to do with them. We will only use the
         #custom torsion force if all atoms are part of "core." Otherwise, they are either unique to one system or never
         #change.
-        for torsion_index in range(old_system_torsion_force.getNumTorsions()):
-            torsion_parameters_list = old_system_torsion_force.getTorsionParameters(torsion_index)
 
-            torsion_parameter_indices = torsion_parameters_list[0][:4]
+        #we need to keep track of what torsions we added so that we do not double count.
+        added_torsions = []
+        for torsion_index in range(old_system_torsion_force.getNumTorsions()):
+            torsion_parameters = old_system_torsion_force.getTorsionParameters(torsion_index)
+
             #get the indices in the hybrid system
-            hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in torsion_parameter_indices]
+            hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in torsion_parameters[:4]]
             hybrid_index_set = set(hybrid_index_list)
 
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
             #interpolate
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
-                #get the new indices so we can get the new angle parameters
-                new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in torsion_parameters[:4]]
+                torsion_indices = torsion_parameters[:4]
+
+                #if we've already added these indices (they may appear >once for high periodicities)
+                #then just continue to the next torsion.
+                if torsion_indices in added_torsions:
+                    continue
+                #get the new indices so we can get the new angle parameters, as well as all old parameters of the old torsion
+                #The reason we do it like this is to take care of varying periodicity between new and old system.
+                torsion_parameters_list = self._find_torsion_parameters(old_system_torsion_force, torsion_indices)
+                new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in torsion_indices]
                 new_torsion_parameters_list = self._find_torsion_parameters(new_system_torsion_force, new_indices)
 
                 #for old torsions, have the energy scale from full at lambda=0 to off at lambda=1
@@ -988,6 +998,8 @@ class HybridTopologyFactory(object):
                     #the parameters at indices 3 and 4 represent theta0 and k, respectively.
                     hybrid_force_parameters = [0.0, 0.0, 0.0,torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
                     self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
+
+                added_torsions.append(torsion_indices)
 
             #otherwise, just add the parameters to the regular force:
             else:
