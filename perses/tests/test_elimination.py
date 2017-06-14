@@ -553,8 +553,7 @@ def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]
-    #mols_and_refs = [['biphenyl','benzene']]
+    mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene'], ['octane','propane']]
     if os.environ.get("TRAVIS", None) == 'true':
         mols_and_refs = [['naphthalene', 'benzene']]
 
