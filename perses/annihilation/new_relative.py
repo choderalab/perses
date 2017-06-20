@@ -620,7 +620,6 @@ class HybridTopologyFactory(object):
         """
         sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
         sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
-        #sterics_addition += "softcore_alpha = %f;" % self.softcore_alpha
         sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
         sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
         return sterics_addition
@@ -636,7 +635,6 @@ class HybridTopologyFactory(object):
         """
         electrostatics_addition = "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
         electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
-        #electrostatics_addition += "softcore_beta = %f;" % (self.softcore_beta / self.softcore_beta.in_unit_system(unit.md_unit_system).unit)
         electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
         electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
         return electrostatics_addition

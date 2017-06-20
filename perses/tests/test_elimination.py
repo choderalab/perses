@@ -259,8 +259,8 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     functions = {
         'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
         'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '1.0', # don't soften angles
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
     }
     # Initialize engine
@@ -342,8 +342,8 @@ def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nstep
     functions = {
         'lambda_sterics' : 'lambda',
         'lambda_electrostatics' : 'lambda',
-        'lambda_bonds' : 'lambda', # don't soften bonds
-        'lambda_angles' : 'lambda', # don't soften angles
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
     }
     # Initialize engine
@@ -454,8 +454,8 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
     functions = {
         'lambda_sterics' : 'lambda',
         'lambda_electrostatics' : 'lambda',
-        'lambda_bonds' : 'lambda', # don't soften bonds
-        'lambda_angles' : 'lambda', # don't soften angles
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
     }
     # Initialize engine
