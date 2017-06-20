@@ -51,7 +51,7 @@ def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temp
     velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
     return [positions, velocities]
 
-def simulate_hybrid(hybrid_system,functions, lambda_value, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds):
+def simulate_hybrid(hybrid_system,functions, lambda_value, positions, nsteps=100, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds):
     platform = openmm.Platform.getPlatformByName("Reference")
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = openmm.Context(hybrid_system, integrator, platform)
