@@ -242,8 +242,8 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
 
 
 def test_setup_hybrid_system():
-    from topology_proposal import TopologyProposal
-    import new_relative
+    from perses.rjmc.topology_proposal import TopologyProposal
+    import perses.annihilation.new_relative as new_relative
     alanine_topology, alanine_positions, leucine_topology, leucine_positions, atom_map = build_two_residues()
 
     alanine_system = forcefield.createSystem(alanine_topology)
@@ -262,9 +262,8 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
     Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
     """
-    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-    import openeye.oechem as oechem
-    from new_relative import HybridTopologyFactory
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    from perses.annihilation.new_relative import HybridTopologyFactory
     import simtk.openmm as openmm
 
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
@@ -301,8 +300,8 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     functions = {
         'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
         'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '1.0', # don't soften angles
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
     }
 
