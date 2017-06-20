@@ -66,7 +66,7 @@ def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"
     """
     Generate a test topology proposal and positions for the hybrid test.
     """
-    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
 
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
 
@@ -89,7 +89,7 @@ def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"
 
 def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
 
-    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
@@ -127,6 +127,43 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     return top_proposal, positions
 
 
+def generate_solvated_hybrid_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    import simtk.openmm.app as app
+    from openmoltools import forcefield_generators
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    mol = createOEMolFromIUPAC(mol_name)
+    m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
+
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    #map one of the rings
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
+
+    effective_atom_map = atom_map
+
+    modeller = app.Modeller(top, pos)
+    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    topology = modeller.getTopology()
+    positions = modeller.getPositions()
+    system = forcefield.createSystem(topology, nonbondedMethod=app.PME)
+
+    n_atoms_old_system = unsolv_system.getNumParticles()
+    n_atoms_after_solvation = system.getNumParticles()
+
+    for i in range(n_atoms_old_system, n_atoms_after_solvation):
+        effective_atom_map[i] = i
+
+    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
+
+    return top_proposal, positions
+
 def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
     Check that the hybrid topology, where both endpoints are identical, returns a free energy within NSIGMA_MAX of 0.
@@ -142,7 +179,7 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_n
 
     """
     from perses.annihilation import NCMCGHMCAlchemicalIntegrator
-    from new_relative import HybridTopologyFactory
+    from perses.annihilation.new_relative import HybridTopologyFactory
 
     #make the hybrid topology factory:
     factory = HybridTopologyFactory(topology_proposal, positions, positions)
@@ -179,6 +216,7 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_n
         context.setPositions(equil_positions)
         forward_integrator.step(ncmc_nsteps)
         w_f[i] = -1.0 * forward_integrator.getLogAcceptanceProbability(context)
+        print(i)
         del context, forward_integrator
 
     #now, reverse protocol
@@ -189,6 +227,7 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_n
         context.setPositions(equil_positions)
         reverse_integrator.step(ncmc_nsteps)
         w_r[i] = -1.0 * reverse_integrator.getLogAcceptanceProbability(context)
+        print(i)
         del context, reverse_integrator
 
     from pymbar import BAR
@@ -309,7 +348,7 @@ def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nstep
     }
     # Initialize engine
     from perses.annihilation import NCMCGHMCAlchemicalIntegrator
-    from new_relative import HybridTopologyFactory
+    from perses.annihilation.new_relative import HybridTopologyFactory
 
     #The current and "proposed" positions are the same, since the molecule is not changed.
     factory = HybridTopologyFactory(topology_proposal, positions, positions)
