@@ -591,6 +591,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
 
         del context, ncmc_integrator
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
