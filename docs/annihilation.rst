@@ -61,5 +61,5 @@ In order to properly assign parameters to the particles in the hybrid system, th
 Creation of Force Terms
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-For each supported force, we have to create at least one custom force, as well as an unmodified force.
+For each supported force, we have to create at least one custom force, as well as an unmodified force. In general, the interactions are handled as follows:
 
