@@ -241,23 +241,6 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
 
 
-def test_setup_hybrid_system():
-    from perses.rjmc.topology_proposal import TopologyProposal
-    import perses.annihilation.new_relative as new_relative
-    alanine_topology, alanine_positions, leucine_topology, leucine_positions, atom_map = build_two_residues()
-
-    alanine_system = forcefield.createSystem(alanine_topology)
-    leucine_system = forcefield.createSystem(leucine_topology)
-
-    atom_map = {value : key for key, value in atom_map.items()}
-    #hybrid = HybridTopologyFactory(leucine_system, alanine_system, leucine_topology, alanine_topology, leucine_positions, alanine_positions, atom_map, softening=0.0)
-    top_prop = TopologyProposal(new_topology=leucine_topology, new_system=leucine_system, old_topology=alanine_topology, old_system=alanine_system, new_to_old_atom_map=atom_map)
-    hybrid_factory = new_relative.HybridTopologyFactory(top_prop)
-
-    [system, topology, positions, sys2_indices_in_system, sys1_indices_in_system] = hybrid.createPerturbedSystem()
-
-    compute_alchemical_correction(leucine_system, alanine_system, hybrid_new, leucine_positions, positions, positions, alanine_positions)
-
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
     Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.

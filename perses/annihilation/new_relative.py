@@ -81,7 +81,10 @@ class HybridTopologyFactory(object):
 
         for force_name in self._new_system_forces.keys():
             if force_name not in self._known_forces:
-                raise ValueError("Unkown force %s encountered in new system" % force_name)
+                if force_name=="CMMotionRemover":
+                    print("Warning! CMMotionRemover detected. It will not be present in the hybrid system.")
+                else:
+                    raise ValueError("Unkown force %s encountered in new system" % force_name)
 
         #get and store the nonbonded method from the system:
         self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
