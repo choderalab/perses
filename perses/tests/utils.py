@@ -272,7 +272,7 @@ def createSystemFromIUPAC(iupac_name):
     forcefield.loadFile(StringIO(ffxml))
 
     # Create the system.
-    system = forcefield.createSystem(topology)
+    system = forcefield.createSystem(topology, removeCMMotion=False)
 
     # Extract positions
     positions = extractPositionsFromOEMOL(molecule)
