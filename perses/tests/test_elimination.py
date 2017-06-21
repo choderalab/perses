@@ -51,6 +51,195 @@ def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temp
     velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
     return [positions, velocities]
 
+def simulate_hybrid(hybrid_system,functions, lambda_value, positions, nsteps=100, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds):
+    platform = openmm.Platform.getPlatformByName("Reference")
+    integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
+    context = openmm.Context(hybrid_system, integrator, platform)
+    for parameter in functions.keys():
+        context.setParameter(parameter, lambda_value)
+    context.setPositions(positions)
+    integrator.step(nsteps)
+    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    return positions
+
+def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+    """
+    Generate a test topology proposal and positions for the hybrid test.
+    """
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
+
+    mol = createOEMolFromIUPAC(mol_name)
+    m, system, positions, topology = createSystemFromIUPAC(mol_name)
+
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    #map one of the rings
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
+
+    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
+    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
+    effective_atom_map = {value : value for value in atom_map.values()}
+
+    #make a topology proposal with the appropriate data:
+    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
+
+    return top_proposal, positions
+
+def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    import simtk.openmm.app as app
+    from openmoltools import forcefield_generators
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    mol = createOEMolFromIUPAC(mol_name)
+    m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
+
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    #map one of the rings
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
+
+    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
+    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
+    effective_atom_map = {value : value for value in atom_map.values()}
+
+    modeller = app.Modeller(top, pos)
+    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    topology = modeller.getTopology()
+    positions = modeller.getPositions()
+    system = forcefield.createSystem(topology, nonbondedMethod=app.PME)
+
+    n_atoms_old_system = unsolv_system.getNumParticles()
+    n_atoms_after_solvation = system.getNumParticles()
+
+    for i in range(n_atoms_old_system, n_atoms_after_solvation):
+        effective_atom_map[i] = i
+
+    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
+
+    return top_proposal, positions
+
+
+def generate_solvated_hybrid_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    import simtk.openmm.app as app
+    from openmoltools import forcefield_generators
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    mol = createOEMolFromIUPAC(mol_name)
+    m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
+
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    #map one of the rings
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
+
+    effective_atom_map = atom_map
+
+    modeller = app.Modeller(top, pos)
+    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    topology = modeller.getTopology()
+    positions = modeller.getPositions()
+    system = forcefield.createSystem(topology, nonbondedMethod=app.PME)
+
+    n_atoms_old_system = unsolv_system.getNumParticles()
+    n_atoms_after_solvation = system.getNumParticles()
+
+    for i in range(n_atoms_old_system, n_atoms_after_solvation):
+        effective_atom_map[i] = i
+
+    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
+
+    return top_proposal, positions
+
+def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
+    """
+    Check that the hybrid topology, where both endpoints are identical, returns a free energy within NSIGMA_MAX of 0.
+    Parameters
+    ----------
+    topology_proposal
+    positions
+    ncmc_nsteps
+    NSIGMA_MAX
+
+    Returns
+    -------
+
+    """
+    from perses.annihilation import NCMCGHMCAlchemicalIntegrator
+    from perses.annihilation.new_relative import HybridTopologyFactory
+
+    #make the hybrid topology factory:
+    factory = HybridTopologyFactory(topology_proposal, positions, positions)
+
+    platform = openmm.Platform.getPlatformByName("Reference")
+
+    hybrid_system = factory.hybrid_system
+    hybrid_topology = factory.hybrid_topology
+    initial_hybrid_positions = factory.hybrid_positions
+
+    n_iterations = 50 #number of times to do NCMC protocol
+
+    #alchemical functions
+    functions = {
+        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
+        'lambda_torsions' : 'lambda'
+    }
+
+    w_f = np.zeros(n_iterations)
+    w_r = np.zeros(n_iterations)
+
+    #make the alchemical integrators:
+    #forward_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
+    #reverse_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
+
+    #first, do forward protocol (lambda=0 -> 1)
+    for i in range(n_iterations):
+        forward_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
+        equil_positions = simulate_hybrid(hybrid_system,functions, 0.0, initial_hybrid_positions)
+        context = openmm.Context(hybrid_system, forward_integrator, platform)
+        context.setPositions(equil_positions)
+        forward_integrator.step(ncmc_nsteps)
+        w_f[i] = -1.0 * forward_integrator.getLogAcceptanceProbability(context)
+        print(i)
+        del context, forward_integrator
+
+    #now, reverse protocol
+    for i in range(n_iterations):
+        reverse_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
+        equil_positions = simulate_hybrid(hybrid_system,functions, 1.0, initial_hybrid_positions)
+        context = openmm.Context(hybrid_system, reverse_integrator, platform)
+        context.setPositions(equil_positions)
+        reverse_integrator.step(ncmc_nsteps)
+        w_r[i] = -1.0 * reverse_integrator.getLogAcceptanceProbability(context)
+        print(i)
+        del context, reverse_integrator
+
+    from pymbar import BAR
+    [df, ddf] = BAR(w_f, w_r)
+    print("df = %12.6f +- %12.5f kT" % (df, ddf))
+    if (abs(df) > NSIGMA_MAX * ddf):
+        msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
+        msg += 'logP_work_n:\n'
+        msg += str(w_f) + '\n'
+        msg += str(w_r) + '\n'
+        raise Exception(msg)
+
 def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
     Test alchemical elimination engine on null transformations, where some atoms are deleted and then reinserted in a cycle.
@@ -70,8 +259,8 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     functions = {
         'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
         'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : '1.0', # don't soften bonds
-        'lambda_angles' : '1.0', # don't soften angles
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
     }
     # Initialize engine
@@ -136,7 +325,117 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
         msg += str(logP_work_n) + '\n'
         raise Exception(msg)
 
-def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
+def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0):
+    """
+    Test the hybrid system by switching between lambda = 1 and lambda = 0, then using BAR to compute the free energy
+    difference. As the test is designed so that both endpoints are the same, the free energy difference should be zero.
+
+    Parameters
+    ----------
+    topology_proposal : TopologyProposal
+        The topology proposal to test.
+        This must be a null transformation, where topology_proposal.old_system == topology_proposal.new_system
+    ncmc_steps : int, optional, default=50
+        Number of NCMC switching steps, or 0 for instantaneous switching.
+    NSIGMA_MAX : float, optional, default=6.0
+    """
+    functions = {
+        'lambda_sterics' : 'lambda',
+        'lambda_electrostatics' : 'lambda',
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
+        'lambda_torsions' : 'lambda'
+    }
+    # Initialize engine
+    from perses.annihilation import NCMCGHMCAlchemicalIntegrator
+    from perses.annihilation.new_relative import HybridTopologyFactory
+
+    #The current and "proposed" positions are the same, since the molecule is not changed.
+    factory = HybridTopologyFactory(topology_proposal, positions, positions)
+
+    forward_integrator = NCMCGHMCAlchemicalIntegrator(temperature, factory.hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
+    reverse_integrator = NCMCGHMCAlchemicalIntegrator(temperature, factory.hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
+
+    platform = openmm.Platform.getPlatformByName("Reference")
+
+    forward_context = openmm.Context(factory.hybrid_system, forward_integrator, platform)
+    reverse_context = openmm.Context(factory.hybrid_system, reverse_integrator, platform)
+
+    # Make sure that old system and new system are identical.
+    if not (topology_proposal.old_system == topology_proposal.new_system):
+        raise Exception("topology_proposal must be a null transformation for this test (old_system == new_system)")
+    for (k,v) in topology_proposal.new_to_old_atom_map.items():
+        if k != v:
+            raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
+
+    nequil = 5 # number of equilibration iterations
+    niterations = 50 # number of round-trip switching trials
+    logP_work_n_f = np.zeros([niterations], np.float64)
+    for iteration in range(nequil):
+        positions = simulate_hybrid(factory.hybrid_system,functions, 0.0, factory.hybrid_positions)
+
+    #do forward switching:
+    for iteration in range(niterations):
+        # Equilibrate
+        positions = simulate_hybrid(factory.hybrid_system,functions, 0.0, factory.hybrid_positions)
+
+        # Check that positions are not NaN
+        if(np.any(np.isnan(positions / unit.angstroms))):
+            raise Exception("Positions became NaN during equilibration")
+
+        # Hybrid NCMC
+        forward_integrator.reset()
+        forward_context.setPositions(positions)
+        forward_integrator.step(ncmc_nsteps)
+        logP_work = forward_integrator.getTotalWork(forward_context)
+
+        # Check that positions are not NaN
+        if(np.any(np.isnan(positions / unit.angstroms))):
+            raise Exception("Positions became NaN on Hybrid NCMC switch")
+
+        # Store log probability associated with work
+        logP_work_n_f[iteration] = logP_work
+
+    logP_work_n_r = np.zeros([niterations], np.float64)
+
+    for iteration in range(nequil):
+        positions = simulate_hybrid(factory.hybrid_system,functions, 1.0, factory.hybrid_positions)
+
+    #do forward switching:
+    for iteration in range(niterations):
+        # Equilibrate
+        positions = simulate_hybrid(factory.hybrid_system,functions, 1.0, factory.hybrid_positions)
+
+        # Check that positions are not NaN
+        if(np.any(np.isnan(positions / unit.angstroms))):
+            raise Exception("Positions became NaN during equilibration")
+
+        # Hybrid NCMC
+        reverse_integrator.reset()
+        reverse_context.setPositions(positions)
+        reverse_integrator.step(ncmc_nsteps)
+        logP_work = reverse_integrator.getTotalWork(forward_context)
+
+        # Check that positions are not NaN
+        if(np.any(np.isnan(positions / unit.angstroms))):
+            raise Exception("Positions became NaN on Hybrid NCMC switch")
+
+        # Store log probability associated with work
+        logP_work_n_r[iteration] = logP_work
+
+    work_f = - logP_work_n_f
+    work_r = - logP_work_n_r
+    from pymbar import BAR
+    [df, ddf] = BAR(work_f, work_r)
+    print("df = %12.6f +- %12.5f kT" % (df, ddf))
+    if (abs(df) > NSIGMA_MAX * ddf):
+        msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
+        msg += 'logP_work_n:\n'
+        msg += str(work_f) + '\n'
+        msg += str(work_r) + '\n'
+        raise Exception(msg)
+
+def check_hybrid_null_elimination(topology_proposal, positions, new_positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """
     Test alchemical elimination engine on null transformations, where some atoms are deleted and then reinserted in a cycle.
 
@@ -155,8 +454,8 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
     functions = {
         'lambda_sterics' : 'lambda',
         'lambda_electrostatics' : 'lambda',
-        'lambda_bonds' : 'lambda', # don't soften bonds
-        'lambda_angles' : 'lambda', # don't soften angles
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
     }
     # Initialize engine
@@ -164,11 +463,11 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
     ncmc_engine = NCMCHybridEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
-    if not (topology_proposal.old_system == topology_proposal.new_system):
-        raise Exception("topology_proposal must be a null transformation for this test (old_system == new_system)")
-    for (k,v) in topology_proposal.new_to_old_atom_map.items():
-        if k != v:
-            raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
+   # if not (topology_proposal.old_system == topology_proposal.new_system):
+   #     raise Exception("topology_proposal must be a null transformation for this test (old_system == new_system)")
+   # for (k,v) in topology_proposal.new_to_old_atom_map.items():
+   #     if k != v:
+   #         raise Exception("topology_proposal must be a null transformation for this test (retailed atoms must map onto themselves)")
 
     nequil = 5 # number of equilibration iterations
     niterations = 50 # number of round-trip switching trials
@@ -184,7 +483,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
             raise Exception("Positions became NaN during equilibration")
 
         # Hybrid NCMC from old to new
-        [positions, new_old_positions, logP_work, logP_energy] = ncmc_engine.integrate(topology_proposal, positions, positions)
+        [_, new_old_positions, logP_work, logP_energy] = ncmc_engine.integrate(topology_proposal, positions, positions)
 
         # Check that positions are not NaN
         if(np.any(np.isnan(positions / unit.angstroms))):
@@ -198,7 +497,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, ncmc_nsteps=50, 
     work_n = - logP_work_n
     from pymbar import EXP
     [df, ddf] = EXP(work_n)
-    #print("df = %12.6f +- %12.5f kT" % (df, ddf))
+    print("df = %12.6f +- %12.5f kT" % (df, ddf))
     if (abs(df) > NSIGMA_MAX * ddf):
         msg = 'Delta F (%d steps switching) = %f +- %f kT; should be within %f sigma of 0\n' % (ncmc_nsteps, df, ddf, NSIGMA_MAX)
         msg += 'logP_work_n:\n'
@@ -292,6 +591,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
 
         del context, ncmc_integrator
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
@@ -333,25 +633,41 @@ def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
     """
-    molecule_names = ['pentane', 'biphenyl', 'imatinib']
+    mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene'], ['octane','propane']]
+    #mols_and_refs=[['pentane', 'propane']]
     if os.environ.get("TRAVIS", None) == 'true':
-        molecule_names = ['pentane']
+        mols_and_refs = [['naphthalene', 'benzene']]
 
-    for molecule_name in molecule_names:
+    for mol_ref in mols_and_refs:
         from perses.tests.utils import createSystemFromIUPAC
-        [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
-        natoms = system.getNumParticles()
-        # Eliminate half of the molecule
-        # TODO: Use a more rigorous scheme to make sure we are really cutting the molecule in half and not just eliminating hydrogens or something.
-        new_to_old_atom_map = { atom.index : atom.index for atom in topology.atoms() if str(atom.element.name) in ['carbon','nitrogen'] }
+        [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
 
-        from perses.rjmc.topology_proposal import TopologyProposal
-        topology_proposal = TopologyProposal(
-            new_topology=topology, new_system=system, old_topology=topology, old_system=system,
-            old_chemical_state_key='', new_chemical_state_key='', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata={'test':0.0})
+        topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
+        #topology_proposal, positions = generate_solvated_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
         for ncmc_nsteps in [0, 1, 50]:
-            f = partial(check_hybrid_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
-            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
+            f = partial(check_alchemical_hybrid_elimination_bar, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
+            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
+            yield f
+
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+def test_ncmc_hybrid_explicit_engine_molecule():
+    """
+    Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
+    """
+    #mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene'], ['octane','propane']]
+    mols_and_refs=[['pentane', 'propane']]
+    if os.environ.get("TRAVIS", None) == 'true':
+        mols_and_refs = [['naphthalene', 'benzene']]
+
+    for mol_ref in mols_and_refs:
+        from perses.tests.utils import createSystemFromIUPAC
+        [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
+
+        #topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
+        topology_proposal, positions = generate_solvated_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
+        for ncmc_nsteps in [0, 1, 50]:
+            f = partial(check_alchemical_hybrid_elimination_bar, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
+            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
             yield f
 
 @skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
@@ -376,10 +692,11 @@ def test_alchemical_elimination_peptide():
         yield f
 
 if __name__ == "__main__":
-    for x in test_ncmc_engine_molecule():
-        print(x.description)
-        x()
-    for x in test_ncmc_hybrid_engine_molecule():
+    #for x in test_ncmc_engine_molecule():
+    #    print(x.description)
+    #    x()
+    #generate_solvated_hybrid_test_topology()
+    for x in test_ncmc_hybrid_explicit_engine_molecule():
         print(x.description)
         x()
 #    test_ncmc_alchemical_integrator_stability_molecules()

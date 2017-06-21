@@ -1753,7 +1753,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':500}, storage=storage)
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':500}, storage=storage, scheme='geometry-ncmc-geometry')
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -2644,12 +2644,12 @@ def run_fused_rings():
         analysis.plot_ncmc_work('ncmc-%d.pdf' % ncmc_steps)
 
 if __name__ == '__main__':
-    #testsystem = PropaneTestSystem(scheme='ncmc-geometry-ncmc', options = {'nsteps':100})
+    #testsystem = PropaneTestSystem(scheme='geometry-ncmc-geometry', options = {'nsteps':10})
     #run_null_system(testsystem)
     #run_alanine_system(sterics=False)
     #run_fused_rings()
-    run_valence_system()
-    #run_t4_inhibitors()
+    #run_valence_system()
+    run_t4_inhibitors()
     #run_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()

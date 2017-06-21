@@ -241,17 +241,73 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
 
 
-def test_setup_hybrid_system():
-    alanine_topology, alanine_positions, leucine_topology, leucine_positions, atom_map = build_two_residues()
+def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
+    """
+    Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
+    """
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    from perses.annihilation.new_relative import HybridTopologyFactory
+    import simtk.openmm as openmm
 
-    alanine_system = forcefield.createSystem(alanine_topology)
-    leucine_system = forcefield.createSystem(leucine_topology)
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
 
-    atom_map = {value : key for key, value in atom_map.items()}
-    hybrid = HybridTopologyFactory(leucine_system, alanine_system, leucine_topology, alanine_topology, leucine_positions, alanine_positions, atom_map, softening=0.0)
-    [system, topology, positions, sys2_indices_in_system, sys1_indices_in_system] = hybrid.createPerturbedSystem()
+    mol_name = "naphthalene"
+    ref_mol_name = "benzene"
 
-    compute_alchemical_correction(leucine_system, alanine_system, system, leucine_positions, positions, positions, alanine_positions)
+    mol = createOEMolFromIUPAC(mol_name)
+    m, system, positions, topology = createSystemFromIUPAC(mol_name)
+
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    #map one of the rings
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
+
+    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
+    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
+    effective_atom_map = {value : value for value in atom_map.values()}
+
+    #make a topology proposal with the appropriate data:
+    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
+
+    factory = HybridTopologyFactory(top_proposal, positions, positions)
+
+    alchemical_system = factory.hybrid_system
+    alchemical_positions = factory.hybrid_positions
+
+    integrator = openmm.VerletIntegrator(1)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    context = openmm.Context(alchemical_system, integrator, platform)
+
+    context.setPositions(alchemical_positions)
+
+    functions = {
+        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_bonds' : 'lambda',
+        'lambda_angles' : 'lambda',
+        'lambda_torsions' : 'lambda'
+    }
+
+    #set all to zero
+    for parm in functions.keys():
+        context.setParameter(parm, 0.0)
+
+    initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
+
+    #set all to one
+    for parm in functions.keys():
+        context.setParameter(parm, 1.0)
+
+    final_energy = context.getState(getEnergy=True).getPotentialEnergy()
+
+    if np.abs(final_energy - initial_energy) > 1.0e-6*unit.kilojoule_per_mole:
+        raise Exception("The energy at the endpoints was not equal for molecule %s" % mol_name)
+
+def test_compare_energies():
+    mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]
+
+    for mol_ref_pair in mols_and_refs:
+        compare_energies(mol_name=mol_ref_pair[0], ref_mol_name=mol_ref_pair[1])
 
 if __name__ == '__main__':
-    test_setup_hybrid_system()
+    test_compare_energies()
