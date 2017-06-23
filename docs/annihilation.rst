@@ -58,8 +58,82 @@ In order to properly assign parameters to the particles in the hybrid system, th
 - Unique new: These atoms are not in the map, and are present only in the new system
     - Example: The chlorine atom that appears when a benzene is transformed into a chlorobenzene.
     
-Creation of Force Terms
-^^^^^^^^^^^^^^^^^^^^^^^
+Treatment of different interaction groups
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 For each supported force, we have to create at least one custom force, as well as an unmodified force. In general, the interactions are handled as follows:
+
+- Environment-Environment: These interactions are handled by regular unmodified forces, as their parameters never change.
+
+- Environment-{Core, Unique old, Unique new}: These interactions are handled by Custom*Forces. For interactions involving the core atoms, the interaction scales from the parameter in the old system to the parameter in the new system as lambda is switched from 0 to 1. For interactions involving the unique atoms, the interaction scales from full to zero as lambda switches from 0 to 1 in unique old atoms, and vice versa for unique new atoms.
+
+- Core-Core interactions: These interactions scale from old system parameters to new system parameters as lambda is switched from 0 to 1.
+
+- Core-{unique old, unique new} interactions: These interactions scale from the parameters in the old system to the parameters in the new system as lambda is switched from 0 to 1. This means that unique atoms always maintain intramolecular interactions.
+
+- Unique-old and unique-new interactions: These are disabled.
+
+- intra-Unique atoms: These interactions are always enabled, and as such are handled by an unmodified force.
+
+
+Force terms
+^^^^^^^^^^^
+
+Given the above division of atoms into different groups, the assignment of interactions to different force classes is straightforward. 
+
+
+Bonds
+"""""
+
+Bonds are handled with a HarmonicBondForce and a CustomBondForce.
+
+- HarmonicBondForce: This handles all bond interactions that do not change with lambda.
+
+- CustomBondForce: This handles bond interactions that change with lambda. Bond terms never become zero; they are always on to ensure that molecules do not fly apart
+
+Angles
+""""""
+
+Angles are also handled with a HarmonicAngleForce and a CustomAngleForce
+
+- HarmonicAngleForce: This handles all angle interactions that do not change with lambda.
+
+- CustomAngleForce: This handles angle interactions that change with lambda. Angle terms never become zero; they are always on to ensure overlap.
+
+Torsions
+""""""""
+
+Torsions are handled with a PeriodicTorsionForce and a CustomTorsionForce
+
+- PeriodicTorsionForce: This handles all torsion interactions that do not change with lambda.
+
+- CustomTorsionForce: This handles interactions that change with lambda. Although the torsion potential for a given group of atoms is never set to zero, the force assignments sometimes include zero as an endpoint. This is to handle the case of torsion multiplicities greater than one.
+
+Nonbonded (both sterics and electrostatics)
+"""""""""""""""""""""""""""""""""""""""""""
+
+- NonbondedForce: This handles sterics and electrostatics interactions that do not change. All interactions that are involved in custom nonbonded forces are excluded from this force.
+
+- CustomBondForce: This handles the exceptions from the standard NonbondedForce above.
+
+Nonbonded (Sterics)
+"""""""""""""""""""
+
+- CustomNonbondedForce: This handles softcore sterics for interactions that change with lambda. This force uses interaction groups to exclude interactions that do not change with lambda (and are covered by the NonbondedForce above). This force supports no cutoff, reaction field, and PME. An important note relates to the dispersion correction; by default, it is not enabled to improve performance. However, it can be enabled as a constructor argument in the HybridTopologyFactory.
+
+Nonbonded (Electrostatics)
+""""""""""""""""""""""""""
+
+- CustomNonbondedForce: This is a separate CustomNonbondedForce that handles electrostatic interactions that change with lambda. This force uses interaction groups to exclude interactions that do not change with lambda (and are covered by the NonbondedForce above). This force supports no cutoff, reaction field, and PME. 
+
+
+Specific unsupported forces
+"""""""""""""""""""""""""""
+Any force that is not in one of the above-mentioned classes will cause an exception to be raised. Some important examples of this are:
+
+- Amoeba forces
+- GB forces
+- CMMotionRemover
+
+
 
