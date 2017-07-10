@@ -76,6 +76,9 @@ class HybridTopologyFactory(object):
 
         if functions:
             self._functions = functions
+            self._has_functions = True
+        else:
+            self._has_functions = False
 
         #prepare dicts of forces, which will be useful later
         self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
@@ -451,7 +454,7 @@ class HybridTopologyFactory(object):
         core_energy_expression = '(K/2)*(r-length)^2;'
         core_energy_expression += 'K = (1-lambda_bonds)*K1 + lambda_bonds*K2;' # linearly interpolate spring constant
         core_energy_expression += 'length = (1-lambda_bonds)*length1 + lambda_bonds*length2;' # linearly interpolate bond length
-        if self._functions:
+        if self._has_functions is not None:
             try:
                 core_energy_expression += 'lambda_bonds = ' + self._functions['lambda_bonds']
             except KeyError as e:
@@ -465,7 +468,7 @@ class HybridTopologyFactory(object):
         custom_core_force.addPerBondParameter('length2') # new bond length
         custom_core_force.addPerBondParameter('K2') #new spring constant
 
-        if self._functions:
+        if self._has_functions is not None:
             custom_core_force.addGlobalParameter('lambda', 0.0)
             custom_core_force.addEnergyParameterDerivative('lambda')
         else:
@@ -487,7 +490,7 @@ class HybridTopologyFactory(object):
         energy_expression  = '(K/2)*(theta-theta0)^2;'
         energy_expression += 'K = (1.0-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
         energy_expression += 'theta0 = (1.0-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
-        if self._functions:
+        if self._has_functions is not None:
             try:
                 energy_expression += 'lambda_angles = ' + self._functions['lambda_angles']
             except KeyError as e:
@@ -501,7 +504,7 @@ class HybridTopologyFactory(object):
         custom_core_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
         custom_core_force.addPerAngleParameter('K_2') # molecule2 spring constant
 
-        if self._functions:
+        if self._has_functions is not None:
             custom_core_force.addGlobalParameter('lambda', 0.0)
             custom_core_force.addEnergyParameterDerivative('lambda')
         else:
@@ -526,7 +529,7 @@ class HybridTopologyFactory(object):
         energy_expression += 'U1 = K1*(1+cos(periodicity1*theta-phase1));'
         energy_expression += 'U2 = K2*(1+cos(periodicity2*theta-phase2));'
 
-        if self._functions:
+        if self._has_functions is not None:
             try:
                 energy_expression += 'lambda_torsions = ' + self._functions['lambda_torsions']
             except KeyError as e:
@@ -543,7 +546,7 @@ class HybridTopologyFactory(object):
         custom_core_force.addPerTorsionParameter('phase2') # molecule2 phase
         custom_core_force.addPerTorsionParameter('K2') # molecule2 spring constant
 
-        if self._functions:
+        if self._has_functions is not None:
             custom_core_force.addGlobalParameter('lambda', 0.0)
             custom_core_force.addEnergyParameterDerivative('lambda')
         else:
@@ -603,7 +606,7 @@ class HybridTopologyFactory(object):
 
         # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
         total_electrostatics_energy = "U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules
-        if self._functions:
+        if self._has_functions is not None:
             try:
                 total_electrostatics_energy += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
             except KeyError as e:
@@ -615,7 +618,7 @@ class HybridTopologyFactory(object):
         electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
         electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
 
-        if self._functions:
+        if self._has_functions is not None:
             electrostatics_custom_nonbonded_force.addGlobalParameter("lambda", 0.0)
             electrostatics_custom_nonbonded_force.addEnergyParameterDerivative('lambda')
         else:
@@ -628,7 +631,7 @@ class HybridTopologyFactory(object):
         self._hybrid_system_forces['core_electrostatics_force'] = electrostatics_custom_nonbonded_force
 
         total_sterics_energy = "U_sterics;" + sterics_energy_expression + sterics_mixing_rules
-        if self._functions:
+        if self._has_functions is not None:
             try:
                 total_sterics_energy += 'lambda_sterics  = ' + self._functions['lambda_sterics']
             except KeyError as e:
@@ -642,7 +645,7 @@ class HybridTopologyFactory(object):
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonB") # Lennard-Jones epsilon final
 
-        if self._functions:
+        if self._has_functions is not None:
             sterics_custom_nonbonded_force.addGlobalParameter('lambda', 0.0)
             sterics_custom_nonbonded_force.addEnergyParameterDerivative('lambda')
         else:
@@ -825,7 +828,7 @@ class HybridTopologyFactory(object):
         """
         #Create the force and add its relevant parameters.
         #we don't need to check that the keys exist, since by the time this is called, these are already checked.
-        if self._functions:
+        if self._has_functions is not None:
             sterics_energy_expression += 'lambda_sterics = ' + self._functions['lambda_sterics']
             electrostatics_energy_expression += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
         custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
@@ -840,7 +843,7 @@ class HybridTopologyFactory(object):
         custom_bond_force.addPerBondParameter("sigmaB")
         custom_bond_force.addPerBondParameter("epsilonB")
 
-        if self._functions:
+        if self._has_functions is not None:
             custom_bond_force.addGlobalParameter('lambda', 0.0)
             custom_bond_force.addEnergyParameterDerivative('lambda')
         else:
