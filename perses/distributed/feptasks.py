@@ -1,10 +1,7 @@
 import celery
 from celery.contrib import rdb
 import simtk.openmm as openmm
-import openmmtools.integrators as integrators
 import openmmtools.cache as cache
-import simtk.unit as unit
-import numpy as np
 import redis
 
 broker_name_server = "redis://localhost"
@@ -32,15 +29,11 @@ class NonequilibriumSwitchTask(celery.Task):
     """
 
     def __init__(self):
-        self._forward_context = None
-        self._forward_integrator = None
-        self._reverse_context = None
-        self._reverse_integrator = None
-        self._equilibrium_context = None
-        self._equilibrium_integrator = None
+        platform = openmm.Platform.getPlatformByName("OpenCL")
+        self._cache = cache.ContextCache(platform=platform)
 
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
-def run_protocol(self, starting_positions, system, nsteps, direction, functions, temperature=300*unit.kelvin, platform_name="OpenCL"):
+def run_protocol(self, starting_positions, nsteps, thermodynamic_state, integrator):
     """
     Perform a switching protocol and return the nonequilibrium switching weight
 
@@ -49,34 +42,16 @@ def run_protocol(self, starting_positions, system, nsteps, direction, functions,
     weight : float64
         The nonequilibrium switching weight
     """
-    if direction == 'forward':
-        if self._forward_context is None:
-            integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=functions, nsteps_neq=nsteps, temperature=temperature)
-            platform = openmm.Platform.getPlatformByName(platform_name)
-            switching_ctx = openmm.Context(system, integrator, platform)
-            self._forward_context = switching_ctx
-            self._forward_integrator = integrator
-        else:
-            switching_ctx = self._forward_context
-            integrator = self._forward_integrator
-    elif direction == 'reverse':
-        if self._reverse_context is None:
-            integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=functions, nsteps_neq=nsteps, temperature=temperature)
-            platform = openmm.Platform.getPlatformByName(platform_name)
-            switching_ctx = openmm.Context(system, integrator, platform)
-            self._reverse_context = switching_ctx
-            self._reverse_integrator = integrator
-        else:
-            switching_ctx = self._reverse_context
-            integrator = self._reverse_integrator
+    switching_ctx, integrator_neq = self._cache.get_context(thermodynamic_state, integrator)
     switching_ctx.setPositions(starting_positions)
-    integrator.step(nsteps)
-    work = integrator.getGlobalVariableByName("protocol_work")
-    integrator.reset()
+    integrator_neq.step(nsteps)
+    work = integrator_neq.getGlobalVariableByName("protocol_work")
+    rdb.set_trace()
+    integrator_neq.reset()
     return work
 
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
-def run_equilibrium(self, starting_positions, system, nsteps, lambda_state, functions, temperature=300.0*unit.kelvin, platform_name="OpenCL"):
+def run_equilibrium(self, starting_positions, nsteps, lambda_state, functions, thermodynamic_state, integrator):
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the positions.
 
@@ -84,14 +59,7 @@ def run_equilibrium(self, starting_positions, system, nsteps, lambda_state, func
     -------
     positions : [n, 3] np.ndarray quantity
     """
-    if self._equilibrium_context is None:
-        integrator = openmm.LangevinIntegrator(temperature, 5.0 / unit.picosecond, 1.0*unit.femtosecond)
-        platform = openmm.Platform.getPlatformByName(platform_name)
-        equilibrium_ctx = openmm.Context(system, integrator, platform)
-        self._equilibrium_context = equilibrium_ctx
-    else:
-        equilibrium_ctx = self._equilibrium_context
-        integrator = self._equilibrium_context.getIntegrator()
+    equilibrium_ctx, integrator = self._cache.get_context(thermodynamic_state, integrator)
     equilibrium_ctx.setPositions(starting_positions)
     for parm in functions.keys():
         equilibrium_ctx.setParameter(parm, lambda_state)
@@ -101,18 +69,12 @@ def run_equilibrium(self, starting_positions, system, nsteps, lambda_state, func
     return positions
 
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
-def minimize(self, starting_positions, system, lambda_state, functions, nsteps_max, temperature=300.0*unit.kelvin, platform_name="OpenCL"):
-    if self._equilibrium_context is None:
-        integrator = openmm.LangevinIntegrator(temperature, 5.0 / unit.picosecond, 1.0*unit.femtosecond)
-        platform = openmm.Platform.getPlatformByName(platform_name)
-        equilibrium_ctx = openmm.Context(system, integrator, platform)
-        self._equilibrium_context = equilibrium_ctx
-    else:
-        equilibrium_ctx = self._equilibrium_context
+def minimize(self, starting_positions, nsteps_max, lambda_state, functions, thermodynamic_state, integrator):
+    equilibrium_ctx, integrator = self._cache.get_context(thermodynamic_state, integrator)
 
     equilibrium_ctx.setPositions(starting_positions)
 
-    for parm in functions:
+    for parm in functions.keys():
         equilibrium_ctx.setParameter(parm, lambda_state)
 
     openmm.LocalEnergyMinimizer.minimize(equilibrium_ctx, maxIterations=nsteps_max)
@@ -120,3 +82,8 @@ def minimize(self, starting_positions, system, lambda_state, functions, nsteps_m
     initial_state = equilibrium_ctx.getState(getPositions=True, getEnergy=True)
 
     return initial_state.getPositions(asNumpy=True)
+
+@app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
+def dummy_task(self, integrator):
+    rdb.set_trace()
+    return integrator

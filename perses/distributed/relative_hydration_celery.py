@@ -1,5 +1,5 @@
 from perses.distributed import feptasks
-from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator
+from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator, LangevinIntegrator
 from openmmtools.states import ThermodynamicState
 import pymbar
 import simtk.openmm as openmm
@@ -13,6 +13,8 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import openeye.oechem as oechem
 import celery
 from openmoltools import forcefield_generators
+import copy
+
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
@@ -77,6 +79,41 @@ def _build_new_topology(self, current_receptor_topology, oemol_proposed):
 
     return new_topology
 
+def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane"):
+    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    import simtk.openmm.app as app
+    from openmoltools import forcefield_generators
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    initial_smiles = oechem.OEMolToSmiles(m)
+    final_smiles = oechem.OEMolToSmiles(refmol)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
+
+    gaff_filename = get_data_filename('data/gaff.xml')
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
+    geometry_engine = FFAllAngleGeometryEngine()
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
+
+    #generate topology proposal
+    topology_proposal = proposal_engine.propose(solvated_system, top_old)
+
+    #generate new positions with geometry engine
+    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+
+    return topology_proposal, pos_old, new_positions
+
+
+
 class NonequilibriumSwitchingFEP(object):
     """
     This class manages Nonequilibrium switching based relative free energy calculations, carried out on a distributed computing framework.
@@ -90,7 +127,7 @@ class NonequilibriumSwitchingFEP(object):
         'lambda_torsions' : 'lambda'
     }
 
-    def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False, forward_functions=None, concurrency=4, platform_name="OpenCL", temperature=300.0*unit.kelvin):
+    def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False, forward_functions=None, ncmc_nsteps=100, concurrency=4, platform_name="OpenCL", temperature=300.0*unit.kelvin):
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
         if forward_functions == None:
             self._forward_functions = self.default_forward_functions
@@ -101,6 +138,13 @@ class NonequilibriumSwitchingFEP(object):
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
         self._concurrency = concurrency
+
+        self._ncmc_nsteps = ncmc_nsteps
+        self._thermodynamic_state = ThermodynamicState(self._hybrid_system, temperature=temperature)
+        self._forward_integrator = AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)
+        self._reverse_integrator = AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)
+        self._equilibrium_integrator = LangevinIntegrator(temperature=temperature)
+
 
         self._current_positions_forward_result = None
         self._current_positions_reverse_result = None
@@ -118,8 +162,8 @@ class NonequilibriumSwitchingFEP(object):
         current_positions_forward = self._current_positions_forward_result.get()
         current_positions_reverse = self._current_positions_reverse_result.get()
 
-        equilibrated_result_forward = feptasks.run_equilibrium.delay(current_positions_forward, self._hybrid_system, n_steps, 0.0, self._forward_functions, temperature=self._temperature, platform_name=self._platform_name)
-        equilibrated_result_reverse = feptasks.run_equilibrium.delay(current_positions_reverse, self._hybrid_system, n_steps, 1.0, self._reverse_functions, temperature=self._temperature, platform_name=self._platform_name)
+        equilibrated_result_forward = feptasks.run_equilibrium.delay(current_positions_forward, n_steps, 0.0, self._forward_functions, self._thermodynamic_state, self._equilibrium_integrator)
+        equilibrated_result_reverse = feptasks.run_equilibrium.delay(current_positions_reverse, n_steps, 1.0, self._reverse_functions, self._thermodynamic_state, self._equilibrium_integrator)
 
         self._current_positions_forward_result = equilibrated_result_forward
         self._current_positions_reverse_result = equilibrated_result_reverse
@@ -139,13 +183,13 @@ class NonequilibriumSwitchingFEP(object):
             current_positions_forward = self._current_positions_forward_result.get()
             current_positions_reverse = self._current_positions_reverse_result.get()
 
-        minimized_forward_result = feptasks.minimize.delay(current_positions_forward, self._hybrid_system, 0.0, self._forward_functions, max_steps, temperature=self._temperature, platform_name=self._platform_name)
-        minimized_reverse_result = feptasks.minimize.delay(current_positions_reverse, self._hybrid_system, 1.0, self._forward_functions, max_steps, temperature=self._temperature, platform_name=self._platform_name)
+        minimized_forward_result = feptasks.minimize.delay(current_positions_forward, max_steps, 0.0, self._forward_functions, self._thermodynamic_state, self._forward_integrator)
+        minimized_reverse_result = feptasks.minimize.delay(current_positions_reverse, max_steps, 0.0, self._reverse_functions, self._thermodynamic_state, self._reverse_integrator)
 
         self._current_positions_forward_result = minimized_forward_result
         self._current_positions_reverse_result = minimized_reverse_result
 
-    def run_nonequilibrium_task(self, ncmc_nsteps=100, async=True):
+    def run_nonequilibrium_task(self, async=True):
         """
         Run nonequilibrium trajectories in both
         Parameters
@@ -158,9 +202,9 @@ class NonequilibriumSwitchingFEP(object):
         current_reverse_positions = self._current_positions_reverse_result.get()
 
         for i in range(self._concurrency):
-            tasks.append(feptasks.run_protocol.s(current_forward_positions, self._hybrid_system, ncmc_nsteps, 'forward', self._forward_functions))
+            tasks.append(feptasks.run_protocol.s(current_forward_positions, self._ncmc_nsteps, self._thermodynamic_state, self._forward_integrator))
         for i in range(self._concurrency):
-            tasks.append(feptasks.run_protocol.s(current_reverse_positions, self._hybrid_system, ncmc_nsteps, 'reverse', self._reverse_functions))
+            tasks.append(feptasks.run_protocol.s(current_reverse_positions, self._ncmc_nsteps, self._thermodynamic_state, self._reverse_integrator))
 
         self._current_nonequilibrium_work_result = celery.group(tasks).apply_async()
 
@@ -190,4 +234,14 @@ class NonequilibriumSwitchingFEP(object):
         return self._reverse_work
 
 if __name__=="__main__":
-    pass
+    topology_proposal, pos_old, new_positions = generate_vacuum_hybrid_topology()
+    ne_fep = NonequilibriumSwitchingFEP(topology_proposal, pos_old, new_positions)
+    ne_fep.minimize()
+    ne_fep.run_equilibrium()
+    ne_fep.run_nonequilibrium_task()
+    ne_fep.run_equilibrium()
+    ne_fep.collect_ne_work()
+    print("test")
+
+
+
