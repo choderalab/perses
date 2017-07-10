@@ -831,7 +831,7 @@ class HybridTopologyFactory(object):
         #now loop through the new system to get the interactions that are unique to it.
         for bond_index in range(new_system_bond_force.getNumBonds()):
             #get each set of bond parameters
-            [index1_new, index2_new, r0_new, k_new] = old_system_bond_force.getBondParameters(bond_index)
+            [index1_new, index2_new, r0_new, k_new] = new_system_bond_force.getBondParameters(bond_index)
 
             #convert indices to hybrid, since that is how we represent atom classes:
             index1_hybrid = self._new_to_hybrid_map[index1_new]
@@ -951,7 +951,7 @@ class HybridTopologyFactory(object):
             angle_parameters = new_system_angle_force.getAngleParameters(angle_index)
 
             #get the indices in the hybrid system
-            hybrid_index_list = [self._old_to_hybrid_map[new_index] for new_index in angle_parameters[:3]]
+            hybrid_index_list = [self._new_to_hybrid_map[new_index] for new_index in angle_parameters[:3]]
             hybrid_index_set = set(hybrid_index_list)
 
             #if the intersection of this hybrid set with the unique new atoms is nonempty, it must be added:
