@@ -41,7 +41,7 @@ class HybridTopologyFactory(object):
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None):
         """
         Initialize the Hybrid topology factory.
 
@@ -55,6 +55,10 @@ class HybridTopologyFactory(object):
             The positions of the "new system"
         use_dispersion_correction : bool, default False
             Whether to use the long range correction in the custom sterics force. This is very expensive for NCMC.
+        functions : dict, default None
+            Alchemical functions that determine how each force is scaled with lambda. The keys must be strings with
+            names beginning with lambda_ and ending with each of bonds, angles, torsions, sterics, electrostatics.
+            If none, then the integrator will need to set each of these and parameter derivatives will be unavailable.
         """
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
@@ -69,6 +73,9 @@ class HybridTopologyFactory(object):
 
         self.softcore_alpha=0.5
         self.softcore_beta=12*unit.angstrom**2
+
+        if functions:
+            self._functions = functions
 
         #prepare dicts of forces, which will be useful later
         self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
@@ -444,14 +451,25 @@ class HybridTopologyFactory(object):
         core_energy_expression = '(K/2)*(r-length)^2;'
         core_energy_expression += 'K = (1-lambda_bonds)*K1 + lambda_bonds*K2;' # linearly interpolate spring constant
         core_energy_expression += 'length = (1-lambda_bonds)*length1 + lambda_bonds*length2;' # linearly interpolate bond length
+        if self._functions:
+            try:
+                core_energy_expression += 'lambda_bonds = ' + self._functions['lambda_bonds']
+            except KeyError as e:
+                print("Functions were provided, but no term was provided for the bonds")
+                raise e
 
         #create the force and add the relevant parameters
         custom_core_force = openmm.CustomBondForce(core_energy_expression)
-        custom_core_force.addGlobalParameter('lambda_bonds', 0.0)
         custom_core_force.addPerBondParameter('length1') # old bond length
         custom_core_force.addPerBondParameter('K1') # old spring constant
         custom_core_force.addPerBondParameter('length2') # new bond length
         custom_core_force.addPerBondParameter('K2') #new spring constant
+
+        if self._functions:
+            custom_core_force.addGlobalParameter('lambda', 0.0)
+            custom_core_force.addEnergyParameterDerivative('lambda')
+        else:
+            custom_core_force.addGlobalParameter('lambda_bonds', 0.0)
 
         self._hybrid_system.addForce(custom_core_force)
         self._hybrid_system_forces['core_bond_force'] = custom_core_force
@@ -469,14 +487,26 @@ class HybridTopologyFactory(object):
         energy_expression  = '(K/2)*(theta-theta0)^2;'
         energy_expression += 'K = (1.0-lambda_angles)*K_1 + lambda_angles*K_2;' # linearly interpolate spring constant
         energy_expression += 'theta0 = (1.0-lambda_angles)*theta0_1 + lambda_angles*theta0_2;' # linearly interpolate equilibrium angle
+        if self._functions:
+            try:
+                energy_expression += 'lambda_angles = ' + self._functions['lambda_angles']
+            except KeyError as e:
+                print("Functions were provided, but no term was provided for the angles")
+                raise e
 
         #create the force and add relevant parameters
         custom_core_force = openmm.CustomAngleForce(energy_expression)
-        custom_core_force.addGlobalParameter('lambda_angles', 0.0)
         custom_core_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
         custom_core_force.addPerAngleParameter('K_1') # molecule1 spring constant
         custom_core_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
         custom_core_force.addPerAngleParameter('K_2') # molecule2 spring constant
+
+        if self._functions:
+            custom_core_force.addGlobalParameter('lambda', 0.0)
+            custom_core_force.addEnergyParameterDerivative('lambda')
+        else:
+            custom_core_force.addGlobalParameter('lambda_angles', 0.0)
+
 
         #add the force to the system and the force dict.
         self._hybrid_system.addForce(custom_core_force)
@@ -496,15 +526,28 @@ class HybridTopologyFactory(object):
         energy_expression += 'U1 = K1*(1+cos(periodicity1*theta-phase1));'
         energy_expression += 'U2 = K2*(1+cos(periodicity2*theta-phase2));'
 
+        if self._functions:
+            try:
+                energy_expression += 'lambda_torsions = ' + self._functions['lambda_torsions']
+            except KeyError as e:
+                print("Functions were provided, but no term was provided for torsions")
+                raise e
+
+
         #create the force and add the relevant parameters
         custom_core_force = openmm.CustomTorsionForce(energy_expression)
-        custom_core_force.addGlobalParameter('lambda_torsions', 0.0)
         custom_core_force.addPerTorsionParameter('periodicity1') # molecule1 periodicity
         custom_core_force.addPerTorsionParameter('phase1') # molecule1 phase
         custom_core_force.addPerTorsionParameter('K1') # molecule1 spring constant
         custom_core_force.addPerTorsionParameter('periodicity2') # molecule2 periodicity
         custom_core_force.addPerTorsionParameter('phase2') # molecule2 phase
         custom_core_force.addPerTorsionParameter('K2') # molecule2 spring constant
+
+        if self._functions:
+            custom_core_force.addGlobalParameter('lambda', 0.0)
+            custom_core_force.addEnergyParameterDerivative('lambda')
+        else:
+            custom_core_force.addGlobalParameter('lambda_torsions', 0.0)
 
         #add the force to the system
         self._hybrid_system.addForce(custom_core_force)
