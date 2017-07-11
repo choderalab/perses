@@ -58,7 +58,8 @@ class HybridTopologyFactory(object):
         functions : dict, default None
             Alchemical functions that determine how each force is scaled with lambda. The keys must be strings with
             names beginning with lambda_ and ending with each of bonds, angles, torsions, sterics, electrostatics.
-            If none, then the integrator will need to set each of these and parameter derivatives will be unavailable.
+            If functions is none, then the integrator will need to set each of these and parameter derivatives will be unavailable.
+            If functions is not None, all lambdas must be specified.
         """
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
