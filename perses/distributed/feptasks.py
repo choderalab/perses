@@ -32,6 +32,33 @@ class NonequilibriumSwitchTask(celery.Task):
         platform = openmm.Platform.getPlatformByName("OpenCL")
         self._cache = cache.ContextCache(platform=platform)
 
+def restore_properties(integrator, measure_shadow_work=False, measure_heat=False, metropolized_integrator=False):
+    """
+    This is a temporary utility function to restore the properties of the AlchemicalNonequilibriumLangevin...
+    integrator so that we can avoid exceptions.
+
+    Parameters
+    ----------
+    integrator : AlchemicalNone...
+        integrator to which the attributes should be added
+    measure_shadow_work : bool, default False
+        whether to tell it to measure shadow work
+    measure_heat : bool, default False
+        whether to tell it to measure heat
+    metropolized_integrator : bool, default False
+        whether the integrator is metropolized
+
+    Returns
+    -------
+    integrator : AlchemicalNone...
+        integrator with attributes added
+    """
+    integrator._measure_shadow_work = measure_shadow_work
+    integrator._measure_heat = measure_heat
+    integrator._metropolized_integrator = metropolized_integrator
+    return integrator
+
+
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
 def run_protocol(self, starting_positions, nsteps, thermodynamic_state, integrator):
     """
@@ -42,11 +69,12 @@ def run_protocol(self, starting_positions, nsteps, thermodynamic_state, integrat
     weight : float64
         The nonequilibrium switching weight
     """
+    integrator = restore_properties(integrator)
     switching_ctx, integrator_neq = self._cache.get_context(thermodynamic_state, integrator)
+    integrator_neq = restore_properties(integrator_neq)
     switching_ctx.setPositions(starting_positions)
     integrator_neq.step(nsteps)
-    work = integrator_neq.getGlobalVariableByName("protocol_work")
-    rdb.set_trace()
+    work = integrator_neq.get_protocol_work(dimensionless=True)
     integrator_neq.reset()
     return work
 
@@ -59,6 +87,7 @@ def run_equilibrium(self, starting_positions, nsteps, lambda_state, functions, t
     -------
     positions : [n, 3] np.ndarray quantity
     """
+    integrator = restore_properties(integrator)
     equilibrium_ctx, integrator = self._cache.get_context(thermodynamic_state, integrator)
     equilibrium_ctx.setPositions(starting_positions)
     for parm in functions.keys():
@@ -70,6 +99,8 @@ def run_equilibrium(self, starting_positions, nsteps, lambda_state, functions, t
 
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
 def minimize(self, starting_positions, nsteps_max, lambda_state, functions, thermodynamic_state, integrator):
+    integrator = restore_properties(integrator)
+
     equilibrium_ctx, integrator = self._cache.get_context(thermodynamic_state, integrator)
 
     equilibrium_ctx.setPositions(starting_positions)
