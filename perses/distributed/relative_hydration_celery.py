@@ -113,6 +113,85 @@ def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane"):
     return topology_proposal, pos_old, new_positions
 
 
+class NonequilibriumFEPSetup(object):
+    """
+    This class is a helper class for nonequilibrium FEP. It generates the input objects that are necessary for the two
+    legs of a relative FEP calculation. For each leg, that is a TopologyProposal, old_positions, and new_positions.
+    Importantly, it ensures that the atom maps in the solvent and complex phases match correctly.
+    """
+
+    def __init__(self, complex_pdb_filename, new_ligand_smiles, forcefield_files, pressure=1.0*unit.atmosphere, temperature=300.0*unit.kelvin):
+        """
+        Initialize a NonequilibriumFEPSetup object
+
+        Parameters
+        ----------
+        complex_pdb_filename : str
+            The name of the protein-ligand complex pdb filename
+        new_ligand_smiles : str
+            The SMILES string representing the other ligand.
+        forcefield_files : list of str
+            The list of ffxml files that contain the forcefields that will be used
+        """
+        self._complex_pdb_filename = complex_pdb_filename
+        self._new_ligand_smiles = new_ligand_smiles
+        self._pressure = pressure
+        self._temperature = temperature
+        self._barostat_period = 50
+
+        complex_pdbfile = open(self._complex_pdb_filename, 'r')
+        pdb_file = app.PDBFile(complex_pdbfile)
+        complex_pdbfile.close()
+
+        self._complex_topology_old = pdb_file.topology
+        self._complex_positions_old = pdb_file.positions
+        self._forcefield = app.ForceField(*forcefield_files)
+
+        if pressure is not None:
+            barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
+            self._system_generator = SystemGenerator(forcefield_files, barostat=barostat)
+        else:
+            self._system_generator = SystemGenerator(forcefield_files)
+
+        self._complex_proposal_engine = SmallMoleculeSetProposalEngine([new_ligand_smiles], self._system_generator)
+        self._geometry_engine = FFAllAngleGeometryEngine()
+
+        self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
+
+        self._complex_topology_proposal = self._complex_proposal_engine.propose(self._complex_system_old_solvated, self._complex_topology_old_solvated)
+        self._complex_positions_new_solvated, _ = self._geometry_engine.propose(self._complex_topology_proposal, self._complex_positions_old_solvated)
+        
+    def _solvate_system(self, topology, positions, padding=9.0*unit.angstrom, model='tip3p'):
+        """
+        Generate a solvated topology, positions, and system for a given input topology and positions.
+        For generating the system, the forcefield files provided in the constructor will be used.
+
+        Parameters
+        ----------
+        topology : app.Topology
+            Topology of the system to solvate
+        positions : [n, 3] ndarray of Quantity nm
+
+        Returns
+        -------
+        solvated_topology : app.Topology
+            Topology of the system with added waters
+        solvated_positions : [n + 3(n_waters), 3] ndarray of Quantity nm
+            Solvated positions
+        solvated_system : openmm.System
+            The parameterized system, containing a barostat if one was specified.
+        """
+        modeller = app.Modeller(topology, positions)
+        modeller.addSolvent(self._forcefield, model=model, padding=padding)
+        solvated_topology = modeller.getTopology()
+        solvated_positions = modeller.getPositions()
+        solvated_system = self._system_generator.build_system(solvated_topology)
+        if self._pressure is not None:
+            barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
+            solvated_system.addForce(barostat)
+
+        return solvated_topology, solvated_positions, solvated_system
+
 
 class NonequilibriumSwitchingFEP(object):
     """
@@ -241,7 +320,6 @@ if __name__=="__main__":
     ne_fep.run_nonequilibrium_task()
     ne_fep.run_equilibrium()
     ne_fep.collect_ne_work()
-    print("test")
 
 
 
