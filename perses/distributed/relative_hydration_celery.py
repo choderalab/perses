@@ -51,6 +51,37 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         # TODO: Preserve bond order info using extended OpenMM API
         destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
 
+def subset_topology(destination_topology, source_topology, include_residue_name):
+    """
+    Add the source OpenMM Topology to the destination Topology.
+
+    Parameters
+    ----------
+    destination_topology : simtk.openmm.app.Topology
+        The Topology to which the contents of `source_topology` are to be added.
+    source_topology : simtk.openmm.app.Topology
+        The Topology to be added.
+    include_residue_name : str, optional, default=None
+        Only include residues with this name.
+
+    """
+    newAtoms = {}
+    for chain in source_topology.chains():
+        newChain = destination_topology.addChain(chain.id)
+        for residue in chain.residues():
+            if (residue.name != include_residue_name):
+                continue
+            newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
+            for atom in residue.atoms():
+                newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                newAtoms[atom] = newAtom
+    for bond in source_topology.bonds():
+        if (bond[0].residue.name!=include_residue_name) or (bond[1].residue.name!=include_residue_name):
+            continue
+        # TODO: Preserve bond order info using extended OpenMM API
+        destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+
+
 def _build_new_topology(self, current_receptor_topology, oemol_proposed):
     """
     Construct a new topology
@@ -120,7 +151,7 @@ class NonequilibriumFEPSetup(object):
     Importantly, it ensures that the atom maps in the solvent and complex phases match correctly.
     """
 
-    def __init__(self, complex_pdb_filename, new_ligand_smiles, forcefield_files, pressure=1.0*unit.atmosphere, temperature=300.0*unit.kelvin):
+    def __init__(self, complex_pdb_filename, ligand_smiles, forcefield_files, pressure=1.0*unit.atmosphere, temperature=300.0*unit.kelvin):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -128,13 +159,13 @@ class NonequilibriumFEPSetup(object):
         ----------
         complex_pdb_filename : str
             The name of the protein-ligand complex pdb filename
-        new_ligand_smiles : str
-            The SMILES string representing the other ligand.
+        ligand_smiles : list of two str
+            The SMILES strings representing the two ligands
         forcefield_files : list of str
             The list of ffxml files that contain the forcefields that will be used
         """
         self._complex_pdb_filename = complex_pdb_filename
-        self._new_ligand_smiles = new_ligand_smiles
+        self._new_ligand_smiles = ligand_smiles
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
@@ -153,14 +184,20 @@ class NonequilibriumFEPSetup(object):
         else:
             self._system_generator = SystemGenerator(forcefield_files)
 
-        self._complex_proposal_engine = SmallMoleculeSetProposalEngine([new_ligand_smiles], self._system_generator)
+        self._complex_proposal_engine = SmallMoleculeSetProposalEngine(ligand_smiles, self._system_generator)
         self._geometry_engine = FFAllAngleGeometryEngine()
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
 
         self._complex_topology_proposal = self._complex_proposal_engine.propose(self._complex_system_old_solvated, self._complex_topology_old_solvated)
         self._complex_positions_new_solvated, _ = self._geometry_engine.propose(self._complex_topology_proposal, self._complex_positions_old_solvated)
-        
+
+        #now generate the equivalent objects for the solvent phase. First, generate the ligand-only topologies and atom map
+        self._solvent_topology_proposal, self._old_solvent_positions = self._generate_ligand_only_topologies(self._complex_positions_old_solvated, self._complex_positions_new_solvated)
+        self._new_solvent_positions, _ = self._geometry_engine.propose(self._solvent_topology_proposal, self._old_solvent_positions)
+
+
+
     def _solvate_system(self, topology, positions, padding=9.0*unit.angstrom, model='tip3p'):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
@@ -191,6 +228,84 @@ class NonequilibriumFEPSetup(object):
             solvated_system.addForce(barostat)
 
         return solvated_topology, solvated_positions, solvated_system
+
+    def _generate_ligand_only_topologies(self, old_positions, new_positions):
+        """
+        This method generates ligand-only topologies and positions from a TopologyProposal containing a solvated complex.
+        The output of this method is then used when building the solvent-phase simulation with the same atom map.
+
+        Parameters
+        ----------
+        topology_proposal : perses.rjmc.TopologyProposal
+             TopologyProposal representing the solvated complex transformation
+
+        Returns
+        -------
+        old_ligand_topology : app.Topology
+            The old topology without the receptor or solvent
+        new_ligand_topology : app.Topology
+            The new topology without the receptor or solvent
+        old_ligand_positions : [m, 3] ndarray of Quantity nm
+            The positions of the old ligand without receptor or solvent
+        new_ligand_positions : [n, 3] ndarray of Quantity nm
+            The positions of the new ligand without receptor or solvent
+        atom_map : dict of int: it
+            The mapping between the two topologies without ligand or solvent.
+        """
+        old_complex = self._complex_topology_proposal.old_topology
+        new_complex = self._complex_topology_proposal.new_topology
+
+        complex_atom_map = self._complex_topology_proposal.old_to_new_atom_map
+
+        old_mol_start_index, old_mol_len = self._complex_proposal_engine._find_mol_start_index(old_complex)
+        new_mol_start_index, new_mol_len = self._complex_proposal_engine._find_mol_start_index(new_complex)
+
+        old_ligand_positions = old_positions[old_mol_start_index:(old_mol_start_index+old_mol_len), :]
+        new_ligand_positions = new_positions[new_mol_start_index:(new_mol_start_index+new_mol_len), :]
+
+        atom_map_adjusted = {}
+
+        #loop through the atoms in the map. If the old index is creater than the old_mol_start_index but less than that
+        #plus the old mol length, then it is valid to include its adjusted value in the map.
+        for old_idx, new_idx in complex_atom_map.items():
+            if old_idx > old_mol_start_index and old_idx < old_mol_len + old_mol_start_index:
+                atom_map_adjusted[old_idx - old_mol_len] = new_idx - new_mol_start_index
+
+        #subset the topologies:
+        old_ligand_topology = app.Topology()
+        new_ligand_topology = app.Topology()
+
+        subset_topology(old_ligand_topology, old_complex, include_residue_name="MOL")
+        subset_topology(new_ligand_topology, new_complex, include_residue_name="MOL")
+
+        #solvate the old ligand topology:
+        old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(old_ligand_topology, old_ligand_positions)
+
+        #now remove the old ligand, leaving only the solvent
+        solvent_only_topology = self._complex_proposal_engine._remove_small_molecule(old_solvated_topology)
+
+        #append the solvent to the new ligand-only topology:
+        append_topology(new_ligand_topology, solvent_only_topology)
+
+        #create the new ligand system:
+        new_solvated_system = self._system_generator.build_system(new_ligand_topology)
+
+        #adjust the atom map to account for the presence of solvent degrees of freedom:
+        #By design, all atoms after the ligands are water, and should be mapped.
+        n_water_atoms = solvent_only_topology.getNumAtoms()
+        for i in range(n_water_atoms):
+            atom_map_adjusted[old_mol_len+i] = new_mol_len + i
+
+        #change the map to accomodate the TP:
+        new_to_old_atom_map = {value : key for key, value in atom_map_adjusted.items()}
+
+        #make a TopologyProposal
+        ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_system, new_system=new_solvated_system,
+                                                    old_topology=old_solvated_topology, old_system=old_solvated_system,
+                                                    new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
+                                                    new_chemical_state_key='B')
+
+        return ligand_topology_proposal, old_solvated_positions
 
 
 class NonequilibriumSwitchingFEP(object):
