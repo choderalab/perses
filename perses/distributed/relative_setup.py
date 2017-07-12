@@ -307,6 +307,25 @@ class NonequilibriumFEPSetup(object):
 
         return ligand_topology_proposal, old_solvated_positions
 
+    @property
+    def complex_topology_proposal(self):
+        return self._complex_topology_proposal
+    @property
+    def complex_old_positions(self):
+        return self._complex_positions_old_solvated
+    @property
+    def complex_new_positions(self):
+        return self._complex_positions_new_solvated
+    @property
+    def solvent_topology_proposal(self):
+        return self._solvent_topology_proposal
+    @property
+    def solvent_old_positions(self):
+        return self._old_solvent_positions
+    @property
+    def solvent_new_positions(self):
+        return self._new_solvent_positions
+
 
 class NonequilibriumSwitchingFEP(object):
     """
