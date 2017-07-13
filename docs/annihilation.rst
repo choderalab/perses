@@ -41,6 +41,17 @@ two initial systems into a new system that contains a union of the former system
 - Systems:
     - Only HarmonicBondForce, HarmonicAngleForce, PeriodicTorsionForce, NonbondedForce, and MonteCarloBarostat are supported. The presence of other forces will raise an exception.
     
+Basic Terminology
+^^^^^^^^^^^^^^^^^
+Throughout the rest of this document, the following terms will be referenced:
+
+- Hybrid topology: An object that "fuses" two systems based on an atom map, and whose identity is controlled by a set of global parameters called `lambda`.  Mapped atoms are switched from the type in one system to the type in the other; unmapped atoms are switched on or off, depending on which system they belong to.
+
+- Old system: We use this to refer to the endpoint represented by `lambda=0`.
+
+- New system: We use this to refer to the endpoint represented by `lambda=1`.
+
+    
 Assignment of Particles to Appropriate Groups
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -124,7 +135,7 @@ Nonbonded (Sterics)
 Nonbonded (Electrostatics)
 """"""""""""""""""""""""""
 
-- CustomNonbondedForce: This is a separate CustomNonbondedForce that handles electrostatic interactions that change with lambda. This force uses interaction groups to exclude interactions that do not change with lambda (and are covered by the NonbondedForce above). This force supports no cutoff, reaction field, and PME. 
+- CustomNonbondedForce: This is a separate CustomNonbondedForce that handles electrostatic interactions that change with lambda. This force uses interaction groups to exclude interactions that do not change with lambda (and are covered by the NonbondedForce above). This force supports the options nocutoff, reaction field, and PME.
 
 
 Specific unsupported forces
@@ -134,6 +145,53 @@ Any force that is not in one of the above-mentioned classes will cause an except
 - Amoeba forces
 - GB forces
 - CMMotionRemover
+
+
+Additional Features
+^^^^^^^^^^^^^^^^^^^
+In addition to creating a hybrid topology dependent on a set of `lambda_force` functions, the HybridTopologyFactory can also take advantage of OpenMM's automatic differentiation to provide dU/dlambda. In order to use this
+functionality, you must provide alchemical functions to the constructor of HybridTopologyFactory. These functions are described below.
+
+Basic Usage of HybridTopologyFactory
+------------------------------------
+
+Basic Construction of Factory
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+In order to use the HybridTopologyFactory, several objects are necessary:
+
+- :py:class:`perses.rjmc.topology_proposal.TopologyProposal` is a container class which holds so-called new and old systems, topologies, and respective atom maps. It can be created manually using the constructor, or can be obtained through a subcalss of :py:class:`perses.rjmc.topology_proposal.ProposalEngine`.
+
+- You need to supply current positions and new positions for the old and new systems, respectively. It is assumed that the atoms which are mapped will have the same positions. If you only have positions for the old system, you can generate (decent) positions for the new system using :py:class:`perses.rjmc.geometry.FFAllAngleGeometryEngine`. You should minimize the hybrid topology that results after this to avoid clashes, however.
+
+- The dispersion correct is calculated for the sterics force if `use_dispersion_correction` is set to `True`. It is false by default; whether to enable this depends on what sort of calculation you are doing:
+
+     - Your calculation requires frequent changes to `lambda` parameters, such as nonequilibrium switching: Set the dispersion correction to false.
+     - Your calculation runs a simulation at a set of constant `lambda` values (that don't change during the simulation), such as thermodynamic integration: Set the dispersion correction to True.
+
+- The alchemical functions argument can be supplied to the `HybridTopologyFactory`, in which case only `lambda` will be exposed. Otherwise, each individual energy term will have a `lambda` associated with it.
+
+Alchemical functions
+^^^^^^^^^^^^^^^^^^^^
+The functions argument allows you to specify the mathematical relationship between a main `lambda` value, and each individual `lambda`. Adding the functions here also automatically enables the computation of the derivative of the energy with respect to `lambda`, useful for various tasks.
+
+Some important notes about specifying the alchemical functions:
+
+- All `lambda` values must be specified. More specifically, the dictionary must have the following form:
+
+.. code-block:: python
+
+    functions_dictionary = {
+    'lambda_bonds' : 'f_bond(lambda)'
+    'lambda_angles' : 'f_angle(lambda)'
+    'lambda_torsions' : 'f_torsion(lambda)'
+    'lambda_sterics' : 'f_sterics(lambda)'
+    'lambda_electrostatics' : 'f_electrostatics(lambda)'
+    }
+
+where `f_{energy_name}()` is an arbitrary function of `lambda` compliant with OpenMM Lepton syntax. See the OpenMM documentation for more information on what kinds of functions can be implemented there.
+
+
+
 
 
 
