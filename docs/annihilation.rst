@@ -191,7 +191,54 @@ Some important notes about specifying the alchemical functions:
 where `f_{energy_name}()` is an arbitrary function of `lambda` compliant with OpenMM Lepton syntax. See the OpenMM documentation for more information on what kinds of functions can be implemented there.
 
 
+Example script
+^^^^^^^^^^^^^^
+Below is a very simple example script that constructs a :py:class:`HybridTopologyFactory` object that can transform a benzene into catechol in vacuum.
 
+.. code-block:: python
+    
+    #import needed functionality
+    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    from perses.annihilation.new_relative import HybridTopologyFactory
+    import simtk.openmm.app as app
+    from openmoltools import forcefield_generators
+    
+    #these are utility functions to rapidly create test systems.
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    
+    #We'll generate the systems by IUPAC name
+    mol_name = "benzene"
+    ref_mol_name = "catechol"
+    
+    #create the benzene molecule and system, as well as a molecule of catechol
+    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
+    refmol = createOEMolFromIUPAC(ref_mol_name)
 
+    #The SmallMoleculeSetProposalEngine class needs smiles strings
+    initial_smiles = oechem.OEMolToSmiles(m)
+    final_smiles = oechem.OEMolToSmiles(refmol)
 
+    #set up the SystemGenerator
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    system_generator = SystemGenerator([gaff_filename])
+    
+    #The GeometryEngine will be useful for generating new positions
+    geometry_engine = FFAllAngleGeometryEngine()
+    
+    #Instantiate the proposal engine, which will generate the TopologyProposal.
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
 
+    #generate a TopologyProposal with the SmallMoleculeSetProposalEngine
+    topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
+    
+    #Generate new positions with the GeometryEngine--note that the second return value (logp) is ignored for this purpose
+    new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
+    
+    #instantiate the HybridTopologyFactory
+    factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
+
+    #Now you have the objects you need to run a simulation, controlled by the `lambda` parameters.
+    hybrid_system = factory.hybrid_system
+    hybrid_topology = factory.hybrid_topology
+    initial_hybrid_positions = factory.hybrid_positions
