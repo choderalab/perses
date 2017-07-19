@@ -6,7 +6,7 @@ import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as unit
 import numpy as np
-from perses.tests.utils import createSystemFromIUPAC, get_data_filename
+from perses.tests.utils import createSystemFromIUPAC, get_data_filename, extractPositionsFromOEMOL
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine, SystemGenerator
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -81,7 +81,6 @@ def subset_topology(destination_topology, source_topology, include_residue_name)
         # TODO: Preserve bond order info using extended OpenMM API
         destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
 
-
 def _build_new_topology(self, current_receptor_topology, oemol_proposed):
     """
     Construct a new topology
@@ -143,7 +142,6 @@ def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane"):
 
     return topology_proposal, pos_old, new_positions
 
-
 class NonequilibriumFEPSetup(object):
     """
     This class is a helper class for nonequilibrium FEP. It generates the input objects that are necessary for the two
@@ -151,32 +149,59 @@ class NonequilibriumFEPSetup(object):
     Importantly, it ensures that the atom maps in the solvent and complex phases match correctly.
     """
 
-    def __init__(self, complex_pdb_filename, ligand_smiles, forcefield_files, pressure=1.0*unit.atmosphere, temperature=300.0*unit.kelvin):
+    def __init__(self, protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, pressure=1.0*unit.atmosphere, temperature=300.0*unit.kelvin):
         """
         Initialize a NonequilibriumFEPSetup object
 
         Parameters
         ----------
-        complex_pdb_filename : str
-            The name of the protein-ligand complex pdb filename
+        protein_pdb_filename : str
+            The name of the protein pdb file
+        ligand_file : str
+            the name of the ligand file (any openeye supported format)
         ligand_smiles : list of two str
             The SMILES strings representing the two ligands
         forcefield_files : list of str
             The list of ffxml files that contain the forcefields that will be used
         """
-        self._complex_pdb_filename = complex_pdb_filename
-        self._new_ligand_smiles = ligand_smiles
+        self._protein_pdb_filename = protein_pdb_filename
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
 
-        complex_pdbfile = open(self._complex_pdb_filename, 'r')
-        pdb_file = app.PDBFile(complex_pdbfile)
-        complex_pdbfile.close()
+        self._ligand_file = ligand_file
+        self._old_ligand_index = old_ligand_index
+        self._new_ligand_index = new_ligand_index
 
-        self._complex_topology_old = pdb_file.topology
-        self._complex_positions_old = pdb_file.positions
+        self._old_ligand_oemol = self.load_sdf(self._ligand_file, index=self._old_ligand_index)
+        self._new_ligand_oemol = self.load_sdf(self._ligand_file, index=self._new_ligand_index)
+
+        self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
+
+        self._new_ligand_smiles = oechem.OEMolToSmiles(self._new_ligand_oemol)
+        self._old_ligand_smiles = oechem.OEMolToSmiles(self._old_ligand_oemol)
+
+        self._old_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._old_ligand_oemol)
+        self._new_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._new_ligand_oemol)
+
+
+        protein_pdbfile = open(self._protein_pdb_filename, 'r')
+        pdb_file = app.PDBFile(protein_pdbfile)
+        protein_pdbfile.close()
+
+        self._protein_topology_old = pdb_file.topology
+        self._protein_positions_old = pdb_file.positions
         self._forcefield = app.ForceField(*forcefield_files)
+
+        self._complex_topology_old = copy.deepcopy(self._protein_topology_old)
+
+        append_topology(self._complex_topology_old, self._old_ligand_topology)
+        n_atoms_complex_old = self._complex_topology_old.getNumAtoms()
+        n_atoms_protein_old = self._protein_topology_old.getNumAtoms()
+
+        self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_complex_old, 3]), unit=unit.nanometers)
+        self._complex_positions_old[:n_atoms_protein_old, :] = self._protein_positions_old
+        self._complex_positions_old[n_atoms_protein_old:, :] = self._old_ligand_positions
 
         if pressure is not None:
             barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
@@ -184,7 +209,7 @@ class NonequilibriumFEPSetup(object):
         else:
             self._system_generator = SystemGenerator(forcefield_files)
 
-        self._complex_proposal_engine = SmallMoleculeSetProposalEngine(ligand_smiles, self._system_generator)
+        self._complex_proposal_engine = SmallMoleculeSetProposalEngine([self._new_ligand_smiles, self._old_ligand_smiles], self._system_generator)
         self._geometry_engine = FFAllAngleGeometryEngine()
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
@@ -196,7 +221,28 @@ class NonequilibriumFEPSetup(object):
         self._solvent_topology_proposal, self._old_solvent_positions = self._generate_ligand_only_topologies(self._complex_positions_old_solvated, self._complex_positions_new_solvated)
         self._new_solvent_positions, _ = self._geometry_engine.propose(self._solvent_topology_proposal, self._old_solvent_positions)
 
+    def load_sdf(self, sdf_filename, index=0):
+        """
+        Load an SDF file into an OEMol. Since SDF files can contain multiple molecules, an index can be provided as well.
 
+        Parameters
+        ----------
+        sdf_filename : str
+            The name of the SDF file
+        index : int, default 0
+            The index of the molecule in the SDF file
+
+        Returns
+        -------
+        mol : openeye.oechem.OEMol object
+            The loaded oemol object
+        """
+        ifs = oechem.oemolistream()
+        ifs.open(sdf_filename)
+        #get the list of molecules
+        mol_list = [mol for mol in ifs.GetOEMols()]
+        #we'll always take the first for now
+        return mol_list[index]
 
     def _solvate_system(self, topology, positions, padding=9.0*unit.angstrom, model='tip3p'):
         """
@@ -208,6 +254,7 @@ class NonequilibriumFEPSetup(object):
         topology : app.Topology
             Topology of the system to solvate
         positions : [n, 3] ndarray of Quantity nm
+            the positions of the unsolvated system
 
         Returns
         -------
@@ -219,6 +266,9 @@ class NonequilibriumFEPSetup(object):
             The parameterized system, containing a barostat if one was specified.
         """
         modeller = app.Modeller(topology, positions)
+        #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H']]
+        #modeller.delete(hs)
+        #modeller.addHydrogens(forcefield=self._forcefield)
         modeller.addSolvent(self._forcefield, model=model, padding=padding)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
@@ -325,7 +375,6 @@ class NonequilibriumFEPSetup(object):
     @property
     def solvent_new_positions(self):
         return self._new_solvent_positions
-
 
 class NonequilibriumSwitchingFEP(object):
     """
@@ -447,6 +496,14 @@ class NonequilibriumSwitchingFEP(object):
         return self._reverse_work
 
 if __name__=="__main__":
+    import os
+    gaff_filename = get_data_filename("data/gaff.xml")
+    forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
+    path_to_schrodinger_inputs = "/Users/grinawap/Downloads/Inputs_for_FEP"
+    protein_file = os.path.join(path_to_schrodinger_inputs, "Bace_fixed_nohet.pdb")
+    molecule_file = os.path.join(path_to_schrodinger_inputs, "Bace_ligands.sdf")
+    fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
+
     topology_proposal, pos_old, new_positions = generate_vacuum_hybrid_topology()
     ne_fep = NonequilibriumSwitchingFEP(topology_proposal, pos_old, new_positions)
     ne_fep.minimize()

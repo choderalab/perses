@@ -23,6 +23,22 @@ app = celery.Celery('perses.distributed.feptasks', broker=broker_location, backe
 app.conf.update(accept_content=['pickle', 'application/x-python-serialize'],task_serializer='pickle', result_serializer='pickle')
 
 
+def update_broker_location(broker_location, backend_location=None):
+    """
+    Update the location of the broker and backend from the default.
+
+    Parameters
+    ----------
+    broker_location : str
+        the url of the broker
+    backend_location: str, optional
+        the url of the backend. If none, broker_location is used.
+    """
+    if backend_location is None:
+        backend_location = broker_location
+    app.conf.update(broker=broker_location, backend=broker_location)
+
+
 class NonequilibriumSwitchTask(celery.Task):
     """
     This is a base class for nonequilibrium switching tasks.
