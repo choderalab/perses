@@ -209,7 +209,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
         elif direction=='reverse':

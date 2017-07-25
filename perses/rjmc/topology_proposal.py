@@ -145,8 +145,8 @@ class TopologyProposal(object):
         self._old_chemical_state_key = old_chemical_state_key
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
-        self._unique_new_atoms = [atom for atom in range(self._new_topology._numAtoms) if atom not in self._new_to_old_atom_map.keys()]
-        self._unique_old_atoms = [atom for atom in range(self._old_topology._numAtoms) if atom not in self._new_to_old_atom_map.values()]
+        self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
+        self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
         self._metadata = metadata
 
     @property
@@ -212,7 +212,7 @@ class ProposalEngine(object):
          a list of all the chemical states that this proposal engine may visit.
     """
 
-    def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False):
+    def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=True):
         self._system_generator = system_generator
         self.verbose = verbose
         self._always_change = always_change
@@ -1236,7 +1236,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         If specified, write statistics to this storage layer.
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, verbose=True):
         if not atom_expr:
             self.atom_expr = oechem.OEExprOpts_AtomicNumber # | oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         else:
@@ -1254,7 +1254,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._generated_systems = dict()
         self._generated_topologies = dict()
         self._matches = dict()
-
+        self.verbose = True
         self._storage = None
         if storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
@@ -1292,6 +1292,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # DEBUG
         strict_stereo = False
+        self.verbose = True
         if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
         from openmoltools.openeye import generate_conformers
         if self.verbose: print('Generating conformers...')
@@ -1538,7 +1539,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map
 
-    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=True):
+    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         """
         Propose a new molecule given the current molecule.
 
