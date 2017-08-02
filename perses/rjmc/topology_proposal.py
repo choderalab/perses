@@ -1247,7 +1247,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         else:
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = list_of_smiles
+        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
@@ -1281,8 +1281,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
+        self.verbose = True
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
-
         current_receptor_topology = self._remove_small_molecule(current_topology)
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
 
@@ -1378,7 +1378,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
-        iso_can_smiles = oechem.OECreateIsoSmiString(mol)
+        iso_can_smiles = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
         return iso_can_smiles
 
     def _topology_to_smiles(self, topology):
@@ -1404,8 +1404,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        smiles_string = oechem.OECreateIsoSmiString(oemol)
-        return smiles_string, oemol
+        smiles_string = oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        final_smiles_string = self._canonicalize_smiles(smiles_string)
+        return final_smiles_string, oemol
 
     def compute_state_key(self, topology):
         """
