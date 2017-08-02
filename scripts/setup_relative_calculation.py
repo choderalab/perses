@@ -6,14 +6,11 @@ from perses.annihilation import relative
 from perses.tests import utils
 import simtk.unit as unit
 from openmmtools.constants import kB
+import simtk.openmm.app as app
+from openmoltools import forcefield_generators
+import copy
+import numpy as np
 
-
-
-def load_sd_file_rdkit(mol_filename):
-    mol_file = open(mol_filename, 'r')
-    suppl = chem.SDMolSupplier(mol_file)
-    mols = [mol for mol in suppl]
-    return mols[0]
 
 def load_mol_file(mol_filename):
     """
@@ -26,126 +23,164 @@ def load_mol_file(mol_filename):
     Returns
     -------
     mol : oechem.OEMol
-        the molecule as an OEMol
+        the list of molecules as OEMols
     """
     ifs = oechem.oemolistream()
     ifs.open(mol_filename)
     #get the list of molecules
     mol_list = [mol for mol in ifs.GetOEMols()]
     #we'll always take the first for now
-    return mol_list[0]
+    return mol_list
 
-
-
-class RelativeFreeEnergySetup(object):
+def load_receptor_pdb(pdb_filename):
     """
-    This is a class to perform relative free energy calculation setups. It assumes you already have a complex with the
-    first molecule, and a SMILES string for the second.
-    """
+    Load the receptor by PDB filename.
 
-    def __init__(self, complex_topology, complex_positions, ligand_name, initial_molecule_SMILES, final_molecule_SMILES, temperature=300.0*unit.kelvin):
+    Parameters
+    ----------
+    pdb_filename
+    """
+    f = open(pdb_filename, 'r')
+    pdbfile = app.PDBFile(f)
+    return pdbfile.topology, pdbfile.positions
+
+def solvate_topology(topology, positions, forcefield, padding=9.0*unit.angstrom):
+    """
+    Solvate the given topology to run an explicit solvent simulation.
+    Parameters
+    ----------
+    topology
+
+    Returns
+    -------
+
+    """
+    modeller = app.Modeller(topology, positions)
+    modeller.addSolvent(forcefield, padding=padding, model='tip3p')
+    topology = modeller.getTopology()
+    positions = modeller.getPositions()
+
+    return topology, positions
+
+def _find_mol_start_index(topology):
         """
-        Create a RelativeFreeEnergySetup tool using the perses infrastructure.
+        Find the starting index of the molecule in the topology.
+        Throws an exception if resname is not present.
 
         Parameters
         ----------
-        complex_topology : openmm.app.topology
-            The topology of the complex of protein with initial ligand
-        complex_positions : [n, 3] ndarray
-            The positions of the atoms in the complex.
-        ligand_name : str
-            The name of the ligand residue in the complex
-        initial_molecule_SMILES : str
-            The molecule in the complex already
-        final_molecule_SMILES : str
-            The molecule to transform the initial molecule into
+        topology : app.Topology object
+            The topology containing the molecule
 
+        Returns
+        -------
+        mol_start_idx : int
+            start index of the molecule
+        mol_length : int
+            the number of atoms in the molecule
         """
-        self._temperature = temperature
-        kT = kB * self._temperature
-        self._beta = 1.0 / kT
-        self._complex_topology = complex_topology
-        self._complex_positions = complex_positions
-        self._ligand_name = ligand_name
-
-        gaff_filename = utils.get_data_filename('data/gaff.xml')
-        system_generator = topology_proposal.SystemGenerator([gaff_filename, 'ff99sbildn.xml', 'tip3p.xml'])
-        current_system = system_generator.build_system(complex_topology)
-        self._geometry_engine = geometry.FFAllAngleGeometryEngine()
-        self._proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(
-            [initial_molecule_SMILES, final_molecule_SMILES], system_generator, residue_name=ligand_name)
-
-        #generate topology proposal
-        self._topology_proposal = self._proposal_engine.propose(current_system, complex_topology)
-
-        #generate new positions with geometry engine
-        new_positions, _ = self._geometry_engine.propose(self._topology_proposal, complex_positions, self._beta)
-
-        #generate a hybrid topology
-        self._hybrid_factory = relative.HybridTopologyFactory(current_system, self._topology_proposal.new_system,
-                                                              complex_topology, self._topology_proposal.new_topology,
-                                                              complex_positions, new_positions,
-                                                              self._topology_proposal.old_to_new_atom_map)
-
-        #generate the materials we need to run a simulation:
-        self._hybrid_system, self._hybrid_topology, self._hybrid_positions, self._sys2_indices_in_system, self._sys1_indices_in_system = self._hybrid_factory.createPerturbedSystem()
+        resname = "MOL"
+        mol_residues = [res for res in topology.residues() if res.name==resname]
+        if len(mol_residues)!=1:
+            raise ValueError("There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'" % (len(mol_residues), resname))
+        mol_residue = mol_residues[0]
+        atoms = list(mol_residue.atoms())
+        mol_start_idx = atoms[0].index
+        return mol_start_idx, len(list(atoms))
 
 
-
-    @property
-    def hybrid_system(self):
-        return self._hybrid_system
-
-    @property
-    def hybrid_positions(self):
-        return self._hybrid_positions
-
-    @property
-    def hybrid_topology(self):
-        return self._hybrid_topology
-
-    @property
-    def complex_topology(self):
-        return self._complex_topology
-
-    @property
-    def complex_positions(self):
-        return self._complex_positions
-
-    @property
-    def topology_proposal(self):
-        return self._topology_proposal
-
-    @property
-    def ligand_name(self):
-        return self._ligand_name
-
-class SolvatedLigandSystemFactory(object):
+def append_topology(destination_topology, source_topology, exclude_residue_name=None):
     """
-    This class is a helper class that can create a solvent hybrid system with the same atom map as a
-    corresponding protein-ligand hybrid system. This is necessary so that the endpoints of the two calculations are
-    exactly the same.
+    Add the source OpenMM Topology to the destination Topology.
+
+    Parameters
+    ----------
+    destination_topology : simtk.openmm.app.Topology
+        The Topology to which the contents of `source_topology` are to be added.
+    source_topology : simtk.openmm.app.Topology
+        The Topology to be added.
+    exclude_residue_name : str, optional, default=None
+        If specified, any residues matching this name are excluded.
+
     """
+    newAtoms = {}
+    for chain in source_topology.chains():
+        newChain = destination_topology.addChain(chain.id)
+        for residue in chain.residues():
+            if (residue.name == exclude_residue_name):
+                continue
+            newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
+            for atom in residue.atoms():
+                newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                newAtoms[atom] = newAtom
+    for bond in source_topology.bonds():
+        if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+            continue
+        # TODO: Preserve bond order info using extended OpenMM API
+        destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
 
-    def __init__(self, relative_free_energy_setup):
-        self._hybrid_topology = relative_free_energy_setup.hybrid_topology
-        self._ligand_name = relative_free_energy_setup.ligand_name
+def _build_new_topology(current_receptor_topology, oemol_proposed):
+    """
+    Construct a new topology
+    Parameters
+    ----------
+    oemol_proposed : oechem.OEMol object
+        the proposed OEMol object
+    current_receptor_topology : app.Topology object
+        The current topology without the small molecule
 
-        #get the list of atoms that pertain to the ligand:
-        self._ligand_atoms_in_hybrid = None
+    Returns
+    -------
+    new_topology : app.Topology object
+        A topology with the receptor and the proposed oemol
+    mol_start_index : int
+        The first index of the small molecule
+    """
+    oemol_proposed.SetTitle("MOL")
+    mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
+    new_topology = app.Topology()
+    append_topology(new_topology, current_receptor_topology)
+    append_topology(new_topology, mol_topology)
+    # Copy periodic box vectors.
+    if current_receptor_topology._periodicBoxVectors != None:
+        new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
+
+    return new_topology
+
+def prepare_topology_proposal():
+    from perses.tests.utils import get_data_filename
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', 'amber99sbildn.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    oemol_list = load_mol_file("p38_ligands.sdf")
+    mol_a = oemol_list[0]
+    mol_b = oemol_list[1]
+
+    modeller = combine_mol_with_receptor(mol_a, "p38_protein.pdb")
+    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    topology = modeller.getTopology()
+    positions = modeller.getPositions()
+    system = forcefield.createSystem(topology, nonbondedMethod=app.PME)
 
 
 
+def combine_mol_with_receptor(mol, receptor_pdb_filename):
+    from perses.tests.utils import extractPositionsFromOEMOL
+    receptor_top, receptor_pos = load_receptor_pdb(receptor_pdb_filename)
+    n_atoms_receptor = receptor_top.getNumAtoms()
+    unsolvated_receptor_mol = _build_new_topology(receptor_top, mol)
+    mol_positions = extractPositionsFromOEMOL(mol)
 
+    #find positions of molecule in receptor topology:
+    mol_start_index, len_mol = _find_mol_start_index(unsolvated_receptor_mol)
+
+    #copy positions to new position array
+    new_positions = unit.Quantity(value=np.zeros([n_atoms_receptor+len_mol, 3]), unit=unit.nanometer)
+    new_positions[:mol_start_index, :] = receptor_pos
+    new_positions[mol_start_index:, :] = mol_positions
+
+    modeller = app.Modeller(unsolvated_receptor_mol, new_positions)
+
+    return modeller
 if __name__=="__main__":
-    import sys
-    #yaml input is the only input
-    input_filename = sys.argv[1]
-    input_file = open(input_filename, 'r')
-    input_data = yaml.load(input_file)
-    input_file.close()
-
-    #load the molecules that will form this calculation
-    initial_molecule = load_mol_file(input_data['initial_molecule'])
-    final_molecule = load_mol_file(input_data['final_molecule'])
-
+    pass
