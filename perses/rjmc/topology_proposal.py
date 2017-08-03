@@ -212,7 +212,7 @@ class ProposalEngine(object):
          a list of all the chemical states that this proposal engine may visit.
     """
 
-    def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=True):
+    def __init__(self, system_generator, proposal_metadata=None, always_change=True, verbose=False):
         self._system_generator = system_generator
         self.verbose = verbose
         self._always_change = always_change
@@ -1236,7 +1236,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         If specified, write statistics to this storage layer.
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, verbose=True):
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
         if not atom_expr:
             self.atom_expr = oechem.OEExprOpts_AtomicNumber # | oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         else:
@@ -1247,14 +1247,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         else:
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = list_of_smiles
+        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
         self._generated_systems = dict()
         self._generated_topologies = dict()
         self._matches = dict()
-        self.verbose = True
+
         self._storage = None
         if storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
@@ -1281,8 +1281,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
+        self.verbose = True
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
-
         current_receptor_topology = self._remove_small_molecule(current_topology)
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
 
@@ -1292,7 +1292,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # DEBUG
         strict_stereo = False
-        self.verbose = True
         if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
         from openmoltools.openeye import generate_conformers
         if self.verbose: print('Generating conformers...')
@@ -1379,7 +1378,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
-        iso_can_smiles = oechem.OECreateIsoSmiString(mol)
+        iso_can_smiles = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
         return iso_can_smiles
 
     def _topology_to_smiles(self, topology):
@@ -1405,8 +1404,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        smiles_string = oechem.OECreateIsoSmiString(oemol)
-        return smiles_string, oemol
+        smiles_string = oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        final_smiles_string = self._canonicalize_smiles(smiles_string)
+        return final_smiles_string, oemol
 
     def compute_state_key(self, topology):
         """

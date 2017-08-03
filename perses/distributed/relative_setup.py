@@ -11,99 +11,17 @@ from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine, SystemGenerator
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import openeye.oechem as oechem
-import openeye.oequacpac as oeq
 import celery
 from openmoltools import forcefield_generators
 import copy
 from cStringIO import StringIO
+import mdtraj as md
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 
-def append_topology(destination_topology, source_topology, exclude_residue_name=None):
-    """
-    Add the source OpenMM Topology to the destination Topology.
-    Parameters
-    ----------
-    destination_topology : simtk.openmm.app.Topology
-        The Topology to which the contents of `source_topology` are to be added.
-    source_topology : simtk.openmm.app.Topology
-        The Topology to be added.
-    exclude_residue_name : str, optional, default=None
-        If specified, any residues matching this name are excluded.
-    """
-    newAtoms = {}
-    for chain in source_topology.chains():
-        newChain = destination_topology.addChain(chain.id)
-        for residue in chain.residues():
-            if (residue.name == exclude_residue_name):
-                continue
-            newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
-            for atom in residue.atoms():
-                newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                newAtoms[atom] = newAtom
-    for bond in source_topology.bonds():
-        if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
-            continue
-        # TODO: Preserve bond order info using extended OpenMM API
-        destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
-
-def subset_topology(destination_topology, source_topology, include_residue_name):
-    """
-    Add the source OpenMM Topology to the destination Topology.
-    Parameters
-    ----------
-    destination_topology : simtk.openmm.app.Topology
-        The Topology to which the contents of `source_topology` are to be added.
-    source_topology : simtk.openmm.app.Topology
-        The Topology to be added.
-    include_residue_name : str, optional, default=None
-        Only include residues with this name.
-    """
-    newAtoms = {}
-    for chain in source_topology.chains():
-        newChain = destination_topology.addChain(chain.id)
-        for residue in chain.residues():
-            if (residue.name != include_residue_name):
-                continue
-            newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
-            for atom in residue.atoms():
-                newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                newAtoms[atom] = newAtom
-    for bond in source_topology.bonds():
-        if (bond[0].residue.name!=include_residue_name) or (bond[1].residue.name!=include_residue_name):
-            continue
-        # TODO: Preserve bond order info using extended OpenMM API
-        destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
-
-def _build_new_topology(self, current_receptor_topology, oemol_proposed):
-    """
-    Construct a new topology
-    Parameters
-    ----------
-    oemol_proposed : oechem.OEMol object
-        the proposed OEMol object
-    current_receptor_topology : app.Topology object
-        The current topology without the small molecule
-    Returns
-    -------
-    new_topology : app.Topology object
-        A topology with the receptor and the proposed oemol
-    mol_start_index : int
-        The first index of the small molecule
-    """
-    oemol_proposed.SetTitle(self._residue_name)
-    mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
-    new_topology = app.Topology()
-    append_topology(new_topology, current_receptor_topology)
-    append_topology(new_topology, mol_topology)
-    # Copy periodic box vectors.
-    if current_receptor_topology._periodicBoxVectors != None:
-        new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
-
-    return new_topology
 
 def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane"):
     from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
@@ -148,6 +66,7 @@ class NonequilibriumFEPSetup(object):
     def __init__(self, protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, pressure=1.0*unit.atmosphere, temperature=300.0*unit.kelvin):
         """
         Initialize a NonequilibriumFEPSetup object
+
         Parameters
         ----------
         protein_pdb_filename : str
@@ -169,35 +88,43 @@ class NonequilibriumFEPSetup(object):
         self._new_ligand_index = new_ligand_index
 
         self._old_ligand_oemol = self.load_sdf(self._ligand_file, index=self._old_ligand_index)
-        self._old_ligand_oemol.SetTitle('MOL')
         self._new_ligand_oemol = self.load_sdf(self._ligand_file, index=self._new_ligand_index)
-        self._new_ligand_oemol.SetTitle('MOL')
 
         self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
-        ffxml=forcefield_generators.generateForceFieldFromMolecules([self._old_ligand_oemol])
+
+        ffxml=forcefield_generators.generateForceFieldFromMolecules([self._old_ligand_oemol, self._new_ligand_oemol])
+
+        self._old_ligand_oemol.SetTitle("MOL")
+        self._new_ligand_oemol.SetTitle("MOL")
+
+        self._new_ligand_smiles = oechem.OECreateSmiString(self._new_ligand_oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        self._old_ligand_smiles = '[H]c1c(c(c(c(c1N([H])c2nc3c(c(n2)OC([H])([H])C4(C(C(C(C(C4([H])[H])([H])[H])([H])[H])([H])[H])([H])[H])[H])nc(n3[H])[H])[H])[H])S(=O)(=O)C([H])([H])[H])[H]'#oechem.OECreateSmiString(self._old_ligand_oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+
+        print(self._new_ligand_smiles)
+        print(self._old_ligand_smiles)
 
         self._old_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._old_ligand_oemol)
+        self._old_ligand_md_topology = md.Topology.from_openmm(self._old_ligand_topology)
         self._new_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._new_ligand_oemol)
+        self._new_liands_md_topology = md.Topology.from_openmm(self._new_ligand_topology)
 
-        oeq.OESetNeutralpHModel(self._new_ligand_oemol)
-        self._new_ligand_smiles = oechem.OEMolToSmiles(self._new_ligand_oemol)
-        print(self._new_ligand_smiles)
-        oeq.OESetNeutralpHModel(self._old_ligand_oemol)
-        self._old_ligand_smiles = 'CS(=O)(=O)c1ccc(cc1)Nc2nc3c(c(n2)OCC4CCCCC4)nc[nH]3'
-        print(self._old_ligand_smiles)
 
         protein_pdbfile = open(self._protein_pdb_filename, 'r')
         pdb_file = app.PDBFile(protein_pdbfile)
         protein_pdbfile.close()
 
         self._protein_topology_old = pdb_file.topology
+        self._protein_md_topology_old = md.Topology.from_openmm(self._protein_topology_old)
         self._protein_positions_old = pdb_file.positions
-        self._forcefield = app.ForceField(*forcefield_files)        
+        self._forcefield = app.ForceField(*forcefield_files)
+        #self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
         self._forcefield.loadFile(StringIO(ffxml))
 
-        self._complex_topology_old = copy.deepcopy(self._protein_topology_old)
+        print("Generated forcefield")
 
-        append_topology(self._complex_topology_old, self._old_ligand_topology)
+        self._complex_md_topology_old = self._protein_md_topology_old.join(self._old_ligand_md_topology)
+        self._complex_topology_old = self._complex_md_topology_old.to_openmm()
+
         n_atoms_complex_old = self._complex_topology_old.getNumAtoms()
         n_atoms_protein_old = self._protein_topology_old.getNumAtoms()
 
@@ -214,25 +141,28 @@ class NonequilibriumFEPSetup(object):
         self._complex_proposal_engine = SmallMoleculeSetProposalEngine([self._new_ligand_smiles, self._old_ligand_smiles], self._system_generator)
         self._geometry_engine = FFAllAngleGeometryEngine()
 
-        #self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
-        self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._protein_topology_old, self._protein_positions_old, self._old_ligand_topology, self._old_ligand_positions)
+        self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
+        self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
+        print(self._complex_proposal_engine._smiles_list)
 
         self._complex_topology_proposal = self._complex_proposal_engine.propose(self._complex_system_old_solvated, self._complex_topology_old_solvated)
         self._complex_positions_new_solvated, _ = self._geometry_engine.propose(self._complex_topology_proposal, self._complex_positions_old_solvated, beta)
 
         #now generate the equivalent objects for the solvent phase. First, generate the ligand-only topologies and atom map
         self._solvent_topology_proposal, self._old_solvent_positions = self._generate_ligand_only_topologies(self._complex_positions_old_solvated, self._complex_positions_new_solvated)
-        self._new_solvent_positions, _ = self._geometry_engine.propose(self._solvent_topology_proposal, self._old_solvent_positions)
+        self._new_solvent_positions, _ = self._geometry_engine.propose(self._solvent_topology_proposal, self._old_solvent_positions, beta)
 
     def load_sdf(self, sdf_filename, index=0):
         """
         Load an SDF file into an OEMol. Since SDF files can contain multiple molecules, an index can be provided as well.
+
         Parameters
         ----------
         sdf_filename : str
             The name of the SDF file
         index : int, default 0
             The index of the molecule in the SDF file
+
         Returns
         -------
         mol : openeye.oechem.OEMol object
@@ -243,18 +173,21 @@ class NonequilibriumFEPSetup(object):
         #get the list of molecules
         mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
         #we'll always take the first for now
-        return mol_list[index]
+        mol_to_return = mol_list[index]
+        return mol_to_return
 
-    def _solvate_system(self, topology, positions, lig_top, lig_pos, padding=9.0*unit.angstrom, model='tip3p'):
+    def _solvate_system(self, topology, positions, padding=4.0*unit.angstrom, model='tip3p'):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
+
         Parameters
         ----------
         topology : app.Topology
             Topology of the system to solvate
         positions : [n, 3] ndarray of Quantity nm
             the positions of the unsolvated system
+
         Returns
         -------
         solvated_topology : app.Topology
@@ -268,14 +201,13 @@ class NonequilibriumFEPSetup(object):
         #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H']]
         #modeller.delete(hs)
         #modeller.addHydrogens(forcefield=self._forcefield)
-        modeller.add(lig_top, lig_pos)
-        print('ADDING SOLVENT')
+        print("preparing to add solvent")
         modeller.addSolvent(self._forcefield, model=model, padding=padding)
-        print('GETTING TOPOLOGY')
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
+        print("solvent added, parameterizing")
         solvated_system = self._system_generator.build_system(solvated_topology)
-        print('SYSTEM BUILT')
+        print("System parameterized")
         if self._pressure is not None:
             barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
             solvated_system.addForce(barostat)
@@ -286,10 +218,12 @@ class NonequilibriumFEPSetup(object):
         """
         This method generates ligand-only topologies and positions from a TopologyProposal containing a solvated complex.
         The output of this method is then used when building the solvent-phase simulation with the same atom map.
+
         Parameters
         ----------
         topology_proposal : perses.rjmc.TopologyProposal
              TopologyProposal representing the solvated complex transformation
+
         Returns
         -------
         old_ligand_topology : app.Topology
@@ -303,55 +237,60 @@ class NonequilibriumFEPSetup(object):
         atom_map : dict of int: it
             The mapping between the two topologies without ligand or solvent.
         """
-        old_complex = self._complex_topology_proposal.old_topology
-        new_complex = self._complex_topology_proposal.new_topology
+        old_complex = md.Topology.from_openmm(self._complex_topology_proposal.old_topology)
+        new_complex = md.Topology.from_openmm(self._complex_topology_proposal.new_topology)
 
         complex_atom_map = self._complex_topology_proposal.old_to_new_atom_map
 
-        old_mol_start_index, old_mol_len = self._complex_proposal_engine._find_mol_start_index(old_complex)
-        new_mol_start_index, new_mol_len = self._complex_proposal_engine._find_mol_start_index(new_complex)
+        old_mol_start_index, old_mol_len = self._complex_proposal_engine._find_mol_start_index(old_complex.to_openmm())
+        new_mol_start_index, new_mol_len = self._complex_proposal_engine._find_mol_start_index(new_complex.to_openmm())
 
-        old_ligand_positions = old_positions[old_mol_start_index:(old_mol_start_index+old_mol_len), :]
+        old_pos = unit.Quantity(np.zeros([len(_complex_positions_old_solvated), 3]), unit=unit.nanometers)
+        old_pos[:,:] = _complex_positions_old_solvated
+        old_ligand_positions = old_pos[old_mol_start_index:(old_mol_start_index+old_mol_len), :]
         new_ligand_positions = new_positions[new_mol_start_index:(new_mol_start_index+new_mol_len), :]
 
-        atom_map_adjusted = {}
+        #atom_map_adjusted = {}
 
         #loop through the atoms in the map. If the old index is creater than the old_mol_start_index but less than that
         #plus the old mol length, then it is valid to include its adjusted value in the map.
-        for old_idx, new_idx in complex_atom_map.items():
-            if old_idx > old_mol_start_index and old_idx < old_mol_len + old_mol_start_index:
-                atom_map_adjusted[old_idx - old_mol_len] = new_idx - new_mol_start_index
+        #for old_idx, new_idx in complex_atom_map.items():
+        #    if old_idx > old_mol_start_index and old_idx < old_mol_len + old_mol_start_index:
+        #        atom_map_adjusted[old_idx - old_mol_len] = new_idx - new_mol_start_index
 
         #subset the topologies:
-        old_ligand_topology = app.Topology()
-        new_ligand_topology = app.Topology()
 
-        subset_topology(old_ligand_topology, old_complex, include_residue_name="MOL")
-        subset_topology(new_ligand_topology, new_complex, include_residue_name="MOL")
+        old_ligand_topology = old_complex.subset(old_complex.select("resname == 'MOL' "))
+        new_ligand_topology = new_complex.subset(new_complex.select("resname == 'MOL' "))
 
         #solvate the old ligand topology:
-        old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(old_ligand_topology, old_ligand_positions)
+        old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(old_ligand_topology.to_openmm(), old_ligand_positions)
+
+        old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
         #now remove the old ligand, leaving only the solvent
-        solvent_only_topology = self._complex_proposal_engine._remove_small_molecule(old_solvated_topology)
+        solvent_only_topology = old_solvated_md_topology.subset(old_solvated_md_topology.select("water"))
 
         #append the solvent to the new ligand-only topology:
-        append_topology(new_ligand_topology, solvent_only_topology)
+        new_solvated_ligand_md_topology = new_ligand_topology.join(solvent_only_topology)
+        nsl,b = new_solvated_ligand_md_topology.to_dataframe()
+        new_solvated_ligand_md_topology = md.Topology.from_dataframe(nsl,b)
 
         #create the new ligand system:
-        new_solvated_system = self._system_generator.build_system(new_ligand_topology)
+        new_solvated_system = self._system_generator.build_system(new_solvated_ligand_md_topology.to_openmm())
 
+        new_to_old_atom_map = {complex_atom_map[x]-new_mol_start_index:x-old_mol_start_index for x in old_complex.select("resname == 'MOL' ") if x in complex_atom_map.keys()}
         #adjust the atom map to account for the presence of solvent degrees of freedom:
         #By design, all atoms after the ligands are water, and should be mapped.
-        n_water_atoms = solvent_only_topology.getNumAtoms()
+        n_water_atoms = solvent_only_topology.to_openmm().getNumAtoms()
         for i in range(n_water_atoms):
-            atom_map_adjusted[old_mol_len+i] = new_mol_len + i
+            new_to_old_atom_map[new_mol_len+i] = old_mol_len + i
 
         #change the map to accomodate the TP:
-        new_to_old_atom_map = {value : key for key, value in atom_map_adjusted.items()}
+        #new_to_old_atom_map = {value : key for key, value in atom_map_adjusted.items()}
 
         #make a TopologyProposal
-        ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_system, new_system=new_solvated_system,
+        ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_ligand_md_topology.to_openmm(), new_system=new_solvated_system,
                                                     old_topology=old_solvated_topology, old_system=old_solvated_system,
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
                                                     new_chemical_state_key='B')
@@ -500,9 +439,9 @@ if __name__=="__main__":
     import os
     gaff_filename = get_data_filename("data/gaff.xml")
     forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
-    path_to_schrodinger_inputs = "/home/ballen/Inputs_for_FEP"
-    protein_file = os.path.join(path_to_schrodinger_inputs, "CDK2_fixed_nohet.pdb")
-    molecule_file = os.path.join(path_to_schrodinger_inputs, "CDK2_ligands.mol2")
+    path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
+    protein_file = os.path.join(path_to_schrodinger_inputs, "/home/ballen/Inputs_for_FEP/CDK2_fixed_nohet.pdb")
+    molecule_file = os.path.join(path_to_schrodinger_inputs, "/home/ballen/Inputs_for_FEP/CDK2_ligands.mol2")
     fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
 
     topology_proposal, pos_old, new_positions = generate_vacuum_hybrid_topology()
@@ -512,3 +451,6 @@ if __name__=="__main__":
     ne_fep.run_nonequilibrium_task()
     ne_fep.run_equilibrium()
     ne_fep.collect_ne_work()
+
+
+
