@@ -245,8 +245,8 @@ class NonequilibriumFEPSetup(object):
         old_mol_start_index, old_mol_len = self._complex_proposal_engine._find_mol_start_index(old_complex.to_openmm())
         new_mol_start_index, new_mol_len = self._complex_proposal_engine._find_mol_start_index(new_complex.to_openmm())
 
-        old_pos = unit.Quantity(np.zeros([len(_complex_positions_old_solvated), 3]), unit=unit.nanometers)
-        old_pos[:,:] = _complex_positions_old_solvated
+        old_pos = unit.Quantity(np.zeros([len(old_positions), 3]), unit=unit.nanometers)
+        old_pos[:,:] = old_positions
         old_ligand_positions = old_pos[old_mol_start_index:(old_mol_start_index+old_mol_len), :]
         new_ligand_positions = new_positions[new_mol_start_index:(new_mol_start_index+new_mol_len), :]
 
@@ -274,6 +274,7 @@ class NonequilibriumFEPSetup(object):
         #append the solvent to the new ligand-only topology:
         new_solvated_ligand_md_topology = new_ligand_topology.join(solvent_only_topology)
         nsl,b = new_solvated_ligand_md_topology.to_dataframe()
+        #dirty hack because new_solvated_ligand_md_topology.to_openmm() was throwing bond topology error
         new_solvated_ligand_md_topology = md.Topology.from_dataframe(nsl,b)
 
         #create the new ligand system:
