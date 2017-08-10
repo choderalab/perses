@@ -137,7 +137,9 @@ class HybridTopologyFactory(object):
         self._atom_classes = self._determine_atom_classes()
 
         #verify that no constraints are changing over the course of the switching.
-        self._constraint_check()
+        constraint_check = False
+        if constraint_check:
+            self._constraint_check()
 
         #copy over relevant virtual sites
         self._handle_virtual_sites()
@@ -598,6 +600,8 @@ class HybridTopologyFactory(object):
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
+
+        standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
         sterics_energy_expression += self._nonbonded_custom_sterics_common()
         electrostatics_energy_expression += self._nonbonded_custom_electrostatics_common()
 
@@ -1255,6 +1259,32 @@ class HybridTopologyFactory(object):
                 else:
                     #if it should be excluded, then set chargeprod to 0, sigma to 1, eps to 0
                     nonbonded_force.addException(particle1, particle2, 0.0, 1.0, 0.0)
+
+    def _handle_hybrid_exceptions_fast(self):
+        """
+        This method adds exceptions specifically to prevent double-counting forces, etc. It does not copy the exceptions
+        from the old and new systems into hybrid; that is for another method. This method relies on set arithmetic instead
+        of a nested python for loop.
+        """
+        import itertools
+        #prepare the atom classes
+        core_atoms = self._atom_classes['core_atoms']
+        unique_old_atoms = self._atom_classes['unique_old_atoms']
+        unique_new_atoms = self._atom_classes['unique_new_atoms']
+        environment_atoms = self._atom_classes['environment_atoms']
+
+        nonbonded_force = self._hybrid_system_forces['standard_nonbonded_force']
+
+        list_of_exception_pairs = []
+        list_of_exception_pairs.extend(list(itertools.product(unique_old_atoms, unique_new_atoms)))
+        list_of_exception_pairs.extend(list(itertools.product(unique_old_atoms, core_atoms)))
+        list_of_exception_pairs.extend(list(itertools.product(unique_old_atoms, environment_atoms)))
+        list_of_exception_pairs.extend(list(itertools.product(unique_new_atoms, core_atoms)))
+        list_of_exception_pairs.extend(list(itertools.product(unique_new_atoms, environment_atoms)))
+        list_of_exception_pairs.extend(list(itertools.product(core_atoms, core_atoms)))
+
+        for pair in list_of_exception_pairs:
+            nonbonded_force.addException(pair[0], pair[1], 0.0, 1.0, 0.0)
 
     def _handle_original_exceptions(self):
         """

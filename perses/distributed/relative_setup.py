@@ -8,14 +8,14 @@ import simtk.unit as unit
 import numpy as np
 from perses.tests.utils import createSystemFromIUPAC, get_data_filename, extractPositionsFromOEMOL
 from perses.annihilation.new_relative import HybridTopologyFactory
-from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine, SystemGenerator
+from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import openeye.oechem as oechem
 import celery
 from openmoltools import forcefield_generators
 import copy
-from cStringIO import StringIO
 import mdtraj as md
+from io import StringIO
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
@@ -117,7 +117,6 @@ class NonequilibriumFEPSetup(object):
         self._protein_md_topology_old = md.Topology.from_openmm(self._protein_topology_old)
         self._protein_positions_old = pdb_file.positions
         self._forcefield = app.ForceField(*forcefield_files)
-        #self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
         self._forcefield.loadFile(StringIO(ffxml))
 
         print("Generated forcefield")
@@ -134,11 +133,12 @@ class NonequilibriumFEPSetup(object):
 
         if pressure is not None:
             barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
-            self._system_generator = SystemGenerator(forcefield_files, barostat=barostat)
+            self._system_generator = SystemGenerator(forcefield_files, barostat=barostat, forcefield_kwargs={'nonbondedMethod' : app.PME})
         else:
             self._system_generator = SystemGenerator(forcefield_files)
 
-        self._complex_proposal_engine = SmallMoleculeSetProposalEngine([self._new_ligand_smiles, self._old_ligand_smiles], self._system_generator)
+        #self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_smiles, self._new_ligand_smiles, self._system_generator, residue_name="MOL")
+        self._complex_proposal_engine = SmallMoleculeSetProposalEngine([self._old_ligand_smiles, self._new_ligand_smiles], self._system_generator, residue_name="MOL")
         self._geometry_engine = FFAllAngleGeometryEngine()
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
@@ -198,9 +198,9 @@ class NonequilibriumFEPSetup(object):
             The parameterized system, containing a barostat if one was specified.
         """
         modeller = app.Modeller(topology, positions)
-        #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H']]
-        #modeller.delete(hs)
-        #modeller.addHydrogens(forcefield=self._forcefield)
+        hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name != "MOL"]
+        modeller.delete(hs)
+        modeller.addHydrogens(forcefield=self._forcefield)
         print("preparing to add solvent")
         modeller.addSolvent(self._forcefield, model=model, padding=padding)
         solvated_topology = modeller.getTopology()
@@ -277,8 +277,11 @@ class NonequilibriumFEPSetup(object):
         #dirty hack because new_solvated_ligand_md_topology.to_openmm() was throwing bond topology error
         new_solvated_ligand_md_topology = md.Topology.from_dataframe(nsl,b)
 
+        new_solvated_ligand_omm_topology = new_solvated_ligand_md_topology.to_openmm()
+        new_solvated_ligand_omm_topology.setPeriodicBoxVectors(old_solvated_topology.getPeriodicBoxVectors())
+
         #create the new ligand system:
-        new_solvated_system = self._system_generator.build_system(new_solvated_ligand_md_topology.to_openmm())
+        new_solvated_system = self._system_generator.build_system(new_solvated_ligand_omm_topology)
 
         new_to_old_atom_map = {complex_atom_map[x]-new_mol_start_index:x-old_mol_start_index for x in old_complex.select("resname == 'MOL' ") if x in complex_atom_map.keys()}
         #adjust the atom map to account for the presence of solvent degrees of freedom:
@@ -291,7 +294,7 @@ class NonequilibriumFEPSetup(object):
         #new_to_old_atom_map = {value : key for key, value in atom_map_adjusted.items()}
 
         #make a TopologyProposal
-        ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_ligand_md_topology.to_openmm(), new_system=new_solvated_system,
+        ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_ligand_omm_topology, new_system=new_solvated_system,
                                                     old_topology=old_solvated_topology, old_system=old_solvated_system,
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
                                                     new_chemical_state_key='B')
@@ -358,6 +361,9 @@ class NonequilibriumSwitchingFEP(object):
         self._forward_work = []
         self._reverse_work = []
 
+        self._forward_positions_after_switch = []
+        self._reverse_positions_after_switch = []
+
     def run_equilibrium(self, n_steps=500):
         """
         Run equilibrium for both end states.
@@ -412,9 +418,10 @@ class NonequilibriumSwitchingFEP(object):
         self._current_nonequilibrium_work_result = celery.group(tasks).apply_async()
 
         if not async:
-            work_values = self._current_nonequilibrium_work_result.join()
+            work_values, positions = self._current_nonequilibrium_work_result.join()
             self._forward_work.append(work_values[:self._concurrency])
             self._reverse_work.append(work_values[self._concurrency:])
+            self._forward_positions_after_switch.append()
 
     def collect_ne_work(self):
         """
@@ -423,7 +430,7 @@ class NonequilibriumSwitchingFEP(object):
         if not self._current_nonequilibrium_work_result:
             return
 
-        work_values = self._current_nonequilibrium_work_result.join()
+        work_values, positions = self._current_nonequilibrium_work_result.join()
         self._forward_work.append(work_values[:self._concurrency])
         self._reverse_work.append(work_values[self._concurrency:])
         self._current_nonequilibrium_work_result = None
@@ -436,17 +443,21 @@ class NonequilibriumSwitchingFEP(object):
     def reverse_work(self):
         return self._reverse_work
 
+    @property
+    def current_free_energy_estimate(self):
+        [df, ddf] = pymbar.BAR(self._forward_work, self._reverse_work)
+        return [df, ddf]
+
 if __name__=="__main__":
     import os
     gaff_filename = get_data_filename("data/gaff.xml")
     forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
     path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
-    protein_file = os.path.join(path_to_schrodinger_inputs, "/home/ballen/Inputs_for_FEP/CDK2_fixed_nohet.pdb")
-    molecule_file = os.path.join(path_to_schrodinger_inputs, "/home/ballen/Inputs_for_FEP/CDK2_ligands.mol2")
+    protein_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/CDK2_fixed_nohet.pdb")
+    molecule_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/Inputs_for_FEP/CDK2_ligands.mol2")
     fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
 
-    topology_proposal, pos_old, new_positions = generate_vacuum_hybrid_topology()
-    ne_fep = NonequilibriumSwitchingFEP(topology_proposal, pos_old, new_positions)
+    ne_fep = NonequilibriumSwitchingFEP(fesetup.solvent_topology_proposal, fesetup.solvent_old_positions, fesetup.solvent_new_positions)
     ne_fep.minimize()
     ne_fep.run_equilibrium()
     ne_fep.run_nonequilibrium_task()
