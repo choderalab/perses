@@ -1184,7 +1184,7 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
 
         self._handle_interaction_groups()
-        self._handle_hybrid_exceptions()
+        self._handle_hybrid_exceptions_fast()
         self._handle_original_exceptions()
 
     def _handle_interaction_groups(self):
@@ -1266,6 +1266,7 @@ class HybridTopologyFactory(object):
         from the old and new systems into hybrid; that is for another method. This method relies on set arithmetic instead
         of a nested python for loop.
         """
+        print("handling exceptions")
         import itertools
         #prepare the atom classes
         core_atoms = self._atom_classes['core_atoms']
@@ -1281,7 +1282,7 @@ class HybridTopologyFactory(object):
         list_of_exception_pairs.extend(list(itertools.product(unique_old_atoms, environment_atoms)))
         list_of_exception_pairs.extend(list(itertools.product(unique_new_atoms, core_atoms)))
         list_of_exception_pairs.extend(list(itertools.product(unique_new_atoms, environment_atoms)))
-        list_of_exception_pairs.extend(list(itertools.product(core_atoms, core_atoms)))
+        list_of_exception_pairs.extend(list(itertools.combinations(core_atoms, 2)))
 
         for pair in list_of_exception_pairs:
             nonbonded_force.addException(pair[0], pair[1], 0.0, 1.0, 0.0)
