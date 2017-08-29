@@ -1402,7 +1402,7 @@ class HybridTopologyFactory(object):
 
         #now, loop through the new system to collect remaining interactions. The only that remain here are
         #uniquenew-uniquenew, uniquenew-core, and uniquenew-environment.
-        for exception_pair, exception_parameters in self._old_system_exceptions.items():
+        for exception_pair, exception_parameters in self._new_system_exceptions.items():
             [index1_new, index2_new] = exception_pair
             [chargeProd_new, sigma_new, epsilon_new] = exception_parameters
 
