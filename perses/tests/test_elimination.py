@@ -544,6 +544,7 @@ def test_alchemical_elimination_mutation():
         f.description = "Testing alchemical null transformation of ALA sidechain in alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
 def test_ncmc_alchemical_integrator_stability_molecules():
     """
     Test NCMCAlchemicalIntegrator
@@ -690,17 +691,3 @@ def test_alchemical_elimination_peptide():
         f = partial(check_alchemical_null_elimination, topology_proposal, testsystem.positions, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
-
-if __name__ == "__main__":
-    #for x in test_ncmc_engine_molecule():
-    #    print(x.description)
-    #    x()
-    #generate_solvated_hybrid_test_topology()
-    for x in test_ncmc_hybrid_explicit_engine_molecule():
-        print(x.description)
-        x()
-#    test_ncmc_alchemical_integrator_stability_molecules()
-#    for x in test_alchemical_elimination_mutation():
-#        x()
-#    for x in test_alchemical_elimination_peptide():
-#        x()
