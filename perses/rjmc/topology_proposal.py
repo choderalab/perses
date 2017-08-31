@@ -145,8 +145,8 @@ class TopologyProposal(object):
         self._old_chemical_state_key = old_chemical_state_key
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
-        self._unique_new_atoms = [atom for atom in range(self._new_topology._numAtoms) if atom not in self._new_to_old_atom_map.keys()]
-        self._unique_old_atoms = [atom for atom in range(self._old_topology._numAtoms) if atom not in self._new_to_old_atom_map.values()]
+        self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
+        self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
         self._metadata = metadata
 
     @property
@@ -1247,7 +1247,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         else:
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = list_of_smiles
+        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
@@ -1281,8 +1281,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
+        self.verbose = True
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
-
         current_receptor_topology = self._remove_small_molecule(current_topology)
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
 
@@ -1291,24 +1291,26 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                                                                                 current_mol_smiles)
 
         # DEBUG
-        strict_stereo = False
-        if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
-        from openmoltools.openeye import generate_conformers
-        if self.verbose: print('Generating conformers...')
-        timer_start = time.time()
-        moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=strict_stereo)
-        #molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
-        ofs = oechem.oemolostream('current.mol2')
-        oechem.OETriposAtomTypeNames(moltemp)
-        oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
-        ofs.close()
-        moltemp = generate_conformers(proposed_mol, max_confs=1, strictStereo=strict_stereo)
-        #molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
-        ofs = oechem.oemolostream('proposed.mol2')
-        oechem.OETriposAtomTypeNames(moltemp)
-        oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
-        ofs.close()
-        if self.verbose: print('Conformer generation took %.3f s' % (time.time() - timer_start))
+        debug = False
+        if debug:
+            strict_stereo = False
+            if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
+            from openmoltools.openeye import generate_conformers
+            if self.verbose: print('Generating conformers...')
+            timer_start = time.time()
+            moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=strict_stereo)
+            #molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
+            ofs = oechem.oemolostream('current.mol2')
+            oechem.OETriposAtomTypeNames(moltemp)
+            oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
+            ofs.close()
+            moltemp = generate_conformers(proposed_mol, max_confs=1, strictStereo=strict_stereo)
+            #molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
+            ofs = oechem.oemolostream('proposed.mol2')
+            oechem.OETriposAtomTypeNames(moltemp)
+            oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
+            ofs.close()
+            if self.verbose: print('Conformer generation took %.3f s' % (time.time() - timer_start))
 
         if self.verbose: print('Building new Topology object...')
         timer_start = time.time()
@@ -1378,7 +1380,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
-        iso_can_smiles = oechem.OECreateIsoSmiString(mol)
+        iso_can_smiles = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
         return iso_can_smiles
 
     def _topology_to_smiles(self, topology):
@@ -1404,8 +1406,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        smiles_string = oechem.OECreateIsoSmiString(oemol)
-        return smiles_string, oemol
+        smiles_string = oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        final_smiles_string = smiles_string
+        return final_smiles_string, oemol
 
     def compute_state_key(self, topology):
         """
@@ -1538,7 +1541,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map
 
-    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=True):
+    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         """
         Propose a new molecule given the current molecule.
 
@@ -1680,6 +1683,23 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 pass
         removed_smiles = smiles_set.difference(safe_smiles)
         return safe_smiles, removed_smiles
+
+class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
+    """
+    Dummy proposal engine that always chooses the new molecule of the two, but uses the base class's atom mapping
+    functionality.
+    """
+
+    def __init__(self, old_mol, new_mol, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
+        self._old_mol_smiles = oechem.OECreateSmiString(old_mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        self._new_mol_smiles = oechem.OECreateSmiString(new_mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        self._old_mol = old_mol
+        self._new_mol = new_mol
+
+        super(TwoMoleculeSetProposalEngine, self).__init__([self._old_mol_smiles, self._new_mol_smiles], system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr)
+
+    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
+        return self._new_mol_smiles, self._new_mol, 0.0
 
 class NullProposalEngine(SmallMoleculeSetProposalEngine):
     """

@@ -83,7 +83,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
-    def __init__(self, metadata=None, use_sterics=False, verbose=False):
+    def __init__(self, metadata=None, use_sterics=False, verbose=True):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
@@ -209,7 +209,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
         elif direction=='reverse':
@@ -218,7 +218,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -353,7 +353,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp_proposal, new_positions
 
     @staticmethod
-    def _oemol_from_residue(res, verbose=False):
+    def _oemol_from_residue(res, verbose=True):
         """
         Get an OEMol from a residue, even if that residue
         is polymeric. In the latter case, external bonds
@@ -1303,7 +1303,7 @@ class GeometrySystemGenerator(object):
     _HarmonicAngleForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
     _PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
-    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=False):
+    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
         ----------
@@ -1538,7 +1538,7 @@ class GeometrySystemGenerator(object):
             print(e)
 
         # DEBUG: Write mol2 file.
-        debug = False
+        debug = True
         if debug:
             if not hasattr(self, 'omega_index'):
                 self.omega_index = 0
@@ -1712,7 +1712,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
     Use updateParametersInContext to make energy evaluation fast.
     """
 
-    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=False):
+    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
         ----------
@@ -1856,7 +1856,7 @@ class ProposalOrderTools(object):
         The topology proposal containing the relevant move.
     """
 
-    def __init__(self, topology_proposal, verbose=False):
+    def __init__(self, topology_proposal, verbose=True):
         self._topology_proposal = topology_proposal
         self.verbose = True # DEBUG
 
