@@ -60,6 +60,7 @@ env:
     # Location of decrypted OpenEye license file
     - OE_LICENSE="$HOME/oe_license.txt"
     - OPENEYE_CHANNEL="-i https://pypi.anaconda.org/OpenEye/simple"
+    - TRAVIS="true"
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
     - secure: "RRvLDPu9mPoNaRWIseaJdgShOXI+PaHPWKAIJvW7VYWcAS6iEN7W4Fj4zD5hkocQxc3ou97EtkgID+ApH10bSGKxCykyU0urSY9jsSOJX2m0AE19X0dVr6ySIQkwCWE6kUMVlvQYQo80fM2EMElD+btr4G9XBAhArAO7HvZHkoQ="
 
