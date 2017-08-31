@@ -14,7 +14,7 @@ import openeye.oechem as oechem
 import celery
 from openmoltools import forcefield_generators
 import copy
-from cStringIO import StringIO
+from io import StringIO
 import mdtraj as md
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
@@ -98,7 +98,8 @@ class NonequilibriumFEPSetup(object):
         self._new_ligand_oemol.SetTitle("MOL")
 
         self._new_ligand_smiles = oechem.OECreateSmiString(self._new_ligand_oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-        self._old_ligand_smiles = '[H]c1c(c(c(c(c1N([H])c2nc3c(c(n2)OC([H])([H])C4(C(C(C(C(C4([H])[H])([H])[H])([H])[H])([H])[H])([H])[H])[H])nc(n3[H])[H])[H])[H])S(=O)(=O)C([H])([H])[H])[H]'#oechem.OECreateSmiString(self._old_ligand_oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        self._old_ligand_smiles = oechem.OECreateSmiString(self._old_ligand_oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+
 
         print(self._new_ligand_smiles)
         print(self._old_ligand_smiles)
@@ -268,6 +269,8 @@ class NonequilibriumFEPSetup(object):
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
+        old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
+
         #now remove the old ligand, leaving only the solvent
         solvent_only_topology = old_solvated_md_topology.subset(old_solvated_md_topology.select("water"))
 
@@ -276,6 +279,7 @@ class NonequilibriumFEPSetup(object):
         nsl,b = new_solvated_ligand_md_topology.to_dataframe()
         #dirty hack because new_solvated_ligand_md_topology.to_openmm() was throwing bond topology error
         new_solvated_ligand_md_topology = md.Topology.from_dataframe(nsl,b)
+
 
         #create the new ligand system:
         new_solvated_system = self._system_generator.build_system(new_solvated_ligand_md_topology.to_openmm())
@@ -441,8 +445,8 @@ if __name__=="__main__":
     gaff_filename = get_data_filename("data/gaff.xml")
     forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
     path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
-    protein_file = os.path.join(path_to_schrodinger_inputs, "/home/ballen/Inputs_for_FEP/CDK2_fixed_nohet.pdb")
-    molecule_file = os.path.join(path_to_schrodinger_inputs, "/home/ballen/Inputs_for_FEP/CDK2_ligands.mol2")
+    protein_file = os.path.join(path_to_schrodinger_inputs, "CDK2_fixed_nohet.pdb")
+    molecule_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/Inputs_for_FEP/CDK2_ligands.mol2")
     fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
 
     topology_proposal, pos_old, new_positions = generate_vacuum_hybrid_topology()
