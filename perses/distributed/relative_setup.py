@@ -100,6 +100,7 @@ class NonequilibriumFEPSetup(object):
         self._new_ligand_smiles = oechem.OECreateSmiString(self._new_ligand_oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
         self._old_ligand_smiles = oechem.OECreateSmiString(self._old_ligand_oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
 
+
         print(self._new_ligand_smiles)
         print(self._old_ligand_smiles)
 
@@ -146,11 +147,11 @@ class NonequilibriumFEPSetup(object):
         print(self._complex_proposal_engine._smiles_list)
 
         self._complex_topology_proposal = self._complex_proposal_engine.propose(self._complex_system_old_solvated, self._complex_topology_old_solvated)
-        self._complex_positions_new_solvated, _ = self._geometry_engine.propose(self._complex_topology_proposal, self._complex_positions_old_solvated)
+        self._complex_positions_new_solvated, _ = self._geometry_engine.propose(self._complex_topology_proposal, self._complex_positions_old_solvated, beta)
 
         #now generate the equivalent objects for the solvent phase. First, generate the ligand-only topologies and atom map
         self._solvent_topology_proposal, self._old_solvent_positions = self._generate_ligand_only_topologies(self._complex_positions_old_solvated, self._complex_positions_new_solvated)
-        self._new_solvent_positions, _ = self._geometry_engine.propose(self._solvent_topology_proposal, self._old_solvent_positions)
+        self._new_solvent_positions, _ = self._geometry_engine.propose(self._solvent_topology_proposal, self._old_solvent_positions, beta)
 
     def load_sdf(self, sdf_filename, index=0):
         """
@@ -242,19 +243,21 @@ class NonequilibriumFEPSetup(object):
 
         complex_atom_map = self._complex_topology_proposal.old_to_new_atom_map
 
-        old_mol_start_index, old_mol_len = self._complex_proposal_engine._find_mol_start_index(old_complex)
-        new_mol_start_index, new_mol_len = self._complex_proposal_engine._find_mol_start_index(new_complex)
+        old_mol_start_index, old_mol_len = self._complex_proposal_engine._find_mol_start_index(old_complex.to_openmm())
+        new_mol_start_index, new_mol_len = self._complex_proposal_engine._find_mol_start_index(new_complex.to_openmm())
 
-        old_ligand_positions = old_positions[old_mol_start_index:(old_mol_start_index+old_mol_len), :]
+        old_pos = unit.Quantity(np.zeros([len(old_positions), 3]), unit=unit.nanometers)
+        old_pos[:,:] = old_positions
+        old_ligand_positions = old_pos[old_mol_start_index:(old_mol_start_index+old_mol_len), :]
         new_ligand_positions = new_positions[new_mol_start_index:(new_mol_start_index+new_mol_len), :]
 
-        atom_map_adjusted = {}
+        #atom_map_adjusted = {}
 
         #loop through the atoms in the map. If the old index is creater than the old_mol_start_index but less than that
         #plus the old mol length, then it is valid to include its adjusted value in the map.
-        for old_idx, new_idx in complex_atom_map.items():
-            if old_idx > old_mol_start_index and old_idx < old_mol_len + old_mol_start_index:
-                atom_map_adjusted[old_idx - old_mol_len] = new_idx - new_mol_start_index
+        #for old_idx, new_idx in complex_atom_map.items():
+        #    if old_idx > old_mol_start_index and old_idx < old_mol_len + old_mol_start_index:
+        #        atom_map_adjusted[old_idx - old_mol_len] = new_idx - new_mol_start_index
 
         #subset the topologies:
 
@@ -262,7 +265,9 @@ class NonequilibriumFEPSetup(object):
         new_ligand_topology = new_complex.subset(new_complex.select("resname == 'MOL' "))
 
         #solvate the old ligand topology:
-        old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(old_ligand_topology, old_ligand_positions)
+        old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(old_ligand_topology.to_openmm(), old_ligand_positions)
+
+        old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -271,18 +276,23 @@ class NonequilibriumFEPSetup(object):
 
         #append the solvent to the new ligand-only topology:
         new_solvated_ligand_md_topology = new_ligand_topology.join(solvent_only_topology)
+        nsl,b = new_solvated_ligand_md_topology.to_dataframe()
+        #dirty hack because new_solvated_ligand_md_topology.to_openmm() was throwing bond topology error
+        new_solvated_ligand_md_topology = md.Topology.from_dataframe(nsl,b)
+
 
         #create the new ligand system:
         new_solvated_system = self._system_generator.build_system(new_solvated_ligand_md_topology.to_openmm())
 
+        new_to_old_atom_map = {complex_atom_map[x]-new_mol_start_index:x-old_mol_start_index for x in old_complex.select("resname == 'MOL' ") if x in complex_atom_map.keys()}
         #adjust the atom map to account for the presence of solvent degrees of freedom:
         #By design, all atoms after the ligands are water, and should be mapped.
-        n_water_atoms = solvent_only_topology.getNumAtoms()
+        n_water_atoms = solvent_only_topology.to_openmm().getNumAtoms()
         for i in range(n_water_atoms):
-            atom_map_adjusted[old_mol_len+i] = new_mol_len + i
+            new_to_old_atom_map[new_mol_len+i] = old_mol_len + i
 
         #change the map to accomodate the TP:
-        new_to_old_atom_map = {value : key for key, value in atom_map_adjusted.items()}
+        #new_to_old_atom_map = {value : key for key, value in atom_map_adjusted.items()}
 
         #make a TopologyProposal
         ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_ligand_md_topology.to_openmm(), new_system=new_solvated_system,

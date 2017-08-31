@@ -145,8 +145,8 @@ class TopologyProposal(object):
         self._old_chemical_state_key = old_chemical_state_key
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
-        self._unique_new_atoms = [atom for atom in range(self._new_topology._numAtoms) if atom not in self._new_to_old_atom_map.keys()]
-        self._unique_old_atoms = [atom for atom in range(self._old_topology._numAtoms) if atom not in self._new_to_old_atom_map.values()]
+        self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
+        self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
         self._metadata = metadata
 
     @property
@@ -1539,7 +1539,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_to_old_atom_map[new_index] = old_index
         return new_to_old_atom_map
 
-    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=True):
+    def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         """
         Propose a new molecule given the current molecule.
 
