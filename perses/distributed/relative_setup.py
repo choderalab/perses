@@ -25,7 +25,8 @@ class NonequilibriumFEPSetup(object):
     Importantly, it ensures that the atom maps in the solvent and complex phases match correctly.
     """
 
-    def __init__(self, protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, pressure=1.0*unit.atmosphere, temperature=300.0*unit.kelvin):
+    def __init__(self, protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files,
+                 pressure=1.0 * unit.atmosphere, temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -39,11 +40,18 @@ class NonequilibriumFEPSetup(object):
             The SMILES strings representing the two ligands
         forcefield_files : list of str
             The list of ffxml files that contain the forcefields that will be used
+        pressure : Quantity, units of pressure
+            Pressure to use in the barostat
+        temperature : Quantity, units of temperature
+            Temperature to use for the Langevin integrator
+        solvent_padding : Quantity, units of length
+            The amount of padding to use when adding solvent
         """
         self._protein_pdb_filename = protein_pdb_filename
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
+        self._padding = solvent_padding
 
         self._ligand_file = ligand_file
         self._old_ligand_index = old_ligand_index
@@ -141,7 +149,7 @@ class NonequilibriumFEPSetup(object):
         mol_to_return = mol_list[index]
         return mol_to_return
 
-    def _solvate_system(self, topology, positions, padding=4.0*unit.angstrom, model='tip3p'):
+    def _solvate_system(self, topology, positions, model='tip3p'):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -167,7 +175,7 @@ class NonequilibriumFEPSetup(object):
         modeller.delete(hs)
         modeller.addHydrogens(forcefield=self._forcefield)
         print("preparing to add solvent")
-        modeller.addSolvent(self._forcefield, model=model, padding=padding)
+        modeller.addSolvent(self._forcefield, model=model, padding=self._padding)
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
         print("solvent added, parameterizing")
@@ -298,7 +306,10 @@ class NonequilibriumSwitchingFEP(object):
         'lambda_torsions' : 'lambda'
     }
 
-    def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False, forward_functions=None, ncmc_nsteps=100, concurrency=4, platform_name="OpenCL", temperature=300.0*unit.kelvin):
+    def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
+                 forward_functions=None, ncmc_nsteps=100, concurrency=4, platform_name="OpenCL",
+                 temperature=300.0 * unit.kelvin):
+
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
         if forward_functions == None:
             self._forward_functions = self.default_forward_functions
