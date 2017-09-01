@@ -51,12 +51,12 @@ class NonequilibriumSwitchTask(celery.Task):
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
 def run_protocol(self, starting_positions, nsteps, thermodynamic_state, integrator):
     """
-    Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work
+    Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work.
 
     Returns
     -------
     work : float
-        The dimensionless nonequilibrium work
+        The dimensionless nonequilibrium protocol work.
     """
     switching_ctx, integrator_neq = self._cache.get_context(thermodynamic_state, integrator)
     switching_ctx.setPositions(starting_positions)

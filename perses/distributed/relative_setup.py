@@ -464,6 +464,3 @@ if __name__=="__main__":
     ne_fep.run_nonequilibrium_task()
     ne_fep.run_equilibrium()
     ne_fep.collect_ne_work()
-
-
-
