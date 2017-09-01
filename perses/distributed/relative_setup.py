@@ -16,8 +16,8 @@ from openmoltools import forcefield_generators
 import copy
 import mdtraj as md
 from io import StringIO
+from openmmtools.constants import kB
 
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
@@ -464,6 +464,3 @@ if __name__=="__main__":
     ne_fep.run_nonequilibrium_task()
     ne_fep.run_equilibrium()
     ne_fep.collect_ne_work()
-
-
-

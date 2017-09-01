@@ -16,7 +16,7 @@ else:
 import matplotlib as mpl
 mpl.use('Agg')
 import seaborn as sns
-
+from openmmtools.constants import kB
 import matplotlib.pyplot as plt
 
 ################################################################################
@@ -30,7 +30,6 @@ ENV = 'vacuum'
 # CONSTANTS
 ################################################################################
 
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
