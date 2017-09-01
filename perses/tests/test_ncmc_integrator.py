@@ -22,7 +22,8 @@ istravis = os.environ.get('TRAVIS', None) == 'true'
 # CONSTANTS
 ################################################################################
 
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+from openmmtools.constants import kB
+
 
 ################################################################################
 # TESTS

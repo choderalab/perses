@@ -5,8 +5,8 @@ import mdtraj as md
 import numpy as np
 import copy
 import enum
+from openmmtools.constants import ONE_4PI_EPS0
 
-ONE_4PI_EPS0 = 138.935456
 InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'core', 'environment'])
 
 class HybridTopologyFactory(object):

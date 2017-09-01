@@ -33,6 +33,7 @@ import numpy as np
 import simtk.openmm as mm
 import simtk.unit as units
 from openmmtools import testsystems
+from openmmtools.constants import kB
 
 import logging
 logger = logging.getLogger(__name__)
@@ -42,12 +43,6 @@ logger = logging.getLogger(__name__)
 #=============================================================================================
 
 __version__ = "$Revision: $"
-
-#=============================================================================================
-# MODULE CONSTANTS
-#=============================================================================================
-
-kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA # Boltzmann constant
 
 #=============================================================================================
 # Thermodynamic state description

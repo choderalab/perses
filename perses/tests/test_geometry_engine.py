@@ -26,7 +26,7 @@ try:
 except ImportError:
     from commands import getoutput  # If python 2
 from nose.plugins.attrib import attr
-
+from openmmtools.constants import kB
 from perses.rjmc import coordinate_numba
 
 #correct p-value threshold for some multiple hypothesis testing
@@ -35,7 +35,6 @@ ntests = 3.0
 ncommits = 10000.0
 
 pval_threshold = pval_base / (ntests * ncommits)
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT

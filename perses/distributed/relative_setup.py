@@ -16,45 +16,7 @@ from openmoltools import forcefield_generators
 import copy
 import mdtraj as md
 from io import StringIO
-
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
-temperature = 300.0 * unit.kelvin
-kT = kB * temperature
-beta = 1.0/kT
-
-
-def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane"):
-    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-    import simtk.openmm.app as app
-    from openmoltools import forcefield_generators
-
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
-    refmol = createOEMolFromIUPAC(ref_mol_name)
-
-    initial_smiles = oechem.OEMolToSmiles(m)
-    final_smiles = oechem.OEMolToSmiles(refmol)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
-    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
-
-    gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
-    geometry_engine = FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old)
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
-
-    return topology_proposal, pos_old, new_positions
+from openmmtools.constants import kB
 
 class NonequilibriumFEPSetup(object):
     """
@@ -145,6 +107,8 @@ class NonequilibriumFEPSetup(object):
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
         self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
         print(self._complex_proposal_engine._smiles_list)
+
+        beta = 1.0 / (kB * temperature)
 
         self._complex_topology_proposal = self._complex_proposal_engine.propose(self._complex_system_old_solvated, self._complex_topology_old_solvated)
         self._complex_positions_new_solvated, _ = self._geometry_engine.propose(self._complex_topology_proposal, self._complex_positions_old_solvated, beta)
@@ -327,8 +291,8 @@ class NonequilibriumSwitchingFEP(object):
     """
 
     default_forward_functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_sterics' : 'lambda',
+        'lambda_electrostatics' : 'lambda',
         'lambda_bonds' : 'lambda',
         'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'
@@ -464,6 +428,3 @@ if __name__=="__main__":
     ne_fep.run_nonequilibrium_task()
     ne_fep.run_equilibrium()
     ne_fep.collect_ne_work()
-
-
-

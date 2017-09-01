@@ -23,6 +23,7 @@ import numpy as np
 from openmmtools import testsystems
 import copy
 import time
+from openmmtools.constants import kB
 
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
@@ -34,12 +35,6 @@ from perses.tests.utils import quantity_is_finite
 
 import logging
 logger = logging.getLogger(__name__)
-
-################################################################################
-# CONSTANTS
-################################################################################
-
-from perses.samplers.thermodynamics import kB
 
 ################################################################################
 # THERMODYNAMIC STATE

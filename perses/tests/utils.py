@@ -23,12 +23,12 @@ if sys.version_info >= (3, 0):
 else:
     from cStringIO import StringIO
     from commands import getstatusoutput
+from openmmtools.constants import kB
 
 ################################################################################
 # CONSTANTS
 ################################################################################
 
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
