@@ -87,11 +87,10 @@ def run_protocol(self, starting_positions, nsteps, thermodynamic_state, integrat
     """
     integrator = restore_properties(integrator)
     switching_ctx, integrator_neq = self._cache.get_context(thermodynamic_state, integrator)
-    integrator_neq = restore_properties(integrator_neq)
     switching_ctx.setPositions(starting_positions)
+    integrator_neq.reset()
     integrator_neq.step(nsteps)
     work = integrator_neq.get_protocol_work(dimensionless=True)
-    integrator_neq.reset()
     return work
 
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
