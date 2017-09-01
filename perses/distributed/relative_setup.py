@@ -18,12 +18,7 @@ import mdtraj as md
 from io import StringIO
 from openmmtools.constants import kB
 
-temperature = 300.0 * unit.kelvin
-kT = kB * temperature
-beta = 1.0/kT
-
-
-def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane"):
+def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane", temperature=300.0*unit.kelvin):
     from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
@@ -52,6 +47,7 @@ def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane"):
     topology_proposal = proposal_engine.propose(solvated_system, top_old)
 
     #generate new positions with geometry engine
+    beta = 1.0 / (kB * temperature)
     new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
 
     return topology_proposal, pos_old, new_positions
@@ -145,6 +141,8 @@ class NonequilibriumFEPSetup(object):
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
         self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
         print(self._complex_proposal_engine._smiles_list)
+
+        beta = 1.0 / (kB * temperature)
 
         self._complex_topology_proposal = self._complex_proposal_engine.propose(self._complex_system_old_solvated, self._complex_topology_old_solvated)
         self._complex_positions_new_solvated, _ = self._geometry_engine.propose(self._complex_topology_proposal, self._complex_positions_old_solvated, beta)
