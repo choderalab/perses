@@ -13,12 +13,7 @@ from simtk import openmm, unit
 import math
 import numpy as np
 from functools import partial
-
-################################################################################
-# CONSTANTS
-################################################################################
-
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+from openmmtools.constants import kB
 
 ################################################################################
 # TESTS

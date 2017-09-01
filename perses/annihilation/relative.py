@@ -4,8 +4,7 @@ import simtk.openmm.app as app
 import numpy as np
 import copy
 from perses.rjmc.topology_proposal import deepcopy_topology
-
-ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
+from openmmtools.constants import ONE_4PI_EPS0
 
 def unique(atom_list):
     if atom_list[0] > atom_list[-1]:

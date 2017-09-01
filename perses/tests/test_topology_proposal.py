@@ -12,9 +12,9 @@ except:
     from urllib2 import urlopen
     from cStringIO import StringIO
 from nose.plugins.attrib import attr
+from openmmtools.constants import kB
 
 temperature = 300*unit.kelvin
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 # Compute kT and inverse temperature.
 kT = kB * temperature
 beta = 1.0 / kT
