@@ -49,10 +49,8 @@ script:
 
 env:
   matrix:
-    # Allfast tests for python 2.7
-    - python=2.7 CONDA_PY=27 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem ImidazoleProtonationStateTestSystem"
-    - python=3.4 CONDA_PY=34 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
     - python=3.5 CONDA_PY=35 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
+    - python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
 
   global:
     - ORGNAME="omnia"
@@ -61,7 +59,6 @@ env:
     # Location of decrypted OpenEye license file
     - OE_LICENSE="$HOME/oe_license.txt"
     - OPENEYE_CHANNEL="-i https://pypi.anaconda.org/OpenEye/simple"
-    - TRAVIS="true"
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
     - secure: "RRvLDPu9mPoNaRWIseaJdgShOXI+PaHPWKAIJvW7VYWcAS6iEN7W4Fj4zD5hkocQxc3ou97EtkgID+ApH10bSGKxCykyU0urSY9jsSOJX2m0AE19X0dVr6ySIQkwCWE6kUMVlvQYQo80fM2EMElD+btr4G9XBAhArAO7HvZHkoQ="
 
