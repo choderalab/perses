@@ -18,6 +18,7 @@ branches:
 install:
   #add random sleep from 1-10s to try to prevent overloading the anaconda servers
   - sleep $[ ( $RANDOM % 10 )  + 1 ]s
+  - env
   - source devtools/travis-ci/install.sh
   - export PYTHONUNBUFFERED=true
   - export CC=gcc
@@ -48,10 +49,8 @@ script:
 
 env:
   matrix:
-    # Allfast tests for python 2.7
-    - python=2.7 CONDA_PY=27 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem ImidazoleProtonationStateTestSystem"
-    - python=3.4 CONDA_PY=34 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
     - python=3.5 CONDA_PY=35 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
+    - python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
 
   global:
     - ORGNAME="omnia"

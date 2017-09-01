@@ -33,7 +33,7 @@ from openmmtools.constants import kB
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
-
+istravis = os.environ.get('TRAVIS', None) == 'true'
 ################################################################################
 # TESTS
 ################################################################################
@@ -505,7 +505,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
         raise Exception(msg)
 
 # TODO: Re-enable this test once PointMutationEngine can return size of chemical space
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+@skipIf(istravis, "Skip expensive test on travis")
 def test_alchemical_elimination_mutation():
     """
     Test alchemical elimination for mutations.
@@ -544,6 +544,7 @@ def test_alchemical_elimination_mutation():
         f.description = "Testing alchemical null transformation of ALA sidechain in alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
 
+@skipIf(istravis, "Skip expensive test on travis")
 def test_ncmc_alchemical_integrator_stability_molecules():
     """
     Test NCMCAlchemicalIntegrator
@@ -591,7 +592,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
 
         del context, ncmc_integrator
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+@skipIf(istravis, "Skip expensive test on travis")
 def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
@@ -628,7 +629,7 @@ def test_ncmc_engine_molecule():
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+@skipIf(istravis, "Skip expensive test on travis")
 def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
@@ -649,7 +650,7 @@ def test_ncmc_hybrid_engine_molecule():
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
             yield f
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+@skipIf(istravis, "Skip expensive test on travis")
 def test_ncmc_hybrid_explicit_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
@@ -670,7 +671,7 @@ def test_ncmc_hybrid_explicit_engine_molecule():
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
             yield f
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip expensive test on travis")
+@skipIf(istravis, "Skip expensive test on travis")
 def test_alchemical_elimination_peptide():
     """
     Test alchemical elimination for the alanine dipeptide.
@@ -690,17 +691,3 @@ def test_alchemical_elimination_peptide():
         f = partial(check_alchemical_null_elimination, topology_proposal, testsystem.positions, ncmc_nsteps=ncmc_nsteps)
         f.description = "Testing alchemical elimination using alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
-
-if __name__ == "__main__":
-    #for x in test_ncmc_engine_molecule():
-    #    print(x.description)
-    #    x()
-    #generate_solvated_hybrid_test_topology()
-    for x in test_ncmc_hybrid_explicit_engine_molecule():
-        print(x.description)
-        x()
-#    test_ncmc_alchemical_integrator_stability_molecules()
-#    for x in test_alchemical_elimination_mutation():
-#        x()
-#    for x in test_alchemical_elimination_peptide():
-#        x()
