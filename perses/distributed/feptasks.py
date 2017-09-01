@@ -78,12 +78,12 @@ def restore_properties(integrator, measure_shadow_work=False, measure_heat=False
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
 def run_protocol(self, starting_positions, nsteps, thermodynamic_state, integrator):
     """
-    Perform a switching protocol and return the nonequilibrium switching weight
+    Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work
 
     Returns
     -------
-    weight : float64
-        The nonequilibrium switching weight
+    work : float
+        The dimensionless nonequilibrium work
     """
     integrator = restore_properties(integrator)
     switching_ctx, integrator_neq = self._cache.get_context(thermodynamic_state, integrator)
