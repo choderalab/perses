@@ -18,40 +18,6 @@ import mdtraj as md
 from io import StringIO
 from openmmtools.constants import kB
 
-def generate_vacuum_hybrid_topology(mol_name="propane", ref_mol_name="butane", temperature=300.0*unit.kelvin):
-    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-    import simtk.openmm.app as app
-    from openmoltools import forcefield_generators
-
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
-    refmol = createOEMolFromIUPAC(ref_mol_name)
-
-    initial_smiles = oechem.OEMolToSmiles(m)
-    final_smiles = oechem.OEMolToSmiles(refmol)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
-    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
-
-    gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
-    geometry_engine = FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old)
-
-    #generate new positions with geometry engine
-    beta = 1.0 / (kB * temperature)
-    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
-
-    return topology_proposal, pos_old, new_positions
-
 class NonequilibriumFEPSetup(object):
     """
     This class is a helper class for nonequilibrium FEP. It generates the input objects that are necessary for the two
