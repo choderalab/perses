@@ -325,8 +325,8 @@ class NonequilibriumSwitchingFEP(object):
     """
 
     default_forward_functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
+        'lambda_sterics' : 'lambda',
+        'lambda_electrostatics' : 'lambda',
         'lambda_bonds' : 'lambda',
         'lambda_angles' : 'lambda',
         'lambda_torsions' : 'lambda'

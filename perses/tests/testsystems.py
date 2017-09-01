@@ -38,12 +38,7 @@ from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
-
-################################################################################
-# CONSTANTS
-################################################################################
-
-from perses.samplers.thermodynamics import kB
+from openmmtools.constants import kB
 
 ################################################################################
 # TEST SYSTEMS

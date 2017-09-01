@@ -6,6 +6,7 @@ import traceback
 from simtk import openmm, unit
 from perses.storage import NetCDFStorageView
 from perses.tests.utils import quantity_is_finite
+from openmmtools.constants import kB
 
 default_functions = {
     'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
@@ -124,7 +125,6 @@ class NCMCEngine(object):
 
     @property
     def beta(self):
-        kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
         kT = kB * self.temperature
         beta = 1.0 / kT
         return beta
@@ -778,7 +778,6 @@ class NCMCAlchemicalIntegrator(openmm.CustomIntegrator):
         self.direction = direction
 
         # Compute kT in natural openmm units.
-        kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
         kT = kB * temperature
         self.kT = kT
 
