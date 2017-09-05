@@ -3,6 +3,8 @@ from celery.contrib import rdb
 import simtk.openmm as openmm
 import openmmtools.cache as cache
 import redis
+import numpy as np
+import mdtraj as md
 
 broker_name_server = "redis://localhost"
 
@@ -49,9 +51,14 @@ class NonequilibriumSwitchTask(celery.Task):
         self._cache = cache.ContextCache(platform=platform)
 
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
-def run_protocol(self, starting_positions, nsteps, thermodynamic_state, integrator):
+def run_protocol(self, thermodynamic_state, sampler_state, mc_move, n_iterations):
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work.
+
+    Parameters
+    ----------
+    sampler_state : openmmtools.states.SamplerState object
+        Object containing the positions of the
 
     Returns
     -------
@@ -66,22 +73,48 @@ def run_protocol(self, starting_positions, nsteps, thermodynamic_state, integrat
     return work
 
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
-def run_equilibrium(self, starting_positions, nsteps, lambda_state, functions, thermodynamic_state, integrator):
+def run_equilibrium(self, thermodynamic_state, sampler_state, mc_move, topology, n_iterations):
     """
-    Run nsteps of equilibrium sampling at the specified thermodynamic state and return the positions.
+    Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
+    as well as a trajectory of the positions after each application of an MCMove. This means that if the MCMove
+    is configured to run 1000 steps of dynamics, and n_iterations is 100, there will be 100 frames in the resulting
+    trajectory; these are the result of 100,000 steps (1000*100) of dynamics.
+
+    Parameters
+    ----------
+    thermodynamic_state : openmmtools.states.ThermodynamicState
+        The thermodynamic state (including context parameters) that should be used
+    sampler_state : openmmtools.states.SamplerState
+        The state of the sampler (such as positions) from which to start
+    mc_move : openmmtools.mcmc.MCMove
+        The move to apply to the system
+    topology : mdtraj.Topology
+        an MDTraj topology object used to construct the trajectory
+    n_iterations : int
+        The number of times to apply the move. Note that this is not the number of steps of dynamics; it is
+        n_iterations*n_steps (which is set in the MCMove).
 
     Returns
     -------
-    positions : [n, 3] np.ndarray quantity
+    sampler_state : openmmtools.SamplerState
+        The sampler state after equilibrium has been run
+    trajectory : mdtraj.Trajectory
+        A trajectory consisting of one frame per application of the MCMove
     """
-    equilibrium_ctx, integrator = self._cache.get_context(thermodynamic_state, integrator)
-    equilibrium_ctx.setPositions(starting_positions)
-    for parm in functions.keys():
-        equilibrium_ctx.setParameter(parm, lambda_state)
-    integrator.step(nsteps)
-    state = equilibrium_ctx.getState(getPositions=True)
-    positions = state.getPositions(asNumpy=True)
-    return positions
+    n_atoms = topology.n_atoms
+
+    #create a numpy array for the trajectory
+    trajectory_positions = np.zeros([n_atoms, 3, n_iterations])
+
+    #loop through iterations and apply MCMove, then collect positions into numpy array
+    for iteration in range(n_iterations):
+        mc_move.apply(thermodynamic_state, sampler_state)
+        trajectory_positions[:, 3, iteration] = sampler_state.positions
+
+    #construct trajectory object:
+    trajectory = md.Trajectory(trajectory_positions, topology)
+
+    return sampler_state, trajectory
 
 @app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
 def minimize(self, starting_positions, nsteps_max, lambda_state, functions, thermodynamic_state, integrator):
