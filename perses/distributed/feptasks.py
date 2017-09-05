@@ -40,17 +40,7 @@ def update_broker_location(broker_location, backend_location=None):
         backend_location = broker_location
     app.conf.update(broker=broker_location, backend=broker_location)
 
-
-class NonequilibriumSwitchTask(celery.Task):
-    """
-    This is a base class for nonequilibrium switching tasks.
-    """
-
-    def __init__(self):
-        platform = openmm.Platform.getPlatformByName("OpenCL")
-        self._cache = cache.ContextCache(platform=platform)
-
-@app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
+@app.task(serializer="pickle")
 def run_protocol(self, thermodynamic_state, sampler_state, mc_move, n_iterations):
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work.
@@ -72,8 +62,8 @@ def run_protocol(self, thermodynamic_state, sampler_state, mc_move, n_iterations
     work = integrator_neq.get_protocol_work(dimensionless=True)
     return work
 
-@app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
-def run_equilibrium(self, thermodynamic_state, sampler_state, mc_move, topology, n_iterations):
+@app.task(serializer="pickle")
+def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_iterations):
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
     as well as a trajectory of the positions after each application of an MCMove. This means that if the MCMove
@@ -116,22 +106,17 @@ def run_equilibrium(self, thermodynamic_state, sampler_state, mc_move, topology,
 
     return sampler_state, trajectory
 
-@app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
-def minimize(self, starting_positions, nsteps_max, lambda_state, functions, thermodynamic_state, integrator):
-    equilibrium_ctx, integrator = self._cache.get_context(thermodynamic_state, integrator)
+@app.task(serializer="pickle")
+def minimize(thermodynamic_state, sampler_state, max_steps):
+    """
+    Run
+    Parameters
+    ----------
+    thermodynamic_state
+    sampler_state
 
-    equilibrium_ctx.setPositions(starting_positions)
+    Returns
+    -------
 
-    for parm in functions.keys():
-        equilibrium_ctx.setParameter(parm, lambda_state)
+    """
 
-    openmm.LocalEnergyMinimizer.minimize(equilibrium_ctx, maxIterations=nsteps_max)
-
-    initial_state = equilibrium_ctx.getState(getPositions=True, getEnergy=True)
-
-    return initial_state.getPositions(asNumpy=True)
-
-@app.task(bind=True, base=NonequilibriumSwitchTask, serializer="pickle")
-def dummy_task(self, integrator):
-    rdb.set_trace()
-    return integrator
