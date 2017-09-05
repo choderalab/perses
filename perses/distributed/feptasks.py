@@ -23,7 +23,7 @@ def get_broker_name():
 
 broker_location = broker_name_server
 app = celery.Celery('perses.distributed.feptasks', broker=broker_location, backend=broker_location)
-app.conf.update(accept_content=['pickle', 'application/x-python-serialize'],task_serializer='pickle', result_serializer='pickle')
+app.conf.update(accept_content=['pickle', 'application/x-python-serialize'], task_serializer='pickle', result_serializer='pickle')
 
 
 def update_broker_location(broker_location, backend_location=None):
@@ -42,26 +42,57 @@ def update_broker_location(broker_location, backend_location=None):
     app.conf.update(broker=broker_location, backend=broker_location)
 
 @app.task(serializer="pickle")
-def run_protocol(self, thermodynamic_state, sampler_state, mc_move, n_iterations):
+def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_iterations):
     """
-    Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work.
+    Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
+    that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
+    by the ne_mc_move. The trajectory that results, along with the work values, will contain n_iterations elements.
 
     Parameters
     ----------
-    sampler_state : openmmtools.states.SamplerState object
-        Object containing the positions of the
+    thermodynamic_state : openmmtools.states.ThermodynamicState
+        The thermodynamic state at which to run the protocol
+    sampler_state : openmmtools.states.SamplerState
+        The initial sampler state at which to run the protocol, including positions.
+    ne_mc_move : perses.distributed.relative_setup.NonequilibriumSwitchingMove
+        The move that will be used to perform the switching.
+    topology : mdtraj.Topology
+        An MDtraj topology for the system to generate trajectories
+    n_iterations : int
+        The number of times to apply the specified MCMove
 
     Returns
     -------
-    work : float
-        The dimensionless nonequilibrium protocol work.
+    trajectory : mdtraj.Trajectory
+        Trajectory containing n_iterations frames
+
     """
-    switching_ctx, integrator_neq = self._cache.get_context(thermodynamic_state, integrator)
-    switching_ctx.setPositions(starting_positions)
-    integrator_neq.reset()
-    integrator_neq.step(nsteps)
-    work = integrator_neq.get_protocol_work(dimensionless=True)
-    return work
+    n_atoms = topology.n_atoms
+
+    #create a numpy array for the trajectory
+    trajectory_positions = np.zeros([n_atoms, 3, n_iterations])
+
+    #create a numpy array for the work values
+    cumulative_work = np.zeros(n_iterations)
+
+    #reset the MCMove to ensure that we are starting with zero work.
+    ne_mc_move.reset(thermodynamic_state)
+
+    #now loop through the iterations and run the protocol:
+    for iteration in range(n_iterations):
+        #apply the nonequilibrium move
+        ne_mc_move.apply(thermodynamic_state, sampler_state)
+
+        #record the positions as a result
+        trajectory_positions[:, :, iteration] = sampler_state.positions
+
+        #record the cumulative work as a result
+        cumulative_work[iteration] = ne_mc_move.current_total_work
+
+    #create an MDTraj trajectory with this data
+    trajectory = md.Trajectory(trajectory_positions, topology)
+
+    return trajectory, cumulative_work
 
 @app.task(serializer="pickle")
 def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_iterations):
@@ -100,7 +131,7 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     #loop through iterations and apply MCMove, then collect positions into numpy array
     for iteration in range(n_iterations):
         mc_move.apply(thermodynamic_state, sampler_state)
-        trajectory_positions[:, 3, iteration] = sampler_state.positions
+        trajectory_positions[:, :, iteration] = sampler_state.positions
 
     #construct trajectory object:
     trajectory = md.Trajectory(trajectory_positions, topology)
