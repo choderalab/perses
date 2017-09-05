@@ -2,6 +2,7 @@ import celery
 from celery.contrib import rdb
 import simtk.openmm as openmm
 import openmmtools.cache as cache
+import openmmtools.mcmc as mcmc
 import redis
 import numpy as np
 import mdtraj as md
@@ -107,16 +108,29 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     return sampler_state, trajectory
 
 @app.task(serializer="pickle")
-def minimize(thermodynamic_state, sampler_state, max_steps):
+def minimize(thermodynamic_state, sampler_state, mc_move, max_iterations=20):
     """
-    Run
+    Minimize the given system and state, up to a maximum number of steps.
+
     Parameters
     ----------
-    thermodynamic_state
-    sampler_state
+    thermodynamic_state : openmmtools.states.ThermodynamicState
+        The state at which the system could be minimized
+    sampler_state : openmmtools.states.SamplerState
+        The starting state at which to minimize the system.
+    mc_move : openmmtools.mcmc.MCMove
+        The move type. This is not directly relevant, but it will
+        determine whether a context can be reused. It is recommended that
+        the same move as the equilibrium protocol is used here.
+    max_iterations : int, optional, default 20
+        The maximum number of minimization steps. Default is 20.
 
     Returns
     -------
-
+    sampler_state : openmmtools.states.SamplerState
+        The posititions and accompanying state following minimization
     """
+    mcmc_sampler = mcmc.MCMCSampler(thermodynamic_state, sampler_state, mc_move)
+    mcmc_sampler.minimize(max_iterations=max_iterations)
+    return mcmc_sampler.sampler_state
 
