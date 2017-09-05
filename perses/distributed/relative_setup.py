@@ -1,8 +1,9 @@
 from perses.distributed import feptasks
 from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator, LangevinIntegrator
-from openmmtools.states import ThermodynamicState
+from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import openmmtools.mcmc as mcmc
 import openmmtools.cache as cache
+import openmmtools.alchemy as alchemy
 import pymbar
 import simtk.openmm as openmm
 import simtk.openmm.app as app
@@ -19,6 +20,7 @@ import copy
 import mdtraj as md
 from io import StringIO
 from openmmtools.constants import kB
+import logging
 
 class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
@@ -413,38 +415,83 @@ class NonequilibriumSwitchingFEP(object):
     }
 
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
-                 forward_functions=None, ncmc_nsteps=100, concurrency=4, platform_name="OpenCL",
+                 forward_functions=None, ncmc_nsteps=100, nsteps_per_iteration=1, concurrency=4, platform_name="OpenCL",
                  temperature=300.0 * unit.kelvin):
 
+        #construct the hybrid topology factory object
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
+
+        #use default functions if none specified
         if forward_functions == None:
             self._forward_functions = self.default_forward_functions
         else:
             self._forward_functions = forward_functions
+
+        #reverse functions to get a symmetric protocol
         self._reverse_functions = {param : param_formula.replace("lambda", "(1-lambda)") for param, param_formula in self._forward_functions.items()}
 
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
         self._concurrency = concurrency
-
         self._ncmc_nsteps = ncmc_nsteps
+        self._nsteps_per_iteration = nsteps_per_iteration
+
+        #create the thermodynamic state
+        lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(self._hybrid_system)
+        lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
+
+        #ensure their states are set appropriately
+        lambda_zero_alchemical_state = self._set_all_parameters_of_state(lambda_zero_alchemical_state, 0.0)
+        lambda_one_alchemical_state = self._set_all_parameters_of_state(lambda_one_alchemical_state, 1.0)
+
+        #create the base thermodynamic state with the hybrid system
         self._thermodynamic_state = ThermodynamicState(self._hybrid_system, temperature=temperature)
+
+        #Now create the compound states with different alchemical states
+        self._lambda_zero_thermodynamic_state = CompoundThermodynamicState(self._thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
+        self._lambda_one_thermodynamic_state = CompoundThermodynamicState(self._thermodynamic_state, composable_states=[lambda_one_alchemical_state])
+
+        #create the forward and reverse integrators
         self._forward_integrator = AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)
         self._reverse_integrator = AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)
-        self._equilibrium_integrator = LangevinIntegrator(temperature=temperature)
+
+        #create the forward and reverse MCMoves
+        self._forward_ne_mc_move = NonequilibriumSwitchingMove(self._forward_integrator, self._nsteps_per_iteration)
+        self._reverse_ne_mc_move = NonequilibriumSwitchingMove(self._reverse_integrator, self._nsteps_per_iteration)
+
+        #create the equilibrium MCMove
+        self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(temperature=temperature)
+
+        #set the SamplerState for the forward and reverse equilibrium simulations
+        self._lambda_one_sampler_state = SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
+        self._lambda_zero_sampler_state = copy.deepcopy(self._lambda_one_sampler_state)
 
 
-        self._current_positions_forward_result = None
-        self._current_positions_reverse_result = None
-        self._current_nonequilibrium_work_result = []
 
-        self._platform_name = platform_name
-        self._temperature = temperature
-        self._forward_work = []
-        self._reverse_work = []
 
-        self._forward_positions_after_switch = []
-        self._reverse_positions_after_switch = []
+    def _set_all_parameters_of_state(self, alchemical_state, value):
+        """
+        Set all the parameters of an AlchemicalState object to a specified value.
+
+        Parameters
+        ----------
+        alchemical_state : openmmtools.alchemy.AlchemicalState
+            The alchemical state whose parameters should be set
+        value : float
+            the value to use when setting these parameters
+
+        Returns
+        -------
+        alchemical_state : openmmtools.alchemy.AlchemicalState
+            the alchemical state with parameters set to the new value
+        """
+        alchemical_state.lambda_angles = value
+        alchemical_state.lambda_bonds = value
+        alchemical_state.lambda_torsions = value
+        alchemical_state.lambda_sterics = value
+        alchemical_state.lambda_electrostatics = value
+
+        return alchemical_state
 
     def run_equilibrium(self, n_steps=500):
         """
