@@ -633,6 +633,77 @@ class NonequilibriumSwitchingFEP(object):
                 self._reverse_nonequilibrium_cumulative_works.append(cum_work)
                 self._reverse_nonequilibrium_trajectories.append(traj)
 
+    def write_nonequilibrium_trajectories(self, directory, file_prefix):
+        """
+        Write out an MDTraj h5 file for each nonequilibrium trajectory. The files will be placed in
+        [directory]/file_prefix-[forward, reverse]-index.h5. This method will ensure that all pending
+        results are collected.
+
+        Parameters
+        ----------
+        directory : str
+            The directory in which to place the files
+        file_prefix : str
+            A prefix for the filenames
+        """
+        self.retrieve_nonequilibrium_results()
+
+        #loop through the forward trajectories
+        for index, forward_trajectory in enumerate(self._forward_nonequilibrium_trajectories):
+
+            #construct the name for this file
+            full_filename = os.path.join(directory, file_prefix + "forward" + str(index) + ".h5")
+
+            #save the trajectory
+            forward_trajectory.save_hdf5(full_filename)
+
+        #repeat for the reverse trajectories:
+        for index, reverse_trajectory in enumerate(self._reverse_nonequilibrium_trajectories):
+
+            #construct the name for this file
+            full_filename = os.path.join(directory, file_prefix + "reverse" + str(index) + ".h5")
+
+            #save the trajectory
+            reverse_trajectory.save_hdf5(full_filename)
+
+    def write_equilibrium_trajectories(self, directory, file_prefix):
+        """
+        Write out an MDTraj h5 file for each nonequilibrium trajectory. The files will be placed in
+        [directory]/file_prefix-[lambda0, lambda1].h5.
+
+        Parameters
+        ----------
+        directory : str
+            The directory in which to place the files
+        file_prefix : str
+            A prefix for the filenames
+        """
+        
+
+    @property
+    def lambda_zero_equilibrium_trajectory(self):
+        return self._lambda_zero_traj
+
+    @property
+    def lambda_one_equilibrium_trajectory(self):
+        return self._lambda_one_traj
+
+    @property
+    def forward_nonequilibrium_trajectories(self):
+        return self._forward_nonequilibrium_trajectories
+
+    @property
+    def reverse_nonequilibrium_trajectories(self):
+        return self._reverse_nonequilibrium_trajectories
+
+    @property
+    def forward_cumulative_works(self):
+        return self._forward_nonequilibrium_cumulative_works
+
+    @property
+    def reverse_cumulative_works(self):
+        return self._reverse_nonequilibrium_cumulative_works
+
     @property
     def current_free_energy_estimate(self):
         [df, ddf] = pymbar.BAR(self._forward_total_work, self._reverse_total_work)
