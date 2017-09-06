@@ -430,11 +430,14 @@ class NonequilibriumSwitchingFEP(object):
         #reverse functions to get a symmetric protocol
         self._reverse_functions = {param : param_formula.replace("lambda", "(1-lambda)") for param, param_formula in self._forward_functions.items()}
 
+        #set up some class attributes
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
         self._concurrency = concurrency
         self._ncmc_nsteps = ncmc_nsteps
         self._nsteps_per_iteration = nsteps_per_iteration
+        self._forward_nonequilibrium_results = []
+        self._reverse_nonequilibrium_results = []
 
         #create the thermodynamic state
         lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(self._hybrid_system)
@@ -462,12 +465,16 @@ class NonequilibriumSwitchingFEP(object):
         #create the equilibrium MCMove
         self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(temperature=temperature)
 
-        #set the SamplerState for the forward and reverse equilibrium simulations
+        #set the SamplerState for the lambda 0 and 1 equilibrium simulations
         self._lambda_one_sampler_state = SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
         self._lambda_zero_sampler_state = copy.deepcopy(self._lambda_one_sampler_state)
 
+        #initialize by minimizing
+        self.minimize()
 
-
+        #initialize the trajectories for the lambda 0 and 1 equilibrium simulations
+        self._lambda_zero_traj = md.Trajectory(self._lambda_zero_sampler_state.positions, self._factory.hybrid_topology)
+        self._lambda_one_traj = md.Trajectory(self._lambda_one_sampler_state.positions, self._factory.hybrid_topology)
 
     def _set_all_parameters_of_state(self, alchemical_state, value):
         """
@@ -493,39 +500,22 @@ class NonequilibriumSwitchingFEP(object):
 
         return alchemical_state
 
-    def run_equilibrium(self, n_steps=500):
-        """
-        Run equilibrium for both end states.
-        """
-        current_positions_forward = self._current_positions_forward_result.get()
-        current_positions_reverse = self._current_positions_reverse_result.get()
-
-        equilibrated_result_forward = feptasks.run_equilibrium.delay(current_positions_forward, n_steps, 0.0, self._forward_functions, self._thermodynamic_state, self._equilibrium_integrator)
-        equilibrated_result_reverse = feptasks.run_equilibrium.delay(current_positions_reverse, n_steps, 1.0, self._reverse_functions, self._thermodynamic_state, self._equilibrium_integrator)
-
-        self._current_positions_forward_result = equilibrated_result_forward
-        self._current_positions_reverse_result = equilibrated_result_reverse
-
     def minimize(self, max_steps=50):
         """
-        Minimize both end states
+        Minimize both end states. This method updates the _sampler_state attributes for each lambda
+
         Parameters
         ----------
         max_steps : int, default 50
             max number of steps for openmm minimizer.
         """
-        if not self._current_positions_forward_result:
-            current_positions_forward = self._initial_hybrid_positions
-            current_positions_reverse = self._initial_hybrid_positions
-        else:
-            current_positions_forward = self._current_positions_forward_result.get()
-            current_positions_reverse = self._current_positions_reverse_result.get()
+        #Asynchronously invoke the tasks
+        minimized_lambda_zero_result = feptasks.minimize.s(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, max_iterations=max_steps)
+        minimized_lambda_one_result = feptasks.minimize.s(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, max_iterations=max_steps)
 
-        minimized_forward_result = feptasks.minimize.delay(current_positions_forward, max_steps, 0.0, self._forward_functions, self._thermodynamic_state, self._forward_integrator)
-        minimized_reverse_result = feptasks.minimize.delay(current_positions_reverse, max_steps, 0.0, self._reverse_functions, self._thermodynamic_state, self._reverse_integrator)
-
-        self._current_positions_forward_result = minimized_forward_result
-        self._current_positions_reverse_result = minimized_reverse_result
+        #now synchronously retrieve the results and save the sampler states.
+        self._lambda_zero_sampler_state = minimized_lambda_zero_result.join()
+        self._lambda_one_sampler_state = minimized_lambda_one_result.join()
 
     def run_nonequilibrium_task(self, async=True):
         """
@@ -552,17 +542,74 @@ class NonequilibriumSwitchingFEP(object):
             self._reverse_work.append(work_values[self._concurrency:])
             self._forward_positions_after_switch.append()
 
-    def collect_ne_work(self):
+    def run(self, n_iterations=5, concurrency=1):
         """
-        Collect the nonequilibrium work, if using async mode.
-        """
-        if not self._current_nonequilibrium_work_result:
-            return
+        Run one iteration of the nonequilibrium switching free energy calculations. This entails:
 
-        work_values, positions = self._current_nonequilibrium_work_result.join()
-        self._forward_work.append(work_values[:self._concurrency])
-        self._reverse_work.append(work_values[self._concurrency:])
-        self._current_nonequilibrium_work_result = None
+        - 1 iteration of equilibrium at lambda=0 and lambda=1
+        - concurrency (parameter) many nonequilibrium trajectories in both forward and reverse
+           (e.g., if concurrency is 5, then 5 forward and 5 reverse protocols will be run)
+        - 1 iteration of equilibrium at lambda=0 and lambda=1
+
+        Parameters
+        ----------
+        n_iterations : int, optional, default 5
+            The number of times to run the entire sequence described above
+        concurrency: int, default 1
+            The number of concurrent nonequilibrium protocols to run; note that with greater than one,
+            error estimation may be more complicated.
+        """
+        for i in range(n_iterations):
+            self._run_equilibrium()
+
+
+    def _run_equilibrium(self, n_iterations=1):
+        """
+        Run one iteration of equilibrium at lambda=1 and lambda=0, and replace the current equilibrium sampler states
+        with the results of the equilibrium calculation, as well as extend the current equilibrium trajectories.
+
+        Parameters
+        ----------
+        n_iterations : int, default 1
+            How many times to run the n_steps of equilibrium
+        """
+        #run equilibrium for lambda=0 and lambda=1
+        lambda_zero_result = feptasks.run_equilibrium.delay(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations)
+        lambda_one_result = feptasks.run_equilibrium.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations)
+
+        #retrieve the results of the calculation
+        self._lambda_zero_sampler_state, traj_zero_result = lambda_zero_result.get()
+        self._lambda_one_sampler_state, traj_one_result = lambda_one_result.get()
+
+        #join the trajectories to the reference trajectories
+        self._lambda_zero_traj = self._lambda_zero_traj.join(traj_zero_result)
+        self._lambda_one_traj = self._lambda_one_traj.join(traj_one_result)
+
+    def _run_nonequilibrium(self, concurrency=1, n_iterations=1):
+        """
+        Run concurrency-many nonequilibrium protocols in both directions. This method stores the result object, but does
+        not retrieve the results. Note that n_iterations is important, since in order to perform an entire switching trajectory
+        (from 0 to 1 or vice versa), we require that n_steps*n_iterations = protocol length
+
+        Parameters
+        ----------
+        concurrency : int, default 1
+
+        """
+
+        #set up the group object that will be used to compute the nonequilibrium results.
+        forward_protocol_group = celery.group(
+            feptasks.run_protocol.s(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state,
+                                    self._forward_ne_mc_move, self._factory.hybrid_topology, n_iterations) for i in
+            range(concurrency))
+        reverse_protocol_group = celery.group(
+            feptasks.run_protocol.s(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state,
+                                    self._reverse_ne_mc_move, self._factory.hybrid_topology, n_iterations) for i in
+            range(concurrency))
+
+        #get the result objects:
+        self._forward_nonequilibrium_results.append(forward_protocol_group.apply_async())
+        self._reverse_nonequilibrium_results.append(reverse_protocol_group.apply_async())
 
     @property
     def forward_work(self):
