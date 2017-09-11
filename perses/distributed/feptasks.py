@@ -147,8 +147,8 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         self._integrator = pickle.loads(serialization['integrator'])
         integrators.RestorableIntegrator.restore_interface(self._integrator)
         self._integrator._measure_shadow_work = serialization['measure_shadow_work']
-        self._integrator._measure_heat = serialization['measure_shadow_work']
-        self._integrator._metropolized_integrator = serialization['measure_shadow_work']
+        self._integrator._measure_heat = serialization['measure_heat']
+        self._integrator._metropolized_integrator = serialization['metropolized_integrator']
 
 
 def update_broker_location(broker_location, backend_location=None):
@@ -199,7 +199,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
 
     #create a numpy array for the work values
     cumulative_work = np.zeros(n_iterations)
-    #rdb.set_trace()
+    rdb.set_trace()
     #reset the MCMove to ensure that we are starting with zero work.
     ne_mc_move.reset(thermodynamic_state)
 
