@@ -1509,10 +1509,38 @@ class HybridTopologyFactory(object):
 
         added_atoms = dict()
 
+        #get the core atoms in the new index system (as opposed to the hybrid index system). We will need this later
+        core_atoms_new_indices = {self._hybrid_to_new_map[core_atom] for core_atom in self._atom_classes['core']}
+
         #now, add each unique new atom to the topology (this is the same order as the system)
         for particle_idx in self._topology_proposal.unique_new_atoms:
             new_system_atom = new_topology.atom(particle_idx)
-            added_atoms[particle_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, new_system_atom.residue)
+
+            #first, we get the residue in the new system associated with this atom
+            new_system_residue = new_system_atom.residue
+
+            #next, we have to enumerate the other atoms in that residue to find mapped atoms
+            new_system_atom_set = {atom.index for atom in new_system_residue.atoms}
+
+            #Now, we find the subset of atoms that are mapped. These must be in the "core" category, since they are mapped
+            #and part of a changing residue
+            mapped_new_atom_indices = core_atoms_new_indices.intersection(new_system_atom_set)
+
+            #Now get the old indices of the above atoms so that we can find the appropriate residue in the old system
+            #for this we can use the new to old atom map
+            mapped_old_atom_indices = [self._topology_proposal.new_to_old_atom_map[atom_idx] for atom_idx in mapped_new_atom_indices]
+
+            #we can just take the first one--they all have the same residue
+            first_mapped_old_atom_index = mapped_old_atom_indices[0]
+
+            #get the atom object corresponding to this index from the hybrid (which is a deepcopy of the old)
+            mapped_hybrid_system_atom = hybrid_topology.atom(first_mapped_old_atom_index)
+
+            #get the residue that is relevant to this atom
+            mapped_residue = mapped_hybrid_system_atom.residue
+
+            #add the atom using the mapped residue
+            added_atoms[particle_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
 
         #now loop through the bonds in the new system, and if the bond contains a unique new atom, then add it to the hybrid topology
         for (atom1, atom2) in new_topology.bonds:
