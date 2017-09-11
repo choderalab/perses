@@ -21,6 +21,7 @@ import mdtraj as md
 from io import StringIO
 from openmmtools.constants import kB
 import logging
+import os
 
 class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
@@ -572,8 +573,8 @@ class NonequilibriumSwitchingFEP(object):
         self._lambda_one_sampler_state, traj_one_result = lambda_one_result.get()
 
         #join the trajectories to the reference trajectories
-        self._lambda_zero_traj = self._lambda_zero_traj.join(traj_zero_result)
-        self._lambda_one_traj = self._lambda_one_traj.join(traj_one_result)
+        self._lambda_zero_traj = self._lambda_zero_traj.join(traj_zero_result, check_topology=False)
+        self._lambda_one_traj = self._lambda_one_traj.join(traj_one_result, check_topology=False)
 
     def _run_nonequilibrium(self, concurrency=1, n_iterations=1):
         """
