@@ -136,6 +136,9 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         dictionary = super(NonequilibriumSwitchingMove, self).__getstate__()
         dictionary['integrator'] = pickle.dumps(self._integrator)
         dictionary['current_total_work'] = self.current_total_work
+        dictionary['measure_shadow_work'] = self._integrator._measure_shadow_work
+        dictionary['measure_heat'] = self._integrator._measure_heat
+        dictionary['metropolized_integrator'] = self._integrator._metropolized_integrator
         return dictionary
 
     def __setstate__(self, serialization):
@@ -143,6 +146,10 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         self._current_total_work = serialization['current_total_work']
         self._integrator = pickle.loads(serialization['integrator'])
         integrators.RestorableIntegrator.restore_interface(self._integrator)
+        self._integrator._measure_shadow_work = serialization['measure_shadow_work']
+        self._integrator._measure_heat = serialization['measure_shadow_work']
+        self._integrator._metropolized_integrator = serialization['measure_shadow_work']
+
 
 def update_broker_location(broker_location, backend_location=None):
     """
