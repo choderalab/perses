@@ -22,111 +22,7 @@ from io import StringIO
 from openmmtools.constants import kB
 import logging
 import os
-import mdtraj.formats as formats
-
-class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
-    """
-    This class represents an MCMove that runs a nonequilibrium switching protocol using the AlchemicalNonequilibriumLangevinIntegrator.
-    It is simply a wrapper around the aforementioned integrator, which must be provided in the constructor.
-
-    Parameters
-    ----------
-    n_steps : int
-        The number of integration steps to take each time the move is applied.
-    integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
-        The integrator that will be used for the nonequilibrium switching.
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
-    reassign_velocities : bool, optional
-        If True, the velocities will be reassigned from the Maxwell-Boltzmann
-        distribution at the beginning of the move (default is False).
-    restart_attempts : int, optional
-        When greater than 0, if after the integration there are NaNs in energies,
-        the move will restart. When the integrator has a random component, this
-        may help recovering. An IntegratorMoveError is raised after the given
-        number of attempts if there are still NaNs.
-
-    Attributes
-    ----------
-    n_steps : int
-    context_cache : openmmtools.cache.ContextCache
-    reassign_velocities : bool
-    restart_attempts : int or None
-    current_total_work : float
-    """
-
-    def __init__(self, integrator, n_steps, **kwargs):
-        super(NonequilibriumSwitchingMove, self).__init__(n_steps, **kwargs)
-        self._integrator = integrator
-        self._current_total_work = 0.0
-
-    def _get_integrator(self, thermodynamic_state):
-        """
-        Get the integrator associated with this move. In this case, it is simply the integrator passed in to the constructor.
-
-        Parameters
-        ----------
-        thermodynamic_state : openmmtools.states.ThermodynamicState
-            thermodynamic state; unused here.
-
-        Returns
-        -------
-        integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
-            The integrator that is associated with this MCMove
-        """
-        return self._integrator
-
-    def reset(self, thermodynamic_state):
-        """
-        Reset the work statistics on the associated ContextCache integrator.
-
-        Parameters
-        ----------
-        thermodynamic_state : openmmtools.states.ThermodynamicState
-            the thermodynamic state for which this integrator is cached.
-        """
-
-        # Check if we have to use the global cache.
-        if self.context_cache is None:
-            context_cache = cache.global_context_cache
-        else:
-            context_cache = self.context_cache
-
-        #Get the integrator from the context cache
-        context, integrator = context_cache.get_context(thermodynamic_state, self._integrator)
-
-        #Reset the statistics on the integrator
-        integrator.reset()
-
-        #reset the class's own statistics:
-        self._current_total_work = 0.0
-
-    def _after_integration(self, context, thermodynamic_state):
-        """
-        Accumulate the work after n_steps is performed.
-
-        Parameters
-        ----------
-        context : openmm.Context
-            The OpenMM context which is performing the integration
-        thermodynamic_state : openmmtools.states.ThermodynamicState
-            The relevant thermodynamic state for this context and integrator
-        """
-        integrator = context.getIntegrator()
-        self._current_total_work += integrator.get_total_work(dimensionless=True)
-
-    @property
-    def current_total_work(self):
-        """
-        Get the current total work in kT
-
-        Returns
-        -------
-        current_total_work : float
-            the current total work performed by this move since the last reset()
-        """
-        return self._current_total_work
+from perses.distributed.feptasks import NonequilibriumSwitchingMove
 
 class NonequilibriumFEPSetup(object):
     """
@@ -758,3 +654,4 @@ if __name__=="__main__":
     ne_fep = NonequilibriumSwitchingFEP(fesetup.solvent_topology_proposal, fesetup.solvent_old_positions, fesetup.solvent_new_positions)
     print("ne-fep initialized")
     ne_fep.run(n_iterations=1)
+    ne_fep.retrieve_nonequilibrium_results()
