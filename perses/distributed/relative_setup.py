@@ -486,8 +486,8 @@ class NonequilibriumSwitchingFEP(object):
         self.minimize()
 
         #initialize the trajectories for the lambda 0 and 1 equilibrium simulations
-        self._lambda_zero_traj = md.Trajectory(self._lambda_zero_sampler_state.positions, self._factory.hybrid_topology)
-        self._lambda_one_traj = md.Trajectory(self._lambda_one_sampler_state.positions, self._factory.hybrid_topology)
+        self._lambda_zero_traj = md.Trajectory(np.array(self._lambda_zero_sampler_state.positions), self._factory.hybrid_topology)
+        self._lambda_one_traj = md.Trajectory(np.array(self._lambda_one_sampler_state.positions), self._factory.hybrid_topology)
 
     def _set_all_parameters_of_state(self, alchemical_state, value):
         """
@@ -527,8 +527,8 @@ class NonequilibriumSwitchingFEP(object):
         minimized_lambda_one_result = feptasks.minimize.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, max_iterations=max_steps)
 
         #now synchronously retrieve the results and save the sampler states.
-        self._lambda_zero_sampler_state = minimized_lambda_zero_result.join()
-        self._lambda_one_sampler_state = minimized_lambda_one_result.join()
+        self._lambda_zero_sampler_state = minimized_lambda_zero_result.get()
+        self._lambda_one_sampler_state = minimized_lambda_one_result.get()
 
     def run(self, n_iterations=5, concurrency=1):
         """
@@ -678,7 +678,7 @@ class NonequilibriumSwitchingFEP(object):
         file_prefix : str
             A prefix for the filenames
         """
-        
+
 
     @property
     def lambda_zero_equilibrium_trajectory(self):
@@ -710,13 +710,20 @@ class NonequilibriumSwitchingFEP(object):
         return [df, ddf]
 
 if __name__=="__main__":
-    import os
-    gaff_filename = get_data_filename("data/gaff.xml")
-    forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
-    path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
-    protein_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/CDK2_fixed_nohet.pdb")
-    molecule_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/Inputs_for_FEP/CDK2_ligands.mol2")
-    fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
-
+    #import os
+    #outfile = open("fesetup.pkl", 'wb')
+    #gaff_filename = get_data_filename("data/gaff.xml")
+    #forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
+    #path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
+    #protein_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/CDK2_fixed_nohet.pdb")
+    #molecule_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/Inputs_for_FEP/CDK2_ligands.mol2")
+    #fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
+    import pickle
+    infile = open("fesetup.pkl", 'rb')
+    fesetup = pickle.load(infile)
+    infile.close()
+    #pickle.dump(fesetup, outfile)
+    #outfile.close()
     ne_fep = NonequilibriumSwitchingFEP(fesetup.solvent_topology_proposal, fesetup.solvent_old_positions, fesetup.solvent_new_positions)
     print("ne-fep initialized")
+    ne_fep.run(n_iterations=1)
