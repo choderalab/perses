@@ -711,7 +711,6 @@ class NonequilibriumSwitchingFEP(object):
 
 if __name__=="__main__":
     #import os
-    #outfile = open("fesetup.pkl", 'wb')
     #gaff_filename = get_data_filename("data/gaff.xml")
     #forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
     #path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
