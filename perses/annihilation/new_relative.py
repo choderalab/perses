@@ -1510,7 +1510,7 @@ class HybridTopologyFactory(object):
         added_atoms = dict()
 
         #get the core atoms in the new index system (as opposed to the hybrid index system). We will need this later
-        core_atoms_new_indices = {self._hybrid_to_new_map[core_atom] for core_atom in self._atom_classes['core']}
+        core_atoms_new_indices = {self._hybrid_to_new_map[core_atom] for core_atom in self._atom_classes['core_atoms']}
 
         #now, add each unique new atom to the topology (this is the same order as the system)
         for particle_idx in self._topology_proposal.unique_new_atoms:
