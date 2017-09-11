@@ -22,6 +22,7 @@ from io import StringIO
 from openmmtools.constants import kB
 import logging
 import os
+import mdtraj.formats as formats
 
 class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
@@ -417,7 +418,7 @@ class NonequilibriumSwitchingFEP(object):
 
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=None, ncmc_nsteps=100, nsteps_per_iteration=1, concurrency=4, platform_name="OpenCL",
-                 temperature=300.0 * unit.kelvin):
+                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None):
 
         #construct the hybrid topology factory object
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
@@ -437,6 +438,8 @@ class NonequilibriumSwitchingFEP(object):
         self._concurrency = concurrency
         self._ncmc_nsteps = ncmc_nsteps
         self._nsteps_per_iteration = nsteps_per_iteration
+        self._trajectory_prefix = trajectory_prefix
+        self._trajectory_directory = trajectory_directory
 
         #initialize lists for results
         self._forward_nonequilibrium_trajectories = []
@@ -553,6 +556,8 @@ class NonequilibriumSwitchingFEP(object):
             self._run_nonequilibrium(concurrency=concurrency, n_iterations=self._n_iterations_per_call)
             self._run_equilibrium()
 
+        if self._trajectory_directory:
+            self._write_equilibrium_trajectories(self._trajectory_directory, self._trajectory_prefix)
 
     def _run_equilibrium(self, n_iterations=1):
         """
@@ -572,9 +577,17 @@ class NonequilibriumSwitchingFEP(object):
         self._lambda_zero_sampler_state, traj_zero_result = lambda_zero_result.get()
         self._lambda_one_sampler_state, traj_one_result = lambda_one_result.get()
 
-        #join the trajectories to the reference trajectories
-        self._lambda_zero_traj = self._lambda_zero_traj.join(traj_zero_result, check_topology=False)
-        self._lambda_one_traj = self._lambda_one_traj.join(traj_one_result, check_topology=False)
+        #join the trajectories to the reference trajectories, if the object exists,
+        #otherwise, simply create it
+        if self._lambda_zero_traj:
+            self._lambda_zero_traj = self._lambda_zero_traj.join(traj_zero_result, check_topology=False)
+        else:
+            self._lambda_zero_traj = traj_zero_result
+
+        if self._lambda_one_traj:
+            self._lambda_one_traj = self._lambda_one_traj.join(traj_one_result, check_topology=False)
+        else:
+            self._lambda_one_traj = traj_one_result
 
     def _run_nonequilibrium(self, concurrency=1, n_iterations=1):
         """
@@ -667,7 +680,7 @@ class NonequilibriumSwitchingFEP(object):
             #save the trajectory
             reverse_trajectory.save_hdf5(full_filename)
 
-    def write_equilibrium_trajectories(self, directory, file_prefix):
+    def _write_equilibrium_trajectories(self, directory, file_prefix):
         """
         Write out an MDTraj h5 file for each nonequilibrium trajectory. The files will be placed in
         [directory]/file_prefix-[lambda0, lambda1].h5.
@@ -679,6 +692,24 @@ class NonequilibriumSwitchingFEP(object):
         file_prefix : str
             A prefix for the filenames
         """
+        lambda_zero_filename = os.path.join(directory, file_prefix + "-" + "lambda0" + ".h5")
+        lambda_one_filename = os.path.join(directory, file_prefix + "-" + "lambda1" + ".h5")
+
+        filenames = [lambda_zero_filename, lambda_one_filename]
+        trajs = [self._lambda_zero_traj, self._lambda_one_traj]
+
+        #open the existing file if it exists, and append. Otherwise create it
+        for filename, traj in zip(filenames, trajs):
+            if not os.path.exists(filename):
+                traj.save_hdf5(filename)
+            else:
+                written_traj = md.load(filename)
+                concatenated_traj = written_traj.join(traj)
+                concatenated_traj.save_hdf5(filename)
+
+        #delete the trajectories.
+        self._lambda_one_traj = None
+        self._lambda_zero_traj = None
 
 
     @property
