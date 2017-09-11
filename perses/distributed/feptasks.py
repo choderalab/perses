@@ -3,9 +3,12 @@ from celery.contrib import rdb
 import simtk.openmm as openmm
 import openmmtools.cache as cache
 import openmmtools.mcmc as mcmc
+import openmmtools.utils as utils
+import openmmtools.integrators as integrators
 import redis
 import numpy as np
 import mdtraj as md
+import pickle
 
 broker_name_server = "redis://localhost"
 
@@ -25,6 +28,121 @@ broker_location = broker_name_server
 app = celery.Celery('perses.distributed.feptasks', broker=broker_location, backend=broker_location)
 app.conf.update(accept_content=['pickle', 'application/x-python-serialize'], task_serializer='pickle', result_serializer='pickle')
 
+class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
+    """
+    This class represents an MCMove that runs a nonequilibrium switching protocol using the AlchemicalNonequilibriumLangevinIntegrator.
+    It is simply a wrapper around the aforementioned integrator, which must be provided in the constructor.
+
+    Parameters
+    ----------
+    n_steps : int
+        The number of integration steps to take each time the move is applied.
+    integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
+        The integrator that will be used for the nonequilibrium switching.
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+    reassign_velocities : bool, optional
+        If True, the velocities will be reassigned from the Maxwell-Boltzmann
+        distribution at the beginning of the move (default is False).
+    restart_attempts : int, optional
+        When greater than 0, if after the integration there are NaNs in energies,
+        the move will restart. When the integrator has a random component, this
+        may help recovering. An IntegratorMoveError is raised after the given
+        number of attempts if there are still NaNs.
+
+    Attributes
+    ----------
+    n_steps : int
+    context_cache : openmmtools.cache.ContextCache
+    reassign_velocities : bool
+    restart_attempts : int or None
+    current_total_work : float
+    """
+
+    def __init__(self, integrator, n_steps, **kwargs):
+        super(NonequilibriumSwitchingMove, self).__init__(n_steps, **kwargs)
+        self._integrator = integrator
+        self._current_total_work = 0.0
+
+    def _get_integrator(self, thermodynamic_state):
+        """
+        Get the integrator associated with this move. In this case, it is simply the integrator passed in to the constructor.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+            thermodynamic state; unused here.
+
+        Returns
+        -------
+        integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
+            The integrator that is associated with this MCMove
+        """
+        return self._integrator
+
+    def reset(self, thermodynamic_state):
+        """
+        Reset the work statistics on the associated ContextCache integrator.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+            the thermodynamic state for which this integrator is cached.
+        """
+
+        # Check if we have to use the global cache.
+        if self.context_cache is None:
+            context_cache = cache.global_context_cache
+        else:
+            context_cache = self.context_cache
+
+        #Get the integrator from the context cache
+        context, integrator = context_cache.get_context(thermodynamic_state, self._integrator)
+
+        #Reset the statistics on the integrator
+        integrator.reset()
+
+        #reset the class's own statistics:
+        self._current_total_work = 0.0
+
+    def _after_integration(self, context, thermodynamic_state):
+        """
+        Accumulate the work after n_steps is performed.
+
+        Parameters
+        ----------
+        context : openmm.Context
+            The OpenMM context which is performing the integration
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+            The relevant thermodynamic state for this context and integrator
+        """
+        integrator = context.getIntegrator()
+        self._current_total_work += integrator.get_total_work(dimensionless=True)
+
+    @property
+    def current_total_work(self):
+        """
+        Get the current total work in kT
+
+        Returns
+        -------
+        current_total_work : float
+            the current total work performed by this move since the last reset()
+        """
+        return self._current_total_work
+
+    def __getstate__(self):
+        dictionary = super(NonequilibriumSwitchingMove, self).__getstate__()
+        dictionary['integrator'] = pickle.dumps(self._integrator)
+        dictionary['current_total_work'] = self.current_total_work
+        return dictionary
+
+    def __setstate__(self, serialization):
+        super(NonequilibriumSwitchingMove, self).__setstate__(serialization)
+        self._current_total_work = serialization['current_total_work']
+        self._integrator = pickle.loads(serialization['integrator'])
+        integrators.RestorableIntegrator.restore_interface(self._integrator)
 
 def update_broker_location(broker_location, backend_location=None):
     """
@@ -70,11 +188,11 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
     n_atoms = topology.n_atoms
 
     #create a numpy array for the trajectory
-    trajectory_positions = np.zeros([n_atoms, 3, n_iterations])
+    trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
 
     #create a numpy array for the work values
     cumulative_work = np.zeros(n_iterations)
-
+    #rdb.set_trace()
     #reset the MCMove to ensure that we are starting with zero work.
     ne_mc_move.reset(thermodynamic_state)
 
@@ -84,7 +202,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
         ne_mc_move.apply(thermodynamic_state, sampler_state)
 
         #record the positions as a result
-        trajectory_positions[:, :, iteration] = sampler_state.positions
+        trajectory_positions[iteration, :, :] = sampler_state.positions
 
         #record the cumulative work as a result
         cumulative_work[iteration] = ne_mc_move.current_total_work
@@ -126,12 +244,12 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     n_atoms = topology.n_atoms
 
     #create a numpy array for the trajectory
-    trajectory_positions = np.zeros([n_atoms, 3, n_iterations])
+    trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
 
     #loop through iterations and apply MCMove, then collect positions into numpy array
     for iteration in range(n_iterations):
         mc_move.apply(thermodynamic_state, sampler_state)
-        trajectory_positions[:, :, iteration] = sampler_state.positions
+        trajectory_positions[iteration, :, :] = sampler_state.positions
 
     #construct trajectory object:
     trajectory = md.Trajectory(trajectory_positions, topology)
