@@ -410,6 +410,16 @@ class HybridTopologyFactory(object):
                 if constraint != constraint_from_old_system:
                     raise ValueError("Constraints are changing during switching.")
 
+    def _constraint_check_fast(self):
+        """
+        This method will check for changing constraints by first serializing the new and old systems to xml, then using
+        that xml to check for constraint changes. Using lxml and XPATH, this should be considerably faster than the
+        OpenMM API. If a constraint is found to be changing, an exception will be raised, as this cannot currently be
+        handled by the HybridTopologyFactory.
+        """
+        old_system_xml = openmm.XmlSerializer.serialize(self._topology_proposal.old_system)
+        new_system_xml = openmm.XmlSerializer.serialize(self._topology_proposal.new_system)
+
     def _determine_interaction_group(self, atoms_in_interaction):
         """
         This method determines which interaction group the interaction should fall under. There are four groups:
