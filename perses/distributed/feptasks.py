@@ -228,7 +228,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
         trajectory_positions[iteration, :, :] = sampler_state.positions
 
         #get the box angles and lengths
-        a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(sampler_state.box_vectors)
+        a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
         trajectory_box_lengths[iteration, :] = [a, b, c]
         trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
 
@@ -283,7 +283,7 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
         trajectory_positions[iteration, :] = sampler_state.positions
 
         #get the box lengths and angles
-        a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(sampler_state.box_vectors)
+        a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
         trajectory_box_lengths[iteration, :] = [a, b, c]
         trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
 
