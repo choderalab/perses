@@ -118,7 +118,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             The relevant thermodynamic state for this context and integrator
         """
         integrator = context.getIntegrator()
-        self._current_total_work += integrator.get_total_work(dimensionless=True)
+        self._current_total_work = integrator.get_total_work(dimensionless=True)
 
     @property
     def current_total_work(self):
