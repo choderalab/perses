@@ -346,6 +346,8 @@ class NonequilibriumSwitchingFEP(object):
         self._reverse_nonequilibrium_results = []
         self._forward_total_work = []
         self._reverse_total_work = []
+        self._lambda_zero_energies = []
+        self._lambda_one_energies = []
 
         #Set the number of times that the nonequilbrium move will have to be run in order to complete a protocol:
         if self._ncmc_nsteps % self._nsteps_per_iteration != 0:
@@ -472,6 +474,10 @@ class NonequilibriumSwitchingFEP(object):
         #retrieve the results of the calculation
         self._lambda_zero_sampler_state, traj_zero_result = lambda_zero_result.get()
         self._lambda_one_sampler_state, traj_one_result = lambda_one_result.get()
+
+        #append the potential energies of the final frame of the trajectories
+        self._lambda_zero_energies.append(self._lambda_zero_sampler_state.potential_energy)
+        self._lambda_one_energies.append(self._lambda_one_sampler_state.potential_energy)
 
         #join the trajectories to the reference trajectories, if the object exists,
         #otherwise, simply create it
