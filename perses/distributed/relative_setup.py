@@ -358,8 +358,8 @@ class NonequilibriumSwitchingFEP(object):
         lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
 
         #ensure their states are set appropriately
-        lambda_zero_alchemical_state = self._set_all_parameters_of_state(lambda_zero_alchemical_state, 0.0)
-        lambda_one_alchemical_state = self._set_all_parameters_of_state(lambda_one_alchemical_state, 1.0)
+        lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
+        lambda_one_alchemical_state.set_alchemical_parameters(0.0)
 
         #create the base thermodynamic state with the hybrid system
         self._thermodynamic_state = ThermodynamicState(self._hybrid_system, temperature=temperature)
@@ -393,30 +393,6 @@ class NonequilibriumSwitchingFEP(object):
 
         self._lambda_zero_traj = md.Trajectory(np.array(self._lambda_zero_sampler_state.positions), self._factory.hybrid_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
         self._lambda_one_traj = md.Trajectory(np.array(self._lambda_one_sampler_state.positions), self._factory.hybrid_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
-
-    def _set_all_parameters_of_state(self, alchemical_state, value):
-        """
-        Set all the parameters of an AlchemicalState object to a specified value.
-
-        Parameters
-        ----------
-        alchemical_state : openmmtools.alchemy.AlchemicalState
-            The alchemical state whose parameters should be set
-        value : float
-            the value to use when setting these parameters
-
-        Returns
-        -------
-        alchemical_state : openmmtools.alchemy.AlchemicalState
-            the alchemical state with parameters set to the new value
-        """
-        alchemical_state.lambda_angles = value
-        alchemical_state.lambda_bonds = value
-        alchemical_state.lambda_torsions = value
-        alchemical_state.lambda_sterics = value
-        alchemical_state.lambda_electrostatics = value
-
-        return alchemical_state
 
     def minimize(self, max_steps=50):
         """
