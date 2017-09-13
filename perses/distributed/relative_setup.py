@@ -653,5 +653,6 @@ if __name__=="__main__":
     #outfile.close()
     ne_fep = NonequilibriumSwitchingFEP(fesetup.solvent_topology_proposal, fesetup.solvent_old_positions, fesetup.solvent_new_positions)
     print("ne-fep initialized")
-    ne_fep.run(n_iterations=1)
+    ne_fep.run(n_iterations=2)
     ne_fep.retrieve_nonequilibrium_results()
+    print("retrieved")
