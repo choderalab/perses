@@ -95,7 +95,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         """
         return self._integrator
 
-    def reset(self, thermodynamic_state):
+    def reset(self):
         """
         Reset the work statistics on the associated ContextCache integrator.
 
@@ -104,21 +104,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         thermodynamic_state : openmmtools.states.ThermodynamicState
             the thermodynamic state for which this integrator is cached.
         """
-
-        # Check if we have to use the global cache.
-        if self.context_cache is None:
-            context_cache = cache.global_context_cache
-        else:
-            context_cache = self.context_cache
-
-        #Get the integrator from the context cache
-        context, integrator = context_cache.get_context(thermodynamic_state, self._integrator)
-
-        #Reset the statistics on the integrator
-        integrator.reset()
-
-        #reset the class's own statistics:
-        self._current_total_work = 0.0
+        self._integrator.reset()
 
     def _after_integration(self, context, thermodynamic_state):
         """
@@ -217,7 +203,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
     cumulative_work = np.zeros(n_iterations)
     #rdb.set_trace()
     #reset the MCMove to ensure that we are starting with zero work.
-    ne_mc_move.reset(thermodynamic_state)
+    ne_mc_move.reset()
 
     #now loop through the iterations and run the protocol:
     for iteration in range(n_iterations):
