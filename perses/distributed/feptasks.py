@@ -2,6 +2,19 @@ import celery
 from celery.contrib import rdb
 import simtk.openmm as openmm
 import openmmtools.cache as cache
+
+#Add the variables specific to the Alchemical langevin integrator
+cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
+    "protocol_work" : 0.0,
+    "Eold" : 0.0,
+    "Enew" : 0.0,
+    "lambda" : 0.0,
+    "nsteps" : 0.0,
+    "step" : 0.0,
+    "n_lambda_steps" : 0.0,
+    "lambda_step" : 0.0
+})
+
 import openmmtools.mcmc as mcmc
 import openmmtools.utils as utils
 import openmmtools.integrators as integrators
@@ -199,7 +212,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
 
     #create a numpy array for the work values
     cumulative_work = np.zeros(n_iterations)
-    rdb.set_trace()
+    #rdb.set_trace()
     #reset the MCMove to ensure that we are starting with zero work.
     ne_mc_move.reset(thermodynamic_state)
 
