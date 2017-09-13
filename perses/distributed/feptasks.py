@@ -21,6 +21,7 @@ import openmmtools.integrators as integrators
 import redis
 import numpy as np
 import mdtraj as md
+import mdtraj.utils as mdtrajutils
 import pickle
 
 broker_name_server = "redis://localhost"
@@ -209,6 +210,8 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
 
     #create a numpy array for the trajectory
     trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
+    trajectory_box_lengths = np.zeros([n_iterations, 3])
+    trajectory_box_angles = np.zeros([n_iterations, 3])
 
     #create a numpy array for the work values
     cumulative_work = np.zeros(n_iterations)
@@ -224,11 +227,16 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
         #record the positions as a result
         trajectory_positions[iteration, :, :] = sampler_state.positions
 
+        #get the box angles and lengths
+        a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(sampler_state.box_vectors)
+        trajectory_box_lengths[iteration, :] = [a, b, c]
+        trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
+
         #record the cumulative work as a result
         cumulative_work[iteration] = ne_mc_move.current_total_work
 
     #create an MDTraj trajectory with this data
-    trajectory = md.Trajectory(trajectory_positions, topology)
+    trajectory = md.Trajectory(trajectory_positions, topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
 
     return trajectory, cumulative_work
 
@@ -265,14 +273,22 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
 
     #create a numpy array for the trajectory
     trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
+    trajectory_box_lengths = np.zeros([n_iterations, 3])
+    trajectory_box_angles = np.zeros([n_iterations, 3])
 
     #loop through iterations and apply MCMove, then collect positions into numpy array
     for iteration in range(n_iterations):
         mc_move.apply(thermodynamic_state, sampler_state)
-        trajectory_positions[iteration, :, :] = sampler_state.positions
+
+        trajectory_positions[iteration, :] = sampler_state.positions
+
+        #get the box lengths and angles
+        a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(sampler_state.box_vectors)
+        trajectory_box_lengths[iteration, :] = [a, b, c]
+        trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
 
     #construct trajectory object:
-    trajectory = md.Trajectory(trajectory_positions, topology)
+    trajectory = md.Trajectory(trajectory_positions, topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
 
     return sampler_state, trajectory
 
