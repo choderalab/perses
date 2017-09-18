@@ -268,6 +268,8 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
         The sampler state after equilibrium has been run
     trajectory : mdtraj.Trajectory
         A trajectory consisting of one frame per application of the MCMove
+    reduced_potential_final_frame : float
+        Unitless reduced potential (kT) of the final frame of the trajectory
     """
     n_atoms = topology.n_atoms
 
@@ -290,7 +292,10 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     #construct trajectory object:
     trajectory = md.Trajectory(trajectory_positions, topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
 
-    return sampler_state, trajectory
+    #get the reduced potential from the final frame for endpoint perturbations
+    reduced_potential_final_frame = thermodynamic_state.reduced_potential(sampler_state)
+
+    return sampler_state, trajectory, reduced_potential_final_frame
 
 @app.task(serializer="pickle")
 def minimize(thermodynamic_state, sampler_state, mc_move, max_iterations=20):
@@ -318,4 +323,25 @@ def minimize(thermodynamic_state, sampler_state, mc_move, max_iterations=20):
     mcmc_sampler = mcmc.MCMCSampler(thermodynamic_state, sampler_state, mc_move)
     mcmc_sampler.minimize(max_iterations=max_iterations)
     return mcmc_sampler.sampler_state
+
+@app.task(serializer="pickle")
+def compute_reduced_potential(thermodynamic_state, sampler_state):
+    """
+    Compute the reduced potential of the given SamplerState under the given ThermodynamicState.
+
+    Parameters
+    ----------
+    thermodynamic_state : openmmtools.states.ThermodynamicState
+        The thermodynamic state under which to compute the reduced potential
+    sampler_state : openmmtools.states.SamplerState
+        The sampler state for which to compute the reduced potential
+
+    Returns
+    -------
+    reduced_potential : float
+        unitless reduced potential (kT)
+    """
+    context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
+    sampler_state.apply_to_context(context, ignore_velocities=True)
+    return thermodynamic_state.reduced_potential(sampler_state)
 
