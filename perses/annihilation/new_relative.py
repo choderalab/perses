@@ -1563,6 +1563,46 @@ class HybridTopologyFactory(object):
 
         return hybrid_topology
 
+    def old_positions(self, hybrid_positions):
+        """
+        Get the positions corresponding to the old system
+
+        Parameters
+        ----------
+        hybrid_positions : [n, 3] np.ndarray with unit
+            The positions of the hybrid system
+
+        Returns
+        -------
+        old_positions : [m, 3] np.ndarray with unit
+            The positions of the old system
+        """
+        n_atoms_old = self._topology_proposal.n_atoms_old
+        old_positions = unit.Quantity(np.zeros([n_atoms_old, 3]), unit=unit.nanometer)
+        for idx in range(n_atoms_old):
+            old_positions[idx, :] = hybrid_positions[self._old_to_hybrid_map[idx], :]
+        return old_positions
+
+    def new_positions(self, hybrid_positions):
+        """
+        Get the positions corresponding to the new system.
+
+        Parameters
+        ----------
+        hybrid_positions : [n, 3] np.ndarray with unit
+            The positions of the hybrid system
+
+        Returns
+        -------
+        new_positions : [m, 3] np.ndarray with unit
+            The positions of the new system
+        """
+        n_atoms_new = self._topology_proposal.n_atoms_new
+        new_positions = unit.Quantity(np.zeros([n_atoms_new, 3]), unit=unit.nanometer)
+        for idx in range(n_atoms_new):
+            new_positions[idx, :] = hybrid_positions[self._old_to_hybrid_map[idx], :]
+        return new_positions
+
     @property
     def hybrid_system(self):
         """
