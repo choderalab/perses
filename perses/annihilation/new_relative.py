@@ -5,6 +5,8 @@ import mdtraj as md
 import numpy as np
 import copy
 import enum
+from io import StringIO
+import lxml.etree as etree
 from openmmtools.constants import ONE_4PI_EPS0
 
 InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'core', 'environment'])
@@ -137,13 +139,13 @@ class HybridTopologyFactory(object):
         self._atom_classes = self._determine_atom_classes()
 
         #verify that no constraints are changing over the course of the switching.
-        constraint_check = False
-        if constraint_check:
-            self._constraint_check()
 
         #create the opposite atom maps for use in nonbonded force processing
         self._hybrid_to_old_map = {value : key for key, value in self._old_to_hybrid_map.items()}
         self._hybrid_to_new_map = {value : key for key, value in self._new_to_hybrid_map.items()}
+
+        #verify that no constraints are changing over the course of the switching.
+        self._constraint_check_fast()
 
         #construct dictionary of exceptions in old and new systems
         self._old_system_exceptions = self._generate_dict_from_exceptions(self._old_system_forces['NonbondedForce'])
@@ -409,6 +411,50 @@ class HybridTopologyFactory(object):
                 constraint_from_old_system = constrained_atoms_dict[(atom2_hybrid, atom1_hybrid)]
                 if constraint != constraint_from_old_system:
                     raise ValueError("Constraints are changing during switching.")
+
+    def _constraint_check_fast(self):
+        """
+        This method will check for changing constraints by first serializing the new and old systems to xml, then using
+        that xml to check for constraint changes. Using lxml and XPATH, this should be considerably faster than the
+        OpenMM API. If a constraint is found to be changing, an exception will be raised, as this cannot currently be
+        handled by the HybridTopologyFactory.
+        """
+        #set up an xpath string to find constraints
+        constraint_string = '/System/Constraints/Constraint'
+
+        #get a reference to maps with shorter names
+        o_h_map = self._old_to_hybrid_map
+        n_h_map = self._new_to_hybrid_map
+
+        #serialize the systems
+        old_system_xml = openmm.XmlSerializer.serialize(self._topology_proposal.old_system)
+        new_system_xml = openmm.XmlSerializer.serialize(self._topology_proposal.new_system)
+
+        #get the serialized systems into stringio form
+        old_system_io = StringIO(old_system_xml)
+        new_system_io = StringIO(new_system_xml)
+
+        #parse the xml strings
+        old_system_tree = etree.parse(old_system_io)
+        new_system_tree = etree.parse(new_system_io)
+
+        #get the list of constraints from new and old systems:
+        old_system_constraint_list = old_system_tree.xpath(constraint_string)
+        new_system_constraint_list = new_system_tree.xpath(constraint_string)
+
+        #convert the list of constraint elements to dictionaries. By using frozenset, we can do this independent of the order of
+        old_system_constraints = {frozenset((o_h_map[int(constraint.attrib['p1'])], o_h_map[int(constraint.attrib['p2'])])) : float(constraint.attrib['d']) for constraint in old_system_constraint_list}
+        new_system_constraints = {frozenset((n_h_map[int(constraint.attrib['p1'])], n_h_map[int(constraint.attrib['p2'])])) : float(constraint.attrib['d']) for constraint in new_system_constraint_list}
+
+        #find the set of constraints that are common to both:
+        old_constraint_sets = set(old_system_constraints.keys())
+        new_constraint_sets = set(new_system_constraints.keys())
+        overlapping_constraints = old_constraint_sets.intersection(new_constraint_sets)
+
+        #check that the constraints match in both cases:
+        for constraint_pair in overlapping_constraints:
+            if old_system_constraints[constraint_pair] != new_system_constraints[constraint_pair]:
+                raise ValueError("There is a changing constraint length in this system.")
 
     def _determine_interaction_group(self, atoms_in_interaction):
         """
