@@ -188,9 +188,6 @@ class NonequilibriumFEPSetup(object):
         print("solvent added, parameterizing")
         solvated_system = self._system_generator.build_system(solvated_topology)
         print("System parameterized")
-        if self._pressure is not None:
-            barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
-            solvated_system.addForce(barostat)
 
         return solvated_topology, solvated_positions, solvated_system
 
@@ -337,6 +334,8 @@ class NonequilibriumSwitchingFEP(object):
         self._nsteps_per_iteration = nsteps_per_iteration
         self._trajectory_prefix = trajectory_prefix
         self._trajectory_directory = trajectory_directory
+        self._zero_endpoint_n_atoms = topology_proposal.n_atoms_old
+        self._one_endpoint_n_atoms = topology_proposal.n_atoms_new
 
         #initialize lists for results
         self._forward_nonequilibrium_trajectories = []
@@ -347,8 +346,12 @@ class NonequilibriumSwitchingFEP(object):
         self._reverse_nonequilibrium_results = []
         self._forward_total_work = []
         self._reverse_total_work = []
-        self._lambda_zero_energies = []
-        self._lambda_one_energies = []
+        self._lambda_zero_reduced_potentials = []
+        self._lambda_one_reduced_potentials = []
+        self._nonalchemical_zero_endpt_reduced_potentials = []
+        self._nonalchemical_one_endpt_reduced_potentials = []
+        self._nonalchemical_zero_results = []
+        self._nonalchemical_one_results = []
 
         #Set the number of times that the nonequilbrium move will have to be run in order to complete a protocol:
         if self._ncmc_nsteps % self._nsteps_per_iteration != 0:
@@ -365,6 +368,10 @@ class NonequilibriumSwitchingFEP(object):
 
         #create the base thermodynamic state with the hybrid system
         self._thermodynamic_state = ThermodynamicState(self._hybrid_system, temperature=temperature)
+
+        #Create thermodynamic states for the nonalchemical endpoints
+        self._nonalchemical_zero_thermodynamic_state = ThermodynamicState(topology_proposal.old_system, temperature=temperature)
+        self._nonalchemical_one_thermodynamic_state = ThermodynamicState(topology_proposal.new_system, temperature=temperature)
 
         #Now create the compound states with different alchemical states
         self._lambda_zero_thermodynamic_state = CompoundThermodynamicState(self._thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
@@ -389,7 +396,6 @@ class NonequilibriumSwitchingFEP(object):
         self.minimize()
 
         #initialize the trajectories for the lambda 0 and 1 equilibrium simulations
-
         a_0, b_0, c_0, alpha_0, beta_0, gamma_0 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_zero_sampler_state.box_vectors)
         a_1, b_1, c_1, alpha_1, beta_1, gamma_1 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_one_sampler_state.box_vectors)
 
@@ -477,12 +483,27 @@ class NonequilibriumSwitchingFEP(object):
         lambda_one_result = feptasks.run_equilibrium.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations)
 
         #retrieve the results of the calculation
-        self._lambda_zero_sampler_state, traj_zero_result = lambda_zero_result.get()
-        self._lambda_one_sampler_state, traj_one_result = lambda_one_result.get()
+        self._lambda_zero_sampler_state, traj_zero_result, lambda_zero_reduced_potential = lambda_zero_result.get()
+        self._lambda_one_sampler_state, traj_one_result, lambda_one_reduced_potential = lambda_one_result.get()
 
         #append the potential energies of the final frame of the trajectories
-        self._lambda_zero_energies.append(self._lambda_zero_sampler_state.potential_energy)
-        self._lambda_one_energies.append(self._lambda_one_sampler_state.potential_energy)
+        self._lambda_zero_reduced_potentials.append(lambda_zero_reduced_potential)
+        self._lambda_one_reduced_potentials.append(lambda_one_reduced_potential)
+
+        #Now create SamplerStates to generate the data for endpoint perturbations:
+        final_hybrid_positions_zero = self._lambda_zero_sampler_state.positions
+        final_hybrid_positions_one = self._lambda_one_sampler_state.positions
+
+        positions_zero = self._factory.old_positions(final_hybrid_positions_zero)
+        positions_one = self._factory.new_positions(final_hybrid_positions_one)
+
+        #Create sampler states for each of these:
+        sampler_state_zero = SamplerState(positions_zero, box_vectors=self._lambda_zero_sampler_state.box_vectors)
+        sampler_state_one = SamplerState(positions_one, box_vectors=self._lambda_one_sampler_state.box_vectors)
+
+        #launch a task to compute the reduced potentials at these endpoints
+        self._nonalchemical_zero_results.append(feptasks.compute_reduced_potential.delay(self._nonalchemical_zero_thermodynamic_state, sampler_state_zero))
+        self._nonalchemical_one_results.append(feptasks.compute_reduced_potential.delay(self._nonalchemical_one_thermodynamic_state, sampler_state_one))
 
         #join the trajectories to the reference trajectories, if the object exists,
         #otherwise, simply create it
@@ -618,6 +639,30 @@ class NonequilibriumSwitchingFEP(object):
         self._lambda_one_traj = None
         self._lambda_zero_traj = None
 
+    def retrieve_nonalchemical_results(self):
+        """
+        Call this to retrieve the reduced potential results for the nonalchemical endpoints
+        """
+        for nonalchemical_result_zero, nonalchemical_result_one in zip(self._nonalchemical_zero_results, self._nonalchemical_one_results):
+            self._nonalchemical_zero_endpt_reduced_potentials.append(nonalchemical_result_zero.get())
+            self._nonalchemical_one_endpt_reduced_potentials.append(nonalchemical_result_one.get())
+
+        self._nonalchemical_zero_results = []
+        self._nonalchemcal_one_results = []
+
+    @property
+    def zero_endpoint_perturbation(self):
+        hybrid_reduced_potentials = np.array(self._lambda_zero_reduced_potentials)
+        nonalchemical_reduced_potentials = np.array(self._nonalchemical_zero_endpt_reduced_potentials)
+        [df, ddf] = pymbar.EXP(nonalchemical_reduced_potentials - hybrid_reduced_potentials)
+        return [df, ddf]
+
+    @property
+    def one_endpoint_perturbation(self):
+        hybrid_reduced_potentials = np.array(self._lambda_one_reduced_potentials)
+        nonalchemical_reduced_potentials = np.array(self._lambda_zero_reduced_potentials)
+        [df, ddf] = pymbar.EXP(nonalchemical_reduced_potentials - hybrid_reduced_potentials)
+        return [df, ddf]
 
     @property
     def lambda_zero_equilibrium_trajectory(self):
@@ -649,7 +694,7 @@ class NonequilibriumSwitchingFEP(object):
         return [df, ddf]
 
 if __name__=="__main__":
-    #import os
+    import os
     #gaff_filename = get_data_filename("data/gaff.xml")
     #forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
     #path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
@@ -657,9 +702,12 @@ if __name__=="__main__":
     #molecule_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/Inputs_for_FEP/CDK2_ligands.mol2")
     #fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
     import pickle
-    infile = open("fesetup.pkl", 'rb')
+    infile = open("fesetup2.pkl", 'rb')
     fesetup = pickle.load(infile)
     infile.close()
+    #pickle.dump(fesetup, outfile)
+    #outfile.close()
+    #outfile = open("fesetup2.pkl", 'wb')
     #pickle.dump(fesetup, outfile)
     #outfile.close()
     ne_fep = NonequilibriumSwitchingFEP(fesetup.solvent_topology_proposal, fesetup.solvent_old_positions, fesetup.solvent_new_positions)
