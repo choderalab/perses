@@ -343,5 +343,5 @@ def compute_reduced_potential(thermodynamic_state, sampler_state):
     """
     context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
     sampler_state.apply_to_context(context, ignore_velocities=True)
-    return thermodynamic_state.reduced_potential(sampler_state)
+    return thermodynamic_state.reduced_potential(context)
 
