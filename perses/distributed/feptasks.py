@@ -206,7 +206,11 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
         Trajectory containing n_iterations frames
 
     """
-    n_atoms = topology.n_atoms
+    #get the atom indices we need to subset the topology and positions
+    atom_indices = topology.select('not solvent')
+    subset_topology = topology.subset(atom_indices)
+
+    n_atoms = subset_topology.n_atoms
 
     #create a numpy array for the trajectory
     trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
@@ -225,7 +229,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
         ne_mc_move.apply(thermodynamic_state, sampler_state)
 
         #record the positions as a result
-        trajectory_positions[iteration, :, :] = sampler_state.positions
+        trajectory_positions[iteration, :, :] = sampler_state.positions[atom_indices, :]
 
         #get the box angles and lengths
         a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
@@ -236,7 +240,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
         cumulative_work[iteration] = ne_mc_move.current_total_work
 
     #create an MDTraj trajectory with this data
-    trajectory = md.Trajectory(trajectory_positions, topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
+    trajectory = md.Trajectory(trajectory_positions, subset_topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
 
     return trajectory, cumulative_work
 
@@ -271,7 +275,11 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     reduced_potential_final_frame : float
         Unitless reduced potential (kT) of the final frame of the trajectory
     """
-    n_atoms = topology.n_atoms
+    #get the atom indices we need to subset the topology and positions
+    atom_indices = topology.select('not solvent')
+    subset_topology = topology.subset(atom_indices)
+
+    n_atoms = subset_topology.n_atoms
 
     #create a numpy array for the trajectory
     trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
@@ -282,7 +290,7 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     for iteration in range(n_iterations):
         mc_move.apply(thermodynamic_state, sampler_state)
 
-        trajectory_positions[iteration, :] = sampler_state.positions
+        trajectory_positions[iteration, :] = sampler_state.positions[atom_indices, :]
 
         #get the box lengths and angles
         a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
@@ -290,7 +298,7 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
         trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
 
     #construct trajectory object:
-    trajectory = md.Trajectory(trajectory_positions, topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
+    trajectory = md.Trajectory(trajectory_positions, subset_topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
 
     #get the reduced potential from the final frame for endpoint perturbations
     reduced_potential_final_frame = thermodynamic_state.reduced_potential(sampler_state)
