@@ -207,7 +207,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
 
     """
     #get the atom indices we need to subset the topology and positions
-    atom_indices = topology.select('not solvent')
+    atom_indices = topology.select('not water')
     subset_topology = topology.subset(atom_indices)
 
     n_atoms = subset_topology.n_atoms
@@ -276,7 +276,7 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
         Unitless reduced potential (kT) of the final frame of the trajectory
     """
     #get the atom indices we need to subset the topology and positions
-    atom_indices = topology.select('not solvent')
+    atom_indices = topology.select('not water')
     subset_topology = topology.subset(atom_indices)
 
     n_atoms = subset_topology.n_atoms
