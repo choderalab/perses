@@ -1646,7 +1646,7 @@ class HybridTopologyFactory(object):
         n_atoms_new = self._topology_proposal.n_atoms_new
         new_positions = unit.Quantity(np.zeros([n_atoms_new, 3]), unit=unit.nanometer)
         for idx in range(n_atoms_new):
-            new_positions[idx, :] = hybrid_positions[self._old_to_hybrid_map[idx], :]
+            new_positions[idx, :] = hybrid_positions[self._new_to_hybrid_map[idx], :]
         return new_positions
 
     @property
