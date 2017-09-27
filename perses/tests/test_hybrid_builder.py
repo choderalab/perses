@@ -309,5 +309,81 @@ def test_compare_energies():
     for mol_ref_pair in mols_and_refs:
         compare_energies(mol_name=mol_ref_pair[0], ref_mol_name=mol_ref_pair[1])
 
+def generate_topology_proposal(old_mol_iupac="pentane", new_mol_iupac="butane"):
+    """
+    Utility function to generate a topologyproposal for tests
+
+    Parameters
+    ----------
+    old_mol_iupac : str, optional
+        name of old mol, default pentane
+    new_mol_iupac : str, optional
+        name of new mol, default butane
+
+    Returns
+    -------
+    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+        the topology proposal corresponding to the given transformation
+    old_positions : [n, 3] np.ndarray of float
+        positions of old mol
+    new_positions : [m, 3] np.ndarray of float
+        positions of new mol
+    """
+    from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine, SystemGenerator
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    from perses.tests.utils import createSystemFromIUPAC, get_data_filename
+    import openmoltools.forcefield_generators as forcefield_generators
+    from io import StringIO
+    from openmmtools.constants import kB
+
+
+    temperature = 300.0 * unit.kelvin
+    kT = kB * temperature
+    beta = 1.0/kT
+
+    gaff_filename = get_data_filename("data/gaff.xml")
+    forcefield_files = [gaff_filename, 'amber99sbildn.xml']
+
+    #generate systems and topologies
+    old_mol, old_system, old_positions, old_topology = createSystemFromIUPAC(old_mol_iupac)
+    new_mol, new_system, new_positions, new_topology = createSystemFromIUPAC(new_mol_iupac)
+
+    #set names
+    old_mol.SetTitle("MOL")
+    new_mol.SetTitle("MOL")
+
+    #generate forcefield and ProposalEngine
+    #ffxml=forcefield_generators.generateForceFieldFromMolecules([old_mol, new_mol])
+    system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion' : False})
+    proposal_engine = TwoMoleculeSetProposalEngine(old_mol, new_mol, system_generator, residue_name="pentane")
+    geometry_engine = FFAllAngleGeometryEngine()
+
+    #create a TopologyProposal
+    topology_proposal = proposal_engine.propose(old_system, old_topology)
+    new_positions_geometry, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
+
+    return topology_proposal, old_positions, new_positions_geometry
+
+def test_position_output():
+    """
+    Test that the hybrid returns the correct positions for the new and old systems after construction
+    """
+    from perses.annihilation.new_relative import HybridTopologyFactory
+    import numpy as np
+
+    #generate topology proposal
+    topology_proposal, old_positions, new_positions = generate_topology_proposal()
+
+    factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
+
+    old_positions_factory = factory.old_positions(factory.hybrid_positions)
+    new_positions_factory = factory.new_positions(factory.hybrid_positions)
+
+    assert np.all(np.isclose(old_positions.in_units_of(unit.nanometers), old_positions_factory.in_units_of(unit.nanometers)))
+    assert np.all(np.isclose(new_positions.in_units_of(unit.nanometers), new_positions_factory.in_units_of(unit.nanometers)))
+
+
+
 if __name__ == '__main__':
-    test_compare_energies()
+    #test_compare_energies()
+    test_position_output()
