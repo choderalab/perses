@@ -401,20 +401,25 @@ class NonequilibriumSwitchingFEP(object):
         a_0, b_0, c_0, alpha_0, beta_0, gamma_0 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_zero_sampler_state.box_vectors)
         a_1, b_1, c_1, alpha_1, beta_1, gamma_1 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_one_sampler_state.box_vectors)
 
+        lambda_zero_positions = np.array(self._lambda_zero_sampler_state.positions.value_in_unit_system(unit.md_unit_system))
+        lambda_one_positions = np.array(self._lambda_one_sampler_state.positions.value_in_unit_system(unit.md_unit_system))
+
         #subset the topology appropriately:
         if atom_selection is not None:
             atom_selection_indices = self._factory.hybrid_topology.select(atom_selection)
             subset_topology = self._factory.hybrid_topology.subset(atom_selection_indices)
             self._atom_selection_indices = atom_selection_indices
+
+            #create trajectory objects
+            self._lambda_zero_traj = md.Trajectory(lambda_zero_positions[atom_selection_indices, :], subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
+            self._lambda_one_traj = md.Trajectory(lambda_one_positions[atom_selection_indices, :], subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
         else:
             subset_topology = self._factory.hybrid_topology
             self._atom_selection_indices = None
 
-        lambda_zero_positions = self._lambda_zero_sampler_state.positions[atom_selection, :].value_in_unit_system(unit.md_unit_system)
-        lambda_one_positions = self._lambda_one_sampler_state.positions[atom_selection, :].value_in_unit_system(unit.md_unit_system)
-
-        self._lambda_zero_traj = md.Trajectory(np.array(lambda_zero_positions), subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
-        self._lambda_one_traj = md.Trajectory(np.array(lambda_one_positions), subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
+            #create trajectory objects here without slicing. This avoids sending over a large array of integers when we just want to save the whole set of coordinates
+            self._lambda_zero_traj = md.Trajectory(lambda_zero_positions, subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
+            self._lambda_one_traj = md.Trajectory(lambda_one_positions, subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
 
     def _set_all_parameters_of_state(self, alchemical_state, value):
         """
