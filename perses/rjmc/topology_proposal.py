@@ -1244,8 +1244,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
 
-        list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
+        # Canonicalize all SMILES strings
+        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in set(list_of_smiles)]
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
@@ -1279,7 +1279,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
-        self.verbose = True
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
         current_receptor_topology = self._remove_small_molecule(current_topology)
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
