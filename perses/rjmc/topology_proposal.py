@@ -1406,7 +1406,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        smiles_string = oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        smiles_string = oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
         final_smiles_string = smiles_string
         return final_smiles_string, oemol
 
@@ -1961,7 +1961,7 @@ class ButaneProposalEngine(NullProposalEngine):
         Custom definition for the atom map between butane and butane
 
         MAP:
-        
+
         C - C - C - C
             C - C - C - C
 
@@ -1987,7 +1987,7 @@ class ButaneProposalEngine(NullProposalEngine):
         for carbon in carbons:
             if len(neighbors[carbon]) == 1:
                 end_carbons.append(carbon)
-        
+
         # Extract linear chain of carbons
         carbon_chain = list()
         last_carbon = end_carbons[0]
