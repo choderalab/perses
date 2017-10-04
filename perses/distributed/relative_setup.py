@@ -311,7 +311,7 @@ class NonequilibriumSwitchingFEP(object):
     }
 
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
-                 forward_functions=None, ncmc_nsteps=100, nsteps_per_iteration=1, concurrency=4, platform_name="OpenCL",
+                 forward_functions=None, n_equil_steps=1000, ncmc_nsteps=100, nsteps_per_iteration=1, concurrency=4, platform_name="OpenCL",
                  temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None):
 
         #construct the hybrid topology factory object
@@ -386,7 +386,7 @@ class NonequilibriumSwitchingFEP(object):
         self._reverse_ne_mc_move = NonequilibriumSwitchingMove(self._reverse_integrator, self._nsteps_per_iteration)
 
         #create the equilibrium MCMove
-        self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove()
+        self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=n_equil_steps)
 
         #set the SamplerState for the lambda 0 and 1 equilibrium simulations
         self._lambda_one_sampler_state = SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
