@@ -1237,15 +1237,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
-        if not atom_expr:
-            self.atom_expr = oechem.OEExprOpts_AtomicNumber # | oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-        else:
-            self.atom_expr = atom_expr
+        # Default atom and bond expressions for MCSS
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
-        if not bond_expr:
-            self.bond_expr = 0 #oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-        else:
-            self.bond_expr = bond_expr
+        self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
+        self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+
         list_of_smiles = list(set(list_of_smiles))
         self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
         self._n_molecules = len(self._smiles_list)
