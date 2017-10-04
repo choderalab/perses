@@ -358,7 +358,6 @@ class NonequilibriumSwitchingFEP(object):
         #set up some class attributes
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
-        self._concurrency = concurrency
         self._ncmc_nsteps = ncmc_nsteps
         self._nsteps_per_iteration = nsteps_per_iteration
         self._trajectory_prefix = trajectory_prefix
