@@ -144,7 +144,7 @@ class SamplerState(object):
         context = self.createContext(platform=platform)
 
         # Get state.
-        openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True)
+        openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True, enforcePeriodicBox=True)
 
         # Populate context.
         self.positions = openmm_state.getPositions(asNumpy=True)
@@ -194,7 +194,7 @@ class SamplerState(object):
 
         """
         # Get state.
-        openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True)
+        openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True, enforcePeriodicBox=True)
 
         # Create new object, bypassing init.
         self = SamplerState.__new__(cls)
