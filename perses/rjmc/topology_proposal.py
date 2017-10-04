@@ -677,8 +677,7 @@ class PolymerProposalEngine(ProposalEngine):
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
 
-        # Select atom mapping scheme
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_AtomicNumber
         bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
 
