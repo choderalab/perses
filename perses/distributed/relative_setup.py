@@ -311,8 +311,39 @@ class NonequilibriumSwitchingFEP(object):
     }
 
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
-                 forward_functions=None, n_equil_steps=1000, ncmc_nsteps=100, nsteps_per_iteration=1, concurrency=4, platform_name="OpenCL",
-                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None):
+                 forward_functions=None, n_equil_steps=1000, ncmc_nsteps=100, nsteps_per_iteration=1,
+                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None, atom_selection="not water"):
+        """
+        Create an instance of the NonequilibriumSwitchingFEP driver class
+
+        Parameters
+        ----------
+        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+            TopologyProposal object containing transformation of interest
+        pos_old : [n, 3] ndarray unit.Quantity
+            Positions of the old system.
+        new_positions : [m, 3] ndarray unit.Quantity
+            Positions of the new system
+        use_dispersion_correction : bool, default False
+            Whether to use the (expensive) dispersion correction
+        forward_functions : dict of str: str, default None
+            How each force's scaling parameter relates to the main lambda that is switched by the integrator.
+        n_equil_steps : int, default 1000
+            Number of equilibrium steps between switching events
+        ncmc_nsteps : int, default 100
+            Number of steps per NCMC trajectory
+        nsteps_per_iteration : int, default one
+            Number of steps to take per MCMove; this controls how often configurations are written out.
+        temperature : float unit.Quantity
+            Temperature at which to perform the simulation, default 300K
+        trajectory_directory : str, default None
+            Where to write out trajectories resulting from the calculation. If none, no writing is done.
+        trajectory_prefix : str, default None
+            What prefix to use for this calculation's trajectory files. If none, no writing is done.
+        atom_selection : str, default not water
+            MDTraj selection syntax for which atomic coordinates to save in the trajectories. Default strips
+            all water.
+        """
 
         #construct the hybrid topology factory object
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
@@ -329,13 +360,14 @@ class NonequilibriumSwitchingFEP(object):
         #set up some class attributes
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
-        self._concurrency = concurrency
         self._ncmc_nsteps = ncmc_nsteps
         self._nsteps_per_iteration = nsteps_per_iteration
         self._trajectory_prefix = trajectory_prefix
         self._trajectory_directory = trajectory_directory
         self._zero_endpoint_n_atoms = topology_proposal.n_atoms_old
         self._one_endpoint_n_atoms = topology_proposal.n_atoms_new
+        self._atom_selection = atom_selection
+
 
         #initialize lists for results
         self._forward_nonequilibrium_trajectories = []
@@ -399,8 +431,25 @@ class NonequilibriumSwitchingFEP(object):
         a_0, b_0, c_0, alpha_0, beta_0, gamma_0 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_zero_sampler_state.box_vectors)
         a_1, b_1, c_1, alpha_1, beta_1, gamma_1 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_one_sampler_state.box_vectors)
 
-        self._lambda_zero_traj = md.Trajectory(np.array(self._lambda_zero_sampler_state.positions), self._factory.hybrid_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
-        self._lambda_one_traj = md.Trajectory(np.array(self._lambda_one_sampler_state.positions), self._factory.hybrid_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
+        lambda_zero_positions = np.array(self._lambda_zero_sampler_state.positions.value_in_unit_system(unit.md_unit_system))
+        lambda_one_positions = np.array(self._lambda_one_sampler_state.positions.value_in_unit_system(unit.md_unit_system))
+
+        #subset the topology appropriately:
+        if atom_selection is not None:
+            atom_selection_indices = self._factory.hybrid_topology.select(atom_selection)
+            subset_topology = self._factory.hybrid_topology.subset(atom_selection_indices)
+            self._atom_selection_indices = atom_selection_indices
+
+            #create trajectory objects
+            self._lambda_zero_traj = md.Trajectory(lambda_zero_positions[atom_selection_indices, :], subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
+            self._lambda_one_traj = md.Trajectory(lambda_one_positions[atom_selection_indices, :], subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
+        else:
+            subset_topology = self._factory.hybrid_topology
+            self._atom_selection_indices = None
+
+            #create trajectory objects here without slicing. This avoids sending over a large array of integers when we just want to save the whole set of coordinates
+            self._lambda_zero_traj = md.Trajectory(lambda_zero_positions, subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
+            self._lambda_one_traj = md.Trajectory(lambda_one_positions, subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
 
     def minimize(self, max_steps=50):
         """
@@ -455,8 +504,8 @@ class NonequilibriumSwitchingFEP(object):
             How many times to run the n_steps of equilibrium
         """
         #run equilibrium for lambda=0 and lambda=1
-        lambda_zero_result = feptasks.run_equilibrium.delay(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations)
-        lambda_one_result = feptasks.run_equilibrium.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations)
+        lambda_zero_result = feptasks.run_equilibrium.delay(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations, atom_indices_to_save=self._atom_selection_indices)
+        lambda_one_result = feptasks.run_equilibrium.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations, atom_indices_to_save=self._atom_selection_indices)
 
         #retrieve the results of the calculation
         self._lambda_zero_sampler_state, traj_zero_result, lambda_zero_reduced_potential = lambda_zero_result.get()
@@ -511,11 +560,13 @@ class NonequilibriumSwitchingFEP(object):
         #set up the group object that will be used to compute the nonequilibrium results.
         forward_protocol_group = celery.group(
             feptasks.run_protocol.s(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state,
-                                    self._forward_ne_mc_move, self._factory.hybrid_topology, n_iterations) for i in
+                                    self._forward_ne_mc_move, self._factory.hybrid_topology, n_iterations,
+                                    atom_indices_to_save=self._atom_selection_indices) for i in
             range(concurrency))
         reverse_protocol_group = celery.group(
             feptasks.run_protocol.s(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state,
-                                    self._reverse_ne_mc_move, self._factory.hybrid_topology, n_iterations) for i in
+                                    self._reverse_ne_mc_move, self._factory.hybrid_topology, n_iterations,
+                                    atom_indices_to_save=self._atom_selection_indices) for i in
             range(concurrency))
 
         #get the result objects:
