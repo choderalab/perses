@@ -677,7 +677,8 @@ class PolymerProposalEngine(ProposalEngine):
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
 
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_AtomicNumber
+        # Select atom mapping scheme
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
         bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
 
@@ -1961,7 +1962,7 @@ class ButaneProposalEngine(NullProposalEngine):
         Custom definition for the atom map between butane and butane
 
         MAP:
-        
+
         C - C - C - C
             C - C - C - C
 
@@ -1987,7 +1988,7 @@ class ButaneProposalEngine(NullProposalEngine):
         for carbon in carbons:
             if len(neighbors[carbon]) == 1:
                 end_carbons.append(carbon)
-        
+
         # Extract linear chain of carbons
         carbon_chain = list()
         last_carbon = end_carbons[0]
