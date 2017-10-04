@@ -36,6 +36,7 @@ from openmmtools import testsystems
 from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
+from unittest import skipIf
 import tempfile
 import copy
 from openmmtools.constants import kB

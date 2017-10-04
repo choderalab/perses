@@ -22,6 +22,7 @@ import sys, math
 import numpy as np
 import logging
 from functools import partial
+from unittest import skipIf
 
 import perses.tests.testsystems
 
