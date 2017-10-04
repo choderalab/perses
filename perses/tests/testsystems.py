@@ -1983,7 +1983,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         for smiles in list_of_smiles:
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smiles)
-            can_smi = oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
+            can_smi = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
             list_of_canonicalized_smiles.append(can_smi)
         return list_of_canonicalized_smiles
 
