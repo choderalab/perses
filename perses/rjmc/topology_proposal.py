@@ -1289,7 +1289,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         Returns
         -------
         proposal : TopologyProposal object
-           topology proposal object
+           topology proposal object           
         """
         # Determine SMILES string for current small molecule
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
