@@ -23,6 +23,7 @@ import numpy as np
 import mdtraj as md
 import mdtraj.utils as mdtrajutils
 import pickle
+import simtk.unit as unit
 
 broker_name_server = "redis://localhost"
 
@@ -235,7 +236,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
         ne_mc_move.apply(thermodynamic_state, sampler_state)
 
         #record the positions as a result
-        trajectory_positions[iteration, :, :] = sampler_state.positions[atom_indices, :]
+        trajectory_positions[iteration, :, :] = sampler_state.positions[atom_indices, :].value_in_unit_system(unit.md_unit_system)
 
         #get the box angles and lengths
         a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
@@ -302,7 +303,7 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     for iteration in range(n_iterations):
         mc_move.apply(thermodynamic_state, sampler_state)
 
-        trajectory_positions[iteration, :] = sampler_state.positions[atom_indices, :]
+        trajectory_positions[iteration, :] = sampler_state.positions[atom_indices, :].value_in_unit_system(unit.md_unit_system)
 
         #get the box lengths and angles
         a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
