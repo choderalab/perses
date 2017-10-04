@@ -181,7 +181,7 @@ def update_broker_location(broker_location, backend_location=None):
     app.conf.update(broker=broker_location, backend=broker_location)
 
 @app.task(serializer="pickle")
-def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_iterations):
+def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_iterations, atom_indices_to_save=None):
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
     that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
@@ -199,6 +199,8 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
         An MDtraj topology for the system to generate trajectories
     n_iterations : int
         The number of times to apply the specified MCMove
+    atom_indices_to_save : list of int, default None
+        list of indices to save (when excluding waters, for instance). If None, all indices are saved.
 
     Returns
     -------
@@ -207,8 +209,12 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
 
     """
     #get the atom indices we need to subset the topology and positions
-    atom_indices = topology.select('not water')
-    subset_topology = topology.subset(atom_indices)
+    if atom_indices_to_save is None:
+        atom_indices = range(topology.n_atoms)
+        subset_topology = topology
+    else:
+        subset_topology = topology.subset(atom_indices_to_save)
+        atom_indices = atom_indices_to_save
 
     n_atoms = subset_topology.n_atoms
 
@@ -245,7 +251,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
     return trajectory, cumulative_work
 
 @app.task(serializer="pickle")
-def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_iterations):
+def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_iterations, atom_indices_to_save=None):
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
     as well as a trajectory of the positions after each application of an MCMove. This means that if the MCMove
@@ -265,6 +271,8 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     n_iterations : int
         The number of times to apply the move. Note that this is not the number of steps of dynamics; it is
         n_iterations*n_steps (which is set in the MCMove).
+    atom_indices_to_save : list of int, default None
+        list of indices to save (when excluding waters, for instance). If None, all indices are saved.
 
     Returns
     -------
@@ -276,8 +284,12 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
         Unitless reduced potential (kT) of the final frame of the trajectory
     """
     #get the atom indices we need to subset the topology and positions
-    atom_indices = topology.select('not water')
-    subset_topology = topology.subset(atom_indices)
+    if atom_indices_to_save is None:
+        atom_indices = range(topology.n_atoms)
+        subset_topology = topology
+    else:
+        subset_topology = topology.subset(atom_indices_to_save)
+        atom_indices = atom_indices_to_save
 
     n_atoms = subset_topology.n_atoms
 
