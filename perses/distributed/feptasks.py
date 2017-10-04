@@ -211,7 +211,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
     """
     #get the atom indices we need to subset the topology and positions
     if atom_indices_to_save is None:
-        atom_indices = range(topology.n_atoms)
+        atom_indices = list(range(topology.n_atoms))
         subset_topology = topology
     else:
         subset_topology = topology.subset(atom_indices_to_save)
@@ -286,7 +286,7 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     """
     #get the atom indices we need to subset the topology and positions
     if atom_indices_to_save is None:
-        atom_indices = range(topology.n_atoms)
+        atom_indices = list(range(topology.n_atoms))
         subset_topology = topology
     else:
         subset_topology = topology.subset(atom_indices_to_save)
