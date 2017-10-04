@@ -311,8 +311,37 @@ class NonequilibriumSwitchingFEP(object):
     }
 
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
-                 forward_functions=None, ncmc_nsteps=100, nsteps_per_iteration=1, concurrency=4, platform_name="OpenCL",
+                 forward_functions=None, ncmc_nsteps=100, nsteps_per_iteration=1,
                  temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None, atom_selection="not water"):
+        """
+        Create an instance of the NonequilibriumSwitchingFEP driver class
+
+        Parameters
+        ----------
+        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+            TopologyProposal object containing transformation of interest
+        pos_old : [n, 3] ndarray unit.Quantity
+            Positions of the old system.
+        new_positions : [m, 3] ndarray unit.Quantity
+            Positions of the new system
+        use_dispersion_correction : bool, default False
+            Whether to use the (expensive) dispersion correction
+        forward_functions : dict of str: str, default None
+            How each force's scaling parameter relates to the main lambda that is switched by the integrator.
+        ncmc_nsteps : int, default 100
+            Number of steps per NCMC trajectory
+        nsteps_per_iteration : int, default one
+            Number of steps to take per MCMove; this controls how often configurations are written out.
+        temperature : float unit.Quantity
+            Temperature at which to perform the simulation, default 300K
+        trajectory_directory : str, default None
+            Where to write out trajectories resulting from the calculation. If none, no writing is done.
+        trajectory_prefix : str, default None
+            What prefix to use for this calculation's trajectory files. If none, no writing is done.
+        atom_selection : str, default not water
+            MDTraj selection syntax for which atomic coordinates to save in the trajectories. Default strips
+            all water.
+        """
 
         #construct the hybrid topology factory object
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
