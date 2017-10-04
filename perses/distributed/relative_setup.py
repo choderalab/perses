@@ -402,8 +402,8 @@ class NonequilibriumSwitchingFEP(object):
         #subset the topology appropriately:
         atom_selection = self._factory.hybrid_topology.select("not water")
         subset_topology = self._factory.hybrid_topology.subset(atom_selection)
-        lambda_zero_positions = self._lambda_zero_sampler_state.positions[atom_selection, :]
-        lambda_one_positions = self._lambda_one_sampler_state.positions[atom_selection, :]
+        lambda_zero_positions = self._lambda_zero_sampler_state.positions[atom_selection, :].value_in_unit_system(unit.md_unit_system)
+        lambda_one_positions = self._lambda_one_sampler_state.positions[atom_selection, :].value_in_unit_system(unit.md_unit_system)
 
         self._lambda_zero_traj = md.Trajectory(np.array(lambda_zero_positions), subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
         self._lambda_one_traj = md.Trajectory(np.array(lambda_one_positions), subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
