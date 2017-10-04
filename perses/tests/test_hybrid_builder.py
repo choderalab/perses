@@ -2,6 +2,7 @@ from simtk.openmm import app
 from simtk import unit, openmm
 import numpy as np
 from perses.annihilation.relative import HybridTopologyFactory
+from unittest import skipIf
 import copy
 
 ace = {

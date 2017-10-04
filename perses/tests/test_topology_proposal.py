@@ -13,6 +13,7 @@ except:
     from cStringIO import StringIO
 from nose.plugins.attrib import attr
 from openmmtools.constants import kB
+from unittest import skipIf
 
 temperature = 300*unit.kelvin
 # Compute kT and inverse temperature.
