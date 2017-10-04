@@ -287,7 +287,7 @@ class NetCDFStorage(object):
         # Check dimensions
         expected_shape = list()
         for (dimension_index, size) in enumerate(array.shape):
-            expected_shape.append(self._ncfile.dimensions[dimension_name(dimension_index)].size)
+            expected_shape.append(self._ncfile.dimensions[dimension_name(dimension_index)].shape)
         expected_shape = tuple(expected_shape)
         if expected_shape != array.shape:
             raise Exception("write_array called for /%s/%s/%s with different dimension (%s) than initially called (%s); dimension must stay constant." % (envname, modname, varname, str(array.shape), str(expected_shape)))
