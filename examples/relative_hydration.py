@@ -23,7 +23,7 @@ def simulate_hybrid(hybrid_system,functions, lambda_value, positions, nsteps=500
         context.setParameter(parameter, lambda_value)
     context.setPositions(positions)
     integrator.step(nsteps)
-    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    positions = context.getState(getPositions=True, enforcePeriodicBox=True).getPositions(asNumpy=True)
     return positions
 
 
