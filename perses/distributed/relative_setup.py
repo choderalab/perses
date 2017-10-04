@@ -312,7 +312,7 @@ class NonequilibriumSwitchingFEP(object):
 
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=None, ncmc_nsteps=100, nsteps_per_iteration=1, concurrency=4, platform_name="OpenCL",
-                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None):
+                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None, atom_selection="not water"):
 
         #construct the hybrid topology factory object
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
@@ -336,6 +336,8 @@ class NonequilibriumSwitchingFEP(object):
         self._trajectory_directory = trajectory_directory
         self._zero_endpoint_n_atoms = topology_proposal.n_atoms_old
         self._one_endpoint_n_atoms = topology_proposal.n_atoms_new
+        self._atom_selection = atom_selection
+
 
         #initialize lists for results
         self._forward_nonequilibrium_trajectories = []
@@ -400,8 +402,14 @@ class NonequilibriumSwitchingFEP(object):
         a_1, b_1, c_1, alpha_1, beta_1, gamma_1 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_one_sampler_state.box_vectors)
 
         #subset the topology appropriately:
-        atom_selection = self._factory.hybrid_topology.select("not water")
-        subset_topology = self._factory.hybrid_topology.subset(atom_selection)
+        if atom_selection is not None:
+            atom_selection_indices = self._factory.hybrid_topology.select(atom_selection)
+            subset_topology = self._factory.hybrid_topology.subset(atom_selection_indices)
+            self._atom_selection_indices = atom_selection_indices
+        else:
+            subset_topology = self._factory.hybrid_topology
+            self._atom_selection_indices = None
+
         lambda_zero_positions = self._lambda_zero_sampler_state.positions[atom_selection, :].value_in_unit_system(unit.md_unit_system)
         lambda_one_positions = self._lambda_one_sampler_state.positions[atom_selection, :].value_in_unit_system(unit.md_unit_system)
 
@@ -485,8 +493,8 @@ class NonequilibriumSwitchingFEP(object):
             How many times to run the n_steps of equilibrium
         """
         #run equilibrium for lambda=0 and lambda=1
-        lambda_zero_result = feptasks.run_equilibrium.delay(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations)
-        lambda_one_result = feptasks.run_equilibrium.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations)
+        lambda_zero_result = feptasks.run_equilibrium.delay(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations, atom_indices_to_save=self._atom_selection_indices)
+        lambda_one_result = feptasks.run_equilibrium.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations, atom_indices_to_save=self._atom_selection_indices)
 
         #retrieve the results of the calculation
         self._lambda_zero_sampler_state, traj_zero_result, lambda_zero_reduced_potential = lambda_zero_result.get()
@@ -541,11 +549,13 @@ class NonequilibriumSwitchingFEP(object):
         #set up the group object that will be used to compute the nonequilibrium results.
         forward_protocol_group = celery.group(
             feptasks.run_protocol.s(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state,
-                                    self._forward_ne_mc_move, self._factory.hybrid_topology, n_iterations) for i in
+                                    self._forward_ne_mc_move, self._factory.hybrid_topology, n_iterations,
+                                    atom_indices_to_save=self._atom_selection_indices) for i in
             range(concurrency))
         reverse_protocol_group = celery.group(
             feptasks.run_protocol.s(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state,
-                                    self._reverse_ne_mc_move, self._factory.hybrid_topology, n_iterations) for i in
+                                    self._reverse_ne_mc_move, self._factory.hybrid_topology, n_iterations,
+                                    atom_indices_to_save=self._atom_selection_indices) for i in
             range(concurrency))
 
         #get the result objects:
