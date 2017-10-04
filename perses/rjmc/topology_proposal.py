@@ -1131,12 +1131,15 @@ class SystemGenerator(object):
         If True, will add the GAFF residue template generator.
     barostat : MonteCarloBarostat, optional, default=None
         If provided, a matching barostat will be added to the generated system.
+    verbose : bool, optional, default=False
+        If True, print verbose output
     """
 
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None, verbose=False):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
+        self.verbose = verbose
         if use_antechamber:
             self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
         if 'removeCMMotion' not in self._forcefield_kwargs:
@@ -1177,6 +1180,9 @@ class SystemGenerator(object):
         new_system : openmm.System
             A system object generated from the topology
         """
+        if self.verbose: print('Generating System...')
+        timer_start = time.time()
+
         try:
             system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
         except Exception as e:
@@ -1204,6 +1210,8 @@ class SystemGenerator(object):
         # DEBUG: See if any torsions have duplicate atoms.
         #from perses.tests.utils import check_system
         #check_system(system)
+
+        if self.verbose: print('System generation took %.3f s' % (time.time() - timer_start))
 
         return system
 
@@ -1233,10 +1241,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     proposal_metadata : dict
         metadata for the proposal engine
     storage : NetCDFStorageView, optional, default=None
-        If specified, write statistics to this storage layer.
+        If specified, write statistics to this storage
+    verbose : bool, optional, default=False
+        Print verbose output
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
+                 atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
+                 always_change=True, verbose=False):
         # Default atom and bond expressions for MCSS
         DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
         DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
@@ -1279,70 +1291,34 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
+        # Determine SMILES string for current small molecule
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+
+        # Remove the small molecule from the current Topology object
         current_receptor_topology = self._remove_small_molecule(current_topology)
+
+        # Find the initial atom index of the small molecule in the current topology
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
 
-        #choose the next molecule to simulate:
-        proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology,
-                                                                                current_mol_smiles)
+        # Select the next molecule SMILES given proposal probabilities
+        proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
 
-        # DEBUG
-        debug = False
-        if debug:
-            strict_stereo = False
-            if self.verbose: print('proposed SMILES string: %s' % proposed_mol_smiles)
-            from openmoltools.openeye import generate_conformers
-            if self.verbose: print('Generating conformers...')
-            timer_start = time.time()
-            moltemp = generate_conformers(current_mol, max_confs=1, strictStereo=strict_stereo)
-            #molecule_to_mol2(moltemp, tripos_mol2_filename='current.mol2', conformer=0, residue_name="MOL")
-            ofs = oechem.oemolostream('current.mol2')
-            oechem.OETriposAtomTypeNames(moltemp)
-            oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
-            ofs.close()
-            moltemp = generate_conformers(proposed_mol, max_confs=1, strictStereo=strict_stereo)
-            #molecule_to_mol2(moltemp, tripos_mol2_filename='proposed.mol2', conformer=0, residue_name="MOL")
-            ofs = oechem.oemolostream('proposed.mol2')
-            oechem.OETriposAtomTypeNames(moltemp)
-            oechem.OEWriteMol2File(ofs, moltemp) # Preserve atom naming
-            ofs.close()
-            if self.verbose: print('Conformer generation took %.3f s' % (time.time() - timer_start))
-
-        if self.verbose: print('Building new Topology object...')
-        timer_start = time.time()
+        # Build the new Topology object, including the proposed molecule
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
-        if self.verbose: print('Topology generation took %.3f s' % (time.time() - timer_start))
 
-        # DEBUG: Write out Topology
-        #import cPickle as pickle
-        #outfile = open('topology.pkl', 'w')
-        #pickle.dump(new_topology, outfile)
-        #outfile.close()
-
-        if self.verbose: print('Generating System...')
-        timer_start = time.time()
+        # Generate an OpenMM System from the proposed Topology
         new_system = self._system_generator.build_system(new_topology)
-        if self.verbose: print('System generation took %.3f s' % (time.time() - timer_start))
 
-        smiles_new, _ = self._topology_to_smiles(new_topology)
+        # Determine atom mapping between old and new molecules
+        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose)
 
-        #map the atoms between the new and old molecule only:
-        if self.verbose: print('Generating atom map...')
-        timer_start = time.time()
-        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr)
-        if self.verbose: print('Atom map took %.3f s' % (time.time() - timer_start))
-
-        #adjust the log proposal for the alignment:
-        total_logp = logp_proposal
-
-        #adjust the atom map for the presence of the receptor:
+        # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
         for (key, value) in mol_atom_map.items():
             adjusted_atom_map[key+new_mol_start_index] = value + old_mol_start_index
 
-        #all atoms until the molecule starts are the same
+        # Incorporate atom mapping of all environment atoms
         old_mol_offset = len_old_mol
         for i in range(new_mol_start_index):
             if i >= old_mol_start_index:
@@ -1351,14 +1327,17 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 old_idx = i
             adjusted_atom_map[i] = old_idx
 
-        #Create the TopologyProposal and return it
-        proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=current_topology, old_system=current_system, logp_proposal=total_logp,
-                                                 new_to_old_atom_map=adjusted_atom_map, old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
+        # Create the TopologyProposal onbject
+        proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
+            old_topology=old_topology, new_topology=new_topology,
+            old_system=old_system, new_system=new_system,
+            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
 
         if self.verbose:
             ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
             ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
             print('Proposed transformation would delete %d atoms and create %d atoms.' % (ndelete, ncreate))
+
         return proposal
 
     def _canonicalize_smiles(self, smiles):
@@ -1469,6 +1448,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_index : int
             The first index of the small molecule
         """
+        if self.verbose: print('Building new Topology object...')
+        timer_start = time.time()
+
         oemol_proposed.SetTitle(self._residue_name)
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
@@ -1477,6 +1459,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Copy periodic box vectors.
         if current_receptor_topology._periodicBoxVectors != None:
             new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
+
+        if self.verbose: print('Topology generation took %.3f s' % (time.time() - timer_start))
 
         return new_topology
 
@@ -1504,7 +1488,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return receptor_topology
 
     @staticmethod
-    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree, bond_expr=oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember):
+    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -1520,6 +1504,15 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         matches : list of match
             list of the matches between the molecules
         """
+        if verbose: print('Generating atom map...')
+        timer_start = time.time()
+
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+
+        atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
+        bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
@@ -1536,6 +1529,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
             new_to_old_atom_map[new_index] = old_index
+
+        if verbose: print('Atom map took %.3f s' % (time.time() - timer_start))
         return new_to_old_atom_map
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
