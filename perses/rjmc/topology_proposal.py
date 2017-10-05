@@ -7,6 +7,7 @@ import simtk.openmm.app as app
 from collections import namedtuple
 import copy
 import warnings
+import logging
 import os
 import openeye.oechem as oechem
 import numpy as np
@@ -27,6 +28,8 @@ try:
     from subprocess import getoutput  # If python 3
 except ImportError:
     from commands import getoutput  # If python 2
+
+_logger = logging.getLogger("proposal_engine")
 
 def append_topology(destination_topology, source_topology, exclude_residue_name=None):
     """
@@ -1180,7 +1183,7 @@ class SystemGenerator(object):
         new_system : openmm.System
             A system object generated from the topology
         """
-        if self.verbose: print('Generating System...')
+        _logger.info('Generating System...')
         timer_start = time.time()
 
         try:
@@ -1211,7 +1214,7 @@ class SystemGenerator(object):
         #from perses.tests.utils import check_system
         #check_system(system)
 
-        if self.verbose: print('System generation took %.3f s' % (time.time() - timer_start))
+        _logger.info('System generation took %.3f s' % (time.time() - timer_start))
 
         return system
 
@@ -1248,7 +1251,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
                  atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
-                 always_change=True, verbose=False):
+                 always_change=True):
+
         # Default atom and bond expressions for MCSS
         DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
         DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
@@ -1334,10 +1338,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_system=current_system, new_system=new_system,
             old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
 
-        if self.verbose:
-            ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
-            ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
-            print('Proposed transformation would delete %d atoms and create %d atoms.' % (ndelete, ncreate))
+        ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
+        ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
+        _logger.info('Proposed transformation would delete %d atoms and create %d atoms.' % (ndelete, ncreate))
 
         return proposal
 
@@ -1451,7 +1454,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_index : int
             The first index of the small molecule
         """
-        if self.verbose: print('Building new Topology object...')
+        _logger.info('Building new Topology object...')
         timer_start = time.time()
 
         oemol_proposed.SetTitle(self._residue_name)
@@ -1463,7 +1466,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         if current_receptor_topology._periodicBoxVectors != None:
             new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
 
-        if self.verbose: print('Topology generation took %.3f s' % (time.time() - timer_start))
+        _logger.info('Topology generation took %.3f s' % (time.time() - timer_start))
 
         return new_topology
 
@@ -1507,7 +1510,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         matches : list of match
             list of the matches between the molecules
         """
-        if verbose: print('Generating atom map...')
+        _logger.info('Generating atom map...')
         timer_start = time.time()
 
         DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
@@ -1533,7 +1536,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_index = matchpair.target.GetIdx()
             new_to_old_atom_map[new_index] = old_index
 
-        if verbose: print('Atom map took %.3f s' % (time.time() - timer_start))
+        _logger.info('Atom map took %.3f s' % (time.time() - timer_start))
         return new_to_old_atom_map
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
@@ -1682,7 +1685,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 reverse_order = proposal_order.determine_proposal_order(direction='reverse')
                 safe_smiles.add(smiles_pair[0])
                 safe_smiles.add(smiles_pair[1])
-                print("Adding %s and %s" % (smiles_pair[0], smiles_pair[1]))
+                _logger.info("Adding %s and %s" % (smiles_pair[0], smiles_pair[1]))
             except NoTorsionError:
                 pass
         removed_smiles = smiles_set.difference(safe_smiles)
