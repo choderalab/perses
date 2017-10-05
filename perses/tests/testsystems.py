@@ -1980,11 +1980,16 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
             canonical isomeric smiles
         """
         list_of_canonicalized_smiles = []
+        ofs = oechem.oemolostream('current.mol2') # DEBUG
         for smiles in list_of_smiles:
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smiles)
-            can_smi = oechem.OECreateIsoSmiString(mol)
+            oechem.OEAddExplicitHydrogens(mol)
+            can_smi = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
             list_of_canonicalized_smiles.append(can_smi)
+
+        ofs.close() # DEBUG
+
         return list_of_canonicalized_smiles
 
 class NullTestSystem(PersesTestSystem):
