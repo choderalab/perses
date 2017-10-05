@@ -1134,15 +1134,12 @@ class SystemGenerator(object):
         If True, will add the GAFF residue template generator.
     barostat : MonteCarloBarostat, optional, default=None
         If provided, a matching barostat will be added to the generated system.
-    verbose : bool, optional, default=False
-        If True, print verbose output
     """
 
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None, verbose=False):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
-        self.verbose = verbose
         if use_antechamber:
             self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
         if 'removeCMMotion' not in self._forcefield_kwargs:
@@ -1245,8 +1242,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         metadata for the proposal engine
     storage : NetCDFStorageView, optional, default=None
         If specified, write statistics to this storage
-    verbose : bool, optional, default=False
-        Print verbose output
     """
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
