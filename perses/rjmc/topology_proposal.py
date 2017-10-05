@@ -1247,7 +1247,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         else:
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
-        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
+        self._smiles_list = [self.canonicalize_smiles(smiles) for smiles in list_of_smiles]
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
@@ -1364,7 +1364,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             print('Proposed transformation would delete %d atoms and create %d atoms.' % (ndelete, ncreate))
         return proposal
 
-    def _canonicalize_smiles(self, smiles):
+    @staticmethod
+    def canonicalize_smiles(smiles):
         """
         Convert a SMILES string into canonical isomeric smiles
 

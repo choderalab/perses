@@ -78,6 +78,7 @@ def test_small_molecule_proposals():
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
     from collections import defaultdict
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     import openeye.oechem as oechem
     list_of_smiles = ['CCCC','CCCCC','CCCCCC']
     gaff_xml_filename = get_data_filename('data/gaff.xml')
@@ -97,7 +98,8 @@ def test_small_molecule_proposals():
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        assert oechem.OEMolToSmiles(oemol) == proposal.new_chemical_state_key
+        smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OEMolToSmiles(oemol))
+        assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
 
 def load_pdbid_to_openmm(pdbid):
