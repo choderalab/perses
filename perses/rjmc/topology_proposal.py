@@ -1248,6 +1248,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
         self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
+        print(self._smiles_list)
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
@@ -1380,7 +1381,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
-        iso_can_smiles = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        oechem.OEAddExplicitHydrogens(mol)        
+        iso_can_smiles = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
         return iso_can_smiles
 
     def _topology_to_smiles(self, topology):
@@ -1572,7 +1574,16 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         # Compute contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
         # log [P(Mold | Mnew) / P(Mnew | Mold)]
-        current_smiles_idx = self._smiles_list.index(molecule_smiles)
+
+        # Retrieve the current molecule index
+        try:
+            current_smiles_idx = self._smiles_list.index(molecule_smiles)
+        except ValueError as e:
+            msg = "Current SMILES string '%s' not found in canonical molecule set.\n"
+            msg += "Molecule set: %s" % self._smiles_list
+            raise Exception(msg)
+
+        # Propose a new molecule
         molecule_probabilities = self._probability_matrix[current_smiles_idx, :]
         proposed_smiles_idx = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
         reverse_probability = self._probability_matrix[proposed_smiles_idx, current_smiles_idx]
