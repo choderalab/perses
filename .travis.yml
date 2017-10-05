@@ -32,10 +32,10 @@ script:
   - conda create --yes -n test python=$python
   # Activate the test environment
   - source activate test
-  # Add org channel
-  - conda config --add channels ${ORGNAME}
+  # Add omnia
+  - conda config --add channels omnia --add channels conda-forge
   # Add omnia dev channels
-  - conda config --add channels https://conda.anaconda.org/omnia/label/dev
+  - conda config --add channels omnia/label/dev
   # Build the recipe
   - conda build devtools/conda-recipe
   # Install the package
