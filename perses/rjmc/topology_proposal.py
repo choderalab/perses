@@ -1248,7 +1248,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             self.bond_expr = bond_expr
         list_of_smiles = list(set(list_of_smiles))
         self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in list_of_smiles]
-        print(self._smiles_list)
         self._n_molecules = len(self._smiles_list)
 
         self._residue_name = residue_name
@@ -1381,7 +1380,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
-        oechem.OEAddExplicitHydrogens(mol)        
+        oechem.OEAddExplicitHydrogens(mol)
         iso_can_smiles = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
         return iso_can_smiles
 

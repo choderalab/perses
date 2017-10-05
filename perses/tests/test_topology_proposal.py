@@ -77,10 +77,11 @@ def test_small_molecule_proposals():
     """
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
+    from collections import defaultdict
     import openeye.oechem as oechem
     list_of_smiles = ['CCCC','CCCCC','CCCCCC']
     gaff_xml_filename = get_data_filename('data/gaff.xml')
-    stats_dict = {smiles : 0 for smiles in list_of_smiles}
+    stats_dict = defaultdict(lambda: 0)
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, system_generator)
     initial_molecule = generate_initial_molecule('CCCC')
