@@ -299,7 +299,7 @@ class NCMCEngine(object):
 
             # Write trajectory frame.
             if self._storage and self.write_ncmc_interval:
-                positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+                positions = context.getState(getPositions=True, enforcePeriodicBox=True).getPositions(asNumpy=True)
                 self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(self.nsteps+1))
 
             # Perform NCMC integration.
@@ -325,7 +325,7 @@ class NCMCEngine(object):
 
                 # Write trajectory frame.
                 if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
-                    positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+                    positions = context.getState(getPositions=True, enforcePeriodicBox=True).getPositions(asNumpy=True)
                     assert quantity_is_finite(positions) == True
                     self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(self.nsteps+1))
 
@@ -348,7 +348,7 @@ class NCMCEngine(object):
                 raise e
 
         # Store final positions and log acceptance probability.
-        final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+        final_positions = context.getState(getPositions=True, enforcePeriodicBox=True).getPositions(asNumpy=True)
         assert quantity_is_finite(final_positions) == True
         logP_NCMC = integrator.getLogAcceptanceProbability(context)
         return final_positions, logP_NCMC
