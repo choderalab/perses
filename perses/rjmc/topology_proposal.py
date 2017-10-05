@@ -1257,7 +1257,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
 
         # Canonicalize all SMILES strings
-        self._smiles_list = [self._canonicalize_smiles(smiles) for smiles in set(list_of_smiles)]
+        self._smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in set(list_of_smiles)]
 
         self._n_molecules = len(self._smiles_list)
 
@@ -1330,8 +1330,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Create the TopologyProposal onbject
         proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
-            old_topology=old_topology, new_topology=new_topology,
-            old_system=old_system, new_system=new_system,
+            old_topology=current_topology, new_topology=new_topology,
+            old_system=current_system, new_system=new_system,
             old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
 
         if self.verbose:
