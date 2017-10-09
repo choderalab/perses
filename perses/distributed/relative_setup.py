@@ -370,20 +370,10 @@ class NonequilibriumSwitchingFEP(object):
 
 
         #initialize lists for results
-        self._forward_nonequilibrium_trajectories = []
-        self._reverse_nonequilibrium_trajectories = []
-        self._forward_nonequilibrium_cumulative_works = []
-        self._reverse_nonequilibrium_cumulative_works = []
-        self._forward_nonequilibrium_results = []
-        self._reverse_nonequilibrium_results = []
-        self._forward_total_work = []
-        self._reverse_total_work = []
-        self._lambda_zero_reduced_potentials = []
-        self._lambda_one_reduced_potentials = []
-        self._nonalchemical_zero_endpt_reduced_potentials = []
-        self._nonalchemical_one_endpt_reduced_potentials = []
-        self._nonalchemical_zero_results = []
-        self._nonalchemical_one_results = []
+        self._total_work = {0 : [], 1 : []}
+        self._reduced_potentials = {0 : [], 1 : []}
+        self._nonalchemical_endpoint_reduced_potentials = {0: [], 1: []}
+
 
         #Set the number of times that the nonequilbrium move will have to be run in order to complete a protocol:
         if self._ncmc_nsteps % self._nsteps_per_iteration != 0:
@@ -395,27 +385,23 @@ class NonequilibriumSwitchingFEP(object):
         lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
 
         #ensure their states are set appropriately
-        lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-        lambda_one_alchemical_state.set_alchemical_parameters(0.0)
+        self._hybrid_alchemical_states = {0 : lambda_zero_alchemical_state.set_alchemical_parameters(0.0), 1: lambda_one_alchemical_state.set_alchemical_parameters(1.0)}
 
         #create the base thermodynamic state with the hybrid system
         self._thermodynamic_state = ThermodynamicState(self._hybrid_system, temperature=temperature)
 
         #Create thermodynamic states for the nonalchemical endpoints
-        self._nonalchemical_zero_thermodynamic_state = ThermodynamicState(topology_proposal.old_system, temperature=temperature)
-        self._nonalchemical_one_thermodynamic_state = ThermodynamicState(topology_proposal.new_system, temperature=temperature)
+        self._nonalchemical_thermodynamic_states = {0 : ThermodynamicState(topology_proposal.old_system, temperature=temperature), 1: ThermodynamicState(topology_proposal.new_system, temperature=temperature)}
 
         #Now create the compound states with different alchemical states
-        self._lambda_zero_thermodynamic_state = CompoundThermodynamicState(self._thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
-        self._lambda_one_thermodynamic_state = CompoundThermodynamicState(self._thermodynamic_state, composable_states=[lambda_one_alchemical_state])
+        self._hybrid_thermodynamic_states = {0: CompoundThermodynamicState(self._thermodynamic_state, composable_states=[self._hybrid_alchemical_states[0]]), 1: CompoundThermodynamicState(self._thermodynamic_state, composable_states=[self._hybrid_alchemical_states[1]])}
 
         #create the forward and reverse integrators
-        self._forward_integrator = AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)
-        self._reverse_integrator = AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)
+        self._integrators = {0 : AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature),
+                             1: AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)}
 
         #create the forward and reverse MCMoves
-        self._forward_ne_mc_move = NonequilibriumSwitchingMove(self._forward_integrator, self._nsteps_per_iteration)
-        self._reverse_ne_mc_move = NonequilibriumSwitchingMove(self._reverse_integrator, self._nsteps_per_iteration)
+        self._ne_mc_moves = {n : NonequilibriumSwitchingMove(self._integrators[n], self._nsteps_per_iteration) for n in (0,1)}
 
         #create the equilibrium MCMove
         self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=n_equil_steps)
@@ -424,32 +410,18 @@ class NonequilibriumSwitchingFEP(object):
         self._lambda_one_sampler_state = SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
         self._lambda_zero_sampler_state = copy.deepcopy(self._lambda_one_sampler_state)
 
+        self._sampler_states = {0: SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors()),
+                                1: copy.deepcopy(self._lambda_one_sampler_state)}
+
         #initialize by minimizing
         self.minimize()
-
-        #initialize the trajectories for the lambda 0 and 1 equilibrium simulations
-        a_0, b_0, c_0, alpha_0, beta_0, gamma_0 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_zero_sampler_state.box_vectors)
-        a_1, b_1, c_1, alpha_1, beta_1, gamma_1 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_one_sampler_state.box_vectors)
-
-        lambda_zero_positions = np.array(self._lambda_zero_sampler_state.positions.value_in_unit_system(unit.md_unit_system))
-        lambda_one_positions = np.array(self._lambda_one_sampler_state.positions.value_in_unit_system(unit.md_unit_system))
 
         #subset the topology appropriately:
         if atom_selection is not None:
             atom_selection_indices = self._factory.hybrid_topology.select(atom_selection)
-            subset_topology = self._factory.hybrid_topology.subset(atom_selection_indices)
             self._atom_selection_indices = atom_selection_indices
-
-            #create trajectory objects
-            self._lambda_zero_traj = md.Trajectory(lambda_zero_positions[atom_selection_indices, :], subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
-            self._lambda_one_traj = md.Trajectory(lambda_one_positions[atom_selection_indices, :], subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
         else:
-            subset_topology = self._factory.hybrid_topology
             self._atom_selection_indices = None
-
-            #create trajectory objects here without slicing. This avoids sending over a large array of integers when we just want to save the whole set of coordinates
-            self._lambda_zero_traj = md.Trajectory(lambda_zero_positions, subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
-            self._lambda_one_traj = md.Trajectory(lambda_one_positions, subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
 
     def minimize(self, max_steps=50):
         """
@@ -460,13 +432,9 @@ class NonequilibriumSwitchingFEP(object):
         max_steps : int, default 50
             max number of steps for openmm minimizer.
         """
-        #Asynchronously invoke the tasks
-        minimized_lambda_zero_result = feptasks.minimize.delay(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, max_iterations=max_steps)
-        minimized_lambda_one_result = feptasks.minimize.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, max_iterations=max_steps)
+        minimized_results = {n: feptasks.minimize.delay(self._hybrid_thermodynamic_states[n], self._sampler_states[n], self._equilibrium_mc_move, max_iterations=max_steps) for n in (0,1)}
 
-        #now synchronously retrieve the results and save the sampler states.
-        self._lambda_zero_sampler_state = minimized_lambda_zero_result.get()
-        self._lambda_one_sampler_state = minimized_lambda_one_result.get()
+        self._sampler_states ={n: result.get() for (n, result) in minimized_results.items()}
 
     def run(self, n_iterations=5, concurrency=1):
         """
@@ -660,7 +628,7 @@ class NonequilibriumSwitchingFEP(object):
             else:
                 written_traj = md.load(filename)
                 concatenated_traj = written_traj.join(traj)
-                concatenated_traj.save_hdf5(filename)
+                concatenated_traj.save_hdf5(filename)2
 
         #delete the trajectories.
         self._lambda_one_traj = None
