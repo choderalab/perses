@@ -2,7 +2,7 @@ import celery
 from celery.contrib import rdb
 import simtk.openmm as openmm
 import openmmtools.cache as cache
-from typing import List
+from typing import List, Tuple
 
 #Add the variables specific to the Alchemical langevin integrator
 cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
@@ -77,7 +77,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     current_total_work : float
     """
 
-    def __init__(self, integrator, n_steps, **kwargs):
+    def __init__(self, integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator, n_steps: int, **kwargs):
         super(NonequilibriumSwitchingMove, self).__init__(n_steps, **kwargs)
         self._integrator = integrator
         self._current_total_work = 0.0
@@ -170,7 +170,9 @@ def update_broker_location(broker_location, backend_location=None):
     app.conf.update(broker=broker_location, backend=broker_location)
 
 @app.task(serializer="pickle")
-def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_iterations, atom_indices_to_save=None):
+def run_protocol(sampler_state: states.SamplerState, thermodynamic_state: states.ThermodynamicState,
+                 ne_mc_move: NonequilibriumSwitchingMove, topology: md.Topology, n_iterations: int,
+                 atom_indices_to_save: List[int] = None) -> Tuple[md.Trajectory, np.array]:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
     that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
@@ -178,10 +180,10 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
 
     Parameters
     ----------
-    thermodynamic_state : openmmtools.states.ThermodynamicState
-        The thermodynamic state at which to run the protocol
     sampler_state : openmmtools.states.SamplerState
         The initial sampler state at which to run the protocol, including positions.
+    thermodynamic_state : openmmtools.states.ThermodynamicState
+        The thermodynamic state at which to run the protocol
     ne_mc_move : perses.distributed.relative_setup.NonequilibriumSwitchingMove
         The move that will be used to perform the switching.
     topology : mdtraj.Topology
@@ -195,7 +197,8 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
     -------
     trajectory : mdtraj.Trajectory
         Trajectory containing n_iterations frames
-
+    cumulative_work : np.array of float
+        Work along the nonequilibrium switching trajectory
     """
     #get the atom indices we need to subset the topology and positions
     if atom_indices_to_save is None:
@@ -240,7 +243,9 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
     return trajectory, cumulative_work
 
 @app.task(serializer="pickle")
-def run_equilibrium(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState, mc_move: mcmc.MCMCMove, topology: md.Topology, n_iterations: int, atom_indices_to_save: List[int]=None):
+def run_equilibrium(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState,
+                    mc_move: mcmc.MCMCMove, topology: md.Topology, n_iterations: int,
+                    atom_indices_to_save: List[int] = None) -> Tuple[states.SamplerState, md.Trajectory, float]:
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
     as well as a trajectory of the positions after each application of an MCMove. This means that if the MCMove
@@ -307,7 +312,8 @@ def run_equilibrium(thermodynamic_state: states.ThermodynamicState, sampler_stat
     return sampler_state, trajectory, reduced_potential_final_frame
 
 @app.task(serializer="pickle")
-def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState, mc_move: mcmc.MCMCMove, max_iterations=20) -> states.SamplerState:
+def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState, mc_move: mcmc.MCMCMove,
+             max_iterations: int=20) -> states.SamplerState:
     """
     Minimize the given system and state, up to a maximum number of steps.
 
