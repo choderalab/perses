@@ -3,6 +3,7 @@ from celery.contrib import rdb
 import simtk.openmm as openmm
 import openmmtools.cache as cache
 from typing import List, Tuple, Union, NamedTuple
+import os
 
 #Add the variables specific to the Alchemical langevin integrator
 cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
@@ -23,6 +24,7 @@ import openmmtools.states as states
 import redis
 import numpy as np
 import mdtraj as md
+from mdtraj.formats import HDF5TrajectoryFile
 import mdtraj.utils as mdtrajutils
 import pickle
 import simtk.unit as unit
@@ -396,4 +398,30 @@ def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult,
     """
     nonequilibrium_result.trajectory.save_hdf5(trajectory_filename)
     np.save(cum_work_filename, nonequilibrium_result.cumulative_work)
+
     return nonequilibrium_result.cumulative_work[-1]
+
+@app.task(serializer="pickle")
+def write_equilibrium_trajectory(equilibrium_result: EquilibriumResult, trajectory_filename: str) -> float:
+    """
+    Write the results of an equilibrium simulation to disk. This task will append the results to the given filename.
+    Parameters
+    ----------
+    equilibrium_result : EquilibriumResult namedtuple
+        the result of an equilibrium calculation
+    trajectory_filename : str
+        the name of the trajectory file to which we should append
+
+    Returns
+    -------
+    reduced_potential_final_frame : float
+        the reduced potential of the final frame
+    """
+    if not os.path.exists(trajectory_filename):
+        equilibrium_result.trajectory.save_hdf5(trajectory_filename)
+    else:
+        written_traj = md.load_hdf5(trajectory_filename)
+        concatenated_traj = written_traj.join(equilibrium_result.trajectory)
+        concatenated_traj.save_hdf5(trajectory_filename)
+
+    return equilibrium_result.reduced_potential
