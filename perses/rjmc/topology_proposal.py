@@ -118,6 +118,14 @@ class TopologyProposal(object):
         {new_atom_idx : old_atom_idx} map for the two systems
     old_to_new_atom_map : dict
         {old_atom_idx : new_atom_idx} map for the two systems
+    new_alchemical_atoms : list
+        List of all atoms in new system that are being transformed
+    new_environment_atoms : list
+        List of all atoms in new system that are not transformed, just mapped
+    old_alchemical_atoms : list
+        List of all atoms in old system that are being transformed
+    old_environment_atoms : list
+        List of all atoms in old system that are not transformed, just mapped
     unique_new_atoms : list of int
         List of indices of the unique new atoms
     unique_old_atoms : list of int
@@ -134,8 +142,13 @@ class TopologyProposal(object):
         additional information of interest about the state
     """
 
-    def __init__(self, new_topology=None, new_system=None, old_topology=None, old_system=None,
-                 logp_proposal=None, new_to_old_atom_map=None,old_chemical_state_key=None, new_chemical_state_key=None, metadata=None):
+    def __init__(self,
+                 new_topology=None, new_system=None,
+                 old_topology=None, old_system=None,
+                 logp_proposal=None,
+                 new_to_old_atom_map=None, old_alchemical_atoms=None,
+                 old_chemical_state_key=None, new_chemical_state_key=None,
+                 metadata=None):
 
         if new_chemical_state_key is None or old_chemical_state_key is None:
             raise ValueError("chemical_state_keys must be set.")
@@ -150,6 +163,10 @@ class TopologyProposal(object):
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
         self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
+        self._old_alchemical_atoms = old_alchemical_atoms
+        self._new_alchemical_atoms = { self._old_to_new_atom_map[old_atom] for old_atom in old_alchemical_atoms }.union(self.unique_new_atoms)
+        self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
+        self._new_environment_atoms = set(range(new_system.getNumParticles())) - self._new_alchemical_atoms
         self._metadata = metadata
 
     @property
@@ -179,6 +196,18 @@ class TopologyProposal(object):
     @property
     def unique_old_atoms(self):
         return self._unique_old_atoms
+    @property
+    def new_alchemical_atoms(self):
+        return list(self._new_alchemical_atoms)
+    @property
+    def old_alchemical_atoms(self):
+        return list(self._old_alchemical_atoms)
+    @property
+    def new_environment_atoms(self):
+        return list(self._new_environment_atoms)
+    @property
+    def old_environment_atoms(self):
+        return list(self._old_environment_atoms)
     @property
     def n_atoms_new(self):
         return self._new_system.getNumParticles()
@@ -1195,6 +1224,8 @@ class SystemGenerator(object):
             pdbfile = PDBFile.writeFile(new_topology, positions, outfile)
             outfile.close()
             msg = str(e)
+            import traceback
+            msg += traceback.format_exc(e)
             msg += "\n"
             msg += "PDB file written as 'BuildSystem-failure.pdb'"
             raise Exception(msg)
@@ -1289,7 +1320,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         Returns
         -------
         proposal : TopologyProposal object
-           topology proposal object           
+           topology proposal object
         """
         # Determine SMILES string for current small molecule
         current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
