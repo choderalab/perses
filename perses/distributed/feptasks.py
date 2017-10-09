@@ -2,6 +2,7 @@ import celery
 from celery.contrib import rdb
 import simtk.openmm as openmm
 import openmmtools.cache as cache
+from typing import List
 
 #Add the variables specific to the Alchemical langevin integrator
 cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
@@ -18,6 +19,7 @@ cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
 import openmmtools.mcmc as mcmc
 import openmmtools.utils as utils
 import openmmtools.integrators as integrators
+import openmmtools.states as states
 import redis
 import numpy as np
 import mdtraj as md
@@ -238,7 +240,7 @@ def run_protocol(thermodynamic_state, sampler_state, ne_mc_move, topology, n_ite
     return trajectory, cumulative_work
 
 @app.task(serializer="pickle")
-def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_iterations, atom_indices_to_save=None):
+def run_equilibrium(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState, mc_move: mcmc.MCMCMove, topology: md.Topology, n_iterations: int, atom_indices_to_save: List[int]=None):
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
     as well as a trajectory of the positions after each application of an MCMove. This means that if the MCMove
@@ -305,7 +307,7 @@ def run_equilibrium(thermodynamic_state, sampler_state, mc_move, topology, n_ite
     return sampler_state, trajectory, reduced_potential_final_frame
 
 @app.task(serializer="pickle")
-def minimize(thermodynamic_state, sampler_state, mc_move, max_iterations=20):
+def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState, mc_move: mcmc.MCMCMove, max_iterations=20) -> states.SamplerState:
     """
     Minimize the given system and state, up to a maximum number of steps.
 
@@ -332,7 +334,7 @@ def minimize(thermodynamic_state, sampler_state, mc_move, max_iterations=20):
     return mcmc_sampler.sampler_state
 
 @app.task(serializer="pickle")
-def compute_reduced_potential(thermodynamic_state, sampler_state):
+def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState) -> float:
     """
     Compute the reduced potential of the given SamplerState under the given ThermodynamicState.
 
@@ -352,3 +354,28 @@ def compute_reduced_potential(thermodynamic_state, sampler_state):
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 
+@app.task(serializer="pickle")
+def write_nonequilibrium_trajectory(trajectory: md.Trajectory, cumulative_work: np.array, trajectory_filename: str, cum_work_filename: str) -> float:
+    """
+    Write the results of a nonequilibrium switching trajectory to a file. The trajectory is written to an
+    mdtraj hdf5 file, whereas the cumulative work is written to a numpy file.
+
+    Parameters
+    ----------
+    trajectory : mdtraj.Trajectory object
+        The trajectory of the nonequilibrium switching simulation
+    cumulative_work : np.array of float
+        The work values generated during the switching
+    trajectory_filename : str
+        The full filepath for where to store the trajectory
+    cum_work_filename : str
+        The full filepath for where to store the work trajectory
+
+    Returns
+    -------
+    final_work : float
+        The final value of the work trajectory
+    """
+    trajectory.save_hdf5(trajectory_filename)
+    np.save(cum_work_filename, cumulative_work)
+    return cumulative_work[-1]
