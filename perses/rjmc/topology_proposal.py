@@ -163,7 +163,7 @@ class TopologyProposal(object):
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
         self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
-        self._old_alchemical_atoms = old_alchemical_atoms
+        self._old_alchemical_atoms = old_alchemical_atoms or set()
         self._new_alchemical_atoms = { self._old_to_new_atom_map[old_atom] for old_atom in old_alchemical_atoms }.union(self.unique_new_atoms)
         self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
         self._new_environment_atoms = set(range(new_system.getNumParticles())) - self._new_alchemical_atoms
