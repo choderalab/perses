@@ -106,6 +106,7 @@ def test_two_molecule_proposal_engine():
     """
     Test TwoMoleculeSetProposalEngine
     """
+    # Create a proposal engine for butane -> pentane
     old_mol = generate_initial_molecule('CCCC')
     new_mol = generate_initial_molecule('CCCCC')
     from perses.rjmc import topology_proposal
@@ -113,6 +114,16 @@ def test_two_molecule_proposal_engine():
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine
     proposal_engine = TwoMoleculeSetProposalEngine(old_mol, new_mol, system_generator)
+    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(old_mol, "MOL")
+    # Propose a transformation
+    proposal = proposal_engine.propose(initial_system, initial_topology)
+    # Check proposal
+    assert (proposal.new_system.getNumParticles() == 17), "new_system (pentane) should have 17 atoms (actual: %d)" % proposal.new_system.getNumParticles()
+    assert (proposal.old_system.getNumParticles() == 14), "old_system (butane) should have 14 atoms (actual: %d)" % proposal.old_system.getNumParticles()
+    assert len(proposal.new_alchemical_atoms) == 17, "new_alchemical_atoms should be 17 (actual: %d)" % proposal.new_alchemical_atoms
+    assert len(proposal.old_alchemical_atoms) == 14, "old_alchemical_atoms should be 14 (actual: %d)" % proposal.old_alchemical_atoms
+    assert len(proposal.new_environment_atoms) == 0, "new_environment_atoms should be 0 (actual: %d)" % proposal.new_environment_atoms
+    assert len(proposal.old_environment_atoms) == 0, "old_environment_atoms should be 0 (actual: %d)" % proposal.old_environment_atoms
 
 def load_pdbid_to_openmm(pdbid):
     """

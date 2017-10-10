@@ -96,6 +96,9 @@ class TopologyProposal(object):
         contribution from the chemical proposal to the log probability of acceptance (Eq. 36 for hybrid; Eq. 53 for two-stage)
     new_to_old_atom_map : dict
         {new_atom_idx : old_atom_idx} map for the two systems
+    old_alchemical_atoms : list, optional, default=None
+        List of all atoms in old system that are being transformed.
+        If None, all atoms are assumed to be part of the alchemical region.
     chemical_state_key : str
         The current chemical state (unique)
     metadata : dict
@@ -164,8 +167,8 @@ class TopologyProposal(object):
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
         self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
-        self._old_alchemical_atoms = old_alchemical_atoms or set()
-        self._new_alchemical_atoms = { self._old_to_new_atom_map[old_atom] for old_atom in self._old_alchemical_atoms }.union(self._unique_new_atoms)
+        self._old_alchemical_atoms = old_alchemical_atoms or {atom for atom in range(old_system.getNumParticles())}
+        self._new_alchemical_atoms = set(self._old_to_new_atom_map.values()).union(self._unique_new_atoms)
         self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
         self._new_environment_atoms = set(range(new_system.getNumParticles())) - self._new_alchemical_atoms
         self._metadata = metadata
