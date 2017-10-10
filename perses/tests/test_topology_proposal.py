@@ -102,6 +102,18 @@ def test_small_molecule_proposals():
         assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
 
+def test_two_molecule_proposal_engine():
+    """
+    Test TwoMoleculeSetProposalEngine
+    """
+    old_mol = generate_initial_molecule('CCCC')
+    new_mol = generate_initial_molecule('CCCCC')
+    from perses.rjmc import topology_proposal
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+    from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine
+    proposal_engine = TwoMoleculeSetProposalEngine(old_mol, new_mol, system_generator)
+
 def load_pdbid_to_openmm(pdbid):
     """
     create openmm topology without pdb file

@@ -32,6 +32,7 @@ from openmmtools.constants import kB
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
+OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
 ################################################################################
 # UTILITIES
