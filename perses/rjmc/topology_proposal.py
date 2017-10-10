@@ -17,6 +17,7 @@ from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.storage import NetCDFStorageView
+from perses.tests.utils import OESMILES_OPTIONS
 try:
     from StringIO import StringIO
 except ImportError:
@@ -164,7 +165,7 @@ class TopologyProposal(object):
         self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
         self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
         self._old_alchemical_atoms = old_alchemical_atoms or set()
-        self._new_alchemical_atoms = { self._old_to_new_atom_map[old_atom] for old_atom in old_alchemical_atoms }.union(self.unique_new_atoms)
+        self._new_alchemical_atoms = { self._old_to_new_atom_map[old_atom] for old_atom in self._old_alchemical_atoms }.union(self._unique_new_atoms)
         self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
         self._new_environment_atoms = set(range(new_system.getNumParticles())) - self._new_alchemical_atoms
         self._metadata = metadata
@@ -1388,7 +1389,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
         oechem.OEAddExplicitHydrogens(mol)
-        iso_can_smiles = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
+        iso_can_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
         return iso_can_smiles
 
     def _topology_to_smiles(self, topology):
@@ -1414,7 +1415,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        smiles_string = oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
+        smiles_string = oechem.OECreateSmiString(oemol, OESMILES_OPTIONS)
         final_smiles_string = smiles_string
         return final_smiles_string, oemol
 
@@ -1724,8 +1725,8 @@ class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     """
 
     def __init__(self, old_mol, new_mol, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
-        self._old_mol_smiles = oechem.OECreateSmiString(old_mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-        self._new_mol_smiles = oechem.OECreateSmiString(new_mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        self._old_mol_smiles = oechem.OECreateSmiString(old_mol, OESMILES_OPTIONS)
+        self._new_mol_smiles = oechem.OECreateSmiString(new_mol, OESMILES_OPTIONS)
         self._old_mol = old_mol
         self._new_mol = new_mol
 
