@@ -35,7 +35,7 @@ from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
 from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
-from perses.tests.constants import OESMILES_OPTIONS
+from perses.rjmc.topology_proposal import OESMILES_OPTIONS
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
