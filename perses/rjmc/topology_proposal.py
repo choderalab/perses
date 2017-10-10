@@ -167,7 +167,7 @@ class TopologyProposal(object):
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
         self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
-        self._old_alchemical_atoms = old_alchemical_atoms or {atom for atom in range(old_system.getNumParticles())}
+        self._old_alchemical_atoms = set(old_alchemical_atoms) or {atom for atom in range(old_system.getNumParticles())}
         self._new_alchemical_atoms = set(self._old_to_new_atom_map.values()).union(self._unique_new_atoms)
         self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
         self._new_environment_atoms = set(range(new_system.getNumParticles())) - self._new_alchemical_atoms
@@ -1335,6 +1335,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Find the initial atom index of the small molecule in the current topology
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
 
+        # Determine atom indices of the small molecule in the current topology
+        old_alchemical_atoms = range(old_mol_start_index, len_old_mol)
+
         # Select the next molecule SMILES given proposal probabilities
         proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
 
@@ -1366,6 +1369,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
             old_topology=current_topology, new_topology=new_topology,
             old_system=current_system, new_system=new_system,
+            old_alchemical_atoms=old_alchemical_atoms,
             old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
