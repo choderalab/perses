@@ -35,6 +35,7 @@ from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
 from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
+from perses.rjmc.topology_proposal import OESMILES_OPTIONS
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
@@ -1985,7 +1986,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smiles)
             oechem.OEAddExplicitHydrogens(mol)
-            can_smi = oechem.OECreateSmiString(mol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
+            can_smi = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
             list_of_canonicalized_smiles.append(can_smi)
 
         ofs.close() # DEBUG
