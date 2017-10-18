@@ -136,14 +136,14 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
     solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
-    #barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
+    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
-    #solvated_system.addForce(barostat)
+    solvated_system.addForce(barostat)
 
 
     gaff_filename = get_data_filename('data/gaff.xml')
 
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
     geometry_engine = FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
