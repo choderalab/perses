@@ -14,8 +14,11 @@ temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
 
+import pymbar.timeseries as timeseries
+
 import copy
 import pymbar
+cache.global_context_cache.platform = openmm.Platform.getPlatformByName("CUDA")
 
 ace = {
     'H1'  : [app.Element.getBySymbol('H'), (2.022 ,  0.992 ,  0.038)],#  1.00  0.00           H
@@ -173,7 +176,7 @@ def test_hybrid_endpoint_overlap():
     alchemical_thermodynamic_states = [lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state]
 
     #create an MCMCMove, BAOAB with default parameters
-    mc_move = mcmc.LangevinSplittingDynamicsMove()
+    mc_move = mcmc.LangevinDynamicsMove()
 
     initial_sampler_state = SamplerState(hybrid_factory.hybrid_positions, box_vectors=hybrid_factory.hybrid_system.getDefaultPeriodicBoxVectors())
 
@@ -228,7 +231,8 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     """
     #run an initial minimization:
     mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
-    new_sampler_state = mcmc_sampler.minimize(max_iterations=20)
+    mcmc_sampler.minimize(max_iterations=20)
+    new_sampler_state = mcmc_sampler.sampler_state
 
     #initialize work array
     w = np.zeros([n_iterations])
@@ -259,7 +263,13 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
 
         w[iteration] = nonalchemical_reduced_potential - hybrid_reduced_potential
 
-    return pymbar.EXP(w)
+    [t0, g, Neff_max] = timeseries.detectEquilibration(w)
+    w_burned_in = w[t0:]
+
+    [df, ddf] = pymbar.EXP(w_burned_in)
+    ddf_corrected = ddf * np.sqrt(g)
+    
+    return [df, ddf_corrected]
 
 def get_available_parameters(system, prefix='lambda'):
     parameters = list()
