@@ -18,7 +18,7 @@ import pymbar.timeseries as timeseries
 
 import copy
 import pymbar
-cache.global_context_cache.platform = openmm.Platform.getPlatformByName("CUDA")
+cache.global_context_cache.platform = openmm.Platform.getPlatformByName("OpenCL")
 
 ace = {
     'H1'  : [app.Element.getBySymbol('H'), (2.022 ,  0.992 ,  0.038)],#  1.00  0.00           H
@@ -135,13 +135,15 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
-    #solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
+    solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
+    #barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
+
+    #solvated_system.addForce(barostat)
+
 
     gaff_filename = get_data_filename('data/gaff.xml')
-    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
-    
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat)
-    solvated_system = system_generator.build_system(solvated_topology)
+
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
     geometry_engine = FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
