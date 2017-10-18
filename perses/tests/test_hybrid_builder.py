@@ -116,8 +116,6 @@ leu_bonds = [
 forcefield = app.ForceField('amber99sbildn.xml')
 
 def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
-
-    from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
@@ -558,4 +556,5 @@ def test_position_output():
 
 if __name__ == '__main__':
     #test_compare_energies()
-    test_position_output()
+    #test_position_output()
+    test_hybrid_endpoint_overlap()
