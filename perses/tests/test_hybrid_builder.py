@@ -285,6 +285,8 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
 
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
+
+    assert ddf_corrected < 3.0
     
     return [df, ddf_corrected]
 
