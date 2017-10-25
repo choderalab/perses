@@ -1,6 +1,7 @@
 from simtk.openmm import app
 from simtk import unit, openmm
 import numpy as np
+import os
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, TopologyProposal
@@ -9,6 +10,7 @@ from openmmtools import alchemy
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
 import openmmtools.mcmc as mcmc
 import openmmtools.cache as cache
+from unittest import skipIf
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
@@ -18,7 +20,14 @@ import pymbar.timeseries as timeseries
 
 import copy
 import pymbar
-cache.global_context_cache.platform = openmm.Platform.getPlatformByName("OpenCL")
+
+istravis = os.environ.get('TRAVIS', None) == 'true'
+
+#if there is no OpenCL, just pass.
+try:
+    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("OpenCL")
+except Exception:
+    pass
 
 ace = {
     'H1'  : [app.Element.getBySymbol('H'), (2.022 ,  0.992 ,  0.038)],#  1.00  0.00           H
@@ -156,13 +165,11 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
 
     return topology_proposal, solvated_positions, new_positions
 
-def test_hybrid_endpoint_overlap():
+def test_hybrid_endpoint_overlap(mol_name="pentane", ref_mol_name="butane", platform=None):
     """
     Test that the variance of the perturbation from lambda={0,1} to the corresponding nonalchemical endpoint is not
     too large.
     """
-    mol_name = "pentane" #use a simple molecule
-    ref_mol_name = "butane" #perturb to butane
 
     #generate the input for creating the hybrid system:
     topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name=mol_name, ref_mol_name=ref_mol_name)
@@ -186,7 +193,14 @@ def test_hybrid_endpoint_overlap():
     for lambda_state in (0, 1):
         print(run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
                                         nonalchemical_thermodynamic_states[lambda_state], initial_sampler_state,
-                                        mc_move,100, hybrid_factory, lambda_index=lambda_state))
+                                        mc_move, 100, hybrid_factory, lambda_index=lambda_state))
+
+def test_simple_overlap():
+    test_hybrid_endpoint_overlap()
+
+@skipIf(istravis, "Skip expensive test on travis")
+def test_difficult_overlap():
+    test_hybrid_endpoint_overlap(mol_name='imatinib', ref_mol_name='nilotinib')
 
 def generate_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
