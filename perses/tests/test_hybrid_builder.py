@@ -194,6 +194,7 @@ def run_hybrid_endpoint_overlap(mol_name="pentane", ref_mol_name="butane"):
                                         nonalchemical_thermodynamic_states[lambda_state], initial_sampler_state,
                                         mc_move, 100, hybrid_factory, lambda_index=lambda_state))
 
+@skipIf(istravis, "Skip expensive test on travis")
 def test_simple_overlap():
     run_hybrid_endpoint_overlap()
 
