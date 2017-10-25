@@ -23,11 +23,10 @@ import pymbar
 
 istravis = os.environ.get('TRAVIS', None) == 'true'
 
-#if there is no OpenCL, just pass.
 try:
     cache.global_context_cache.platform = openmm.Platform.getPlatformByName("OpenCL")
 except Exception:
-    pass
+    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
 
 ace = {
     'H1'  : [app.Element.getBySymbol('H'), (2.022 ,  0.992 ,  0.038)],#  1.00  0.00           H
