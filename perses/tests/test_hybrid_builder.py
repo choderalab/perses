@@ -165,7 +165,7 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
 
     return topology_proposal, solvated_positions, new_positions
 
-def test_hybrid_endpoint_overlap(mol_name="pentane", ref_mol_name="butane", platform=None):
+def run_hybrid_endpoint_overlap(mol_name="pentane", ref_mol_name="butane"):
     """
     Test that the variance of the perturbation from lambda={0,1} to the corresponding nonalchemical endpoint is not
     too large.
@@ -196,11 +196,11 @@ def test_hybrid_endpoint_overlap(mol_name="pentane", ref_mol_name="butane", plat
                                         mc_move, 100, hybrid_factory, lambda_index=lambda_state))
 
 def test_simple_overlap():
-    test_hybrid_endpoint_overlap()
+    run_hybrid_endpoint_overlap()
 
 @skipIf(istravis, "Skip expensive test on travis")
 def test_difficult_overlap():
-    test_hybrid_endpoint_overlap(mol_name='imatinib', ref_mol_name='nilotinib')
+    run_hybrid_endpoint_overlap(mol_name='imatinib', ref_mol_name='nilotinib')
 
 def generate_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
@@ -576,4 +576,4 @@ def test_position_output():
 if __name__ == '__main__':
     #test_compare_energies()
     #test_position_output()
-    test_hybrid_endpoint_overlap()
+    run_hybrid_endpoint_overlap()
