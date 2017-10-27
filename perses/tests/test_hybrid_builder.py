@@ -235,7 +235,6 @@ def generate_vacuum_proposal(mol_name="pentane", ref_mol_name="butane"):
     topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal(mol_name=mol_name, ref_mol_name=ref_mol_name)
     return topology_proposal, current_positions, new_positions
 
-@skipIf(istravis, "Skip expensive test on travis")
 def test_simple_overlap():
     topology_proposal, current_positions, new_positions = generate_vacuum_proposal()
     run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
