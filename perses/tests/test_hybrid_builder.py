@@ -123,6 +123,37 @@ leu_bonds = [
 
 forcefield = app.ForceField('amber99sbildn.xml')
 
+def generate_vacuum_topology_proposal(mol_name="naphthalene", ref_mol_name="benzene"):
+    from openmoltools import forcefield_generators
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    initial_smiles = oechem.OEMolToSmiles(m)
+    final_smiles = oechem.OEMolToSmiles(refmol)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
+
+    gaff_filename = get_data_filename('data/gaff.xml')
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
+    geometry_engine = FFAllAngleGeometryEngine()
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
+
+    #generate topology proposal
+    topology_proposal = proposal_engine.propose(solvated_system, top_old)
+
+    #generate new positions with geometry engine
+    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+
+    return topology_proposal, pos_old, new_positions
+
 def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
@@ -164,17 +195,13 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
 
     return topology_proposal, solvated_positions, new_positions
 
-def run_hybrid_endpoint_overlap(mol_name="pentane", ref_mol_name="butane"):
+def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions):
     """
     Test that the variance of the perturbation from lambda={0,1} to the corresponding nonalchemical endpoint is not
     too large.
     """
-
-    #generate the input for creating the hybrid system:
-    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name=mol_name, ref_mol_name=ref_mol_name)
-
     #create the hybrid system:
-    hybrid_factory = HybridTopologyFactory(topology_proposal, solvated_positions, new_positions, use_dispersion_correction=True)
+    hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
 
     #get the relevant thermodynamic states:
     nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = generate_thermodynamic_states(
@@ -194,13 +221,30 @@ def run_hybrid_endpoint_overlap(mol_name="pentane", ref_mol_name="butane"):
                                         nonalchemical_thermodynamic_states[lambda_state], initial_sampler_state,
                                         mc_move, 100, hybrid_factory, lambda_index=lambda_state))
 
+def generate_solvated_proposal(mol_name="pentane", ref_mol_name="butane"):
+    """
+    Run the code to generate a solvated topology proposal and positions
+    """
+    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name=mol_name, ref_mol_name=ref_mol_name)
+    return topology_proposal, solvated_positions, new_positions
+    
+def generate_vacuum_proposal(mol_name="pentane", ref_mol_name="butane"):
+    """
+    Generate a proposal for vacuum only. This should be useful for travis
+    """
+    topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal(mol_name=mol_name, ref_mol_name=ref_mol_name)
+    return topology_proposal, current_positions, new_positions
+
 @skipIf(istravis, "Skip expensive test on travis")
 def test_simple_overlap():
-    run_hybrid_endpoint_overlap()
+    topology_proposal, current_positions, new_positions = generate_vacuum_proposal()
+    run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
 @skipIf(istravis, "Skip expensive test on travis")
 def test_difficult_overlap():
-    run_hybrid_endpoint_overlap(mol_name='imatinib', ref_mol_name='nilotinib')
+    topology_proposal, solvated_positions, new_positions = generate_solvated_proposal(mol_name='imatinib', ref_mol_name='nilotinib')
+    run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
+
 
 def generate_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
@@ -578,4 +622,4 @@ def test_position_output():
 if __name__ == '__main__':
     #test_compare_energies()
     #test_position_output()
-    run_hybrid_endpoint_overlap()
+    test_simple_overlap()
