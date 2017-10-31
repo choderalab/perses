@@ -273,14 +273,29 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
 def test_simple_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
     topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal()
-    run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
+    [df, ddf, Neff_max] = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
+    
+    if Neff_max < 10:
+        raise Exception("Number of effective samples is less than 10; cannot produce reliable estimates of free energy")
+
+    if ddf > 3.0:
+        msg = "Overlap test in vacuum failed for pentane->butane transformation"
+        msg += "standard deviation %f is greater than 3kT" % ddf
+        raise Exception(msg)
 
 @skipIf(istravis, "Skip expensive test on travis")
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
     topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name='imatinib', ref_mol_name='nilotinib')
-    run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
+    [df, ddf, Neff_max] = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
+    if Neff_max < 10:
+        raise Exception("Number of effective samples is less than 10; cannot produce reliable estimates of free energy")
+        
+    if ddf > 3.0:
+        msg = "Overlap test in vacuum failed for pentane->butane transformation"
+        msg += "standard deviation %f is greater than 3kT" % ddf
+        raise Exception(msg)
 
 def generate_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
@@ -325,7 +340,7 @@ def generate_thermodynamic_states(system: openmm.System, topology_proposal: Topo
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
-def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory, lambda_index=0):
+def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory, lambda_index=0, threshold=3.0):
     """
 
     Parameters
@@ -344,7 +359,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         The hybrid topology factory
     lambda_index : int, optional default 0
         The index, 0 or 1, at which to retrieve nonalchemical positions
-    
+
     Returns
     -------
     df : float
@@ -393,12 +408,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
 
-    if ddf_corrected > 3.0:
-        msg = "The endpoint overlap test failed"
-        msg += "ddF %f was greater than 3kT after correction" % ddf_corrected
-        raise Exception(msg)
-    
-    return [df, ddf_corrected]
+    return [df, ddf_corrected, Neff_max]
 
 def get_available_parameters(system, prefix='lambda'):
     parameters = list()
