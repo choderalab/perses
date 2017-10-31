@@ -248,6 +248,11 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
          Positions of the initial system
     new_positions : np.array, unit-bearing
          Positions of the new system
+
+    Returns
+    -------
+    hybrid_endpoint_results : list
+       list of [df, ddf, N_eff] for 1 and 0
     """
     #create the hybrid system:
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
@@ -265,37 +270,66 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
 
     initial_sampler_state = SamplerState(hybrid_factory.hybrid_positions, box_vectors=hybrid_factory.hybrid_system.getDefaultPeriodicBoxVectors())
 
+    hybrid_endpoint_results = []
     for lambda_state in (0, 1):
-        print(run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
+        result = run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
                                         nonalchemical_thermodynamic_states[lambda_state], initial_sampler_state,
-                                        mc_move, 100, hybrid_factory, lambda_index=lambda_state))
-    
+                                        mc_move, 100, hybrid_factory, lambda_index=lambda_state)
+        print(result)
+
+        hybrid_endpoint_results.append(result)
+
+    return hybrid_endpoint_results
+
+def check_result(results, threshold=3.0, neffmin=10):
+    """
+    Ensure results are within threshold standard deviations and Neff_max > neffmin
+
+    Parameters
+    ----------
+    results : list
+        list of [df, ddf, Neff_max]
+    threshold : float, default 3.0
+        the standard deviation threshold
+    neff_min : float, default 10
+        the minimum number of acceptable samples
+    """
+    df = results[0]
+    ddf = results[1]
+    N_eff = results[2]
+
+    if N_eff < neffmin:
+        raise Exception("Number of effective samples %f was below minimum of %f" % (N_eff, neffmin))
+
+    if ddf > threshold:
+        raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
+
 def test_simple_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
     topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal()
-    [df, ddf, Neff_max] = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
-    
-    if Neff_max < 10:
-        raise Exception("Number of effective samples is less than 10; cannot produce reliable estimates of free energy")
+    results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
-    if ddf > 3.0:
-        msg = "Overlap test in vacuum failed for pentane->butane transformation"
-        msg += "standard deviation %f is greater than 3kT" % ddf
-        raise Exception(msg)
+    for idx, lambda_result in enumerate(results):
+        try:
+            check_result(lambda_result)
+        except Exception as e:
+            message = "pentane->butane failed at lambda %d \n" % idx
+            message += str(e)
+            raise Exception(message)
 
 @skipIf(istravis, "Skip expensive test on travis")
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
     topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name='imatinib', ref_mol_name='nilotinib')
-    [df, ddf, Neff_max] = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
+    results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
-    if Neff_max < 10:
-        raise Exception("Number of effective samples is less than 10; cannot produce reliable estimates of free energy")
-        
-    if ddf > 3.0:
-        msg = "Overlap test in vacuum failed for pentane->butane transformation"
-        msg += "standard deviation %f is greater than 3kT" % ddf
-        raise Exception(msg)
+    for idx, lambda_result in enumerate(results):
+        try:
+            check_result(lambda_result)
+        except Exception as e:
+            message = "solvated imatinib->nilotinib failed at lambda %d \n" % idx
+            message += str(e)
+            raise Exception(message)
 
 def generate_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
@@ -340,7 +374,7 @@ def generate_thermodynamic_states(system: openmm.System, topology_proposal: Topo
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
-def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory, lambda_index=0, threshold=3.0):
+def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory, lambda_index=0):
     """
 
     Parameters
