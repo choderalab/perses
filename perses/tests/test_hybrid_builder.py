@@ -124,6 +124,26 @@ leu_bonds = [
 forcefield = app.ForceField('amber99sbildn.xml')
 
 def generate_vacuum_topology_proposal(mol_name="naphthalene", ref_mol_name="benzene"):
+    """
+    Generate a test vacuum topology proposal, current positions, and new positions triplet
+    from two IUPAC molecule names.
+
+    Parameters
+    ----------
+    mol_name : str, optional
+        name of the first molecule
+    ref_mol_name : str, optional
+        name of the second molecule
+    
+    Returns
+    -------
+    topology_proposal : perses.rjmc.topology_proposal
+        The topology proposal representing the transformation
+    current_positions : np.array, unit-bearing
+        The positions of the initial system
+    new_positions : np.array, unit-bearing
+        The positions of the new system
+    """
     from openmoltools import forcefield_generators
 
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
@@ -155,6 +175,26 @@ def generate_vacuum_topology_proposal(mol_name="naphthalene", ref_mol_name="benz
     return topology_proposal, pos_old, new_positions
 
 def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+    """
+    Generate a test solvated topology proposal, current positions, and new positions triplet
+    from two IUPAC molecule names.
+
+    Parameters
+    ----------
+    mol_name : str, optional
+        name of the first molecule
+    ref_mol_name : str, optional
+        name of the second molecule
+    
+    Returns
+    -------
+    topology_proposal : perses.rjmc.topology_proposal
+        The topology proposal representing the transformation
+    current_positions : np.array, unit-bearing
+        The positions of the initial system
+    new_positions : np.array, unit-bearing
+        The positions of the new system
+    """
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
@@ -199,6 +239,15 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
     """
     Test that the variance of the perturbation from lambda={0,1} to the corresponding nonalchemical endpoint is not
     too large.
+
+    Parameters
+    ----------
+    topology_proposal : perses.rjmc.TopologyProposal
+         TopologyProposal object describing the transformation
+    current_positions : np.array, unit-bearing
+         Positions of the initial system
+    new_positions : np.array, unit-bearing
+         Positions of the new system
     """
     #create the hybrid system:
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
@@ -220,28 +269,16 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
         print(run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
                                         nonalchemical_thermodynamic_states[lambda_state], initial_sampler_state,
                                         mc_move, 100, hybrid_factory, lambda_index=lambda_state))
-
-def generate_solvated_proposal(mol_name="pentane", ref_mol_name="butane"):
-    """
-    Run the code to generate a solvated topology proposal and positions
-    """
-    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name=mol_name, ref_mol_name=ref_mol_name)
-    return topology_proposal, solvated_positions, new_positions
     
-def generate_vacuum_proposal(mol_name="pentane", ref_mol_name="butane"):
-    """
-    Generate a proposal for vacuum only. This should be useful for travis
-    """
-    topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal(mol_name=mol_name, ref_mol_name=ref_mol_name)
-    return topology_proposal, current_positions, new_positions
-
 def test_simple_overlap():
-    topology_proposal, current_positions, new_positions = generate_vacuum_proposal()
+    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
+    topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal()
     run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
 @skipIf(istravis, "Skip expensive test on travis")
 def test_difficult_overlap():
-    topology_proposal, solvated_positions, new_positions = generate_solvated_proposal(mol_name='imatinib', ref_mol_name='nilotinib')
+    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
+    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name='imatinib', ref_mol_name='nilotinib')
     run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
 
@@ -251,11 +288,21 @@ def generate_thermodynamic_states(system: openmm.System, topology_proposal: Topo
 
     Parameters
     ----------
-    system
+    system : openmm.System
+        System object corresponding to thermodynamic state
+    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+        TopologyProposal representing transformation
 
     Returns
     -------
-
+    nonalchemical_zero_thermodynamic_state : ThermodynamicState
+        Nonalchemical thermodynamic state for lambda zero endpoint
+    nonalchemical_one_thermodynamic_state : ThermodynamicState
+        Nonalchemical thermodynamic state for lambda one endpoint
+    lambda_zero_thermodynamic_state : ThermodynamicState
+        Alchemical (hybrid) thermodynamic state for lambda zero
+    lambda_one_thermodynamic_State : ThermodynamicState
+        Alchemical (hybrid) thermodynamic state for lambda one
     """
     #create the thermodynamic state
     lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(system)
@@ -283,11 +330,27 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
 
     Parameters
     ----------
-    lambda_thermodynamic_state
-    nonalchemical_thermodynamic_state
-    initial_hybrid_sampler_state
-    mc_move
-    n_iterations
+    lambda_thermodynamic_state : ThermodynamicState
+        The thermodynamic state corresponding to the hybrid system at a lambda endpoint
+    nonalchemical_thermodynamic_state : ThermodynamicState
+        The nonalchemical thermodynamic state for the relevant endpoint
+    initial_hybrid_sampler_state : SamplerState
+        Starting positions for the sampler. Must be compatible with lambda_thermodynamic_state
+    mc_move : MCMCMove
+        The MCMove that will be used for sampling at the lambda endpoint
+    n_iterations : int
+        The number of iterations
+    factory : HybridTopologyFactory
+        The hybrid topology factory
+    lambda_index : int, optional default 0
+        The index, 0 or 1, at which to retrieve nonalchemical positions
+    
+    Returns
+    -------
+    df : float
+        Free energy difference between alchemical and nonalchemical systems, estimated with EXP
+    ddf : float
+        Standard deviation of estimate, corrected for correlation, from EXP estimator.
     """
     #run an initial minimization:
     mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
@@ -324,12 +387,16 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         w[iteration] = nonalchemical_reduced_potential - hybrid_reduced_potential
 
     [t0, g, Neff_max] = timeseries.detectEquilibration(w)
+    print(Neff_max)
     w_burned_in = w[t0:]
 
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
 
-    assert ddf_corrected < 3.0
+    if ddf_corrected > 3.0:
+        msg = "The endpoint overlap test failed"
+        msg += "ddF %f was greater than 3kT after correction" % ddf_corrected
+        raise Exception(msg)
     
     return [df, ddf_corrected]
 
