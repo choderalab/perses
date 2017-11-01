@@ -256,7 +256,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     nonequilibrium_result = NonequilibriumResult(trajectory, cumulative_work)
 
     #if desired, write nonequilibrium trajectories:
-    if trajectory_filename:
+    if trajectory_filename is not None:
         #to get the filename for cumulative work, replace the extension of the trajectory file with .cw.npy
         filepath_parts = trajectory_filename.split(".")
         filepath_parts[-1] = "cw.npy"
@@ -337,7 +337,8 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
     equilibrium_result = EquilibriumResult(sampler_state, reduced_potential_final_frame)
 
     #If there is a trajectory filename passed, write out the results here:
-    write_equilibrium_trajectory(equilibrium_result, trajectory, trajectory_filename)
+    if trajectory_filename is not None:
+        write_equilibrium_trajectory(equilibrium_result, trajectory, trajectory_filename)
 
     return equilibrium_result
 
