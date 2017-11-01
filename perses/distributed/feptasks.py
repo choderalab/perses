@@ -33,8 +33,8 @@ broker_name_server = "redis://localhost"
 
 
 #Make containers for results from tasklets. This allows us to chain tasks together easily.
-EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('trajectory', md.Trajectory), ('reduced_potential', float)])
-NonequilibriumResult = NamedTuple('NonequilibriumResult', [('trajectory', md.Trajectory), ('cumulative_work', np.array)])
+EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('reduced_potential', float)])
+NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', np.array)])
 
 
 
@@ -181,7 +181,7 @@ def update_broker_location(broker_location, backend_location=None):
 @app.task(serializer="pickle")
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                  ne_mc_move: NonequilibriumSwitchingMove, topology: md.Topology, n_iterations: int,
-                 atom_indices_to_save: List[int] = None) -> NonequilibriumResult:
+                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
     that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
@@ -201,7 +201,8 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         The number of times to apply the specified MCMove
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
-
+    trajectory_filename : str, default None
+        Full filepath of output trajectory, if desired. If None, no trajectory file is written.
     Returns
     -------
     nonequilibrium_result : NonequilibriumResult
@@ -254,12 +255,21 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     #create a result object and return that
     nonequilibrium_result = NonequilibriumResult(trajectory, cumulative_work)
 
+    #if desired, write nonequilibrium trajectories:
+    if trajectory_filename:
+        #to get the filename for cumulative work, replace the extension of the trajectory file with .cw.npy
+        filepath_parts = trajectory_filename.split(".")
+        filepath_parts[-1] = "cw.npy"
+        cum_work_filepath = ".".join(filepath_parts)
+
+        write_nonequilibrium_trajectory(nonequilibrium_result, trajectory, trajectory_filename, cum_work_filepath)
+
     return nonequilibrium_result
 
 @app.task(serializer="pickle")
 def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                     mc_move: mcmc.MCMCMove, topology: md.Topology, n_iterations: int,
-                    atom_indices_to_save: List[int] = None) -> EquilibriumResult:
+                    atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> EquilibriumResult:
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
     as well as a trajectory of the positions after each application of an MCMove. This means that if the MCMove
@@ -281,7 +291,8 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
         n_iterations*n_steps (which is set in the MCMove).
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
-
+    trajectory_filename : str, optional, default None
+        Full filepath of trajectory files. If none, trajectory files are not written.
     Returns
     -------
     equilibrium_result : EquilibriumResult
@@ -323,7 +334,10 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
     reduced_potential_final_frame = thermodynamic_state.reduced_potential(sampler_state)
 
     #construct equilibrium result object
-    equilibrium_result = EquilibriumResult(sampler_state, trajectory, reduced_potential_final_frame)
+    equilibrium_result = EquilibriumResult(sampler_state, reduced_potential_final_frame)
+
+    #If there is a trajectory filename passed, write out the results here:
+    write_equilibrium_trajectory(equilibrium_result, trajectory, trajectory_filename)
 
     return equilibrium_result
 
@@ -377,7 +391,7 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     return thermodynamic_state.reduced_potential(context)
 
 @app.task(serializer="pickle")
-def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult, trajectory_filename: str, cum_work_filename: str) -> float:
+def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult, nonequilibrium_trajectory: md.Trajectory, trajectory_filename: str, cum_work_filename: str) -> float:
     """
     Write the results of a nonequilibrium switching trajectory to a file. The trajectory is written to an
     mdtraj hdf5 file, whereas the cumulative work is written to a numpy file.
@@ -386,6 +400,8 @@ def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult,
     ----------
     nonequilibrium_result : NonequilibriumResult namedtuple
         The result of a nonequilibrium switching calculation
+    nonequilibrium_trajectory : md.Trajectory
+        The trajectory resulting from a nonequilibrium simulation
     trajectory_filename : str
         The full filepath for where to store the trajectory
     cum_work_filename : str
@@ -396,19 +412,21 @@ def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult,
     final_work : float
         The final value of the work trajectory
     """
-    nonequilibrium_result.trajectory.save_hdf5(trajectory_filename)
+    nonequilibrium_trajectory.save_hdf5(trajectory_filename)
     np.save(cum_work_filename, nonequilibrium_result.cumulative_work)
 
     return nonequilibrium_result.cumulative_work[-1]
 
 @app.task(serializer="pickle")
-def write_equilibrium_trajectory(equilibrium_result: EquilibriumResult, trajectory_filename: str) -> float:
+def write_equilibrium_trajectory(equilibrium_result: EquilibriumResult, trajectory: md.Trajectory, trajectory_filename: str) -> float:
     """
     Write the results of an equilibrium simulation to disk. This task will append the results to the given filename.
     Parameters
     ----------
     equilibrium_result : EquilibriumResult namedtuple
         the result of an equilibrium calculation
+    trajectory : md.Trajectory
+        the trajectory resulting from an equilibrium simulation
     trajectory_filename : str
         the name of the trajectory file to which we should append
 
@@ -418,10 +436,27 @@ def write_equilibrium_trajectory(equilibrium_result: EquilibriumResult, trajecto
         the reduced potential of the final frame
     """
     if not os.path.exists(trajectory_filename):
-        equilibrium_result.trajectory.save_hdf5(trajectory_filename)
+        trajectory.save_hdf5(trajectory_filename)
     else:
         written_traj = md.load_hdf5(trajectory_filename)
-        concatenated_traj = written_traj.join(equilibrium_result.trajectory)
+        concatenated_traj = written_traj.join(trajectory)
         concatenated_traj.save_hdf5(trajectory_filename)
 
     return equilibrium_result.reduced_potential
+
+@app.task(serializer="pickle")
+def equilibrium_pass_through(equilibrium_result: EquilibriumResult):
+    """
+    Utility function to just pass along the result of the previous calculation so it is not lost.
+
+    Parameters
+    ----------
+    equilibrium_result : EquilibriumResult namedtuple
+        The equilibrium result of the previous task
+
+    Returns
+    -------
+    equilibrium_result : EquilibriumResult namedtuple
+        Same as input
+    """
+    return equilibrium_result
