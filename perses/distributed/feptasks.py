@@ -253,7 +253,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     trajectory = md.Trajectory(trajectory_positions, subset_topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
 
     #create a result object and return that
-    nonequilibrium_result = NonequilibriumResult(trajectory, cumulative_work)
+    nonequilibrium_result = NonequilibriumResult(cumulative_work)
 
     #if desired, write nonequilibrium trajectories:
     if trajectory_filename is not None:
