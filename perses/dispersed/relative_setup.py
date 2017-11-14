@@ -438,7 +438,7 @@ class NonequilibriumSwitchingFEP(object):
                                 1: copy.deepcopy(self._lambda_one_sampler_state)}
 
         #initialize by minimizing
-        self._equilibrium_results = [feptasks.EquilibriumResult(result.sampler_state, 0.0) for result in self.minimize()]
+        self._equilibrium_results = [feptasks.EquilibriumResult(result, 0.0) for result in self.minimize()]
 
         #subset the topology appropriately:
         if atom_selection is not None:
@@ -498,11 +498,14 @@ class NonequilibriumSwitchingFEP(object):
             nonequilibrium_results_list.append(self._client.map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, trajectory_filenames))
 
             self._current_iteration +=1
+            print(self._current_iteration)
 
         #after all tasks have been requested, retrieve the results:
         for i in range(n_iterations):
             endpoint_perturbations = self._client.gather(endpoint_perturbation_results_list[i])
+            print(i)
             nonequilibrium_results = self._client.gather(nonequilibrium_results_list[i])
+            print(i)
 
             for lambda_state in [0,1]:
                 self._reduced_potential_differences[lambda_state].append(endpoint_perturbations[lambda_state])
