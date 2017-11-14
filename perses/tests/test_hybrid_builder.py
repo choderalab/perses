@@ -1,8 +1,32 @@
 from simtk.openmm import app
 from simtk import unit, openmm
 import numpy as np
-from perses.annihilation.relative import HybridTopologyFactory
+import os
+from perses.annihilation.new_relative import HybridTopologyFactory
+from perses.rjmc.geometry import FFAllAngleGeometryEngine
+from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, TopologyProposal
+import openeye.oechem as oechem
+from openmmtools import alchemy
+from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
+import openmmtools.mcmc as mcmc
+import openmmtools.cache as cache
+from unittest import skipIf
+kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+temperature = 300.0 * unit.kelvin
+kT = kB * temperature
+beta = 1.0/kT
+
+import pymbar.timeseries as timeseries
+
 import copy
+import pymbar
+
+istravis = os.environ.get('TRAVIS', None) == 'true'
+
+try:
+    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("OpenCL")
+except Exception:
+    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
 
 ace = {
     'H1'  : [app.Element.getBySymbol('H'), (2.022 ,  0.992 ,  0.038)],#  1.00  0.00           H
@@ -98,6 +122,327 @@ leu_bonds = [
 ]
 
 forcefield = app.ForceField('amber99sbildn.xml')
+
+def generate_vacuum_topology_proposal(mol_name="naphthalene", ref_mol_name="benzene"):
+    """
+    Generate a test vacuum topology proposal, current positions, and new positions triplet
+    from two IUPAC molecule names.
+
+    Parameters
+    ----------
+    mol_name : str, optional
+        name of the first molecule
+    ref_mol_name : str, optional
+        name of the second molecule
+    
+    Returns
+    -------
+    topology_proposal : perses.rjmc.topology_proposal
+        The topology proposal representing the transformation
+    current_positions : np.array, unit-bearing
+        The positions of the initial system
+    new_positions : np.array, unit-bearing
+        The positions of the new system
+    """
+    from openmoltools import forcefield_generators
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    initial_smiles = oechem.OEMolToSmiles(m)
+    final_smiles = oechem.OEMolToSmiles(refmol)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
+
+    gaff_filename = get_data_filename('data/gaff.xml')
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
+    geometry_engine = FFAllAngleGeometryEngine()
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
+
+    #generate topology proposal
+    topology_proposal = proposal_engine.propose(solvated_system, top_old)
+
+    #generate new positions with geometry engine
+    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+
+    return topology_proposal, pos_old, new_positions
+
+def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+    """
+    Generate a test solvated topology proposal, current positions, and new positions triplet
+    from two IUPAC molecule names.
+
+    Parameters
+    ----------
+    mol_name : str, optional
+        name of the first molecule
+    ref_mol_name : str, optional
+        name of the second molecule
+    
+    Returns
+    -------
+    topology_proposal : perses.rjmc.topology_proposal
+        The topology proposal representing the transformation
+    current_positions : np.array, unit-bearing
+        The positions of the initial system
+    new_positions : np.array, unit-bearing
+        The positions of the new system
+    """
+    import simtk.openmm.app as app
+    from openmoltools import forcefield_generators
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
+    refmol = createOEMolFromIUPAC(ref_mol_name)
+
+    initial_smiles = oechem.OEMolToSmiles(m)
+    final_smiles = oechem.OEMolToSmiles(refmol)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    modeller = app.Modeller(top_old, pos_old)
+    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    solvated_topology = modeller.getTopology()
+    solvated_positions = modeller.getPositions()
+    solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
+    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
+
+    solvated_system.addForce(barostat)
+
+
+    gaff_filename = get_data_filename('data/gaff.xml')
+
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
+    geometry_engine = FFAllAngleGeometryEngine()
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
+
+    #generate topology proposal
+    topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
+
+    #generate new positions with geometry engine
+    new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
+
+    return topology_proposal, solvated_positions, new_positions
+
+def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions):
+    """
+    Test that the variance of the perturbation from lambda={0,1} to the corresponding nonalchemical endpoint is not
+    too large.
+
+    Parameters
+    ----------
+    topology_proposal : perses.rjmc.TopologyProposal
+         TopologyProposal object describing the transformation
+    current_positions : np.array, unit-bearing
+         Positions of the initial system
+    new_positions : np.array, unit-bearing
+         Positions of the new system
+
+    Returns
+    -------
+    hybrid_endpoint_results : list
+       list of [df, ddf, N_eff] for 1 and 0
+    """
+    #create the hybrid system:
+    hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
+
+    #get the relevant thermodynamic states:
+    nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = generate_thermodynamic_states(
+        hybrid_factory.hybrid_system, topology_proposal)
+
+    nonalchemical_thermodynamic_states = [nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state]
+
+    alchemical_thermodynamic_states = [lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state]
+
+    #create an MCMCMove, BAOAB with default parameters
+    mc_move = mcmc.LangevinDynamicsMove()
+
+    initial_sampler_state = SamplerState(hybrid_factory.hybrid_positions, box_vectors=hybrid_factory.hybrid_system.getDefaultPeriodicBoxVectors())
+
+    hybrid_endpoint_results = []
+    for lambda_state in (0, 1):
+        result = run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
+                                        nonalchemical_thermodynamic_states[lambda_state], initial_sampler_state,
+                                        mc_move, 100, hybrid_factory, lambda_index=lambda_state)
+        print(result)
+
+        hybrid_endpoint_results.append(result)
+
+    return hybrid_endpoint_results
+
+def check_result(results, threshold=3.0, neffmin=10):
+    """
+    Ensure results are within threshold standard deviations and Neff_max > neffmin
+
+    Parameters
+    ----------
+    results : list
+        list of [df, ddf, Neff_max]
+    threshold : float, default 3.0
+        the standard deviation threshold
+    neff_min : float, default 10
+        the minimum number of acceptable samples
+    """
+    df = results[0]
+    ddf = results[1]
+    N_eff = results[2]
+
+    if N_eff < neffmin:
+        raise Exception("Number of effective samples %f was below minimum of %f" % (N_eff, neffmin))
+
+    if ddf > threshold:
+        raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
+
+def test_simple_overlap():
+    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
+    topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal()
+    results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
+
+    for idx, lambda_result in enumerate(results):
+        try:
+            check_result(lambda_result)
+        except Exception as e:
+            message = "pentane->butane failed at lambda %d \n" % idx
+            message += str(e)
+            raise Exception(message)
+
+@skipIf(istravis, "Skip expensive test on travis")
+def test_difficult_overlap():
+    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
+    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name='imatinib', ref_mol_name='nilotinib')
+    results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
+
+    for idx, lambda_result in enumerate(results):
+        try:
+            check_result(lambda_result)
+        except Exception as e:
+            message = "solvated imatinib->nilotinib failed at lambda %d \n" % idx
+            message += str(e)
+            raise Exception(message)
+
+def generate_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
+    """
+    Generate endpoint thermodynamic states for the system
+
+    Parameters
+    ----------
+    system : openmm.System
+        System object corresponding to thermodynamic state
+    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+        TopologyProposal representing transformation
+
+    Returns
+    -------
+    nonalchemical_zero_thermodynamic_state : ThermodynamicState
+        Nonalchemical thermodynamic state for lambda zero endpoint
+    nonalchemical_one_thermodynamic_state : ThermodynamicState
+        Nonalchemical thermodynamic state for lambda one endpoint
+    lambda_zero_thermodynamic_state : ThermodynamicState
+        Alchemical (hybrid) thermodynamic state for lambda zero
+    lambda_one_thermodynamic_State : ThermodynamicState
+        Alchemical (hybrid) thermodynamic state for lambda one
+    """
+    #create the thermodynamic state
+    lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(system)
+    lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
+
+    #ensure their states are set appropriately
+    lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
+    lambda_one_alchemical_state.set_alchemical_parameters(0.0)
+
+    #create the base thermodynamic state with the hybrid system
+    thermodynamic_state = ThermodynamicState(system, temperature=temperature)
+
+    #Create thermodynamic states for the nonalchemical endpoints
+    nonalchemical_zero_thermodynamic_state = ThermodynamicState(topology_proposal.old_system, temperature=temperature)
+    nonalchemical_one_thermodynamic_state = ThermodynamicState(topology_proposal.new_system, temperature=temperature)
+
+    #Now create the compound states with different alchemical states
+    lambda_zero_thermodynamic_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
+    lambda_one_thermodynamic_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
+
+    return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
+
+def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory, lambda_index=0):
+    """
+
+    Parameters
+    ----------
+    lambda_thermodynamic_state : ThermodynamicState
+        The thermodynamic state corresponding to the hybrid system at a lambda endpoint
+    nonalchemical_thermodynamic_state : ThermodynamicState
+        The nonalchemical thermodynamic state for the relevant endpoint
+    initial_hybrid_sampler_state : SamplerState
+        Starting positions for the sampler. Must be compatible with lambda_thermodynamic_state
+    mc_move : MCMCMove
+        The MCMove that will be used for sampling at the lambda endpoint
+    n_iterations : int
+        The number of iterations
+    factory : HybridTopologyFactory
+        The hybrid topology factory
+    lambda_index : int, optional default 0
+        The index, 0 or 1, at which to retrieve nonalchemical positions
+
+    Returns
+    -------
+    df : float
+        Free energy difference between alchemical and nonalchemical systems, estimated with EXP
+    ddf : float
+        Standard deviation of estimate, corrected for correlation, from EXP estimator.
+    """
+    #run an initial minimization:
+    mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
+    mcmc_sampler.minimize(max_iterations=20)
+    new_sampler_state = mcmc_sampler.sampler_state
+
+    #initialize work array
+    w = np.zeros([n_iterations])
+
+    #run n_iterations of the endpoint perturbation:
+    for iteration in range(n_iterations):
+        mc_move.apply(lambda_thermodynamic_state, new_sampler_state)
+
+        #compute the reduced potential at the new state
+        hybrid_context, integrator = cache.global_context_cache.get_context(lambda_thermodynamic_state)
+        new_sampler_state.apply_to_context(hybrid_context, ignore_velocities=True)
+        hybrid_reduced_potential = lambda_thermodynamic_state.reduced_potential(hybrid_context)
+
+        #generate a sampler state for the nonalchemical system
+        if lambda_index == 0:
+            nonalchemical_positions = factory.old_positions(new_sampler_state.positions)
+        elif lambda_index == 1:
+            nonalchemical_positions = factory.new_positions(new_sampler_state.positions)
+        else:
+            raise ValueError("The lambda index needs to be either one or zero for this to be meaningful")
+
+        nonalchemical_sampler_state = SamplerState(nonalchemical_positions, box_vectors=new_sampler_state.box_vectors)
+
+        #compute the reduced potential at the nonalchemical system as well:
+        nonalchemical_context, integrator = cache.global_context_cache.get_context(nonalchemical_thermodynamic_state)
+        nonalchemical_sampler_state.apply_to_context(nonalchemical_context, ignore_velocities=True)
+        nonalchemical_reduced_potential = nonalchemical_thermodynamic_state.reduced_potential(nonalchemical_context)
+
+        w[iteration] = nonalchemical_reduced_potential - hybrid_reduced_potential
+
+    [t0, g, Neff_max] = timeseries.detectEquilibration(w)
+    print(Neff_max)
+    w_burned_in = w[t0:]
+
+    [df, ddf] = pymbar.EXP(w_burned_in)
+    ddf_corrected = ddf * np.sqrt(g)
+
+    return [df, ddf_corrected, Neff_max]
 
 def get_available_parameters(system, prefix='lambda'):
     parameters = list()
@@ -386,4 +731,5 @@ def test_position_output():
 
 if __name__ == '__main__':
     #test_compare_energies()
-    test_position_output()
+    #test_position_output()
+    test_simple_overlap()
