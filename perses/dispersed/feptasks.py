@@ -444,7 +444,7 @@ def compute_nonalchemical_perturbation(equilibrium_result: EquilibriumResult, hy
     if lambda_state==0:
         nonalchemical_positions = hybrid_factory.old_positions(hybrid_positions)
     elif lambda_state==1:
-        nonalchemical_positions = hybrid_positions.new_positions(hybrid_positions)
+        nonalchemical_positions = hybrid_factory.new_positions(hybrid_positions)
     else:
         raise ValueError("lambda_state must be 0 or 1")
 
