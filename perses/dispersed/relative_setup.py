@@ -481,21 +481,27 @@ class NonequilibriumSwitchingFEP(object):
         hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
         niterations_per_call_list = [self._n_iterations_per_call, self._n_iterations_per_call]
         atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
-        trajectory_filenames = [None, None]
         hybrid_factory_list = [self._factory, self._factory]
 
         endpoint_perturbation_results_list = []
         nonequilibrium_results_list = []
         for i in range(n_iterations):
 
+            if self._write_traj:
+                equilibrium_trajectory_filenames = self._trajectory_filename.values()
+                noneq_trajectory_filenames = [self._neq_traj_filename[lambda_state].format(iteration=i) for lambda_state in endpoints]
+            else:
+                equilibrium_trajectory_filenames = [None, None]
+                noneq_trajectory_filenames = [None, None]
+
             #run a round of equilibrium
-            self._equilibrium_results = self._client.map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, trajectory_filenames)
+            self._equilibrium_results = self._client.map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
             #get the perturbations to nonalchemical states:
-            endpoint_perturbation_results_list.append(self._client.map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states, endpoints))
+            endpoint_perturbation_results_list.append(self._client.map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
 
             #run a round of nonequilibrium switching:
-            nonequilibrium_results_list.append(self._client.map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, trajectory_filenames))
+            nonequilibrium_results_list.append(self._client.map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, noneq_trajectory_filenames))
 
             self._current_iteration +=1
             print(self._current_iteration)
@@ -512,7 +518,7 @@ class NonequilibriumSwitchingFEP(object):
 
                 #for the nonequilibrium results, we have to access the last element of the cumulative work, since that
                 #is the total work
-                self._total_work[lambda_state].append(nonequilibrium_results[lambda_state].cum_work[-1])
+                self._total_work[lambda_state].append(nonequilibrium_results[lambda_state].cumulative_work[-1])
 
 
     def _adjust_for_correlation(self, timeseries_array: np.array):
