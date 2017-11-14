@@ -1,5 +1,3 @@
-import celery
-from celery.contrib import rdb
 import simtk.openmm as openmm
 import openmmtools.cache as cache
 from typing import List, Tuple, Union, NamedTuple
@@ -18,41 +16,20 @@ cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
 })
 
 import openmmtools.mcmc as mcmc
-import openmmtools.utils as utils
 import openmmtools.integrators as integrators
 import openmmtools.states as states
-import redis
 import numpy as np
 import mdtraj as md
-from mdtraj.formats import HDF5TrajectoryFile
+from perses.annihilation.new_relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
 import pickle
 import simtk.unit as unit
 
-broker_name_server = "redis://localhost"
 
 
 #Make containers for results from tasklets. This allows us to chain tasks together easily.
 EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('reduced_potential', float)])
 NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', np.array)])
-
-
-
-def get_broker_name():
-    """
-    This is a utility function for getting the broker location
-    """
-    redis_client = redis.Redis(host=broker_name_server)
-    broker_location = redis_client.get("broker_location")
-
-    if broker_location is None:
-        raise ValueError("The specified broker name server does not contain a record of a broker.")
-
-    return broker_location
-
-broker_location = broker_name_server
-app = celery.Celery('perses.distributed.feptasks', broker=broker_location, backend=broker_location)
-app.conf.update(accept_content=['pickle', 'application/x-python-serialize'], task_serializer='pickle', result_serializer='pickle')
 
 class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
@@ -178,7 +155,6 @@ def update_broker_location(broker_location, backend_location=None):
         backend_location = broker_location
     app.conf.update(broker=broker_location, backend=broker_location)
 
-@app.task(serializer="pickle")
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                  ne_mc_move: NonequilibriumSwitchingMove, topology: md.Topology, n_iterations: int,
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> NonequilibriumResult:
@@ -266,7 +242,6 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
 
     return nonequilibrium_result
 
-@app.task(serializer="pickle")
 def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                     mc_move: mcmc.MCMCMove, topology: md.Topology, n_iterations: int,
                     atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> EquilibriumResult:
@@ -342,7 +317,6 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
 
     return equilibrium_result
 
-@app.task(serializer="pickle")
 def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState, mc_move: mcmc.MCMCMove,
              max_iterations: int=20) -> states.SamplerState:
     """
@@ -370,7 +344,6 @@ def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: stat
     mcmc_sampler.minimize(max_iterations=max_iterations)
     return mcmc_sampler.sampler_state
 
-@app.task(serializer="pickle")
 def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState) -> float:
     """
     Compute the reduced potential of the given SamplerState under the given ThermodynamicState.
@@ -391,7 +364,6 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 
-@app.task(serializer="pickle")
 def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult, nonequilibrium_trajectory: md.Trajectory, trajectory_filename: str, cum_work_filename: str) -> float:
     """
     Write the results of a nonequilibrium switching trajectory to a file. The trajectory is written to an
@@ -418,7 +390,6 @@ def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult,
 
     return nonequilibrium_result.cumulative_work[-1]
 
-@app.task(serializer="pickle")
 def write_equilibrium_trajectory(equilibrium_result: EquilibriumResult, trajectory: md.Trajectory, trajectory_filename: str) -> float:
     """
     Write the results of an equilibrium simulation to disk. This task will append the results to the given filename.
@@ -445,19 +416,40 @@ def write_equilibrium_trajectory(equilibrium_result: EquilibriumResult, trajecto
 
     return equilibrium_result.reduced_potential
 
-@app.task(serializer="pickle")
-def equilibrium_pass_through(equilibrium_result: EquilibriumResult):
+def compute_nonalchemical_perturbation(equilibrium_result: EquilibriumResult, hybrid_factory: HybridTopologyFactory, nonalchemical_thermodynamic_state: states.ThermodynamicState, lambda_state: int):
     """
-    Utility function to just pass along the result of the previous calculation so it is not lost.
+    Compute the perturbation of transforming the given hybrid equilibrium result into the system for the given nonalchemical_thermodynamic_state
 
     Parameters
     ----------
-    equilibrium_result : EquilibriumResult namedtuple
-        The equilibrium result of the previous task
-
+    equilibrium_result : EquilibriumResult
+        Result of the equilibrium simulation
+    hybrid_factory : HybridTopologyFactory
+        Hybrid factory necessary for getting the positions of the nonalchemical system
+    nonalchemical_thermodynamic_state : states.ThermodynamicState
+        ThermodynamicState of the nonalchemical system
+    lambda_state : int
+        Whether this is lambda 0 or 1
     Returns
     -------
-    equilibrium_result : EquilibriumResult namedtuple
-        Same as input
+    work : float
+        perturbation in kT from the hybrid system to the nonalchemical one
     """
-    return equilibrium_result
+    #get the objects we need to begin
+    hybrid_reduced_potential = equilibrium_result.reduced_potential
+    hybrid_sampler_state = equilibrium_result.sampler_state
+    hybrid_positions = hybrid_sampler_state.positions
+
+    #get the positions for the nonalchemical system
+    if lambda_state==0:
+        nonalchemical_positions = hybrid_factory.old_positions(hybrid_positions)
+    elif lambda_state==1:
+        nonalchemical_positions = hybrid_positions.new_positions(hybrid_positions)
+    else:
+        raise ValueError("lambda_state must be 0 or 1")
+
+    nonalchemical_sampler_state = states.SamplerState(nonalchemical_positions, box_vectors=hybrid_sampler_state.box_vectors)
+
+    nonalchemical_reduced_potential = compute_reduced_potential(nonalchemical_thermodynamic_state, nonalchemical_sampler_state)
+
+    return hybrid_reduced_potential - nonalchemical_reduced_potential

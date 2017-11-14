@@ -1,8 +1,8 @@
-from perses.distributed import feptasks
+from __future__ import absolute_import
+from perses.dispersed import feptasks
 from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator, LangevinIntegrator
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import openmmtools.mcmc as mcmc
-import openmmtools.cache as cache
 import threading
 import queue
 import openmmtools.alchemy as alchemy
@@ -25,7 +25,9 @@ from io import StringIO
 from openmmtools.constants import kB
 import logging
 import os
-from perses.distributed.feptasks import NonequilibriumSwitchingMove
+import dask.distributed as distributed
+
+from perses.dispersed.feptasks import NonequilibriumSwitchingMove
 work_lock = threading.Lock()
 
 _logger = logging.getLogger(__name__)
@@ -317,7 +319,7 @@ class NonequilibriumSwitchingFEP(object):
 
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=None, n_equil_steps=1000, ncmc_nsteps=100, nsteps_per_iteration=1,
-                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None, atom_selection="not water"):
+                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None, atom_selection="not water", scheduler_address=None):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class
 
@@ -348,7 +350,13 @@ class NonequilibriumSwitchingFEP(object):
         atom_selection : str, default not water
             MDTraj selection syntax for which atomic coordinates to save in the trajectories. Default strips
             all water.
+        scheduler_address : str, default None
+            The address of the dask scheduler. If None, local will be used.
         """
+        if scheduler_address is None:
+            self._client = distributed.Client()
+        else:
+            self._client = distributed.Client(scheduler_address)
 
         #construct the hybrid topology factory object
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
@@ -383,7 +391,6 @@ class NonequilibriumSwitchingFEP(object):
             self._trajectory_filename = {0: None, 1: None}
             self._neq_traj_filename = {0: None, 1: None}
 
-        self._task_queue = queue.Queue()
         #initialize lists for results
         self._total_work = {0 : [], 1 : []}
         self._reduced_potential_differences = {0 : [], 1 : []}
@@ -430,11 +437,8 @@ class NonequilibriumSwitchingFEP(object):
         self._sampler_states = {0: SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors()),
                                 1: copy.deepcopy(self._lambda_one_sampler_state)}
 
-        self._listener_thread = threading.Thread(target=self._record_switching_results, daemon=True)
-        self._listener_thread.start()
-
         #initialize by minimizing
-        self.minimize()
+        self._equilibrium_results = [feptasks.EquilibriumResult(result.sampler_state, 0.0) for result in self.minimize()]
 
         #subset the topology appropriately:
         if atom_selection is not None:
@@ -454,9 +458,9 @@ class NonequilibriumSwitchingFEP(object):
         max_steps : int, default 50
             max number of steps for openmm minimizer.
         """
-        minimized_results = {n: feptasks.minimize.delay(self._hybrid_thermodynamic_states[n], self._sampler_states[n], self._equilibrium_mc_move, max_iterations=max_steps) for n in (0,1)}
+        minimized = self._client.map(feptasks.minimize, self._hybrid_thermodynamic_states.values(), self._sampler_states.values(), [self._equilibrium_mc_move, self._equilibrium_mc_move])
         _logger.info("Minimizing")
-        self._sampler_states ={n: result.get() for (n, result) in minimized_results.items()}
+        return self._client.gather(minimized)
 
     def run(self, n_iterations=5):
         """
@@ -472,146 +476,41 @@ class NonequilibriumSwitchingFEP(object):
         n_iterations : int, optional, default 5
             The number of times to run the entire sequence described above
         """
+        endpoints = [0, 1]
+        eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
+        hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
+        niterations_per_call_list = [self._n_iterations_per_call, self._n_iterations_per_call]
+        atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
+        trajectory_filenames = [None, None]
+        hybrid_factory_list = [self._factory, self._factory]
+
+        endpoint_perturbation_results_list = []
+        nonequilibrium_results_list = []
         for i in range(n_iterations):
-            iteration_chords = dict()
-            iteration_results = dict()
-            for lambda_state in [0,1]:
 
-                eq_traj_file = self._trajectory_filename[lambda_state] if self._write_traj else None
-                neq_traj_file = self._neq_traj_filename[lambda_state].format(teration=self._current_iteration) if self._write_traj else None
+            #run a round of equilibrium
+            self._equilibrium_results = self._client.map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, trajectory_filenames)
 
-                initial_equilibrium_result = feptasks.EquilibriumResult(self._sampler_states[lambda_state], 0.0)
-                #the first task is an equilibrium task:
-                equilibrium_task = feptasks.run_equilibrium.s(initial_equilibrium_result,
-                                                              self._hybrid_thermodynamic_states[lambda_state],
-                                                              self._equilibrium_mc_move, self._factory.hybrid_topology,
-                                                              n_iterations=self._n_iterations_per_call,
-                                                              atom_indices_to_save=self._atom_selection_indices,
-                                                              trajectory_filename=eq_traj_file)
+            #get the perturbations to nonalchemical states:
+            endpoint_perturbation_results_list.append(self._client.map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states, endpoints))
 
-                #This task will follow the equilibrium task, and will consist of a nonequilibrium switching task
-                #along with another equilibrium task.
-                neq_following_task = feptasks.run_protocol.s(self._hybrid_thermodynamic_states[lambda_state],
-                                                             self._ne_mc_moves[lambda_state],
-                                                             self._factory.hybrid_topology, self._n_iterations_per_call,
-                                                             atom_indices_to_save=self._atom_selection_indices,
-                                                             trajectory_filename=neq_traj_file)
-
-                eq_following_task = feptasks.run_equilibrium.s(self._hybrid_thermodynamic_states[lambda_state],
-                                                              self._equilibrium_mc_move, self._factory.hybrid_topology,
-                                                              n_iterations=self._n_iterations_per_call,
-                                                              atom_indices_to_save=self._atom_selection_indices,
-                                                              trajectory_filename=eq_traj_file)
-
-                following_group = celery.group(feptasks.equilibrium_pass_through.s(), neq_following_task, eq_following_task)
-
-                #We'll chain the first equilibrium run to a pair of tasks: a nonequilibrium task and another equilibrium
-                #task.
-                iteration_chord = celery.chain(equilibrium_task, following_group)
-
-                iteration_chords[lambda_state] = iteration_chord
-
-            #call both chords to start lambda 0 and 1 calculations:
-            for lambda_state in [0,1]:
-                iteration_results[lambda_state] = iteration_chords[lambda_state]()
-
-                #put the result in the task queue
-
-                task_dict = {'lambda_state' : lambda_state, 'iteration_number' : self._current_iteration, 'result_object' : iteration_results[lambda_state]}
-                self._task_queue.put(task_dict)
-
-                #set the sampler state for equilibrium to the latest equilibrium result:
-                self._sampler_states[lambda_state] = iteration_results[lambda_state].children[2].get().sampler_state
+            #run a round of nonequilibrium switching:
+            nonequilibrium_results_list.append(self._client.map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, trajectory_filenames))
 
             self._current_iteration +=1
 
+        #after all tasks have been requested, retrieve the results:
+        for i in range(n_iterations):
+            endpoint_perturbations = self._client.gather(endpoint_perturbation_results_list[i])
+            nonequilibrium_results = self._client.gather(nonequilibrium_results_list[i])
 
+            for lambda_state in [0,1]:
+                self._reduced_potential_differences[lambda_state].append(endpoint_perturbations[lambda_state])
 
-    def _record_switching_results(self):
-        """
-        This is a thread callback to record the results of switching. It is implemented seperately so that it can act
-        without blocking the main thread. This function also calls the reduced_potential tasklet in order to accumulate
-        the information required to perturb to nonalchemical systems. It listens to a queue that was set up by the
-        constructor, and waits for tasks to write out.
-        """
-        #run until killed.
-        while True:
-            #this will be a dictionary. Just block until there's something here.
-            task_dict = self._task_queue.get(block=True)
+                #for the nonequilibrium results, we have to access the last element of the cumulative work, since that
+                #is the total work
+                self._total_work[lambda_state].append(nonequilibrium_results[lambda_state].cum_work[-1])
 
-            #acquire the lock:
-            work_lock.acquire()
-
-            #extract relevant information from the
-            lambda_state = task_dict['lambda_state']
-            iteration_number = task_dict['iteration_number']
-            result_object = task_dict['result_object']
-
-            #the result object has three children, an equilibrium, nonequilibrium result and a following equilibrium result
-            initial_equilibrium_result = result_object.children[0].get()
-            nonequilibrium_result = result_object.children[1].get()
-            final_equilibrium_result = result_object.children[1].get()
-
-            _logger.info("Received results for iteration %d and lambda endpoint %d" % (iteration_number, lambda_state))
-
-            #append the work value to our list
-            self._total_work[lambda_state].append(nonequilibrium_result.cumulative_work[-1])
-
-            #Get the reduced potential difference
-
-            #We'll need the thermodynamic state for the corresponding nonalchemical system:
-            thermodynamic_state = self._nonalchemical_thermodynamic_states[lambda_state]
-            reduced_potential_tasks = []
-            for equilibrium_results in [initial_equilibrium_result, final_equilibrium_result]:
-                sampler_state = equilibrium_results.sampler_state
-                positions = sampler_state.positions
-
-                #convert the positions to the endpoint
-                nonalchemical_positions = self._get_nonalchemical_positions(lambda_state, positions)
-
-                #construct a sampler state
-                nonalchemical_sampler_state = SamplerState(nonalchemical_positions, box_vectors=sampler_state.box_vectors)
-
-                reduced_potential_tasks.append(feptasks.compute_reduced_potential.s(thermodynamic_state, nonalchemical_sampler_state))
-
-            reduced_potential_call = celery.group(reduced_potential_tasks)
-
-            #just block on getting these results
-            reduced_potential_result = reduced_potential_call().get()
-
-            #append the difference in results
-            for result in reduced_potential_result:
-                self._reduced_potential_differences[lambda_state].append(initial_equilibrium_result.reduced_potential - result)
-
-            #release the lock
-            work_lock.release()
-
-            _logger.info("Computed reduced potential difference to nonalchemical system for iteration %d lambda state %d " % (iteration_number, lambda_state))
-
-    def _get_nonalchemical_positions(self, lambda_state: int, alchemical_positions: unit.Quantity):
-        """
-        Convert the hybrid positions to endpoint nonalchemical positions
-        Parameters
-        ----------
-        lambda_state : int
-            0 or 1 (endpoint)
-        alchemical_positions : unit.Quantity array
-            positions of the hybrid system
-
-        Returns
-        -------
-        nonalchemical_positions : unit.Quantity array
-            nonalchemical positions at requested endpoint
-        """
-        #convert these to the appropriate endpoint:
-        if lambda_state==0:
-            nonalchemical_positions = self._factory.old_positions(alchemical_positions)
-        elif lambda_state==1:
-            nonalchemical_positions = self._factory.new_positions(alchemical_positions)
-        else:
-            raise ValueError("Only 0 or 1 are permitted for endpoints.")
-
-        return nonalchemical_positions
 
     def _adjust_for_correlation(self, timeseries_array: np.array):
         """
@@ -701,8 +600,7 @@ class NonequilibriumSwitchingFEP(object):
         Estimate the free energy based on currently available values
         """
         #Make sure the task queue is empty (all pending calcs are complete) before computing free energy
-        self._task_queue.join()
-
+        #Make sure the task queue is empty (all pending calcs are complete) before computing free energy
         [[df0, ddf0], [df1, ddf1]] = self._endpoint_perturbations()
         [df, ddf] = self._alchemical_free_energy()
 
