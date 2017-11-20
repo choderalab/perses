@@ -614,27 +614,3 @@ class NonequilibriumSwitchingFEP(object):
         [df, ddf] = self._alchemical_free_energy()
 
         return -df0 + df + df1
-
-if __name__=="__main__":
-    import os
-    _logger.setLevel(logging.INFO)
-    #gaff_filename = get_data_filename("data/gaff.xml")
-    #forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
-    #path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
-    #protein_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/CDK2_fixed_nohet.pdb")
-    #molecule_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/Inputs_for_FEP/CDK2_ligands.mol2")
-    #fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
-    import pickle
-    infile = open("fesetup2.pkl", 'rb')
-    fesetup = pickle.load(infile)
-    infile.close()
-    #pickle.dump(fesetup, outfile)
-    #outfile.close()
-    #outfile = open("fesetup2.pkl", 'wb')
-    #pickle.dump(fesetup, outfile)
-    #outfile.close()
-    ne_fep = NonequilibriumSwitchingFEP(fesetup.solvent_topology_proposal, fesetup.solvent_old_positions, fesetup.solvent_new_positions)
-    print("ne-fep initialized")
-    ne_fep.run(n_iterations=2)
-    print(ne_fep.current_free_energy_estimate)
-    print("retrieved")
