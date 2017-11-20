@@ -1,8 +1,10 @@
-from perses.distributed import feptasks
+from __future__ import absolute_import
+from perses.dispersed import feptasks
 from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator, LangevinIntegrator
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import openmmtools.mcmc as mcmc
-import openmmtools.cache as cache
+import threading
+import queue
 import openmmtools.alchemy as alchemy
 import pymbar
 import simtk.openmm as openmm
@@ -23,7 +25,12 @@ from io import StringIO
 from openmmtools.constants import kB
 import logging
 import os
-from perses.distributed.feptasks import NonequilibriumSwitchingMove
+import dask.distributed as distributed
+
+from perses.dispersed.feptasks import NonequilibriumSwitchingMove
+work_lock = threading.Lock()
+
+_logger = logging.getLogger(__name__)
 
 class NonequilibriumFEPSetup(object):
     """
@@ -312,7 +319,7 @@ class NonequilibriumSwitchingFEP(object):
 
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=None, n_equil_steps=1000, ncmc_nsteps=100, nsteps_per_iteration=1,
-                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None, atom_selection="not water"):
+                 temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None, atom_selection="not water", scheduler_address=None):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class
 
@@ -343,7 +350,13 @@ class NonequilibriumSwitchingFEP(object):
         atom_selection : str, default not water
             MDTraj selection syntax for which atomic coordinates to save in the trajectories. Default strips
             all water.
+        scheduler_address : str, default None
+            The address of the dask scheduler. If None, local will be used.
         """
+        if scheduler_address is None:
+            self._client = distributed.Client()
+        else:
+            self._client = distributed.Client(scheduler_address)
 
         #construct the hybrid topology factory object
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
@@ -367,23 +380,21 @@ class NonequilibriumSwitchingFEP(object):
         self._zero_endpoint_n_atoms = topology_proposal.n_atoms_old
         self._one_endpoint_n_atoms = topology_proposal.n_atoms_new
         self._atom_selection = atom_selection
+        self._current_iteration = 0
 
+        if self._trajectory_directory and self._trajectory_prefix:
+            self._write_traj = True
+            self._trajectory_filename = {lambda_state: os.path.join(self._trajectory_directory, trajectory_prefix+"lambda%d" % lambda_state + ".h5") for lambda_state in [0,1]}
+            self._neq_traj_filename = {lambda_state: os.path.join(self._trajectory_directory, trajectory_prefix + ".{iteration}.neq.lambda%d" % lambda_state + ".h5") for lambda_state in [0,1]}
+        else:
+            self._write_traj = False
+            self._trajectory_filename = {0: None, 1: None}
+            self._neq_traj_filename = {0: None, 1: None}
 
         #initialize lists for results
-        self._forward_nonequilibrium_trajectories = []
-        self._reverse_nonequilibrium_trajectories = []
-        self._forward_nonequilibrium_cumulative_works = []
-        self._reverse_nonequilibrium_cumulative_works = []
-        self._forward_nonequilibrium_results = []
-        self._reverse_nonequilibrium_results = []
-        self._forward_total_work = []
-        self._reverse_total_work = []
-        self._lambda_zero_reduced_potentials = []
-        self._lambda_one_reduced_potentials = []
-        self._nonalchemical_zero_endpt_reduced_potentials = []
-        self._nonalchemical_one_endpt_reduced_potentials = []
-        self._nonalchemical_zero_results = []
-        self._nonalchemical_one_results = []
+        self._total_work = {0 : [], 1 : []}
+        self._reduced_potential_differences = {0 : [], 1 : []}
+
 
         #Set the number of times that the nonequilbrium move will have to be run in order to complete a protocol:
         if self._ncmc_nsteps % self._nsteps_per_iteration != 0:
@@ -394,28 +405,27 @@ class NonequilibriumSwitchingFEP(object):
         lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(self._hybrid_system)
         lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
 
-        #ensure their states are set appropriately
         lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-        lambda_one_alchemical_state.set_alchemical_parameters(0.0)
+        lambda_one_alchemical_state.set_alchemical_parameters(1.0)
+
+        #ensure their states are set appropriately
+        self._hybrid_alchemical_states = {0 : lambda_zero_alchemical_state, 1: lambda_one_alchemical_state}
 
         #create the base thermodynamic state with the hybrid system
         self._thermodynamic_state = ThermodynamicState(self._hybrid_system, temperature=temperature)
 
         #Create thermodynamic states for the nonalchemical endpoints
-        self._nonalchemical_zero_thermodynamic_state = ThermodynamicState(topology_proposal.old_system, temperature=temperature)
-        self._nonalchemical_one_thermodynamic_state = ThermodynamicState(topology_proposal.new_system, temperature=temperature)
+        self._nonalchemical_thermodynamic_states = {0 : ThermodynamicState(topology_proposal.old_system, temperature=temperature), 1: ThermodynamicState(topology_proposal.new_system, temperature=temperature)}
 
         #Now create the compound states with different alchemical states
-        self._lambda_zero_thermodynamic_state = CompoundThermodynamicState(self._thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
-        self._lambda_one_thermodynamic_state = CompoundThermodynamicState(self._thermodynamic_state, composable_states=[lambda_one_alchemical_state])
+        self._hybrid_thermodynamic_states = {0: CompoundThermodynamicState(self._thermodynamic_state, composable_states=[self._hybrid_alchemical_states[0]]), 1: CompoundThermodynamicState(self._thermodynamic_state, composable_states=[self._hybrid_alchemical_states[1]])}
 
         #create the forward and reverse integrators
-        self._forward_integrator = AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)
-        self._reverse_integrator = AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)
+        self._integrators = {0 : AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature),
+                             1: AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature)}
 
         #create the forward and reverse MCMoves
-        self._forward_ne_mc_move = NonequilibriumSwitchingMove(self._forward_integrator, self._nsteps_per_iteration)
-        self._reverse_ne_mc_move = NonequilibriumSwitchingMove(self._reverse_integrator, self._nsteps_per_iteration)
+        self._ne_mc_moves = {n : NonequilibriumSwitchingMove(self._integrators[n], self._nsteps_per_iteration) for n in (0,1)}
 
         #create the equilibrium MCMove
         self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=n_equil_steps)
@@ -424,32 +434,20 @@ class NonequilibriumSwitchingFEP(object):
         self._lambda_one_sampler_state = SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
         self._lambda_zero_sampler_state = copy.deepcopy(self._lambda_one_sampler_state)
 
+        self._sampler_states = {0: SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors()),
+                                1: copy.deepcopy(self._lambda_one_sampler_state)}
+
         #initialize by minimizing
-        self.minimize()
-
-        #initialize the trajectories for the lambda 0 and 1 equilibrium simulations
-        a_0, b_0, c_0, alpha_0, beta_0, gamma_0 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_zero_sampler_state.box_vectors)
-        a_1, b_1, c_1, alpha_1, beta_1, gamma_1 = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self._lambda_one_sampler_state.box_vectors)
-
-        lambda_zero_positions = np.array(self._lambda_zero_sampler_state.positions.value_in_unit_system(unit.md_unit_system))
-        lambda_one_positions = np.array(self._lambda_one_sampler_state.positions.value_in_unit_system(unit.md_unit_system))
+        self._equilibrium_results = [feptasks.EquilibriumResult(result, 0.0) for result in self.minimize()]
 
         #subset the topology appropriately:
         if atom_selection is not None:
             atom_selection_indices = self._factory.hybrid_topology.select(atom_selection)
-            subset_topology = self._factory.hybrid_topology.subset(atom_selection_indices)
             self._atom_selection_indices = atom_selection_indices
-
-            #create trajectory objects
-            self._lambda_zero_traj = md.Trajectory(lambda_zero_positions[atom_selection_indices, :], subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
-            self._lambda_one_traj = md.Trajectory(lambda_one_positions[atom_selection_indices, :], subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
         else:
-            subset_topology = self._factory.hybrid_topology
             self._atom_selection_indices = None
 
-            #create trajectory objects here without slicing. This avoids sending over a large array of integers when we just want to save the whole set of coordinates
-            self._lambda_zero_traj = md.Trajectory(lambda_zero_positions, subset_topology, unitcell_lengths=[a_0, b_0, c_0], unitcell_angles=[alpha_0, beta_0, gamma_0])
-            self._lambda_one_traj = md.Trajectory(lambda_one_positions, subset_topology, unitcell_lengths=[a_1, b_1, c_1], unitcell_angles=[alpha_1, beta_1, gamma_1])
+        print("Constructed")
 
     def minimize(self, max_steps=50):
         """
@@ -460,15 +458,11 @@ class NonequilibriumSwitchingFEP(object):
         max_steps : int, default 50
             max number of steps for openmm minimizer.
         """
-        #Asynchronously invoke the tasks
-        minimized_lambda_zero_result = feptasks.minimize.delay(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, max_iterations=max_steps)
-        minimized_lambda_one_result = feptasks.minimize.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, max_iterations=max_steps)
+        minimized = self._client.map(feptasks.minimize, self._hybrid_thermodynamic_states.values(), self._sampler_states.values(), [self._equilibrium_mc_move, self._equilibrium_mc_move])
+        _logger.info("Minimizing")
+        return self._client.gather(minimized)
 
-        #now synchronously retrieve the results and save the sampler states.
-        self._lambda_zero_sampler_state = minimized_lambda_zero_result.get()
-        self._lambda_one_sampler_state = minimized_lambda_one_result.get()
-
-    def run(self, n_iterations=5, concurrency=1):
+    def run(self, n_iterations=5):
         """
         Run one iteration of the nonequilibrium switching free energy calculations. This entails:
 
@@ -481,247 +475,149 @@ class NonequilibriumSwitchingFEP(object):
         ----------
         n_iterations : int, optional, default 5
             The number of times to run the entire sequence described above
-        concurrency: int, default 1
-            The number of concurrent nonequilibrium protocols to run; note that with greater than one,
-            error estimation may be more complicated.
         """
+        endpoints = [0, 1]
+        eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
+        hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
+        niterations_per_call_list = [self._n_iterations_per_call, self._n_iterations_per_call]
+        atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
+        hybrid_factory_list = [self._factory, self._factory]
+
+        endpoint_perturbation_results_list = []
+        nonequilibrium_results_list = []
         for i in range(n_iterations):
-            self._run_equilibrium()
-            self._run_nonequilibrium(concurrency=concurrency, n_iterations=self._n_iterations_per_call)
-            self._run_equilibrium()
 
-        if self._trajectory_directory:
-            self._write_equilibrium_trajectories(self._trajectory_directory, self._trajectory_prefix)
-
-    def _run_equilibrium(self, n_iterations=1):
-        """
-        Run one iteration of equilibrium at lambda=1 and lambda=0, and replace the current equilibrium sampler states
-        with the results of the equilibrium calculation, as well as extend the current equilibrium trajectories.
-
-        Parameters
-        ----------
-        n_iterations : int, default 1
-            How many times to run the n_steps of equilibrium
-        """
-        #run equilibrium for lambda=0 and lambda=1
-        lambda_zero_result = feptasks.run_equilibrium.delay(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations, atom_indices_to_save=self._atom_selection_indices)
-        lambda_one_result = feptasks.run_equilibrium.delay(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state, self._equilibrium_mc_move, self._factory.hybrid_topology, n_iterations, atom_indices_to_save=self._atom_selection_indices)
-
-        #retrieve the results of the calculation
-        self._lambda_zero_sampler_state, traj_zero_result, lambda_zero_reduced_potential = lambda_zero_result.get()
-        self._lambda_one_sampler_state, traj_one_result, lambda_one_reduced_potential = lambda_one_result.get()
-
-        #append the potential energies of the final frame of the trajectories
-        self._lambda_zero_reduced_potentials.append(lambda_zero_reduced_potential)
-        self._lambda_one_reduced_potentials.append(lambda_one_reduced_potential)
-
-        #Now create SamplerStates to generate the data for endpoint perturbations:
-        final_hybrid_positions_zero = self._lambda_zero_sampler_state.positions
-        final_hybrid_positions_one = self._lambda_one_sampler_state.positions
-
-        positions_zero = self._factory.old_positions(final_hybrid_positions_zero)
-        positions_one = self._factory.new_positions(final_hybrid_positions_one)
-
-        #Create sampler states for each of these:
-        sampler_state_zero = SamplerState(positions_zero, box_vectors=self._lambda_zero_sampler_state.box_vectors)
-        sampler_state_one = SamplerState(positions_one, box_vectors=self._lambda_one_sampler_state.box_vectors)
-
-        #launch a task to compute the reduced potentials at these endpoints
-        self._nonalchemical_zero_results.append(feptasks.compute_reduced_potential.delay(self._nonalchemical_zero_thermodynamic_state, sampler_state_zero))
-        self._nonalchemical_one_results.append(feptasks.compute_reduced_potential.delay(self._nonalchemical_one_thermodynamic_state, sampler_state_one))
-
-        #join the trajectories to the reference trajectories, if the object exists,
-        #otherwise, simply create it
-        if self._lambda_zero_traj:
-            self._lambda_zero_traj = self._lambda_zero_traj.join(traj_zero_result, check_topology=False)
-        else:
-            self._lambda_zero_traj = traj_zero_result
-
-        if self._lambda_one_traj:
-            self._lambda_one_traj = self._lambda_one_traj.join(traj_one_result, check_topology=False)
-        else:
-            self._lambda_one_traj = traj_one_result
-
-    def _run_nonequilibrium(self, concurrency=1, n_iterations=1):
-        """
-        Run concurrency-many nonequilibrium protocols in both directions. This method stores the result object, but does
-        not retrieve the results. Note that n_iterations is important, since in order to perform an entire switching trajectory
-        (from 0 to 1 or vice versa), we require that n_steps*n_iterations = protocol length
-
-        Parameters
-        ----------
-        concurrency : int, default 1
-            The number of protocols to run in each direction simultaneously
-        n_iterations : int, default 1
-            The number of times to have the NE move applied. Note that as above if n_steps*n_iterations!=ncmc_nsteps,
-            the protocol will not be run properly.
-        """
-
-        #set up the group object that will be used to compute the nonequilibrium results.
-        forward_protocol_group = celery.group(
-            feptasks.run_protocol.s(self._lambda_zero_thermodynamic_state, self._lambda_zero_sampler_state,
-                                    self._forward_ne_mc_move, self._factory.hybrid_topology, n_iterations,
-                                    atom_indices_to_save=self._atom_selection_indices) for i in
-            range(concurrency))
-        reverse_protocol_group = celery.group(
-            feptasks.run_protocol.s(self._lambda_one_thermodynamic_state, self._lambda_one_sampler_state,
-                                    self._reverse_ne_mc_move, self._factory.hybrid_topology, n_iterations,
-                                    atom_indices_to_save=self._atom_selection_indices) for i in
-            range(concurrency))
-
-        #get the result objects:
-        self._forward_nonequilibrium_results.append(forward_protocol_group.apply_async())
-        self._reverse_nonequilibrium_results.append(reverse_protocol_group.apply_async())
-
-    def retrieve_nonequilibrium_results(self):
-        """
-        Retrieve any pending results that were generated by computations from the run() call. Note that this will block
-        until all have completed. This method will update the list of trajectories as well as the nonequilibrium work values.
-        """
-        for result in self._forward_nonequilibrium_results:
-            result_group = result.join()
-            for result in result_group:
-                traj, cum_work = result
-
-                #we can take the final element as the total work
-                self._forward_total_work.append(cum_work[-1])
-
-                #we'll append the cumulative work and the trajectory to the appropriate lists
-                self._forward_nonequilibrium_cumulative_works.append(cum_work)
-                self._forward_nonequilibrium_trajectories.append(traj)
-
-        for result in self._reverse_nonequilibrium_results:
-            result_group = result.join()
-            for result in result_group:
-                traj, cum_work = result
-
-                #we can take the final element as the total work
-                self._reverse_total_work.append(cum_work[-1])
-
-                #we'll append the cumulative work and the trajectory to the appropriate lists
-                self._reverse_nonequilibrium_cumulative_works.append(cum_work)
-                self._reverse_nonequilibrium_trajectories.append(traj)
-
-    def write_nonequilibrium_trajectories(self, directory, file_prefix):
-        """
-        Write out an MDTraj h5 file for each nonequilibrium trajectory. The files will be placed in
-        [directory]/file_prefix-[forward, reverse]-index.h5. This method will ensure that all pending
-        results are collected.
-
-        Parameters
-        ----------
-        directory : str
-            The directory in which to place the files
-        file_prefix : str
-            A prefix for the filenames
-        """
-        self.retrieve_nonequilibrium_results()
-
-        #loop through the forward trajectories
-        for index, forward_trajectory in enumerate(self._forward_nonequilibrium_trajectories):
-
-            #construct the name for this file
-            full_filename = os.path.join(directory, file_prefix + "forward" + str(index) + ".h5")
-
-            #save the trajectory
-            forward_trajectory.save_hdf5(full_filename)
-
-        #repeat for the reverse trajectories:
-        for index, reverse_trajectory in enumerate(self._reverse_nonequilibrium_trajectories):
-
-            #construct the name for this file
-            full_filename = os.path.join(directory, file_prefix + "reverse" + str(index) + ".h5")
-
-            #save the trajectory
-            reverse_trajectory.save_hdf5(full_filename)
-
-    def _write_equilibrium_trajectories(self, directory, file_prefix):
-        """
-        Write out an MDTraj h5 file for each nonequilibrium trajectory. The files will be placed in
-        [directory]/file_prefix-[lambda0, lambda1].h5.
-
-        Parameters
-        ----------
-        directory : str
-            The directory in which to place the files
-        file_prefix : str
-            A prefix for the filenames
-        """
-        lambda_zero_filename = os.path.join(directory, file_prefix + "-" + "lambda0" + ".h5")
-        lambda_one_filename = os.path.join(directory, file_prefix + "-" + "lambda1" + ".h5")
-
-        filenames = [lambda_zero_filename, lambda_one_filename]
-        trajs = [self._lambda_zero_traj, self._lambda_one_traj]
-
-        #open the existing file if it exists, and append. Otherwise create it
-        for filename, traj in zip(filenames, trajs):
-            if not os.path.exists(filename):
-                traj.save_hdf5(filename)
+            if self._write_traj:
+                equilibrium_trajectory_filenames = self._trajectory_filename.values()
+                noneq_trajectory_filenames = [self._neq_traj_filename[lambda_state].format(iteration=i) for lambda_state in endpoints]
             else:
-                written_traj = md.load(filename)
-                concatenated_traj = written_traj.join(traj)
-                concatenated_traj.save_hdf5(filename)
+                equilibrium_trajectory_filenames = [None, None]
+                noneq_trajectory_filenames = [None, None]
 
-        #delete the trajectories.
-        self._lambda_one_traj = None
-        self._lambda_zero_traj = None
+            #run a round of equilibrium
+            self._equilibrium_results = self._client.map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
-    def retrieve_nonalchemical_results(self):
+            #get the perturbations to nonalchemical states:
+            endpoint_perturbation_results_list.append(self._client.map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
+
+            #run a round of nonequilibrium switching:
+            nonequilibrium_results_list.append(self._client.map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, noneq_trajectory_filenames))
+
+            self._current_iteration +=1
+            print(self._current_iteration)
+
+        #after all tasks have been requested, retrieve the results:
+        for i in range(n_iterations):
+            endpoint_perturbations = self._client.gather(endpoint_perturbation_results_list[i])
+            print(i)
+            nonequilibrium_results = self._client.gather(nonequilibrium_results_list[i])
+            print(i)
+
+            for lambda_state in [0,1]:
+                self._reduced_potential_differences[lambda_state].append(endpoint_perturbations[lambda_state])
+
+                #for the nonequilibrium results, we have to access the last element of the cumulative work, since that
+                #is the total work
+                self._total_work[lambda_state].append(nonequilibrium_results[lambda_state].cumulative_work[-1])
+
+
+    def _adjust_for_correlation(self, timeseries_array: np.array):
         """
-        Call this to retrieve the reduced potential results for the nonalchemical endpoints
+        Compute statistical inefficiency for timeseries, returning the timeseries with burn in as well as
+        the statistical inefficience and the max number of effective samples
+
+        Parameters
+        ----------
+        timeseries_array : np.array
+            Array of timeseries values
+
+        Returns
+        -------
+        burned_in_series : np.array
+            Array starting after burn in
+        statistical_inefficiency : float
+            Statistical inefficience of timeseries
+        Neff_max : float
+            Max number of uncorrelated samples
         """
-        for nonalchemical_result_zero, nonalchemical_result_one in zip(self._nonalchemical_zero_results, self._nonalchemical_one_results):
-            self._nonalchemical_zero_endpt_reduced_potentials.append(nonalchemical_result_zero.get())
-            self._nonalchemical_one_endpt_reduced_potentials.append(nonalchemical_result_one.get())
+        [t0, g, Neff_max] = pymbar.timeseries.detectEquilibration(timeseries_array)
 
-        self._nonalchemical_zero_results = []
-        self._nonalchemcal_one_results = []
+        return timeseries_array[t0:], g, Neff_max
 
-    @property
-    def zero_endpoint_perturbation(self):
-        hybrid_reduced_potentials = np.array(self._lambda_zero_reduced_potentials)
-        nonalchemical_reduced_potentials = np.array(self._nonalchemical_zero_endpt_reduced_potentials)
-        [df, ddf] = pymbar.EXP(nonalchemical_reduced_potentials - hybrid_reduced_potentials)
-        return [df, ddf]
+    def _endpoint_perturbations(self):
+        """
+        Compute the correlation-adjusted free energy at the endpoints to the nonalchemical systems.
 
-    @property
-    def one_endpoint_perturbation(self):
-        hybrid_reduced_potentials = np.array(self._lambda_one_reduced_potentials)
-        nonalchemical_reduced_potentials = np.array(self._lambda_zero_reduced_potentials)
-        [df, ddf] = pymbar.EXP(nonalchemical_reduced_potentials - hybrid_reduced_potentials)
-        return [df, ddf]
+        Returns
+        -------
+        df0, ddf0 : list of float
+            endpoint pertubation with error for lambda 0, kT
+        df1, ddf1 : list of float
+            endpoint perturbation for lambda 1, kT
+        """
+        free_energies = []
+        for lambda_endpoint in [0, 1]:
+            work_array = np.array(self._reduced_potential_differences[lambda_endpoint])
+            burned_in, statistical_inefficiency, Neff_max = self._adjust_for_correlation(work_array)
 
-    @property
-    def lambda_zero_equilibrium_trajectory(self):
-        return self._lambda_zero_traj
+            _logger.info("Number of effective samples of endpoint pertubation at lambda %d is %f" % (lambda_endpoint, Neff_max))
 
-    @property
-    def lambda_one_equilibrium_trajectory(self):
-        return self._lambda_one_traj
+            df, ddf_raw = pymbar.EXP(burned_in)
 
-    @property
-    def forward_nonequilibrium_trajectories(self):
-        return self._forward_nonequilibrium_trajectories
+            #correct by multiplying the stddev by the statistical inefficiency
+            ddf_corrected = ddf_raw * np.sqrt(statistical_inefficiency)
 
-    @property
-    def reverse_nonequilibrium_trajectories(self):
-        return self._reverse_nonequilibrium_trajectories
+            free_energies.append([df, ddf_corrected])
 
-    @property
-    def forward_cumulative_works(self):
-        return self._forward_nonequilibrium_cumulative_works
+        return free_energies[0], free_energies[1]
 
-    @property
-    def reverse_cumulative_works(self):
-        return self._reverse_nonequilibrium_cumulative_works
+    def _alchemical_free_energy(self):
+        """
+        Use BAR to compute the free energy between lambda 0 and lambda1
+
+        Returns
+        -------
+        df : float
+            Free energy, kT
+        ddf_corrected : float
+            Error in free energy, kT
+        """
+        statistical_inefficiencies = []
+        work_arrays = []
+        for lambda_endpoint in [0, 1]:
+            work_array = np.array(self._total_work[lambda_endpoint])
+            work_arrays.append(work_array)
+
+            burned_in, statistical_inefficiency, Neff_max = self._adjust_for_correlation(work_array)
+
+            _logger.info("Number of effective samples of switching at lambda %d is %f" % (lambda_endpoint, Neff_max))
+
+            statistical_inefficiencies.append(statistical_inefficiency)
+
+        #for now we'll take the max of the two to decide how to report the error
+        statistical_inefficiency = max(statistical_inefficiencies)
+
+        df, ddf_raw = pymbar.BAR(work_arrays[0], work_arrays[1])
+
+        ddf_corrected = ddf_raw*np.sqrt(statistical_inefficiency)
+
+        return df, ddf_corrected
 
     @property
     def current_free_energy_estimate(self):
-        [df, ddf] = pymbar.BAR(self._forward_total_work, self._reverse_total_work)
-        return [df, ddf]
+        """
+        Estimate the free energy based on currently available values
+        """
+        #Make sure the task queue is empty (all pending calcs are complete) before computing free energy
+        #Make sure the task queue is empty (all pending calcs are complete) before computing free energy
+        [[df0, ddf0], [df1, ddf1]] = self._endpoint_perturbations()
+        [df, ddf] = self._alchemical_free_energy()
+
+        return -df0 + df + df1
 
 if __name__=="__main__":
     import os
+    _logger.setLevel(logging.INFO)
     #gaff_filename = get_data_filename("data/gaff.xml")
     #forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
     #path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
@@ -740,5 +636,5 @@ if __name__=="__main__":
     ne_fep = NonequilibriumSwitchingFEP(fesetup.solvent_topology_proposal, fesetup.solvent_old_positions, fesetup.solvent_new_positions)
     print("ne-fep initialized")
     ne_fep.run(n_iterations=2)
-    ne_fep.retrieve_nonequilibrium_results()
+    print(ne_fep.current_free_energy_estimate)
     print("retrieved")
