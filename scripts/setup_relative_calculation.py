@@ -1,8 +1,9 @@
 import openeye.oechem as oechem
-import rdkit.Chem as chem
+import sys
+import progressbar
 import yaml
 from perses.rjmc import topology_proposal, geometry
-from perses.annihilation import relative
+from perses.dispersed import relative_setup
 from perses.tests import utils
 import simtk.unit as unit
 from openmmtools.constants import kB
@@ -10,177 +11,115 @@ import simtk.openmm.app as app
 from openmoltools import forcefield_generators
 import copy
 import numpy as np
+import pickle
+import progressbar
 
-
-def load_mol_file(mol_filename):
+def run_setup(setup_options):
     """
-    Utility function to load
+    Run the setup pipeline and return the relevant setup objects based on a yaml input file.
+
     Parameters
     ----------
-    mol_filename : str
-        The name of the molecule file. Must be supported by openeye.
+    setup_options : dict
+        result of loading yaml input file
 
     Returns
     -------
-    mol : oechem.OEMol
-        the list of molecules as OEMols
+    fe_setup : NonequilibriumFEPSetup
+        The setup class for this calculation
+    ne_fep : NonequilibriumSwitchingFEP
+        The nonequilibrium driver class
     """
-    ifs = oechem.oemolistream()
-    ifs.open(mol_filename)
-    #get the list of molecules
-    mol_list = [mol for mol in ifs.GetOEMols()]
-    #we'll always take the first for now
-    return mol_list
+    #We'll need the protein PDB file (without missing atoms)
+    protein_pdb_filename = setup_options['protein_pdb']
 
-def load_receptor_pdb(pdb_filename):
-    """
-    Load the receptor by PDB filename.
+    #And a ligand file containing the pair of ligands between which we will transform
+    ligand_file = setup_options['ligand_file']
 
-    Parameters
-    ----------
-    pdb_filename
-    """
-    f = open(pdb_filename, 'r')
-    pdbfile = app.PDBFile(f)
-    return pdbfile.topology, pdbfile.positions
+    #get the indices of ligands out of the file:
+    old_ligand_index = setup_options['old_ligand_index']
+    new_ligand_index = setup_options['new_ligand_index']
 
-def solvate_topology(topology, positions, forcefield, padding=9.0*unit.angstrom):
-    """
-    Solvate the given topology to run an explicit solvent simulation.
-    Parameters
-    ----------
-    topology
+    forcefield_files = setup_options['forcefield_files']
 
-    Returns
-    -------
+    #get the simulation parameters
+    pressure = setup_options['pressure'] * unit.atmosphere
+    temperature = setup_options['temperature'] * unit.kelvin
+    solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
 
-    """
-    modeller = app.Modeller(topology, positions)
-    modeller.addSolvent(forcefield, padding=padding, model='tip3p')
-    topology = modeller.getTopology()
-    positions = modeller.getPositions()
+    setup_pickle_file = setup_options['save_setup_pickle_as']
 
-    return topology, positions
+    fe_setup = relative_setup.NonequilibriumFEPSetup(protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms)
 
-def _find_mol_start_index(topology):
-        """
-        Find the starting index of the molecule in the topology.
-        Throws an exception if resname is not present.
+    pickle_outfile = open(setup_pickle_file, 'wb')
 
-        Parameters
-        ----------
-        topology : app.Topology object
-            The topology containing the molecule
+    try:
+        pickle.dump(fe_setup, pickle_outfile)
+    except Exception as e:
+        print(e)
+        print("Unable to save setup object as a pickle")
+    finally:
+        pickle_outfile.close()
 
-        Returns
-        -------
-        mol_start_idx : int
-            start index of the molecule
-        mol_length : int
-            the number of atoms in the molecule
-        """
-        resname = "MOL"
-        mol_residues = [res for res in topology.residues() if res.name==resname]
-        if len(mol_residues)!=1:
-            raise ValueError("There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'" % (len(mol_residues), resname))
-        mol_residue = mol_residues[0]
-        atoms = list(mol_residue.atoms())
-        mol_start_idx = atoms[0].index
-        return mol_start_idx, len(list(atoms))
+    print("Setup object has been created.")
 
+    phase = setup_options['phase']
 
-def append_topology(destination_topology, source_topology, exclude_residue_name=None):
-    """
-    Add the source OpenMM Topology to the destination Topology.
+    if phase == "complex":
+        topology_proposal = fe_setup.complex_topology_proposal
+        old_positions = fe_setup.complex_old_positions
+        new_positions = fe_setup.complex_old_positions
+    elif phase == "solvent":
+        topology_proposal = fe_setup.solvent_topology_proposal
+        old_positions = fe_setup.solvent_old_positions
+        new_positions = fe_setup.solvent_new_positions
+    else:
+        raise ValueError("Phase must be either complex or solvent.")
 
-    Parameters
-    ----------
-    destination_topology : simtk.openmm.app.Topology
-        The Topology to which the contents of `source_topology` are to be added.
-    source_topology : simtk.openmm.app.Topology
-        The Topology to be added.
-    exclude_residue_name : str, optional, default=None
-        If specified, any residues matching this name are excluded.
+    forward_functions = setup_options['forward_functions']
 
-    """
-    newAtoms = {}
-    for chain in source_topology.chains():
-        newChain = destination_topology.addChain(chain.id)
-        for residue in chain.residues():
-            if (residue.name == exclude_residue_name):
-                continue
-            newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
-            for atom in residue.atoms():
-                newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                newAtoms[atom] = newAtom
-    for bond in source_topology.bonds():
-        if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
-            continue
-        # TODO: Preserve bond order info using extended OpenMM API
-        destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+    n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+    n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
+    n_steps_per_move_application = setup_options['n_steps_per_move_application']
 
-def _build_new_topology(current_receptor_topology, oemol_proposed):
-    """
-    Construct a new topology
-    Parameters
-    ----------
-    oemol_proposed : oechem.OEMol object
-        the proposed OEMol object
-    current_receptor_topology : app.Topology object
-        The current topology without the small molecule
+    trajectory_directory = setup_options['trajectory_directory']
+    trajectory_prefix = setup_options['trajectory_prefix']
+    atom_selection = setup_options['atom_selection']
 
-    Returns
-    -------
-    new_topology : app.Topology object
-        A topology with the receptor and the proposed oemol
-    mol_start_index : int
-        The first index of the small molecule
-    """
-    oemol_proposed.SetTitle("MOL")
-    mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
-    new_topology = app.Topology()
-    append_topology(new_topology, current_receptor_topology)
-    append_topology(new_topology, mol_topology)
-    # Copy periodic box vectors.
-    if current_receptor_topology._periodicBoxVectors != None:
-        new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
+    scheduler_address = setup_options['scheduler_address']
 
-    return new_topology
+    ne_fep = relative_setup.NonequilibriumSwitchingFEP(topology_proposal, old_positions, new_positions,
+                                                       forward_functions=forward_functions,
+                                                       n_equil_steps=n_equilibrium_steps_per_iteration,
+                                                       ncmc_nsteps=n_steps_ncmc_protocol,
+                                                       nsteps_per_iteration=n_steps_per_move_application,
+                                                       temperature=temperature,
+                                                       trajectory_directory=trajectory_directory,
+                                                       trajectory_prefix=trajectory_prefix,
+                                                       atom_selection=atom_selection,
+                                                       scheduler_address=scheduler_address)
 
-def prepare_topology_proposal():
-    from perses.tests.utils import get_data_filename
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', 'amber99sbildn.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-    oemol_list = load_mol_file("p38_ligands.sdf")
-    mol_a = oemol_list[0]
-    mol_b = oemol_list[1]
+    print("Nonequilibrium switching driver class constructed")
 
-    modeller = combine_mol_with_receptor(mol_a, "p38_protein.pdb")
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
-    topology = modeller.getTopology()
-    positions = modeller.getPositions()
-    system = forcefield.createSystem(topology, nonbondedMethod=app.PME)
+    return fe_setup, ne_fep
 
-
-
-def combine_mol_with_receptor(mol, receptor_pdb_filename):
-    from perses.tests.utils import extractPositionsFromOEMOL
-    receptor_top, receptor_pos = load_receptor_pdb(receptor_pdb_filename)
-    n_atoms_receptor = receptor_top.getNumAtoms()
-    unsolvated_receptor_mol = _build_new_topology(receptor_top, mol)
-    mol_positions = extractPositionsFromOEMOL(mol)
-
-    #find positions of molecule in receptor topology:
-    mol_start_index, len_mol = _find_mol_start_index(unsolvated_receptor_mol)
-
-    #copy positions to new position array
-    new_positions = unit.Quantity(value=np.zeros([n_atoms_receptor+len_mol, 3]), unit=unit.nanometer)
-    new_positions[:mol_start_index, :] = receptor_pos
-    new_positions[mol_start_index:, :] = mol_positions
-
-    modeller = app.Modeller(unsolvated_receptor_mol, new_positions)
-
-    return modeller
 if __name__=="__main__":
-    pass
+    yaml_filename = "basic_setup.yaml"
+    yaml_file = open(yaml_filename, 'r')
+    setup_options = yaml.load(yaml_file)
+    yaml_file.close()
+    import time
+
+    fe_setup, ne_fep = run_setup(setup_options)
+    print("setup complete")
+
+    n_cycles = setup_options['n_cycles']
+    n_iterations_per_cycle = setup_options['n_iterations_per_cycle']
+
+    total_iterations = n_cycles*n_iterations_per_cycle
+
+    bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
+    for i in range(n_cycles):
+        ne_fep.run(n_iterations=n_iterations_per_cycle)
+        time.sleep(1)
+        bar.update((i+1)*n_iterations_per_cycle)
