@@ -613,4 +613,5 @@ class NonequilibriumSwitchingFEP(object):
         [[df0, ddf0], [df1, ddf1]] = self._endpoint_perturbations()
         [df, ddf] = self._alchemical_free_energy()
 
-        return -df0 + df + df1
+        ddf_overall = np.sqrt(ddf0**2 + ddf1**2 + ddf**2)
+        return -df0 + df + df1, ddf_overall
