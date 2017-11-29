@@ -104,11 +104,11 @@ def run_setup(setup_options):
     return fe_setup, ne_fep
 
 if __name__=="__main__":
+    import os
     yaml_filename = "basic_setup.yaml"
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file)
     yaml_file.close()
-    import time
 
     fe_setup, ne_fep = run_setup(setup_options)
     print("setup complete")
@@ -121,5 +121,19 @@ if __name__=="__main__":
     bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
     for i in range(n_cycles):
         ne_fep.run(n_iterations=n_iterations_per_cycle)
-        time.sleep(1)
         bar.update((i+1)*n_iterations_per_cycle)
+
+    df, ddf = ne_fep.current_free_energy_estimate
+
+    print("The free energy estimate is %f +/- %f" % (df, ddf))
+
+    trajectory_directory = setup_options['trajectory_directory']
+    trajectory_prefix = setup_options['trajectory_prefix']
+
+    file_prefix = os.path.join(trajectory_directory, trajectory_prefix + "endpoint{endpoint_idx}.npy")
+
+    endpoint_work_paths = [file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0,1]]
+
+    #save the endpoint perturbations
+    for lambda_state, reduced_potential_diference in ne_fep._reduced_potential_differences:
+        np.save(endpoint_work_paths[lambda_state], np.array(reduced_potential_diference))
