@@ -103,6 +103,32 @@ def run_setup(setup_options):
 
     return fe_setup, ne_fep
 
+def get_topology_proposals(fe_setup):
+    """
+    Get a dictionary of the various TopologyProposal objects in a NonequilibriumFEPSetup object
+
+    Parameters
+    ----------
+    fe_setup : NonequilibriumSwitchingFEP
+
+    Returns
+    -------
+    topology_proposals: dict
+        dictionary of topology_proposal_name: topology_proposal, as well as initial positions
+    """
+    topology_proposals = {}
+
+    topology_proposals['solvent_topology_proposal'] = fe_setup.solvent_topology_proposal
+    topology_proposals['complex_topology_proposal'] = fe_setup.complex_topology_proposal
+
+    topology_proposals['solvent_old_positions'] = fe_setup.solvent_old_positions
+    topology_proposals['solvent_new_positions'] = fe_setup.solvent_new_positions
+
+    topology_proposals['complex_old_positions'] = fe_setup.complex_old_positions
+    topology_proposals['complex_new_positions'] = fe_setup.complex_new_positions
+
+    return topology_proposals
+
 if __name__=="__main__":
     import os
     yaml_filename = "basic_setup.yaml"
@@ -118,6 +144,17 @@ if __name__=="__main__":
 
     total_iterations = n_cycles*n_iterations_per_cycle
 
+    trajectory_directory = setup_options['trajectory_directory']
+    trajectory_prefix = setup_options['trajectory_prefix']
+
+    #write out topology proposals
+    topology_proposals_setup = get_topology_proposals(fe_setup)
+    np.save(os.path.join(trajectory_directory, trajectory_prefix+"topology_proposals.npy"), topology_proposals_setup)
+
+    #write out hybrid factory
+    hybrid_factory = ne_fep._factory
+    np.save(os.path.join(trajectory_directory, trajectory_prefix+"hybrid_factory.npy"), hybrid_factory)
+
     bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
     for i in range(n_cycles):
         ne_fep.run(n_iterations=n_iterations_per_cycle)
@@ -127,12 +164,9 @@ if __name__=="__main__":
 
     print("The free energy estimate is %f +/- %f" % (df, ddf))
 
-    trajectory_directory = setup_options['trajectory_directory']
-    trajectory_prefix = setup_options['trajectory_prefix']
+    endpoint_file_prefix = os.path.join(trajectory_directory, trajectory_prefix + "endpoint{endpoint_idx}.npy")
 
-    file_prefix = os.path.join(trajectory_directory, trajectory_prefix + "endpoint{endpoint_idx}.npy")
-
-    endpoint_work_paths = [file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0,1]]
+    endpoint_work_paths = [endpoint_file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0, 1]]
 
     #save the endpoint perturbations
     for lambda_state, reduced_potential_diference in ne_fep._reduced_potential_differences:
