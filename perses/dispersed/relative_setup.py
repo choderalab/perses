@@ -509,9 +509,7 @@ class NonequilibriumSwitchingFEP(object):
         #after all tasks have been requested, retrieve the results:
         for i in range(n_iterations):
             endpoint_perturbations = self._client.gather(endpoint_perturbation_results_list[i])
-            print(i)
             nonequilibrium_results = self._client.gather(nonequilibrium_results_list[i])
-            print(i)
 
             for lambda_state in [0,1]:
                 self._reduced_potential_differences[lambda_state].append(endpoint_perturbations[lambda_state])
