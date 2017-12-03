@@ -726,7 +726,7 @@ class PolymerProposalEngine(ProposalEngine):
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
 
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_AtomicNumber
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber
         bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
 
@@ -1297,7 +1297,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                  always_change=True):
 
         # Default atom and bond expressions for MCSS
-        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree
         DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
         self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
@@ -1560,7 +1560,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info('Generating atom map...')
         timer_start = time.time()
 
-        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree
         DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
         atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
