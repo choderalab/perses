@@ -356,7 +356,7 @@ class NonequilibriumSwitchingFEP(object):
         """
         if scheduler_address is None:
             self._map = map
-            self._gather = lambda x: x
+            self._gather = lambda mapped_list: list(mapped_list)
         else:
             if scheduler_address=='localhost':
                 self._client = distributed.Client()
