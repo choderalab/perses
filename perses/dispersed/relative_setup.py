@@ -25,6 +25,7 @@ from io import StringIO
 from openmmtools.constants import kB
 import logging
 import os
+import pickle
 import dask.distributed as distributed
 
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove
@@ -519,6 +520,29 @@ class NonequilibriumSwitchingFEP(object):
                 self._total_work[lambda_state].append(nonequilibrium_results[lambda_state].cumulative_work[-1])
 
 
+    def equilibrate(self, n_iterations=100):
+        """
+        Run the equilibrium simulations a specified number of times without writing to a file. This can be used to equilibrate
+        the simulation before beginning the free energy calculation.
+
+        Parameters
+        ----------
+        n_iterations : int
+            The number of times to apply the equilibrium MCMove
+        """
+        eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
+        hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
+        niterations_per_call_list = [self._n_iterations_per_call, self._n_iterations_per_call]
+        atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
+
+        for i in range(n_iterations):
+
+            #don't write out any files
+            equilibrium_trajectory_filenames = [None, None]
+
+            #run a round of equilibrium
+            self._equilibrium_results = self._client.map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+
     def _adjust_for_correlation(self, timeseries_array: np.array):
         """
         Compute statistical inefficiency for timeseries, returning the timeseries with burn in as well as
@@ -613,3 +637,92 @@ class NonequilibriumSwitchingFEP(object):
 
         ddf_overall = np.sqrt(ddf0**2 + ddf1**2 + ddf**2)
         return -df0 + df + df1, ddf_overall
+
+def run_setup(setup_options):
+    """
+    Run the setup pipeline and return the relevant setup objects based on a yaml input file.
+
+    Parameters
+    ----------
+    setup_options : dict
+        result of loading yaml input file
+
+    Returns
+    -------
+    fe_setup : NonequilibriumFEPSetup
+        The setup class for this calculation
+    ne_fep : NonequilibriumSwitchingFEP
+        The nonequilibrium driver class
+    """
+    #We'll need the protein PDB file (without missing atoms)
+    protein_pdb_filename = setup_options['protein_pdb']
+
+    #And a ligand file containing the pair of ligands between which we will transform
+    ligand_file = setup_options['ligand_file']
+
+    #get the indices of ligands out of the file:
+    old_ligand_index = setup_options['old_ligand_index']
+    new_ligand_index = setup_options['new_ligand_index']
+
+    forcefield_files = setup_options['forcefield_files']
+
+    #get the simulation parameters
+    pressure = setup_options['pressure'] * unit.atmosphere
+    temperature = setup_options['temperature'] * unit.kelvin
+    solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+
+    setup_pickle_file = setup_options['save_setup_pickle_as']
+
+    fe_setup = NonequilibriumFEPSetup(protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms)
+
+    pickle_outfile = open(setup_pickle_file, 'wb')
+
+    try:
+        pickle.dump(fe_setup, pickle_outfile)
+    except Exception as e:
+        print(e)
+        print("Unable to save setup object as a pickle")
+    finally:
+        pickle_outfile.close()
+
+    print("Setup object has been created.")
+
+    phase = setup_options['phase']
+
+    if phase == "complex":
+        topology_proposal = fe_setup.complex_topology_proposal
+        old_positions = fe_setup.complex_old_positions
+        new_positions = fe_setup.complex_old_positions
+    elif phase == "solvent":
+        topology_proposal = fe_setup.solvent_topology_proposal
+        old_positions = fe_setup.solvent_old_positions
+        new_positions = fe_setup.solvent_new_positions
+    else:
+        raise ValueError("Phase must be either complex or solvent.")
+
+    forward_functions = setup_options['forward_functions']
+
+    n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+    n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
+    n_steps_per_move_application = setup_options['n_steps_per_move_application']
+
+    trajectory_directory = setup_options['trajectory_directory']
+    trajectory_prefix = setup_options['trajectory_prefix']
+    atom_selection = setup_options['atom_selection']
+
+    scheduler_address = setup_options['scheduler_address']
+
+    ne_fep = NonequilibriumSwitchingFEP(topology_proposal, old_positions, new_positions,
+                                                       forward_functions=forward_functions,
+                                                       n_equil_steps=n_equilibrium_steps_per_iteration,
+                                                       ncmc_nsteps=n_steps_ncmc_protocol,
+                                                       nsteps_per_iteration=n_steps_per_move_application,
+                                                       temperature=temperature,
+                                                       trajectory_directory=trajectory_directory,
+                                                       trajectory_prefix=trajectory_prefix,
+                                                       atom_selection=atom_selection,
+                                                       scheduler_address=scheduler_address)
+
+    print("Nonequilibrium switching driver class constructed")
+
+    return fe_setup, ne_fep
