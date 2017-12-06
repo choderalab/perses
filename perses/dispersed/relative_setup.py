@@ -465,7 +465,7 @@ class NonequilibriumSwitchingFEP(object):
         max_steps : int, default 50
             max number of steps for openmm minimizer.
         """
-        minimized = self._client.map(feptasks.minimize, self._hybrid_thermodynamic_states.values(), self._sampler_states.values(), [self._equilibrium_mc_move, self._equilibrium_mc_move])
+        minimized = self._map(feptasks.minimize, self._hybrid_thermodynamic_states.values(), self._sampler_states.values(), [self._equilibrium_mc_move, self._equilibrium_mc_move])
         _logger.info("Minimizing")
         return self._gather(minimized)
 
