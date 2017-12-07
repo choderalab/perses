@@ -565,6 +565,45 @@ def test_run_peptide_library_engine():
 
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
+def test_molecular_atom_mapping(initial_smiles="naphthalene", final_smiles="benzene"):
+    """
+    Test the creation of atom maps between pairs of molecules.
+
+    """
+    from openeye import oechem
+
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    from perses.tests.utils import createOEMolFromSMILES
+
+    # Test mappings for JACS dataset ligands
+    for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
+        # Read molecules
+        dataset_path = 'data/schrodinger-jacs-datasets/%s_ligands.sdf' % dataset_name
+        mol2_filename = resource_filename('perses', dataset_path)
+        ifs = oechem.oemolistream(mol2_filename)
+        molecules = list()
+        for mol in ifs.GetOEGraphMols():
+            molecules.append(oechem.OEGraphMol(mol))
+        nmolecules = len(molecules)
+
+        # Build atom map for transformations to molecule 0
+        for index in range(1, nmolecules):
+            # Build atom map
+            molecule1 = molecules[0]
+            molecule2 = molecules[index]
+            atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2)
+            # Make sure we aren't mapping hydrogens onto anything else
+            atoms1 = [atom for atom in molecule1.GetAtoms()]
+            atoms2 = [atom for atom in molecule2.GetAtoms()]
+            for (index1, index2) in atom_map.items():
+                atom1, atom2 = atoms1[index1], atoms2[index2]
+                if (atom1.GetAtomicNum()==1) != (atom2.GetAtomicNum()==1):
+                    msg = 'Atom atomic number %d is being mapped to atomic number %d\n' % (atom1.GetAtomicNum(), atom2.GetAtomicNum())
+                    msg += 'molecule 1 : %s\n' % oechem.OECreateIsoSmiString(molecule1)
+                    msg += 'molecule 2 : %s\n' % oechem.OECreateIsoSmiString(molecule2)
+                    # TODO: Generate PDF showing problematic mapping
+                    raise Exception(msg)
+
 if __name__ == "__main__":
 
     test_run_point_mutation_propose()
