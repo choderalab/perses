@@ -567,13 +567,14 @@ def test_run_peptide_library_engine():
 
 def test_molecular_atom_mapping(initial_smiles="naphthalene", final_smiles="benzene"):
     """
-    Test the creation of atom maps between pairs of molecules.
+    Test the creation of atom maps between pairs of molecules from the JACS benchmark set.
 
     """
     from openeye import oechem
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.tests.utils import createOEMolFromSMILES
     from perses.tests.utils import render_atom_mapping
+    from itertools import combinations
 
     # Test mappings for JACS dataset ligands
     for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
@@ -584,13 +585,11 @@ def test_molecular_atom_mapping(initial_smiles="naphthalene", final_smiles="benz
         molecules = list()
         for mol in ifs.GetOEGraphMols():
             molecules.append(oechem.OEGraphMol(mol))
-        nmolecules = len(molecules)
 
-        # Build atom map for transformations to molecule 0
-        for index in range(1, nmolecules):
-            # Build atom map
-            molecule1 = molecules[0]
-            molecule2 = molecules[index]
+        # Build atom map for some transformations.
+        #for (molecule1, molecule2) in combinations(molecules, 2): # too slow
+        molecule1 = molecules[0]
+        for molecule2 in molecules[1:]:
             new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2)
             # Make sure we aren't mapping hydrogens onto anything else
             atoms1 = [atom for atom in molecule1.GetAtoms()]
@@ -599,7 +598,7 @@ def test_molecular_atom_mapping(initial_smiles="naphthalene", final_smiles="benz
                 atom1, atom2 = atoms1[index1], atoms2[index2]
                 if (atom1.GetAtomicNum()==1) != (atom2.GetAtomicNum()==1):
                     filename = 'mapping-error.png'
-                    render_atom_mapping(filename, molecule1, molecule2, atom_map)
+                    render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
                     msg = 'Atom atomic number %d is being mapped to atomic number %d\n' % (atom1.GetAtomicNum(), atom2.GetAtomicNum())
                     msg += 'molecule 1 : %s\n' % oechem.OECreateIsoSmiString(molecule1)
                     msg += 'molecule 2 : %s\n' % oechem.OECreateIsoSmiString(molecule2)
