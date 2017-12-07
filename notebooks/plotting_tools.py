@@ -35,6 +35,10 @@ class NonequilibriumSwitchingAnalysis(object):
         cum_work_filenames = [glob.glob(self._neq_work_filename_pattern[lambda_state]) for lambda_state in [0,1]]
         neq_traj_filenames = [glob.glob(self._neq_traj_filename_pattern[lambda_state]) for lambda_state in [0,1]]
 
+        #get the filenames for the endpoint perturbations
+        endpoint_file_prefix = os.path.join(trajectory_directory, trajectory_prefix + "endpoint{endpoint_idx}.npy")
+        self._endpoint_work_paths = [endpoint_file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0, 1]]
+
         #sort the cumulative work files by iteration number and load them:
         stacked_work_arrays = []
         for lambda_state in [0,1]:
@@ -58,6 +62,72 @@ class NonequilibriumSwitchingAnalysis(object):
 
         for lambda_state in [0,1]:
             #index them by their iteration number
-            traj_filename_dict = {int(filename.split(".")[-4]) for filename in neq_traj_filenames[lambda_state]}
+            traj_filename_dict = {int(filename.split(".")[-4]) : filename for filename in neq_traj_filenames[lambda_state]}
             self._neq_traj_filenames.append(traj_filename_dict)
 
+    def get_nonequilibrium_trajectory(self, direction, trajectory_index):
+        """
+        Get a nonequilibrium trajectory corresponding to a particular direction (forward, 0->1, reverse 1->0),
+        and run index.
+
+        Parameters
+        ----------
+        direction : str
+           "forward" or "reverse"
+        trajectory_index : int
+            Iteration number of protocol
+
+        Returns
+        -------
+        nonequilibrium_trajectory : md.Trajectory
+            the nonequilibrium trajectory
+        """
+        if direction=='forward':
+            lambda_state = 0
+        elif direction=='reverse':
+            lambda_state = 1
+        else:
+            raise ValueError("direction must be either forward or reverse")
+
+        nonequilibrium_trajectory_filename = self._neq_traj_filenames[lambda_state][trajectory_index]
+
+        return md.load(nonequilibrium_trajectory_filename)
+
+    @property
+    def lambda_zero_traj(self):
+        """
+        Get the equilibrium trajectory corresponding to lambda=0
+
+        Returns
+        -------
+        lambda_zero_traj : md.Trajectory object
+            The equilibrium trajectory at lambda=0
+        """
+        lambda_zero_filename = self._trajectory_filename[0]
+        return md.load(lambda_zero_filename)
+
+    @property
+    def lambda_one_traj(self):
+        """
+        Get the equilibrium trajectory corresponding to lambda=1
+
+        Returns
+        -------
+        lambda_one_traj : md.Trajectory object
+            The equilibrium trajectory at lambda=1
+        """
+        lambda_one_filename = self._trajectory_directory[1]
+        return md.load(lambda_one_filename)
+
+    @property
+    def cumulative_work(self):
+        """
+        Get the cumulative work array for the nonequilibrium switching.
+        The arrays have the indexing [lambda_state, protocol_index, step_index].
+
+        Returns
+        -------
+        cumulative_works : np.array [2, n_protocols, n_steps_per_protocol]
+            The cumulative work for the protocols that were run.
+        """
+        return self._cumulative_works
