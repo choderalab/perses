@@ -571,9 +571,9 @@ def test_molecular_atom_mapping(initial_smiles="naphthalene", final_smiles="benz
 
     """
     from openeye import oechem
-
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.tests.utils import createOEMolFromSMILES
+    from perses.tests.utils import render_atom_mapping
 
     # Test mappings for JACS dataset ligands
     for dataset_name in ['CDK2', 'p38', 'Tyk2', 'Thrombin', 'PTP1B', 'MCL1', 'Jnk1', 'Bace']:
@@ -598,10 +598,13 @@ def test_molecular_atom_mapping(initial_smiles="naphthalene", final_smiles="benz
             for (index1, index2) in atom_map.items():
                 atom1, atom2 = atoms1[index1], atoms2[index2]
                 if (atom1.GetAtomicNum()==1) != (atom2.GetAtomicNum()==1):
+                    filename = 'mapping-error.png'
+                    render_atom_mapping(filename, molecule1, molecule2, atom_map)
                     msg = 'Atom atomic number %d is being mapped to atomic number %d\n' % (atom1.GetAtomicNum(), atom2.GetAtomicNum())
                     msg += 'molecule 1 : %s\n' % oechem.OECreateIsoSmiString(molecule1)
                     msg += 'molecule 2 : %s\n' % oechem.OECreateIsoSmiString(molecule2)
-                    # TODO: Generate PDF showing problematic mapping
+                    msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
+                    msg += str(atom_map)
                     raise Exception(msg)
 
 if __name__ == "__main__":
