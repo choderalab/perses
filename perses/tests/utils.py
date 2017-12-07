@@ -505,7 +505,7 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     sanitized_smiles_list = list(sanitized_smiles_set)
     return sanitized_smiles_list
 
-def render_atom_mapping(filename, molecule1, molecule2, atom_map, width=1200, height=1200):
+def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=1200):
     """
     Render the atom mapping to a PDF file.
 
@@ -517,8 +517,8 @@ def render_atom_mapping(filename, molecule1, molecule2, atom_map, width=1200, he
         Initial molecule
     molecule2 : openeye.oechem.OEMol
         Final molecule
-    atom_map : dict of int
-        atom_map[molecule1_atom_index] is the corresponding molecule2 atom index
+    new_to_old_atom_map : dict of int
+        new_to_old_atom_map[molecule2_atom_index] is the corresponding molecule1 atom index
     width : int, optional, default=1200
         Width in pixels
     height : int, optional, default=1200
@@ -563,7 +563,7 @@ def render_atom_mapping(filename, molecule1, molecule2, atom_map, width=1200, he
 
     # Label mapped atoms
     index = 1
-    for (index1, index2) in atom_map.items():
+    for (index2, index1) in new_to_old_atom_map.items():
         new_atoms_1[index1].SetMapIdx(index)
         new_atoms_2[index2].SetMapIdx(index)
         index += 1

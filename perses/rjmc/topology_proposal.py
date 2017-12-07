@@ -35,6 +35,9 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCAliphaticONS
+DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+
 ################################################################################
 # LOGGER
 ################################################################################
@@ -1297,9 +1300,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                  always_change=True):
 
         # Default atom and bond expressions for MCSS
-        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree
-        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-
         self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
 
@@ -1559,9 +1559,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         _logger.info('Generating atom map...')
         timer_start = time.time()
-
-        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCAliphaticONS
-        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
         atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION

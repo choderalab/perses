@@ -591,11 +591,11 @@ def test_molecular_atom_mapping(initial_smiles="naphthalene", final_smiles="benz
             # Build atom map
             molecule1 = molecules[0]
             molecule2 = molecules[index]
-            atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2)
+            new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2)
             # Make sure we aren't mapping hydrogens onto anything else
             atoms1 = [atom for atom in molecule1.GetAtoms()]
             atoms2 = [atom for atom in molecule2.GetAtoms()]
-            for (index1, index2) in atom_map.items():
+            for (index2, index1) in new_to_old_atom_map.items():
                 atom1, atom2 = atoms1[index1], atoms2[index2]
                 if (atom1.GetAtomicNum()==1) != (atom2.GetAtomicNum()==1):
                     filename = 'mapping-error.png'
