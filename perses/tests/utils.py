@@ -505,6 +505,99 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     sanitized_smiles_list = list(sanitized_smiles_set)
     return sanitized_smiles_list
 
+def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=1200):
+    """
+    Render the atom mapping to a PDF file.
+
+    Parameters
+    ----------
+    filename : str
+        The PDF filename to write to.
+    molecule1 : openeye.oechem.OEMol
+        Initial molecule
+    molecule2 : openeye.oechem.OEMol
+        Final molecule
+    new_to_old_atom_map : dict of int
+        new_to_old_atom_map[molecule2_atom_index] is the corresponding molecule1 atom index
+    width : int, optional, default=1200
+        Width in pixels
+    height : int, optional, default=1200
+        Height in pixels
+
+    """
+    from openeye import oechem
+
+    # Make copies of the input molecules
+    molecule1, molecule2 = oechem.OEGraphMol(molecule1), oechem.OEGraphMol(molecule2)
+
+    oechem.OEGenerate2DCoordinates(molecule1)
+    oechem.OEGenerate2DCoordinates(molecule2)
+
+    old_atoms_1 = [atom for atom in molecule1.GetAtoms()]
+    old_atoms_2 = [atom for atom in molecule2.GetAtoms()]
+
+    # Add both to an OEGraphMol reaction
+    rmol = oechem.OEGraphMol()
+    rmol.SetRxn(True)
+    def add_molecule(mol):
+        # Add atoms
+        new_atoms = list()
+        old_to_new_atoms = dict()
+        for old_atom in mol.GetAtoms():
+            new_atom = rmol.NewAtom(old_atom.GetAtomicNum())
+            new_atoms.append(new_atom)
+            old_to_new_atoms[old_atom] = new_atom
+        # Add bonds
+        for old_bond in mol.GetBonds():
+            rmol.NewBond(old_to_new_atoms[old_bond.GetBgn()], old_to_new_atoms[old_bond.GetEnd()], old_bond.GetOrder())
+        return new_atoms, old_to_new_atoms
+
+    [new_atoms_1, old_to_new_atoms_1] = add_molecule(molecule1)
+    [new_atoms_2, old_to_new_atoms_2] = add_molecule(molecule2)
+
+    # Label reactant and product
+    for atom in new_atoms_1:
+        atom.SetRxnRole(oechem.OERxnRole_Reactant)
+    for atom in new_atoms_2:
+        atom.SetRxnRole(oechem.OERxnRole_Product)
+
+    # Label mapped atoms
+    index = 1
+    for (index2, index1) in new_to_old_atom_map.items():
+        new_atoms_1[index1].SetMapIdx(index)
+        new_atoms_2[index2].SetMapIdx(index)
+        index += 1
+
+    # Set up image options
+    from openeye import oedepict
+    itf = oechem.OEInterface()
+    oedepict.OEConfigureImageOptions(itf)
+    ext = oechem.OEGetFileExtension(filename)
+    if not oedepict.OEIsRegisteredImageFile(ext):
+        raise Exception('Unknown image type for filename %s' % filename)
+    ofs = oechem.oeofstream()
+    if not ofs.open(filename):
+        raise Exception('Cannot open output file %s' % filename)
+
+    # Setup depiction options
+    oedepict.OEConfigure2DMolDisplayOptions(itf, oedepict.OE2DMolDisplaySetup_AromaticStyle)
+    opts = oedepict.OE2DMolDisplayOptions(width, height, oedepict.OEScale_AutoScale)
+    oedepict.OESetup2DMolDisplayOptions(opts, itf)
+    opts.SetBondWidthScaling(True)
+    opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
+    opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
+
+    # Depict reaction with component highlights
+    oechem.OEGenerate2DCoordinates(rmol)
+    rdisp = oedepict.OE2DMolDisplay(rmol, opts)
+
+    #colors = [c for c in oechem.OEGetLightColors()]
+    #highlightstyle = oedepict.OEHighlightStyle_BallAndStick
+    #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
+    #oedepict.OEAddHighlighting(rdisp, colors[0], highlightstyle, common_atoms_and_bonds)
+    oedepict.OERenderMolecule(ofs, ext, rdisp)
+    ofs.close()
+
 def canonicalize_SMILES(smiles_list):
     """Ensure all SMILES strings end up in canonical form.
     Stereochemistry must already have been expanded.
