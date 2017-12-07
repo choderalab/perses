@@ -1560,7 +1560,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info('Generating atom map...')
         timer_start = time.time()
 
-        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree
+        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCAliphaticONS
         DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
         atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
