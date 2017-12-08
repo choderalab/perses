@@ -1541,7 +1541,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return receptor_topology
 
     @staticmethod
-    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False):
+    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=False):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -1551,6 +1551,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
              The current molecule in the sampler
         proposed_molecule : openeye.oechem.oemol object
              The proposed new molecule
+        allow_ring_breaking : bool, optional, default=True
+             If False, will check to make sure rings are not being broken or formed.
 
         Returns
         -------
@@ -1563,14 +1565,45 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
 
-        oegraphmol_current = oechem.OEGraphMol(current_molecule)
-        oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
+        oegraphmol_current = oechem.OEGraphMol(current_molecule) # pattern molecule
+        oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule) # target molecule
         #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+
+        def breaks_rings(match):
+            """Return True if the transformation allows rings to be broken.
+            """
+            pattern_atoms = { atom.GetIdx() : atom for atom in oegraphmol_current.GetAtoms() }
+            target_atoms = { atom.GetIdx() : atom for atom in oegraphmol_proposed.GetAtoms() }
+
+            pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
+            target_to_pattern_map = { target_atoms[matchpair.target.GetIdx()] : pattern_atoms[matchpair.pattern.GetIdx()] for matchpair in match.GetAtoms() }
+
+            # Iterate over pattern bonds
+            for bond in oegraphmol_current.GetBonds():
+                if bond.IsInRing():
+                    if (bond.GetBgn() in pattern_to_target_map) and (bond.GetEnd() in pattern_to_target_map):
+                        print(bond)
+                        if not pattern_to_target_map[bond.GetBgn()].GetBond(pattern_to_target_map[bond.GetEnd()]):
+                            return True # a ring is broken in pattern -> target transformation
+
+            # Iterate over target bonds
+            for bond in oegraphmol_proposed.GetBonds():
+                if bond.IsInRing():
+                    if (bond.GetBgn() in target_to_pattern_map) and (bond.GetEnd() in target_to_pattern_map):
+                        if not target_to_pattern_map[bond.GetBgn()].GetBond(target_to_pattern_map[bond.GetEnd()]):
+                            return True # a ring is broken in target -> pattern transformation
+
+            return False # no rings are broken
+
+        if allow_ring_breaking is False:
+            # Filter the matches to remove any that allow ring breaking
+            matches = [m for m in matches if not breaks_rings(m)]
+
         if not matches:
             return {}
         match = max(matches, key=lambda m: m.NumAtoms())

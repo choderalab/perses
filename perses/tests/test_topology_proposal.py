@@ -565,6 +565,21 @@ def test_run_peptide_library_engine():
 
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
+def test_ring_breaking_detection():
+    """
+    Test the detection of ring-breaking transformations.
+
+    """
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    from perses.tests.utils import createOEMolFromIUPAC
+    molecule1 = createOEMolFromIUPAC("naphthalene")
+    molecule2 = createOEMolFromIUPAC("benzene")
+    new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=False)
+    filename = 'mapping-error.png'
+    from perses.tests.utils import render_atom_mapping    
+    render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
+    print(new_to_old_atom_map)
+
 def test_molecular_atom_mapping():
     """
     Test the creation of atom maps between pairs of molecules from the JACS benchmark set.
