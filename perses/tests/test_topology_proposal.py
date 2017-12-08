@@ -565,7 +565,7 @@ def test_run_peptide_library_engine():
 
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
-def test_molecular_atom_mapping(initial_smiles="naphthalene", final_smiles="benzene"):
+def test_molecular_atom_mapping():
     """
     Test the creation of atom maps between pairs of molecules from the JACS benchmark set.
 
