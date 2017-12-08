@@ -116,7 +116,7 @@ class NonequilibriumSwitchingAnalysis(object):
         lambda_one_traj : md.Trajectory object
             The equilibrium trajectory at lambda=1
         """
-        lambda_one_filename = self._trajectory_directory[1]
+        lambda_one_filename = self._trajectory_filename[1]
         return md.load(lambda_one_filename)
 
     @property
