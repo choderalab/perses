@@ -572,13 +572,28 @@ def test_ring_breaking_detection():
     """
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from perses.tests.utils import createOEMolFromIUPAC
+    from perses.tests.utils import render_atom_mapping
     molecule1 = createOEMolFromIUPAC("naphthalene")
     molecule2 = createOEMolFromIUPAC("benzene")
+
+    # Allow ring breaking
+    new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=True)
+    if not len(new_to_old_atom_map) > 0:
+        filename = 'mapping-error.png'
+        render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
+        msg = 'Napthalene -> benzene transformation with allow_ring_breaking=True is not returning a valid mapping\n'
+        msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
+        msg += str(new_to_old_atom_map)
+        raise Exception(msg)
+
     new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=False)
-    filename = 'mapping-error.png'
-    from perses.tests.utils import render_atom_mapping    
-    render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
-    print(new_to_old_atom_map)
+    if not len(new_to_old_atom_map)==0:
+        filename = 'mapping-error.png'
+        render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
+        msg = 'Napthalene -> benzene transformation with allow_ring_breaking=False is erroneously allowing ring breaking\n'
+        msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
+        msg += str(new_to_old_atom_map)
+        raise Exception(msg)
 
 def test_molecular_atom_mapping():
     """
@@ -618,7 +633,7 @@ def test_molecular_atom_mapping():
                     msg += 'molecule 1 : %s\n' % oechem.OECreateIsoSmiString(molecule1)
                     msg += 'molecule 2 : %s\n' % oechem.OECreateIsoSmiString(molecule2)
                     msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
-                    msg += str(atom_map)
+                    msg += str(new_to_old_atom_map)
                     raise Exception(msg)
 
 if __name__ == "__main__":

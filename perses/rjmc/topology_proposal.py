@@ -1574,31 +1574,40 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
 
-        def breaks_rings(match):
-            """Return True if the transformation allows rings to be broken.
+        def enumerate_cycle_basis(molecule):
+            """Enumerate a closed cycle basis of bonds in molecule.
+
+            This uses cycle_basis from NetworkX:
+            https://networkx.github.io/documentation/networkx-1.10/reference/generated/networkx.algorithms.cycles.cycle_basis.html#networkx.algorithms.cycles.cycle_basis
+
+            Parameters
+            ----------
+            molecule : OEMol
+                The molecule for a closed cycle basis of Bonds is to be identified
+
+            Returns
+            -------
+            bond_cycle_basis : list of list of OEBond
+                bond_cycle_basis[cycle_index] is a list of OEBond objects that define a cycle in the basis
+                You can think of these as the minimal spanning set of ring systems to check.
             """
-            pattern_atoms = { atom.GetIdx() : atom for atom in oegraphmol_current.GetAtoms() }
-            target_atoms = { atom.GetIdx() : atom for atom in oegraphmol_proposed.GetAtoms() }
-
-            pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
-            target_to_pattern_map = { target_atoms[matchpair.target.GetIdx()] : pattern_atoms[matchpair.pattern.GetIdx()] for matchpair in match.GetAtoms() }
-
-            # Iterate over pattern bonds
-            for bond in oegraphmol_current.GetBonds():
-                if bond.IsInRing():
-                    if (bond.GetBgn() in pattern_to_target_map) and (bond.GetEnd() in pattern_to_target_map):
-                        print(bond)
-                        if not pattern_to_target_map[bond.GetBgn()].GetBond(pattern_to_target_map[bond.GetEnd()]):
-                            return True # a ring is broken in pattern -> target transformation
-
-            # Iterate over target bonds
-            for bond in oegraphmol_proposed.GetBonds():
-                if bond.IsInRing():
-                    if (bond.GetBgn() in target_to_pattern_map) and (bond.GetEnd() in target_to_pattern_map):
-                        if not target_to_pattern_map[bond.GetBgn()].GetBond(target_to_pattern_map[bond.GetEnd()]):
-                            return True # a ring is broken in target -> pattern transformation
-
-            return False # no rings are broken
+            import networkx as nx
+            g = nx.Graph()
+            for atom in molecule.GetAtoms():
+                g.add_node(atom.GetIdx())
+            for bond in molecule.GetBonds():
+                g.add_edge(bond.GetBgnIdx(), bond.GetEndIdx(), bond=bond)
+            bond_cycle_basis = list()
+            for cycle in nx.cycle_basis(g):
+                bond_cycle = list()
+                for i in range(len(cycle)):
+                    atom_index_1 = cycle[i]
+                    atom_index_2 = cycle[(i+1)%len(cycle)]
+                    edge = g.edges[atom_index_1,atom_index_2]
+                    bond = edge['bond']
+                    bond_cycle.append(bond)
+                bond_cycle_basis.append(bond_cycle)
+            return bond_cycle_basis
 
         def enumerate_ring_bonds(molecule, ring_membership, ring_index):
             """Enumerate OEBond objects in ring."""
@@ -1618,15 +1627,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             atom_map : dict of OEAtom : OEAtom
                 atom_map[molecule1_atom] is the corresponding molecule2 atom
             """
-            oechem.OEFindRingAtomsAndBonds(molecule1)
-            nrings, ring_membership = oechem.OEDetermineRingSystems(molecule1)
-            print(molecule1.NumAtoms(), nrings, ring_membership)
-            for ring_index in range(nrings):
-                for bond in enumerate_ring_bonds(molecule1, ring_membership, ring_index):
-                    if (bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map):
-                        if not atom_map[bond.GetBgn()].GetBond(atom_map[bond.GetEnd()]):
-                            return True
-            return False
+            for cycle in enumerate_cycle_basis(molecule1):
+                for bond in cycle:
+                    # All bonds in this cycle must also be present in molecule2
+                    if not ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
+                        return True # there are no corresponding atoms in molecule2
+                    if not atom_map[bond.GetBgn()].GetBond(atom_map[bond.GetEnd()]):
+                        return True # corresponding atoms have no bond in molecule2
+            return False # no rings in molecule1 are broken in molecule2
 
         def preserves_rings(match):
             """Returns True if the transformation allows ring systems to be broken or created."""
