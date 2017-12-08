@@ -1302,6 +1302,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Default atom and bond expressions for MCSS
         self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+        self._allow_ring_breaking = True # allow ring breaking
 
         # Canonicalize all SMILES strings
         self._smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in set(list_of_smiles)]
@@ -1362,7 +1363,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
-        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose)
+        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose, allow_ring_breaking=self._allow_ring_breaking)
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
@@ -1833,28 +1834,10 @@ class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
 
         super(TwoMoleculeSetProposalEngine, self).__init__([self._old_mol_smiles, self._new_mol_smiles], system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr)
 
+        self._allow_ring_breaking = False # don't allow ring breaking
+
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         return self._new_mol_smiles, self._new_mol, 0.0
-
-    @staticmethod
-    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False)
-        """
-        Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms.
-        Matches that would form or break rings are removed.
-
-        Arguments
-        ---------
-        current_molecule : openeye.oechem.oemol object
-             The current molecule in the sampler
-        proposed_molecule : openeye.oechem.oemol object
-             The proposed new molecule
-
-        Returns
-        -------
-        matches : list of match
-            list of the matches between the molecules
-        """
-        return _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=False)
 
 class NullProposalEngine(SmallMoleculeSetProposalEngine):
     """
