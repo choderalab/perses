@@ -1600,9 +1600,52 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
             return False # no rings are broken
 
+        def enumerate_ring_bonds(molecule, ring_membership, ring_index):
+            """Enumerate OEBond objects in ring."""
+            for bond in molecule.GetBonds():
+                if (ring_membership[bond.GetBgnIdx()] == ring_index) and (ring_membership[bond.GetEndIdx()] == ring_index):
+                    yield bond
+
+        def breaks_rings_in_transformation(molecule1, molecule2, atom_map):
+            """Return True if the transformation from molecule1 to molecule2 breaks rings.
+
+            Parameters
+            ----------
+            molecule1 : OEMol
+                Initial molecule whose rings are to be checked for not being broken
+            molecule2 : OEMol
+                Final molecule
+            atom_map : dict of OEAtom : OEAtom
+                atom_map[molecule1_atom] is the corresponding molecule2 atom
+            """
+            oechem.OEFindRingAtomsAndBonds(molecule1)
+            nrings, ring_membership = oechem.OEDetermineRingSystems(molecule1)
+            print(molecule1.NumAtoms(), nrings, ring_membership)
+            for ring_index in range(nrings):
+                for bond in enumerate_ring_bonds(molecule1, ring_membership, ring_index):
+                    if (bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map):
+                        if not atom_map[bond.GetBgn()].GetBond(atom_map[bond.GetEnd()]):
+                            return True
+            return False
+
+        def preserves_rings(match):
+            """Returns True if the transformation allows ring systems to be broken or created."""
+            pattern_atoms = { atom.GetIdx() : atom for atom in oegraphmol_current.GetAtoms() }
+            target_atoms = { atom.GetIdx() : atom for atom in oegraphmol_proposed.GetAtoms() }
+
+            pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
+            if breaks_rings_in_transformation(oegraphmol_current, oegraphmol_proposed, pattern_to_target_map):
+                return False
+
+            target_to_pattern_map = { target_atoms[matchpair.target.GetIdx()] : pattern_atoms[matchpair.pattern.GetIdx()] for matchpair in match.GetAtoms() }
+            if breaks_rings_in_transformation(oegraphmol_proposed, oegraphmol_current, target_to_pattern_map):
+                return False
+
+            return True
+
         if allow_ring_breaking is False:
             # Filter the matches to remove any that allow ring breaking
-            matches = [m for m in matches if not breaks_rings(m)]
+            matches = [m for m in matches if preserves_rings(m)]
 
         if not matches:
             return {}
