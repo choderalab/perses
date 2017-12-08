@@ -80,12 +80,11 @@ if __name__=="__main__":
 
     endpoint_work_paths = [endpoint_file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0, 1]]
 
-    #save the endpoint perturbations
-    for lambda_state, reduced_potential_diference in ne_fep._reduced_potential_differences:
-        np.save(endpoint_work_paths[lambda_state], np.array(reduced_potential_diference))
-
     #try to write out the ne_fep object as a pickle
-    pickle_outfile = open(os.path.join(trajectory_directory, trajectory_prefix+"nefep_pickle.pkl", 'wb'))
+    try:
+        pickle_outfile = open(os.path.join(trajectory_directory, trajectory_prefix+ "ne_fep.pkl"), 'wb')
+    except Exception as e:
+        pass
 
     try:
         pickle.dump(ne_fep, pickle_outfile)
@@ -94,3 +93,7 @@ if __name__=="__main__":
         print("Unable to save run object as a pickle")
     finally:
         pickle_outfile.close()
+
+    #save the endpoint perturbations
+    for lambda_state, reduced_potential_diference in ne_fep._reduced_potential_differences.items():
+        np.save(endpoint_work_paths[lambda_state], np.array(reduced_potential_diference))
