@@ -94,5 +94,6 @@ setup(name='perses',
         'numba',
         'parmed',
         'pdbfixer',
+        'networkx',
         ],
       )
