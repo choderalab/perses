@@ -3,8 +3,6 @@ from perses.dispersed import feptasks
 from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator, LangevinIntegrator
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import openmmtools.mcmc as mcmc
-import threading
-import queue
 import openmmtools.alchemy as alchemy
 import pymbar
 import simtk.openmm as openmm
@@ -16,11 +14,9 @@ from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import openeye.oechem as oechem
-import celery
 from openmoltools import forcefield_generators
 import copy
 import mdtraj as md
-import mdtraj.utils as mdtrajutils
 from io import StringIO
 from openmmtools.constants import kB
 import logging
@@ -29,7 +25,6 @@ import pickle
 import dask.distributed as distributed
 
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove
-work_lock = threading.Lock()
 
 _logger = logging.getLogger(__name__)
 
