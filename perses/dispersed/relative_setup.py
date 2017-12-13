@@ -431,6 +431,7 @@ class NonequilibriumSwitchingFEP(object):
 
         #create the equilibrium MCMove
         self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=n_equil_steps)
+        self._equilibrium_mc_move.n_restart_attempts = 10
 
         #set the SamplerState for the lambda 0 and 1 equilibrium simulations
         self._lambda_one_sampler_state = SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
