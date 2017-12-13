@@ -243,7 +243,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     return nonequilibrium_result
 
 def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                    mc_move: mcmc.MCMCMove, topology: md.Topology, n_iterations: int,
+                    mc_move: mcmc.MCMCMove, topology: md.Topology,
                     atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> EquilibriumResult:
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
