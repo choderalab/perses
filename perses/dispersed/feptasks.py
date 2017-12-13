@@ -275,7 +275,7 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
         final frame.
     """
     sampler_state = equilibrium_result.sampler_state
-
+    n_iterations = 10
     #get the atom indices we need to subset the topology and positions
     if atom_indices_to_save is None:
         atom_indices = list(range(topology.n_atoms))
