@@ -3,8 +3,6 @@ from perses.dispersed import feptasks
 from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator, LangevinIntegrator
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import openmmtools.mcmc as mcmc
-import threading
-import queue
 import openmmtools.alchemy as alchemy
 import pymbar
 import simtk.openmm as openmm
@@ -16,19 +14,17 @@ from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import openeye.oechem as oechem
-import celery
 from openmoltools import forcefield_generators
 import copy
 import mdtraj as md
-import mdtraj.utils as mdtrajutils
 from io import StringIO
 from openmmtools.constants import kB
 import logging
 import os
+import pickle
 import dask.distributed as distributed
 
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove
-work_lock = threading.Lock()
 
 _logger = logging.getLogger(__name__)
 
@@ -354,9 +350,15 @@ class NonequilibriumSwitchingFEP(object):
             The address of the dask scheduler. If None, local will be used.
         """
         if scheduler_address is None:
-            self._client = distributed.Client()
+            self._map = map
+            self._gather = lambda mapped_list: list(mapped_list)
         else:
-            self._client = distributed.Client(scheduler_address)
+            if scheduler_address=='localhost':
+                self._client = distributed.Client()
+            else:
+                self._client = distributed.Client(scheduler_address)
+            self._map = self._client.map
+            self._gather = self._client.gather
 
         #construct the hybrid topology factory object
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, use_dispersion_correction=use_dispersion_correction)
@@ -429,6 +431,7 @@ class NonequilibriumSwitchingFEP(object):
 
         #create the equilibrium MCMove
         self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=n_equil_steps)
+        self._equilibrium_mc_move.n_restart_attempts = 10
 
         #set the SamplerState for the lambda 0 and 1 equilibrium simulations
         self._lambda_one_sampler_state = SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
@@ -458,9 +461,9 @@ class NonequilibriumSwitchingFEP(object):
         max_steps : int, default 50
             max number of steps for openmm minimizer.
         """
-        minimized = self._client.map(feptasks.minimize, self._hybrid_thermodynamic_states.values(), self._sampler_states.values(), [self._equilibrium_mc_move, self._equilibrium_mc_move])
+        minimized = self._map(feptasks.minimize, self._hybrid_thermodynamic_states.values(), self._sampler_states.values(), [self._equilibrium_mc_move, self._equilibrium_mc_move])
         _logger.info("Minimizing")
-        return self._client.gather(minimized)
+        return self._gather(minimized)
 
     def run(self, n_iterations=5):
         """
@@ -495,23 +498,21 @@ class NonequilibriumSwitchingFEP(object):
                 noneq_trajectory_filenames = [None, None]
 
             #run a round of equilibrium
-            self._equilibrium_results = self._client.map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
             #get the perturbations to nonalchemical states:
-            endpoint_perturbation_results_list.append(self._client.map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
+            endpoint_perturbation_results_list.append(self._map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
 
             #run a round of nonequilibrium switching:
-            nonequilibrium_results_list.append(self._client.map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, noneq_trajectory_filenames))
+            nonequilibrium_results_list.append(self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, noneq_trajectory_filenames))
 
             self._current_iteration +=1
             print(self._current_iteration)
 
         #after all tasks have been requested, retrieve the results:
         for i in range(n_iterations):
-            endpoint_perturbations = self._client.gather(endpoint_perturbation_results_list[i])
-            print(i)
-            nonequilibrium_results = self._client.gather(nonequilibrium_results_list[i])
-            print(i)
+            endpoint_perturbations = self._gather(endpoint_perturbation_results_list[i])
+            nonequilibrium_results = self._gather(nonequilibrium_results_list[i])
 
             for lambda_state in [0,1]:
                 self._reduced_potential_differences[lambda_state].append(endpoint_perturbations[lambda_state])
@@ -520,6 +521,29 @@ class NonequilibriumSwitchingFEP(object):
                 #is the total work
                 self._total_work[lambda_state].append(nonequilibrium_results[lambda_state].cumulative_work[-1])
 
+
+    def equilibrate(self, n_iterations=100):
+        """
+        Run the equilibrium simulations a specified number of times without writing to a file. This can be used to equilibrate
+        the simulation before beginning the free energy calculation.
+
+        Parameters
+        ----------
+        n_iterations : int
+            The number of times to apply the equilibrium MCMove
+        """
+        eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
+        hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
+        niterations_per_call_list = [self._n_iterations_per_call, self._n_iterations_per_call]
+        atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
+
+        for i in range(n_iterations):
+
+            #don't write out any files
+            equilibrium_trajectory_filenames = [None, None]
+
+            #run a round of equilibrium
+            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
     def _adjust_for_correlation(self, timeseries_array: np.array):
         """
@@ -613,28 +637,94 @@ class NonequilibriumSwitchingFEP(object):
         [[df0, ddf0], [df1, ddf1]] = self._endpoint_perturbations()
         [df, ddf] = self._alchemical_free_energy()
 
-        return -df0 + df + df1
+        ddf_overall = np.sqrt(ddf0**2 + ddf1**2 + ddf**2)
+        return -df0 + df + df1, ddf_overall
 
-if __name__=="__main__":
-    import os
-    _logger.setLevel(logging.INFO)
-    #gaff_filename = get_data_filename("data/gaff.xml")
-    #forcefield_files = [gaff_filename, 'tip3p.xml', 'amber99sbildn.xml']
-    #path_to_schrodinger_inputs = "/Users/grinawap/Downloads"
-    #protein_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/CDK2_fixed_nohet.pdb")
-    #molecule_file = os.path.join(path_to_schrodinger_inputs, "/Users/grinawap/Downloads/Inputs_for_FEP/CDK2_ligands.mol2")
-    #fesetup = NonequilibriumFEPSetup(protein_file, molecule_file, 0, 2, forcefield_files)
-    import pickle
-    infile = open("fesetup2.pkl", 'rb')
-    fesetup = pickle.load(infile)
-    infile.close()
-    #pickle.dump(fesetup, outfile)
-    #outfile.close()
-    #outfile = open("fesetup2.pkl", 'wb')
-    #pickle.dump(fesetup, outfile)
-    #outfile.close()
-    ne_fep = NonequilibriumSwitchingFEP(fesetup.solvent_topology_proposal, fesetup.solvent_old_positions, fesetup.solvent_new_positions)
-    print("ne-fep initialized")
-    ne_fep.run(n_iterations=2)
-    print(ne_fep.current_free_energy_estimate)
-    print("retrieved")
+def run_setup(setup_options):
+    """
+    Run the setup pipeline and return the relevant setup objects based on a yaml input file.
+
+    Parameters
+    ----------
+    setup_options : dict
+        result of loading yaml input file
+
+    Returns
+    -------
+    fe_setup : NonequilibriumFEPSetup
+        The setup class for this calculation
+    ne_fep : NonequilibriumSwitchingFEP
+        The nonequilibrium driver class
+    """
+    #We'll need the protein PDB file (without missing atoms)
+    protein_pdb_filename = setup_options['protein_pdb']
+
+    #And a ligand file containing the pair of ligands between which we will transform
+    ligand_file = setup_options['ligand_file']
+
+    #get the indices of ligands out of the file:
+    old_ligand_index = setup_options['old_ligand_index']
+    new_ligand_index = setup_options['new_ligand_index']
+
+    forcefield_files = setup_options['forcefield_files']
+
+    #get the simulation parameters
+    pressure = setup_options['pressure'] * unit.atmosphere
+    temperature = setup_options['temperature'] * unit.kelvin
+    solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
+
+    setup_pickle_file = setup_options['save_setup_pickle_as']
+
+    fe_setup = NonequilibriumFEPSetup(protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms)
+
+    pickle_outfile = open(setup_pickle_file, 'wb')
+
+    try:
+        pickle.dump(fe_setup, pickle_outfile)
+    except Exception as e:
+        print(e)
+        print("Unable to save setup object as a pickle")
+    finally:
+        pickle_outfile.close()
+
+    print("Setup object has been created.")
+
+    phase = setup_options['phase']
+
+    if phase == "complex":
+        topology_proposal = fe_setup.complex_topology_proposal
+        old_positions = fe_setup.complex_old_positions
+        new_positions = fe_setup.complex_old_positions
+    elif phase == "solvent":
+        topology_proposal = fe_setup.solvent_topology_proposal
+        old_positions = fe_setup.solvent_old_positions
+        new_positions = fe_setup.solvent_new_positions
+    else:
+        raise ValueError("Phase must be either complex or solvent.")
+
+    forward_functions = setup_options['forward_functions']
+
+    n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+    n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
+    n_steps_per_move_application = setup_options['n_steps_per_move_application']
+
+    trajectory_directory = setup_options['trajectory_directory']
+    trajectory_prefix = setup_options['trajectory_prefix']
+    atom_selection = setup_options['atom_selection']
+
+    scheduler_address = setup_options['scheduler_address']
+
+    ne_fep = NonequilibriumSwitchingFEP(topology_proposal, old_positions, new_positions,
+                                                       forward_functions=forward_functions,
+                                                       n_equil_steps=n_equilibrium_steps_per_iteration,
+                                                       ncmc_nsteps=n_steps_ncmc_protocol,
+                                                       nsteps_per_iteration=n_steps_per_move_application,
+                                                       temperature=temperature,
+                                                       trajectory_directory=trajectory_directory,
+                                                       trajectory_prefix=trajectory_prefix,
+                                                       atom_selection=atom_selection,
+                                                       scheduler_address=scheduler_address)
+
+    print("Nonequilibrium switching driver class constructed")
+
+    return fe_setup, ne_fep
