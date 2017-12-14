@@ -35,6 +35,9 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCAliphaticONS
+DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+
 ################################################################################
 # LOGGER
 ################################################################################
@@ -726,7 +729,7 @@ class PolymerProposalEngine(ProposalEngine):
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
 
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_AtomicNumber
+        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber
         bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
 
@@ -1297,11 +1300,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                  always_change=True):
 
         # Default atom and bond expressions for MCSS
-        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
-        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-
         self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+        self._allow_ring_breaking = True # allow ring breaking
 
         # Canonicalize all SMILES strings
         self._smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in set(list_of_smiles)]
@@ -1362,7 +1363,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
-        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose)
+        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose, allow_ring_breaking=self._allow_ring_breaking)
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
@@ -1541,7 +1542,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return receptor_topology
 
     @staticmethod
-    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False):
+    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=True):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -1551,6 +1552,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
              The current molecule in the sampler
         proposed_molecule : openeye.oechem.oemol object
              The proposed new molecule
+        allow_ring_breaking : bool, optional, default=True
+             If False, will check to make sure rings are not being broken or formed.
 
         Returns
         -------
@@ -1560,20 +1563,99 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info('Generating atom map...')
         timer_start = time.time()
 
-        DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_HvyDegree
-        DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
-
         atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
 
-        oegraphmol_current = oechem.OEGraphMol(current_molecule)
-        oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
+        oegraphmol_current = oechem.OEGraphMol(current_molecule) # pattern molecule
+        oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule) # target molecule
         #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = True
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+
+        def enumerate_cycle_basis(molecule):
+            """Enumerate a closed cycle basis of bonds in molecule.
+
+            This uses cycle_basis from NetworkX:
+            https://networkx.github.io/documentation/networkx-1.10/reference/generated/networkx.algorithms.cycles.cycle_basis.html#networkx.algorithms.cycles.cycle_basis
+
+            Parameters
+            ----------
+            molecule : OEMol
+                The molecule for a closed cycle basis of Bonds is to be identified
+
+            Returns
+            -------
+            bond_cycle_basis : list of list of OEBond
+                bond_cycle_basis[cycle_index] is a list of OEBond objects that define a cycle in the basis
+                You can think of these as the minimal spanning set of ring systems to check.
+            """
+            import networkx as nx
+            g = nx.Graph()
+            for atom in molecule.GetAtoms():
+                g.add_node(atom.GetIdx())
+            for bond in molecule.GetBonds():
+                g.add_edge(bond.GetBgnIdx(), bond.GetEndIdx(), bond=bond)
+            bond_cycle_basis = list()
+            for cycle in nx.cycle_basis(g):
+                bond_cycle = list()
+                for i in range(len(cycle)):
+                    atom_index_1 = cycle[i]
+                    atom_index_2 = cycle[(i+1)%len(cycle)]
+                    edge = g.edges[atom_index_1,atom_index_2]
+                    bond = edge['bond']
+                    bond_cycle.append(bond)
+                bond_cycle_basis.append(bond_cycle)
+            return bond_cycle_basis
+
+        def enumerate_ring_bonds(molecule, ring_membership, ring_index):
+            """Enumerate OEBond objects in ring."""
+            for bond in molecule.GetBonds():
+                if (ring_membership[bond.GetBgnIdx()] == ring_index) and (ring_membership[bond.GetEndIdx()] == ring_index):
+                    yield bond
+
+        def breaks_rings_in_transformation(molecule1, molecule2, atom_map):
+            """Return True if the transformation from molecule1 to molecule2 breaks rings.
+
+            Parameters
+            ----------
+            molecule1 : OEMol
+                Initial molecule whose rings are to be checked for not being broken
+            molecule2 : OEMol
+                Final molecule
+            atom_map : dict of OEAtom : OEAtom
+                atom_map[molecule1_atom] is the corresponding molecule2 atom
+            """
+            for cycle in enumerate_cycle_basis(molecule1):
+                for bond in cycle:
+                    # All bonds in this cycle must also be present in molecule2
+                    if not ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
+                        return True # there are no corresponding atoms in molecule2
+                    if not atom_map[bond.GetBgn()].GetBond(atom_map[bond.GetEnd()]):
+                        return True # corresponding atoms have no bond in molecule2
+            return False # no rings in molecule1 are broken in molecule2
+
+        def preserves_rings(match):
+            """Returns True if the transformation allows ring systems to be broken or created."""
+            pattern_atoms = { atom.GetIdx() : atom for atom in oegraphmol_current.GetAtoms() }
+            target_atoms = { atom.GetIdx() : atom for atom in oegraphmol_proposed.GetAtoms() }
+
+            pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
+            if breaks_rings_in_transformation(oegraphmol_current, oegraphmol_proposed, pattern_to_target_map):
+                return False
+
+            target_to_pattern_map = { target_atoms[matchpair.target.GetIdx()] : pattern_atoms[matchpair.pattern.GetIdx()] for matchpair in match.GetAtoms() }
+            if breaks_rings_in_transformation(oegraphmol_proposed, oegraphmol_current, target_to_pattern_map):
+                return False
+
+            return True
+
+        if allow_ring_breaking is False:
+            # Filter the matches to remove any that allow ring breaking
+            matches = [m for m in matches if preserves_rings(m)]
+
         if not matches:
             return {}
         match = max(matches, key=lambda m: m.NumAtoms())
@@ -1751,6 +1833,8 @@ class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         self._new_mol = new_mol
 
         super(TwoMoleculeSetProposalEngine, self).__init__([self._old_mol_smiles, self._new_mol_smiles], system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr)
+
+        self._allow_ring_breaking = False # don't allow ring breaking
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         return self._new_mol_smiles, self._new_mol, 0.0
