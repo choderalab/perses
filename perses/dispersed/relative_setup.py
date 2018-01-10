@@ -35,33 +35,58 @@ class NonequilibriumFEPSetup(object):
     Importantly, it ensures that the atom maps in the solvent and complex phases match correctly.
     """
 
-    def __init__(self, protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files,
-                 pressure=1.0 * unit.atmosphere, temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms):
+    def __init__(self, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=None, receptor_mol2_filename=None,
+                 pressure=1.0 * unit.atmosphere, temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, solvate=True):
         """
         Initialize a NonequilibriumFEPSetup object
 
         Parameters
         ----------
-        protein_pdb_filename : str
-            The name of the protein pdb file
         ligand_file : str
             the name of the ligand file (any openeye supported format)
         ligand_smiles : list of two str
             The SMILES strings representing the two ligands
         forcefield_files : list of str
             The list of ffxml files that contain the forcefields that will be used
+        protein_pdb_filename : str, default None
+            Protein pdb filename. If none, receptor_mol2_filename must be provided
+        receptor_mol2_filename : str, default None
+            Receptor mol2 filename. If none, protein_pdb_filename must be provided
         pressure : Quantity, units of pressure
             Pressure to use in the barostat
         temperature : Quantity, units of temperature
             Temperature to use for the Langevin integrator
         solvent_padding : Quantity, units of length
             The amount of padding to use when adding solvent
+        solvate: bool, default True
+            Whether to solvate or simulate in vacuum. If False, solvent_padding is ignored
         """
-        self._protein_pdb_filename = protein_pdb_filename
+        mol_list = []
+        if protein_pdb_filename:
+            self._protein_pdb_filename = protein_pdb_filename
+            protein_pdbfile = open(self._protein_pdb_filename, 'r')
+            pdb_file = app.PDBFile(protein_pdbfile)
+            protein_pdbfile.close()
+            self._receptor_positions_old = pdb_file.positions
+            self._receptor_topology_old = pdb_file.topology
+            self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
+
+        elif receptor_mol2_filename:
+            self._receptor_mol2_filename = receptor_mol2_filename
+            self._receptor_mol = self.load_sdf(self._receptor_mol2_filename)
+            mol_list.append(self._receptor_mol)
+            self._receptor_positions_old = extractPositionsFromOEMOL(self._receptor_mol)
+            self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
+            self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
+
+        else:
+            raise ValueError("You need to provide either a protein pdb or a receptor mol2.")
+
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
         self._padding = solvent_padding
+        self._solvate = solvate
 
         self._ligand_file = ligand_file
         self._old_ligand_index = old_ligand_index
@@ -70,9 +95,12 @@ class NonequilibriumFEPSetup(object):
         self._old_ligand_oemol = self.load_sdf(self._ligand_file, index=self._old_ligand_index)
         self._new_ligand_oemol = self.load_sdf(self._ligand_file, index=self._new_ligand_index)
 
+        mol_list.append(self._old_ligand_oemol)
+        mol_list.append(self._new_ligand_oemol)
+
         self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
 
-        ffxml=forcefield_generators.generateForceFieldFromMolecules([self._old_ligand_oemol, self._new_ligand_oemol])
+        ffxml=forcefield_generators.generateForceFieldFromMolecules(mol_list)
 
         self._old_ligand_oemol.SetTitle("MOL")
         self._new_ligand_oemol.SetTitle("MOL")
@@ -89,40 +117,40 @@ class NonequilibriumFEPSetup(object):
         self._new_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._new_ligand_oemol)
         self._new_liands_md_topology = md.Topology.from_openmm(self._new_ligand_topology)
 
-
-        protein_pdbfile = open(self._protein_pdb_filename, 'r')
-        pdb_file = app.PDBFile(protein_pdbfile)
-        protein_pdbfile.close()
-
-        self._protein_topology_old = pdb_file.topology
-        self._protein_md_topology_old = md.Topology.from_openmm(self._protein_topology_old)
-        self._protein_positions_old = pdb_file.positions
         self._forcefield = app.ForceField(*forcefield_files)
         self._forcefield.loadFile(StringIO(ffxml))
 
         print("Generated forcefield")
 
-        self._complex_md_topology_old = self._protein_md_topology_old.join(self._old_ligand_md_topology)
+        self._complex_md_topology_old = self._receptor_md_topology_old.join(self._old_ligand_md_topology)
         self._complex_topology_old = self._complex_md_topology_old.to_openmm()
 
         n_atoms_complex_old = self._complex_topology_old.getNumAtoms()
-        n_atoms_protein_old = self._protein_topology_old.getNumAtoms()
+        n_atoms_protein_old = self._receptor_topology_old.getNumAtoms()
 
         self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_complex_old, 3]), unit=unit.nanometers)
-        self._complex_positions_old[:n_atoms_protein_old, :] = self._protein_positions_old
+        self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions_old
         self._complex_positions_old[n_atoms_protein_old:, :] = self._old_ligand_positions
+
+        if self._solvate:
+            self._nonbonded_method = app.PME
+        else:
+            self._nonbonded_method = app.NoCutoff
 
         if pressure is not None:
             barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
-            self._system_generator = SystemGenerator(forcefield_files, barostat=barostat, forcefield_kwargs={'nonbondedMethod' : app.PME})
+            self._system_generator = SystemGenerator(forcefield_files, barostat=barostat, forcefield_kwargs={'nonbondedMethod' : self._nonbonded_method})
         else:
             self._system_generator = SystemGenerator(forcefield_files)
+
+        #self._system_generator._forcefield.loadFile(StringIO(ffxml))
 
         #self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_smiles, self._new_ligand_smiles, self._system_generator, residue_name="MOL")
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol, self._system_generator, residue_name="MOL")
         self._geometry_engine = FFAllAngleGeometryEngine()
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(self._complex_topology_old, self._complex_positions_old)
+
         self._complex_md_topology_old_solvated = md.Topology.from_openmm(self._complex_topology_old_solvated)
         print(self._complex_proposal_engine._smiles_list)
 
@@ -185,10 +213,16 @@ class NonequilibriumFEPSetup(object):
         modeller.delete(hs)
         modeller.addHydrogens(forcefield=self._forcefield)
         print("preparing to add solvent")
-        modeller.addSolvent(self._forcefield, model=model, padding=self._padding)
-        solvated_topology = modeller.getTopology()
-        solvated_positions = modeller.getPositions()
-        print("solvent added, parameterizing")
+        if self._solvate:
+            print("preparing to add solvent")
+            modeller.addSolvent(self._forcefield, model=model, padding=self._padding)
+            solvated_topology = modeller.getTopology()
+            solvated_positions = modeller.getPositions()
+            print("solvent added, parameterizing")
+        else:
+            print("Solvation disabled; skipping solvate step.")
+            solvated_topology = topology
+            solvated_positions = positions
         solvated_system = self._system_generator.build_system(solvated_topology)
         print("System parameterized")
 
@@ -657,7 +691,16 @@ def run_setup(setup_options):
         The nonequilibrium driver class
     """
     #We'll need the protein PDB file (without missing atoms)
-    protein_pdb_filename = setup_options['protein_pdb']
+    try:
+        protein_pdb_filename = setup_options['protein_pdb']
+        receptor_mol2 = None
+    except KeyError:
+        try:
+            receptor_mol2 = setup_options['receptor_mol2']
+            protein_pdb_filename = None
+        except KeyError as e:
+            print("Either protein_pdb or receptor_mol2 must be specified")
+            raise e
 
     #And a ligand file containing the pair of ligands between which we will transform
     ligand_file = setup_options['ligand_file']
@@ -669,13 +712,19 @@ def run_setup(setup_options):
     forcefield_files = setup_options['forcefield_files']
 
     #get the simulation parameters
+    try:
+        solvate = setup_options['solvate']
+    except KeyError:
+        solvate = True
+
     pressure = setup_options['pressure'] * unit.atmosphere
     temperature = setup_options['temperature'] * unit.kelvin
     solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
 
+
     setup_pickle_file = setup_options['save_setup_pickle_as']
 
-    fe_setup = NonequilibriumFEPSetup(protein_pdb_filename, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms)
+    fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=protein_pdb_filename, receptor_mol2_filename=receptor_mol2, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms, solvate=solvate)
 
     pickle_outfile = open(setup_pickle_file, 'wb')
 

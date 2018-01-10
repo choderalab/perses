@@ -6,8 +6,8 @@ ligand_file: /Users/grinawap/Downloads/Inputs_for_FEP/CDK2_ligands.mol2
 
 #The ligand file contains multiple ligands. Choose the indices of the ligands
 #between which we should compute a relative free energy
-old_ligand_index: 0
-new_ligand_index: 2
+old_ligand_index: 14
+new_ligand_index: 15
 
 #Provide the list of forcefield files. Non-standard (such as gaff.xml) should
 #be provided with a full path
@@ -38,17 +38,17 @@ forward_functions:
     lambda_torsions: lambda
 
 #The number of equilibrium steps to take between nonequilibrium switching events
-n_equilibrium_steps_per_iteration: 10000
+n_equilibrium_steps_per_iteration: 100
 
 #The length of the ncmc protocol
-n_steps_ncmc_protocol: 50000
+n_steps_ncmc_protocol: 50
 
 #The number of NCMC steps per move application. This controls the output frequency
 #1 step/move application means writing out the work at every step.
 n_steps_per_move_application: 1
 
 #where to put the trajectories
-trajectory_directory: /Users/grinawap/solvent_test
+trajectory_directory: /Users/grinawap/solvent_test_4
 
 #how to prefix the trajectory files (project-specific name)
 trajectory_prefix: cdk02
@@ -57,8 +57,8 @@ trajectory_prefix: cdk02
 atom_selection: all
 
 #The location of the schduler. If it's null, a localhost scheduler is created
-scheduler_address: null
+scheduler_address: localhost
 
 #how many iterations to run (n_cycles*n_iterations_per_cycle)
 n_cycles: 5
-n_iterations_per_cycle: 2
+n_iterations_per_cycle: 1

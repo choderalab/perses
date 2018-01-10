@@ -42,7 +42,7 @@ def get_topology_proposals(fe_setup):
 
 if __name__=="__main__":
     import os
-    yaml_filename = "basic_setup.yaml"
+    yaml_filename = "hg_setup.yaml"
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file)
     yaml_file.close()
