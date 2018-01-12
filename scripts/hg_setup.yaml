@@ -21,7 +21,7 @@ temperature: 300.0
 solvent_padding: 9.0
 
 #How much solvent padding to add to the simulation box
-solvent: False
+solvate: False
 
 #The name of the pickle file where we will save the setup object
 save_setup_pickle_as: fesetup.pkl
@@ -48,7 +48,7 @@ n_steps_ncmc_protocol: 50
 n_steps_per_move_application: 1
 
 #where to put the trajectories
-trajectory_directory: /Users/grinawap/hgtest1
+trajectory_directory: /Users/grinawap/hgtest2
 
 #how to prefix the trajectory files (project-specific name)
 trajectory_prefix: hg
@@ -60,5 +60,5 @@ atom_selection: all
 scheduler_address: localhost
 
 #how many iterations to run (n_cycles*n_iterations_per_cycle)
-n_cycles: 5
+n_cycles: 50
 n_iterations_per_cycle: 1
