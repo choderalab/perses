@@ -138,7 +138,10 @@ class NonequilibriumFEPSetup(object):
             self._nonbonded_method = app.NoCutoff
 
         if pressure is not None:
-            barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
+            if self._nonbonded_method == app.PME:
+                barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
+            else:
+                barostat = None
             self._system_generator = SystemGenerator(forcefield_files, barostat=barostat, forcefield_kwargs={'nonbondedMethod' : self._nonbonded_method})
         else:
             self._system_generator = SystemGenerator(forcefield_files)
@@ -210,8 +213,8 @@ class NonequilibriumFEPSetup(object):
         """
         modeller = app.Modeller(topology, positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name != "MOL"]
-        modeller.delete(hs)
-        modeller.addHydrogens(forcefield=self._forcefield)
+        #modeller.delete(hs)
+        #modeller.addHydrogens(forcefield=self._forcefield)
         print("preparing to add solvent")
         if self._solvate:
             print("preparing to add solvent")
@@ -743,7 +746,7 @@ def run_setup(setup_options):
     if phase == "complex":
         topology_proposal = fe_setup.complex_topology_proposal
         old_positions = fe_setup.complex_old_positions
-        new_positions = fe_setup.complex_old_positions
+        new_positions = fe_setup.complex_new_positions
     elif phase == "solvent":
         topology_proposal = fe_setup.solvent_topology_proposal
         old_positions = fe_setup.solvent_old_positions
