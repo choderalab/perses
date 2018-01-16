@@ -498,7 +498,7 @@ class NonequilibriumSwitchingFEP(object):
                 noneq_trajectory_filenames = [None, None]
 
             #run a round of equilibrium
-            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+            self._equilibrium_results = list(self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, atom_indices_to_save_list, equilibrium_trajectory_filenames))
 
             #get the perturbations to nonalchemical states:
             endpoint_perturbation_results_list.append(self._map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
