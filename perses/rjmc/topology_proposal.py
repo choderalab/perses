@@ -1604,7 +1604,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 for i in range(len(cycle)):
                     atom_index_1 = cycle[i]
                     atom_index_2 = cycle[(i+1)%len(cycle)]
-                    edge = g.edges[atom_index_1,atom_index_2]
+                    edge = g.edge[atom_index_1][atom_index_2]
                     bond = edge['bond']
                     bond_cycle.append(bond)
                 bond_cycle_basis.append(bond_cycle)
