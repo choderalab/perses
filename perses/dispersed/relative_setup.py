@@ -529,7 +529,7 @@ class NonequilibriumSwitchingFEP(object):
 
             if self._write_traj:
                 equilibrium_trajectory_filenames = self._trajectory_filename.values()
-                noneq_trajectory_filenames = [self._neq_traj_filename[lambda_state].format(iteration=i) for lambda_state in endpoints]
+                noneq_trajectory_filenames = [self._neq_traj_filename[lambda_state].format(iteration=self._current_iteration) for lambda_state in endpoints]
             else:
                 equilibrium_trajectory_filenames = [None, None]
                 noneq_trajectory_filenames = [None, None]
@@ -576,11 +576,12 @@ class NonequilibriumSwitchingFEP(object):
 
         for i in range(n_iterations):
 
-            #don't write out any files
-            equilibrium_trajectory_filenames = [None, None]
-
+            if self._write_traj:
+                equilibrium_trajectory_filenames = self._trajectory_filename.values()
+            else:
+                equilibrium_trajectory_filenames = [None, None]
             #run a round of equilibrium
-            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
     def _adjust_for_correlation(self, timeseries_array: np.array):
         """
