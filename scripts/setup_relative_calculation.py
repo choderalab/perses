@@ -66,12 +66,18 @@ if __name__=="__main__":
     hybrid_factory = ne_fep._factory
     np.save(os.path.join(trajectory_directory, trajectory_prefix+"hybrid_factory.npy"), hybrid_factory)
 
-    bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
-    bar.update(0)
+    print("equilibrating")
+    ne_fep.equilibrate(n_iterations=100)
+
+    print("equilibration complete")
+    #bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
+    #bar.update(0)
     for i in range(n_cycles):
         ne_fep.run(n_iterations=n_iterations_per_cycle)
-        bar.update((i+1)*n_iterations_per_cycle)
+        print(i)
+        #bar.update((i+1)*n_iterations_per_cycle)
 
+    print("calculation complete")
     df, ddf = ne_fep.current_free_energy_estimate
 
     print("The free energy estimate is %f +/- %f" % (df, ddf))
