@@ -249,7 +249,7 @@ class NonequilibriumFEPSetup(object):
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
         #now remove the old ligand, leaving only the solvent
-        solvent_only_topology = old_solvated_md_topology.subset(old_solvated_md_topology.select("water"))
+        solvent_only_topology = old_solvated_md_topology.subset(old_solvated_md_topology.select("not resname MOL"))
 
         #append the solvent to the new ligand-only topology:
         new_solvated_ligand_md_topology = new_ligand_topology.join(solvent_only_topology)
@@ -543,7 +543,7 @@ class NonequilibriumSwitchingFEP(object):
             equilibrium_trajectory_filenames = [None, None]
 
             #run a round of equilibrium
-            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
     def _adjust_for_correlation(self, timeseries_array: np.array):
         """
@@ -694,7 +694,7 @@ def run_setup(setup_options):
     if phase == "complex":
         topology_proposal = fe_setup.complex_topology_proposal
         old_positions = fe_setup.complex_old_positions
-        new_positions = fe_setup.complex_old_positions
+        new_positions = fe_setup.complex_new_positions
     elif phase == "solvent":
         topology_proposal = fe_setup.solvent_topology_proposal
         old_positions = fe_setup.solvent_old_positions
