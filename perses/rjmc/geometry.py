@@ -15,6 +15,7 @@ import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import time
 import logging
+_logger = logging.getLogger("geometry")
 
 class GeometryEngine(object):
     """
@@ -94,7 +95,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._position_set_time = 0.0
         self.verbose = verbose
         self.use_sterics = use_sterics
-        self._logger = logging.getLogger("geometry")
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -263,7 +263,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             context.setPositions(self._metadata['reference_positions'])
             context.setParameter(growth_parameter_name, len(atom_proposal_order.keys()))
             state = context.getState(getEnergy=True)
-            self._logger.debug("The potential of the valence terms is %s" % str(state.getPotentialEnergy()))
+            _logger.debug("The potential of the valence terms is %s" % str(state.getPotentialEnergy()))
         growth_parameter_value = 1
         #now for the main loop:
         logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
@@ -272,7 +272,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
-            if self.verbose: self._logger.info("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
+            if self.verbose: _logger.info("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
 
             if atom != torsion.atom1:
                 raise Exception('atom != torsion.atom1')
@@ -324,7 +324,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #accumulate logp
             if direction == 'reverse':
-                if self.verbose: self._logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
+                if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
@@ -1325,7 +1325,6 @@ class GeometrySystemGenerator(object):
             If True, will print verbose output.
 
         """
-        self._logger = logging.getLogger("geometry")
         ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                                   # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
@@ -1433,7 +1432,7 @@ class GeometrySystemGenerator(object):
                 growth_idx = max(growth_idx_1, growth_idx_2)
                 # Only need to add terms that are nonzero and involve newly added atoms.
                 if (growth_idx > 0) and ((chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0)):
-                    if self.verbose: self._logger.info('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index_1, particle_index_2, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
+                    if self.verbose: _logger.info('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index_1, particle_index_2, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
                     custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
 
         #copy parameters for sterics parameters in nonbonded force
@@ -1458,7 +1457,7 @@ class GeometrySystemGenerator(object):
                 growth_idx = new_particle_indices.index(particle_index) + 1 if particle_index in new_particle_indices else 0
                 modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
                 if self.verbose and (growth_idx > 0):
-                    self._logger.info('Adding NonbondedForce particle %5d : charge %8.3f |e|, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index, charge/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
+                    _logger.info('Adding NonbondedForce particle %5d : charge %8.3f |e|, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index, charge/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
@@ -1862,7 +1861,6 @@ class ProposalOrderTools(object):
     def __init__(self, topology_proposal, verbose=True):
         self._topology_proposal = topology_proposal
         self.verbose = True # DEBUG
-        self._logger = logging.getLogger("geometry")
 
     def determine_proposal_order(self, direction='forward'):
         """
@@ -2042,15 +2040,15 @@ class ProposalOrderTools(object):
 
         if len(topological_torsions) == 0:
             # Print debug information
-            self._logger.debug('No topological torsions found!')
-            self._logger.debug('atoms_with_positions: %s' % str(atoms_with_positions))
-            self._logger.debug('new_atom: %s' % new_atom)
-            self._logger.debug('bonds involving new atom:')
-            self._logger.debug(new_atom.bonds)
-            self._logger.debug('angles involving new atom:')
-            self._logger.debug(new_atom.angles)
-            self._logger.debug('dihedrals involving new atom:')
-            self._logger.debug(new_atom.dihedrals)
+            _logger.debug('No topological torsions found!')
+            _logger.debug('atoms_with_positions: %s' % str(atoms_with_positions))
+            _logger.debug('new_atom: %s' % new_atom)
+            _logger.debug('bonds involving new atom:')
+            _logger.debug(new_atom.bonds)
+            _logger.debug('angles involving new atom:')
+            _logger.debug(new_atom.angles)
+            _logger.debug('dihedrals involving new atom:')
+            _logger.debug(new_atom.dihedrals)
 
         # Recode topological torsions as parmed Dihedral objects
         topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
