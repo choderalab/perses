@@ -286,7 +286,7 @@ class NonequilibriumFEPSetup(object):
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
         #now remove the old ligand, leaving only the solvent
-        solvent_only_topology = old_solvated_md_topology.subset(old_solvated_md_topology.select("not MOL"))
+        solvent_only_topology = old_solvated_md_topology.subset(old_solvated_md_topology.select("not resname MOL"))
 
         #append the solvent to the new ligand-only topology:
         new_solvated_ligand_md_topology = new_ligand_topology.join(solvent_only_topology)
