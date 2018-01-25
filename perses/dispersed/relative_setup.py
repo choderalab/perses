@@ -387,8 +387,10 @@ class NonequilibriumSwitchingFEP(object):
             The address of the dask scheduler. If None, local will be used.
         """
         if scheduler_address is None:
-            self._map = map
-            self._gather = lambda mapped_list: list(mapped_list)
+            cluster = distributed.LocalCluster()
+            self._client = distributed.Client(cluster)
+            self._map = self._client.map
+            self._gather = self._client.gather
         else:
             if scheduler_address=='localhost':
                 self._client = distributed.Client()
@@ -457,7 +459,7 @@ class NonequilibriumSwitchingFEP(object):
         self._nonalchemical_thermodynamic_states = {0 : ThermodynamicState(topology_proposal.old_system, temperature=temperature), 1: ThermodynamicState(topology_proposal.new_system, temperature=temperature)}
 
         #Now create the compound states with different alchemical states
-        self._hybrid_thermodynamic_states = {0: CompoundThermodynamicState(self._thermodynamic_state, composable_states=[self._hybrid_alchemical_states[0]]), 1: CompoundThermodynamicState(self._thermodynamic_state, composable_states=[self._hybrid_alchemical_states[1]])}
+        self._hybrid_thermodynamic_states = {0: CompoundThermodynamicState(self._thermodynamic_state, composable_states=[self._hybrid_alchemical_states[0]]), 1: CompoundThermodynamicState(copy.deepcopy(self._thermodynamic_state), composable_states=[self._hybrid_alchemical_states[1]])}
 
         #create the forward and reverse integrators
         self._integrators = {0 : AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature),
@@ -548,8 +550,9 @@ class NonequilibriumSwitchingFEP(object):
 
         #after all tasks have been requested, retrieve the results:
         for i in range(n_iterations):
-            endpoint_perturbations = self._gather(endpoint_perturbation_results_list[i])
             nonequilibrium_results = self._gather(nonequilibrium_results_list[i])
+            endpoint_perturbations = self._gather(endpoint_perturbation_results_list[i])
+            #nonequilibrium_results = self._gather(nonequilibrium_results_list[i])
 
             for lambda_state in [0,1]:
                 self._reduced_potential_differences[lambda_state].append(endpoint_perturbations[lambda_state])
@@ -728,17 +731,20 @@ def run_setup(setup_options):
 
     setup_pickle_file = setup_options['save_setup_pickle_as']
 
-    fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=protein_pdb_filename, receptor_mol2_filename=receptor_mol2, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms, solvate=solvate)
+    #fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=protein_pdb_filename, receptor_mol2_filename=receptor_mol2, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms, solvate=solvate)
+    fe_setup_file = open("/Users/grinawap/solvent_test_5/fesetup.pkl", 'rb')
+    fe_setup = pickle.load(fe_setup_file)
+    fe_setup_file.close()
 
-    pickle_outfile = open(setup_pickle_file, 'wb')
+    #pickle_outfile = open(setup_pickle_file, 'wb')
 
-    try:
-        pickle.dump(fe_setup, pickle_outfile)
-    except Exception as e:
-        print(e)
-        print("Unable to save setup object as a pickle")
-    finally:
-        pickle_outfile.close()
+    #try:
+    #    pickle.dump(fe_setup, pickle_outfile)
+    #except Exception as e:
+    #    print(e)
+    #    print("Unable to save setup object as a pickle")
+    #finally:
+    #    pickle_outfile.close()
 
     print("Setup object has been created.")
 
