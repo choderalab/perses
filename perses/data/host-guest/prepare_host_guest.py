@@ -103,7 +103,7 @@ def iupac_to_oemol(iupac_name: str) -> oechem.OEMol:
 
     #generate conformers:
     omega = oeomega.OEOmega()
-    omega.SetStrictStereo
+    omega.SetStrictStereo(False)
     omega.SetMaxConfs(1)
     omega(mol)
 
