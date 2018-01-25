@@ -70,8 +70,8 @@ if __name__=="__main__":
     ne_fep.equilibrate(n_iterations=100)
 
     print("equilibration complete")
-    #bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
-    #bar.update(0)
+    bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
+    bar.update(0)
     for i in range(n_cycles):
         ne_fep.run(n_iterations=n_iterations_per_cycle)
         print(i)
