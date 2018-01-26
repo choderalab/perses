@@ -9,9 +9,9 @@ import openeye.oeomega as oeomega
 
 #used SAMPL6 sampling challenge inputs
 #git revision 93f642ef9e2c478985cd14f3084d899ae3ee1c6d
-host_guest_path = "/Users/grinawap/SAMPL6/host_guest/SAMPLing/CB8-G3-0/PDB/complex.pdb"
-host_vacuum_path = "/Users/grinawap/PycharmProjects/perses/perses/data/host-guest/host.mol2"
-guests_vacuum_path = "/Users/grinawap/PycharmProjects/perses/perses/data/host-guest/guests.mol2"
+host_guest_path = "complex.pdb"
+host_vacuum_path = "host.mol2"
+guests_vacuum_path = "guests.mol2"
 
 #use this molecule as the other end of the perturbation
 alternate_guest = '(5-methoxy-4-quinolyl)-(5-vinylquinuclidin-1-ium-2-yl)methanol'
