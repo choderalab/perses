@@ -1,18 +1,10 @@
-import openeye.oechem as oechem
-import sys
-import progressbar
 import yaml
-from perses.rjmc import topology_proposal, geometry
 from perses.dispersed import relative_setup
-from perses.tests import utils
-import simtk.unit as unit
-from openmmtools.constants import kB
-import simtk.openmm.app as app
-from openmoltools import forcefield_generators
-import copy
 import numpy as np
 import pickle
 import progressbar
+import os
+import sys
 
 def get_topology_proposals(fe_setup):
     """
@@ -41,8 +33,12 @@ def get_topology_proposals(fe_setup):
     return topology_proposals
 
 if __name__=="__main__":
-    import os
-    yaml_filename = "hg_setup.yaml"
+    try:
+       yaml_filename = sys.argv[1]
+    except IndexError as e:
+        print("You need to specify the setup yaml file as an argument to the script.")
+        raise e
+
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file)
     yaml_file.close()
