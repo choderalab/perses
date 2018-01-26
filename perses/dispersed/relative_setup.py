@@ -731,20 +731,17 @@ def run_setup(setup_options):
 
     setup_pickle_file = setup_options['save_setup_pickle_as']
 
-    #fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=protein_pdb_filename, receptor_mol2_filename=receptor_mol2, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms, solvate=solvate)
-    fe_setup_file = open("/Users/grinawap/solvent_test_5/fesetup.pkl", 'rb')
-    fe_setup = pickle.load(fe_setup_file)
-    fe_setup_file.close()
+    fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=protein_pdb_filename, receptor_mol2_filename=receptor_mol2, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms, solvate=solvate)
 
-    #pickle_outfile = open(setup_pickle_file, 'wb')
+    pickle_outfile = open(setup_pickle_file, 'wb')
 
-    #try:
-    #    pickle.dump(fe_setup, pickle_outfile)
-    #except Exception as e:
-    #    print(e)
-    #    print("Unable to save setup object as a pickle")
-    #finally:
-    #    pickle_outfile.close()
+    try:
+        pickle.dump(fe_setup, pickle_outfile)
+    except Exception as e:
+        print(e)
+        print("Unable to save setup object as a pickle")
+    finally:
+        pickle_outfile.close()
 
     print("Setup object has been created.")
 
