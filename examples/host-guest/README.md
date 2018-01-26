@@ -11,3 +11,7 @@ The input files were taken from the [SAMPL6 SAMPLing](https://github.com/MobleyL
 ## Preparation of input files
 
 We first take the solvated complex and extract the host and guest molecules, without solvent. We convert both to OpenEye `OEMol`s and write the host to a separate `mol2` file. We generate the alternate guest molecule by IUPAC name, and use OpenEye Omega to generate an initial conformation for it. Both guests are written to a `mol2` file, with the original molecule from the complex first.
+
+## Running example
+
+To run the example, call `python setup_relative_calculation.py hg_setup.yaml`.
