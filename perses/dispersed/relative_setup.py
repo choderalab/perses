@@ -425,8 +425,8 @@ class NonequilibriumSwitchingFEP(object):
 
         if self._trajectory_directory and self._trajectory_prefix:
             self._write_traj = True
-            self._trajectory_filename = {lambda_state: os.path.join(self._trajectory_directory, trajectory_prefix+"lambda%d" % lambda_state + ".h5") for lambda_state in [0,1]}
-            self._neq_traj_filename = {lambda_state: os.path.join(self._trajectory_directory, trajectory_prefix + ".{iteration}.neq.lambda%d" % lambda_state + ".h5") for lambda_state in [0,1]}
+            self._trajectory_filename = {lambda_state: os.path.join(os.getcwd(), self._trajectory_directory, trajectory_prefix+"lambda%d" % lambda_state + ".h5") for lambda_state in [0,1]}
+            self._neq_traj_filename = {lambda_state: os.path.join(os.getcwd(), self._trajectory_directory, trajectory_prefix + ".{iteration}.neq.lambda%d" % lambda_state + ".h5") for lambda_state in [0,1]}
         else:
             self._write_traj = False
             self._trajectory_filename = {0: None, 1: None}
