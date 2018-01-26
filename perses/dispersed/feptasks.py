@@ -15,6 +15,8 @@ cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
     "lambda_step" : 0.0
 })
 
+cache.global_context_cache.platform = openmm.Platform.getPlatformByName("OpenCL")
+
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
 import openmmtools.states as states
@@ -24,7 +26,6 @@ from perses.annihilation.new_relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
 import pickle
 import simtk.unit as unit
-
 
 
 #Make containers for results from tasklets. This allows us to chain tasks together easily.
@@ -140,21 +141,6 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         self._integrator._metropolized_integrator = serialization['metropolized_integrator']
 
 
-def update_broker_location(broker_location, backend_location=None):
-    """
-    Update the location of the broker and backend from the default.
-
-    Parameters
-    ----------
-    broker_location : str
-        the url of the broker
-    backend_location: str, optional
-        the url of the backend. If none, broker_location is used.
-    """
-    if backend_location is None:
-        backend_location = broker_location
-    app.conf.update(broker=broker_location, backend=broker_location)
-
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                  ne_mc_move: NonequilibriumSwitchingMove, topology: md.Topology, n_iterations: int,
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> NonequilibriumResult:
@@ -243,7 +229,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     return nonequilibrium_result
 
 def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                    mc_move: mcmc.MCMCMove, topology: md.Topology,
+                    mc_move: mcmc.MCMCMove, topology: md.Topology, n_iterations : int,
                     atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> EquilibriumResult:
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
@@ -275,7 +261,6 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
         final frame.
     """
     sampler_state = equilibrium_result.sampler_state
-    n_iterations = 10
     #get the atom indices we need to subset the topology and positions
     if atom_indices_to_save is None:
         atom_indices = list(range(topology.n_atoms))
