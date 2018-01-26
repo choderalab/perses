@@ -227,6 +227,18 @@ def get_data_filename(relative_path):
 
     return fn
 
+def forcefield_directory():
+    """
+    Return the forcefield directory for the additional forcefield files like gaff.xml
+
+    Returns
+    -------
+    forcefield_directory_name : str
+        Directory where OpenMM can find additional forcefield files
+    """
+    forcefield_directory_name = resource_filename("perses", "data")
+    return forcefield_directory_name
+
 def createSystemFromIUPAC(iupac_name):
     """
     Create an openmm system out of an oemol

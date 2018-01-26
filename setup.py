@@ -78,6 +78,9 @@ setup(name='perses',
       #package_data={'perses' : find_package_data('perses','examples') + find_package_data('perses','data')}, # I don't think this works
       package_data={'perses' : find_package_data('examples', 'perses') + find_package_data('perses/data', 'perses')}, # I think this is fixed
       zip_safe=False,
+      entry_points={
+       'openmm.forcefielddir' : 'perses=perses.tests.utils.forcefield_directory',
+      },
       ext_modules=extensions,
       install_requires=[
         'openmm >=7.1.0',
