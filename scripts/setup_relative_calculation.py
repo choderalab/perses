@@ -1,18 +1,10 @@
-import openeye.oechem as oechem
-import sys
-import progressbar
 import yaml
-from perses.rjmc import topology_proposal, geometry
 from perses.dispersed import relative_setup
-from perses.tests import utils
-import simtk.unit as unit
-from openmmtools.constants import kB
-import simtk.openmm.app as app
-from openmoltools import forcefield_generators
-import copy
 import numpy as np
 import pickle
 import progressbar
+import os
+import sys
 
 def get_topology_proposals(fe_setup):
     """
@@ -41,8 +33,12 @@ def get_topology_proposals(fe_setup):
     return topology_proposals
 
 if __name__=="__main__":
-    import os
-    yaml_filename = "basic_setup.yaml"
+    try:
+       yaml_filename = sys.argv[1]
+    except IndexError as e:
+        print("You need to specify the setup yaml file as an argument to the script.")
+        raise e
+
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file)
     yaml_file.close()
@@ -66,12 +62,18 @@ if __name__=="__main__":
     hybrid_factory = ne_fep._factory
     np.save(os.path.join(trajectory_directory, trajectory_prefix+"hybrid_factory.npy"), hybrid_factory)
 
+    print("equilibrating")
+    ne_fep.equilibrate(n_iterations=100)
+
+    print("equilibration complete")
     bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
     bar.update(0)
     for i in range(n_cycles):
         ne_fep.run(n_iterations=n_iterations_per_cycle)
-        bar.update((i+1)*n_iterations_per_cycle)
+        print(i)
+        #bar.update((i+1)*n_iterations_per_cycle)
 
+    print("calculation complete")
     df, ddf = ne_fep.current_free_energy_estimate
 
     print("The free energy estimate is %f +/- %f" % (df, ddf))
