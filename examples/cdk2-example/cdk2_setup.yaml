@@ -16,12 +16,15 @@ forcefield_files:
     - amber99sbildn.xml
     - tip3p.xml
 
-#the temperature and pressure of the simulation
+#the temperature and pressure of the simulation, as well as how much solvent paddding to add
+#units:
+#pressure: atm
+#temperature: Kelvin
+#padding: angstroms
 pressure: 1.0
 temperature: 300.0
-
-#How much solvent padding to add to the simulation box
 solvent_padding: 9.0
+
 
 #The name of the pickle file where we will save the setup object
 save_setup_pickle_as: fesetup.pkl

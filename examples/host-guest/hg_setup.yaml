@@ -16,6 +16,10 @@ forcefield_files:
     - amber99sbildn.xml
 
 #the temperature and pressure of the simulation
+#units:
+#pressure: atm
+#temperature: Kelvin
+#padding: angstroms
 pressure: 1.0
 temperature: 300.0
 solvent_padding: 9.0
