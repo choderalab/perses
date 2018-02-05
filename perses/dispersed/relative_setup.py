@@ -411,6 +411,8 @@ class NonequilibriumSwitchingFEP(object):
         #reverse functions to get a symmetric protocol
         self._reverse_functions = {param : param_formula.replace("lambda", "(1-lambda)") for param, param_formula in self._forward_functions.items()}
 
+        #setup splitting string:
+        self._splitting_string = "V R O H R V"
         #set up some class attributes
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
@@ -462,8 +464,8 @@ class NonequilibriumSwitchingFEP(object):
         self._hybrid_thermodynamic_states = {0: CompoundThermodynamicState(self._thermodynamic_state, composable_states=[self._hybrid_alchemical_states[0]]), 1: CompoundThermodynamicState(copy.deepcopy(self._thermodynamic_state), composable_states=[self._hybrid_alchemical_states[1]])}
 
         #create the forward and reverse integrators
-        self._integrators = {0 : AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature, splitting="V R O H O R V"),
-                             1: AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature, splitting="V R O H O R V")}
+        self._integrators = {0 : AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature, splitting=self._splitting_string),
+                             1: AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature, splitting=self._splitting_string)}
 
         #create the forward and reverse MCMoves
         self._ne_mc_moves = {n : NonequilibriumSwitchingMove(self._integrators[n], self._nsteps_per_iteration) for n in (0,1)}
