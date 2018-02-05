@@ -442,7 +442,10 @@ class NonequilibriumSwitchingFEP(object):
         #Set the number of times that the nonequilbrium move will have to be run in order to complete a protocol:
         if self._ncmc_nsteps % self._nsteps_per_iteration != 0:
             logging.warning("The number of ncmc steps is not divisible by the number of steps per iteration. You may not have a full protocol.")
-        self._n_iterations_per_call = self._ncmc_nsteps // self._nsteps_per_iteration
+        self._n_neq_iterations_per_call = self._ncmc_nsteps // self._nsteps_per_iteration
+
+        #For now, we will not vary this.
+        self._n_eq_iterations_per_call = 1
 
         #create the thermodynamic state
         lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(self._hybrid_system)
@@ -523,7 +526,8 @@ class NonequilibriumSwitchingFEP(object):
         endpoints = [0, 1]
         eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
         hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
-        niterations_per_call_list = [self._n_iterations_per_call, self._n_iterations_per_call]
+        n_neq_iterations_per_call_list = [self._n_neq_iterations_per_call, self._n_neq_iterations_per_call]
+        n_eq_iterations_per_call_list = [self._n_eq_iterations_per_call, self._n_eq_iterations_per_call]
         atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
         hybrid_factory_list = [self._factory, self._factory]
 
@@ -539,13 +543,13 @@ class NonequilibriumSwitchingFEP(object):
                 noneq_trajectory_filenames = [None, None]
 
             #run a round of equilibrium
-            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, n_eq_iterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
             #get the perturbations to nonalchemical states:
             endpoint_perturbation_results_list.append(self._map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
 
             #run a round of nonequilibrium switching:
-            nonequilibrium_results_list.append(self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, noneq_trajectory_filenames))
+            nonequilibrium_results_list.append(self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, n_neq_iterations_per_call_list, atom_indices_to_save_list, noneq_trajectory_filenames))
 
             self._current_iteration +=1
             print(self._current_iteration)
@@ -576,7 +580,7 @@ class NonequilibriumSwitchingFEP(object):
         """
         eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
         hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
-        niterations_per_call_list = [self._n_iterations_per_call, self._n_iterations_per_call]
+        n_eq_iterations_per_call_list = [self._n_eq_iterations_per_call, self._n_eq_iterations_per_call]
         atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
 
         for i in range(n_iterations):
@@ -586,7 +590,7 @@ class NonequilibriumSwitchingFEP(object):
             else:
                 equilibrium_trajectory_filenames = [None, None]
             #run a round of equilibrium
-            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, niterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, n_eq_iterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
     def _adjust_for_correlation(self, timeseries_array: np.array):
         """
