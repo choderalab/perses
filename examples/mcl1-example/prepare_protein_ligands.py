@@ -16,6 +16,10 @@ def read_and_write_protein(protein_filename: str, protein_output_filename: str):
     """
     fixer = pdbfixer.PDBFixer(filename=protein_filename)
 
+    fixer.findMissingResidues()
+    fixer.findMissingAtoms()
+    fixer.addMissingAtoms()
+
     #extract topology and positions
     topology = fixer.topology
     positions = fixer.positions
