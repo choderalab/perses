@@ -5,17 +5,16 @@ import os
 
 #Add the variables specific to the Alchemical langevin integrator
 cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
-    "protocol_work" : 0.0,
-    "Eold" : 0.0,
-    "Enew" : 0.0,
-    "lambda" : 0.0,
-    "nsteps" : 0.0,
-    "step" : 0.0,
-    "n_lambda_steps" : 0.0,
-    "lambda_step" : 0.0
-})
+     "protocol_work" : 0.0,
+     "Eold" : 0.0,
+     "Enew" : 0.0,
+     "lambda" : 0.0,
+     "nsteps" : 0.0,
+     "step" : 0.0,
+     "n_lambda_steps" : 0.0,
+     "lambda_step" : 0.0
+ })
 
-cache.global_context_cache.platform = openmm.Platform.getPlatformByName("OpenCL")
 
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
@@ -108,7 +107,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             The relevant thermodynamic state for this context and integrator
         """
         integrator = context.getIntegrator()
-        self._current_total_work = integrator.get_total_work(dimensionless=True)
+        self._current_total_work = integrator.get_protocol_work(dimensionless=True)
 
     @property
     def current_total_work(self):

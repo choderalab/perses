@@ -387,12 +387,10 @@ class NonequilibriumSwitchingFEP(object):
             The address of the dask scheduler. If None, local will be used.
         """
         if scheduler_address is None:
-            cluster = distributed.LocalCluster()
-            self._client = distributed.Client(cluster)
-            self._map = self._client.map
-            self._gather = self._client.gather
+            self._map = map
+            self._gather = lambda mapped_list: list(mapped_list)
         else:
-            if scheduler_address=='localhost':
+            if scheduler_address == 'localhost':
                 self._client = distributed.Client()
             else:
                 self._client = distributed.Client(scheduler_address)
@@ -556,9 +554,9 @@ class NonequilibriumSwitchingFEP(object):
 
         #after all tasks have been requested, retrieve the results:
         for i in range(n_iterations):
-            nonequilibrium_results = self._gather(nonequilibrium_results_list[i])
+            self._equilibrium_results = self._gather(self._equilibrium_results)
             endpoint_perturbations = self._gather(endpoint_perturbation_results_list[i])
-            #nonequilibrium_results = self._gather(nonequilibrium_results_list[i])
+            nonequilibrium_results = self._gather(nonequilibrium_results_list[i])
 
             for lambda_state in [0,1]:
                 self._reduced_potential_differences[lambda_state].append(endpoint_perturbations[lambda_state])
