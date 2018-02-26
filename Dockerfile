@@ -15,8 +15,13 @@ ENV PATH /miniconda/bin:$PATH
 
 # Add channels and build, then install
 RUN conda config --add channels omnia
+RUN conda update --yes -n base conda
+RUN conda config --add channels conda-forge
 RUN conda config --add channels omnia/label/dev
-RUN conda install --yes conda-build==2.1.17 jinja2 anaconda-client pip
-RUN conda build devtools/conda-recipe
+RUN conda install --yes conda-build jinja2 anaconda-client pip
+
+RUN git clone -b container https://github.com/choderalab/perses
+
+RUN conda build perses/devtools/conda-recipe
 RUN conda install --yes --use-local perses-dev
 RUN pip install -i https://pypi.anaconda.org/OpenEye/simple OpenEye-toolkits
