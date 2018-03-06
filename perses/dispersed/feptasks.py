@@ -181,7 +181,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
                                                  enforcePeriodicBox=thermodynamic_state.is_periodic)
 
         self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
-        
+
         # Subclasses can read here info from the context to update internal statistics.
         self._after_integration(context, thermodynamic_state)
 
@@ -210,6 +210,15 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             the current total work performed by this move since the last reset()
         """
         return self._current_total_work
+
+    @property
+    def trajectory(self):
+        if self._topology is None:
+            raise ValueError("Tried to access a trajectory without providing a topology.")
+        elif self._trajectory is None:
+            raise Exception("Tried to access a trajectory on a move that hasn't been used yet.")
+        else:
+            return self._trajectory
 
     def __getstate__(self):
         dictionary = super(NonequilibriumSwitchingMove, self).__getstate__()
