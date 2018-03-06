@@ -38,22 +38,17 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
     Parameters
     ----------
-    n_steps : int
-        The number of integration steps to take each time the move is applied.
     integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
         The integrator that will be used for the nonequilibrium switching.
+    work_write_interval : int, default None
+        The frequency with which to record the cumulative total work. If None, only save the total work at the end
+    trajectory_write_interval : int, default None
+        The frequency with which to record the positions of the system. If None, only save the last frame
+    traj: md.Trajectory, default None
+        The trajectory to use to write the positions along the protocol. If None, don't write anything.
     context_cache : openmmtools.cache.ContextCache, optional
         The ContextCache to use for Context creation. If None, the global cache
         openmmtools.cache.global_context_cache is used (default is None).
-    reassign_velocities : bool, optional
-        If True, the velocities will be reassigned from the Maxwell-Boltzmann
-        distribution at the beginning of the move (default is False).
-    restart_attempts : int, optional
-        When greater than 0, if after the integration there are NaNs in energies,
-        the move will restart. When the integrator has a random component, this
-        may help recovering. An IntegratorMoveError is raised after the given
-        number of attempts if there are still NaNs.
-
     Attributes
     ----------
     n_steps : int
@@ -63,9 +58,24 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     current_total_work : float
     """
 
-    def __init__(self, integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator, n_steps: int, **kwargs):
-        super(NonequilibriumSwitchingMove, self).__init__(n_steps, **kwargs)
+    def __init__(self, integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator,
+        work_write_interval: int=None, trajectory_write_interval: int=None, traj: md.Trajectory=None, **kwargs):
+
+        super(NonequilibriumSwitchingMove, self).__init__(**kwargs)
         self._integrator = integrator
+        self._ncmc_nsteps = integrator._n_steps_neq
+        
+        self._trajectory_write_interval = trajectory_write_interval
+        self._work_write_interval = work_write_interval
+        
+        #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
+        #work before the end of the protocol as the end
+        if self._ncmc_nsteps % self._work_write_interval != 0:
+            raise ValueError("The work writing interval must be a factor of the total number of steps")
+
+        self._trajectory = traj
+        self._cumulative_work = np.zeros([self._ncmc_nsteps // self._work_write_interval])
+        
         self._current_total_work = 0.0
 
     def _get_integrator(self, thermodynamic_state):
@@ -83,6 +93,61 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             The integrator that is associated with this MCMove
         """
         return self._integrator
+
+    def apply(self, thermodynamic_state, sampler_state):
+        """Propagate the state through the integrator.
+        This updates the SamplerState after the integration. It will apply the full NCMC protocol.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to propagate dynamics.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to. This is modified.
+        """
+        """Propagate the state through the integrator.
+        This updates the SamplerState after the integration. It also logs
+        benchmarking information through the utils.Timer class.
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to propagate dynamics.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to. This is modified.
+        See Also
+        --------
+        openmmtools.utils.Timer
+        """
+        # Check if we have to use the global cache.
+        if self.context_cache is None:
+            context_cache = cache.global_context_cache
+        else:
+            context_cache = self.context_cache
+
+        # Create integrator.
+        integrator = self._get_integrator(thermodynamic_state)
+
+        context, integrator = context_cache.get_context(thermodynamic_state, integrator)
+
+        # Perform the integration.
+        for attempt_counter in range(self.n_restart_attempts + 1):
+
+            # Subclasses may implement _before_integration().
+            self._before_integration(context, thermodynamic_state)
+            
+            integrator.step(self.n_steps)
+
+            # We get also velocities here even if we don't need them because we
+            # will recycle this State to update the sampler state object. This
+            # way we won't need a second call to Context.getState().
+            context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                                 enforcePeriodicBox=thermodynamic_state.is_periodic)
+
+
+        # Subclasses can read here info from the context to update internal statistics.
+        self._after_integration(context, thermodynamic_state)
+
+        sampler_state.update_from_context(context_state)
 
     def reset(self):
         """
