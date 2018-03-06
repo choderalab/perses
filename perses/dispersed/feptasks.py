@@ -59,13 +59,12 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
 
     def __init__(self, integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator,
-        work_write_interval: int=None, trajectory_write_interval: int=None, traj: md.Trajectory=None, **kwargs):
+        work_write_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None **kwargs):
 
         super(NonequilibriumSwitchingMove, self).__init__(**kwargs)
         self._integrator = integrator
         self._ncmc_nsteps = integrator._n_steps_neq
         
-        self._trajectory_write_interval = trajectory_write_interval
         self._work_write_interval = work_write_interval
         
         #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
@@ -73,9 +72,23 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         if self._ncmc_nsteps % self._work_write_interval != 0:
             raise ValueError("The work writing interval must be a factor of the total number of steps")
 
-        self._trajectory = traj
-        self._cumulative_work = np.zeros([self._ncmc_nsteps // self._work_write_interval])
-        
+        self._number_of_step_moves = self._ncmc_nsteps // self._work_write_interval
+
+        #use the number of step moves plus one, since the first is always zero
+        self._cumulative_work = np.zeros(self._number_of_step_moves+1)
+
+        self._topology = top
+        self._subset_atoms = subset_atoms
+        self._trajectory = None
+
+        #if we have a trajectory, set up some ancillary variables:
+        if self._topology is not None:
+            n_atoms = self._topology.n_atoms
+            n_iterations = self._number_of_step_moves
+            self._trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
+            self._trajectory_box_lengths = np.zeros([n_iterations, 3])
+            self._trajectory_box_angles = np.zeros([n_iterations, 3])
+
         self._current_total_work = 0.0
 
     def _get_integrator(self, thermodynamic_state):
@@ -129,21 +142,46 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
 
-        # Perform the integration.
-        for attempt_counter in range(self.n_restart_attempts + 1):
+        # Subclasses may implement _before_integration().
+        self._before_integration(context, thermodynamic_state)
+        
+        self._cumulative_work[0] = integrator.get_protocol_work()
 
-            # Subclasses may implement _before_integration().
-            self._before_integration(context, thermodynamic_state)
-            
-            integrator.step(self.n_steps)
+        #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
+        for iteration in range(self._number_of_step_moves):
 
-            # We get also velocities here even if we don't need them because we
-            # will recycle this State to update the sampler state object. This
-            # way we won't need a second call to Context.getState().
-            context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
+            integrator.step(self._number_of_step_moves)
+            self._current_total_work = integrator.get_protocol_work()
+            self._cumulative_work[iteration+1] = self._current_total_work
+
+            #if we have a trajectory, we'll also write to it
+            if self._topology is not None:
+                context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                                 enforcePeriodicBox=thermodynamic_state.is_periodic)
+                sampler_state.update_from_context(context_state)
+                
+                #record positions for writing to trajectory
+                #we need to check whether the user has requested to subset atoms (excluding water, for instance)
+
+                if self._subset_atoms is None:
+                    self._trajectory_positions[iteration, :, :] = sampler_state.positions[:, :].value_in_unit_system(unit.md_unit_system)
+                else:
+                    self._trajectory_positions[iteration, :, :] = sampler_state.positions[self._subset_atoms, :].value_in_unit_system(unit.md_unit_system)
+
+                #get the box angles and lengths
+                a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
+                self._trajectory_box_lengths[iteration, :] = [a, b, c]
+                self._trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
+
+
+        # We get also velocities here even if we don't need them because we
+        # will recycle this State to update the sampler state object. This
+        # way we won't need a second call to Context.getState().
+        context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
                                                  enforcePeriodicBox=thermodynamic_state.is_periodic)
 
-
+        self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
+        
         # Subclasses can read here info from the context to update internal statistics.
         self._after_integration(context, thermodynamic_state)
 
@@ -159,20 +197,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             the thermodynamic state for which this integrator is cached.
         """
         self._integrator.reset()
-
-    def _after_integration(self, context, thermodynamic_state):
-        """
-        Accumulate the work after n_steps is performed.
-
-        Parameters
-        ----------
-        context : openmm.Context
-            The OpenMM context which is performing the integration
-        thermodynamic_state : openmmtools.states.ThermodynamicState
-            The relevant thermodynamic state for this context and integrator
-        """
-        integrator = context.getIntegrator()
-        self._current_total_work = integrator.get_protocol_work(dimensionless=True)
+        self._current_total_work = 0
 
     @property
     def current_total_work(self):
