@@ -2,6 +2,7 @@ import simtk.openmm as openmm
 import openmmtools.cache as cache
 from typing import List, Tuple, Union, NamedTuple
 import os
+import copy
 
 #Add the variables specific to the Alchemical langevin integrator
 cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
@@ -62,8 +63,8 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         work_write_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, **kwargs):
 
         super(NonequilibriumSwitchingMove, self).__init__(**kwargs)
-        self._integrator = integrator
-        self._ncmc_nsteps = integrator._n_steps_neq
+        self._integrator = copy.deepcopy(integrator)
+        self._ncmc_nsteps = self._integrator._n_steps_neq
         
         self._work_write_interval = work_write_interval
         
@@ -180,8 +181,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         # We get also velocities here even if we don't need them because we
         # will recycle this State to update the sampler state object. This
         # way we won't need a second call to Context.getState().
-        context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
-                                                 enforcePeriodicBox=thermodynamic_state.is_periodic)
+        context_state = context.getState(getPositions=True, enforcePeriodicBox=thermodynamic_state.is_periodic)
 
         self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
 
