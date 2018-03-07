@@ -45,20 +45,17 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         The integrator that will be used for the nonequilibrium switching.
     work_write_interval : int, default None
         The frequency with which to record the cumulative total work. If None, only save the total work at the end
-    trajectory_write_interval : int, default None
-        The frequency with which to record the positions of the system. If None, only save the last frame
-    traj: md.Trajectory, default None
-        The trajectory to use to write the positions along the protocol. If None, don't write anything.
+    top: md.Topology, default None
+        The topology to use to write the positions along the protocol. If None, don't write anything.
+    subset_atoms : np.array, default None
+        The indices of the subset of atoms to write. If None, write all atoms (if writing is enabled)
     context_cache : openmmtools.cache.ContextCache, optional
         The ContextCache to use for Context creation. If None, the global cache
         openmmtools.cache.global_context_cache is used (default is None).
     Attributes
     ----------
-    n_steps : int
-    context_cache : openmmtools.cache.ContextCache
-    reassign_velocities : bool
-    restart_attempts : int or None
     current_total_work : float
+        The total work in kT.
     """
 
     def __init__(self, integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator,
@@ -157,7 +154,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         for iteration in range(self._number_of_step_moves):
 
             integrator.step(self._number_of_step_moves)
-            self._current_total_work = integrator.get_protocol_work()
+            self._current_total_work = integrator.get_protocol_work(dimensionless=True)
             self._cumulative_work[iteration+1] = self._current_total_work
 
             #if we have a trajectory, we'll also write to it
