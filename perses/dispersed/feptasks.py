@@ -202,6 +202,10 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         self._integrator.reset()
         self._current_total_work = 0
 
+    def _before_integration(self, context: openmm.Context, thermodynamic_state: states.ThermodynamicState):
+        """Execute code after Context creation and before integration."""
+        self._integrator.reset()
+
     @property
     def current_total_work(self):
         """
