@@ -31,6 +31,9 @@ import simtk.unit as unit
 EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('reduced_potential', float)])
 NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', np.array)])
 
+class NoTrajectoryException(Exception):
+    
+
 class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
     This class represents an MCMove that runs a nonequilibrium switching protocol using the AlchemicalNonequilibriumLangevinIntegrator.
@@ -83,11 +86,14 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         #if we have a trajectory, set up some ancillary variables:
         if self._topology is not None:
+            self._write_frames = True
             n_atoms = self._topology.n_atoms
             n_iterations = self._number_of_step_moves
             self._trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
             self._trajectory_box_lengths = np.zeros([n_iterations, 3])
             self._trajectory_box_angles = np.zeros([n_iterations, 3])
+        else:
+            self._write_frames = False
 
         self._current_total_work = 0.0
 
@@ -219,6 +225,10 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             raise Exception("Tried to access a trajectory on a move that hasn't been used yet.")
         else:
             return self._trajectory
+    
+    @property
+    def cumulative_work(self):
+        return self._cumulative_work
 
     def __getstate__(self):
         dictionary = super(NonequilibriumSwitchingMove, self).__getstate__()
@@ -280,37 +290,14 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
 
-    n_atoms = subset_topology.n_atoms
-
-    #create a numpy array for the trajectory
-    trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
-    trajectory_box_lengths = np.zeros([n_iterations, 3])
-    trajectory_box_angles = np.zeros([n_iterations, 3])
-
-    #create a numpy array for the work values
-    cumulative_work = np.zeros(n_iterations)
-    #rdb.set_trace()
-    #reset the MCMove to ensure that we are starting with zero work.
     ne_mc_move.reset()
 
-    #now loop through the iterations and run the protocol:
-    for iteration in range(n_iterations):
-        #apply the nonequilibrium move
-        ne_mc_move.apply(thermodynamic_state, sampler_state)
+    #apply the nonequilibrium move
+    ne_mc_move.apply(thermodynamic_state, sampler_state)
 
-        #record the positions as a result
-        trajectory_positions[iteration, :, :] = sampler_state.positions[atom_indices, :].value_in_unit_system(unit.md_unit_system)
-
-        #get the box angles and lengths
-        a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
-        trajectory_box_lengths[iteration, :] = [a, b, c]
-        trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
-
-        #record the cumulative work as a result
-        cumulative_work[iteration] = ne_mc_move.current_total_work
-
-    #create an MDTraj trajectory with this data
-    trajectory = md.Trajectory(trajectory_positions, subset_topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
+    #get the trajectory and cumulative work
+    trajectory = ne_mc_move.trajectory
+    cumulative_work = ne_mc_move.cumulative_work
 
     #create a result object and return that
     nonequilibrium_result = NonequilibriumResult(cumulative_work)
