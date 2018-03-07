@@ -44,7 +44,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     ----------
     integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
         The integrator that will be used for the nonequilibrium switching.
-    work_write_interval : int, default None
+    work_save_interval : int, default None
         The frequency with which to record the cumulative total work. If None, only save the total work at the end
     top: md.Topology, default None
         The topology to use to write the positions along the protocol. If None, don't write anything.
@@ -60,20 +60,20 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
 
     def __init__(self, integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator,
-        work_write_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, **kwargs):
+        work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, **kwargs):
 
         super(NonequilibriumSwitchingMove, self).__init__(**kwargs)
         self._integrator = copy.deepcopy(integrator)
         self._ncmc_nsteps = self._integrator._n_steps_neq
         
-        self._work_write_interval = work_write_interval
+        self._work_save_interval = work_save_interval
         
         #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
         #work before the end of the protocol as the end
-        if self._ncmc_nsteps % self._work_write_interval != 0:
+        if self._ncmc_nsteps % self._work_save_interval != 0:
             raise ValueError("The work writing interval must be a factor of the total number of steps")
 
-        self._number_of_step_moves = self._ncmc_nsteps // self._work_write_interval
+        self._number_of_step_moves = self._ncmc_nsteps // self._work_save_interval
 
         #use the number of step moves plus one, since the first is always zero
         self._cumulative_work = np.zeros(self._number_of_step_moves+1)
@@ -157,7 +157,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
         for iteration in range(self._number_of_step_moves):
 
-            integrator.step(self._number_of_step_moves)
+            integrator.step(self._work_save_interval)
             self._current_total_work = integrator.get_protocol_work(dimensionless=True)
             self._cumulative_work[iteration+1] = self._current_total_work
 
@@ -254,7 +254,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                 integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator, topology: md.Topology, work_write_interval: int,
+                 integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator, topology: md.Topology, work_save_interval: int,
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
@@ -271,7 +271,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         The integrator that will be used to perform the switching.
     topology : mdtraj.Topology
         An MDtraj topology for the system to generate trajectories
-    work_write_interval : int
+    work_save_interval : int
         How often to write the work and, if requested, configurations
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
@@ -296,7 +296,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
     
-    ne_mc_move = NonequilibriumSwitchingMove(integrator, work_write_interval, subset_topology, atom_indices)
+    ne_mc_move = NonequilibriumSwitchingMove(integrator, work_save_interval, subset_topology, atom_indices)
 
     ne_mc_move.reset()
 
