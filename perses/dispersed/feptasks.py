@@ -32,7 +32,7 @@ EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.Sa
 NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', np.array)])
 
 class NoTrajectoryException(Exception):
-    
+    pass
 
 class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
@@ -62,7 +62,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
 
     def __init__(self, integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator,
-        work_write_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None **kwargs):
+        work_write_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, **kwargs):
 
         super(NonequilibriumSwitchingMove, self).__init__(**kwargs)
         self._integrator = integrator
@@ -219,10 +219,10 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
     @property
     def trajectory(self):
-        if self._topology is None:
-            raise ValueError("Tried to access a trajectory without providing a topology.")
+        if self._write_frames is None:
+            raise NoTrajectoryException("Tried to access a trajectory without providing a topology.")
         elif self._trajectory is None:
-            raise Exception("Tried to access a trajectory on a move that hasn't been used yet.")
+            raise NoTrajectoryException("Tried to access a trajectory on a move that hasn't been used yet.")
         else:
             return self._trajectory
     
@@ -250,8 +250,8 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                 ne_mc_move: NonequilibriumSwitchingMove, topology: md.Topology, n_iterations: int,
-                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> NonequilibriumResult:
+                 integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator, topology: md.Topology, work_write_interval: int,
+                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
     that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
@@ -263,16 +263,18 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         The result of an equilibrium simulation
     thermodynamic_state : openmmtools.states.ThermodynamicState
         The thermodynamic state at which to run the protocol
-    ne_mc_move : perses.distributed.relative_setup.NonequilibriumSwitchingMove
-        The move that will be used to perform the switching.
+    integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
+        The integrator that will be used to perform the switching.
     topology : mdtraj.Topology
         An MDtraj topology for the system to generate trajectories
-    n_iterations : int
-        The number of times to apply the specified MCMove
+    work_write_interval : int
+        How often to write the work and, if requested, configurations
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
     trajectory_filename : str, default None
         Full filepath of output trajectory, if desired. If None, no trajectory file is written.
+    write_configuration : bool, default False
+        Whether to also write configurations of the trajectory at the requested interval.
     Returns
     -------
     nonequilibrium_result : NonequilibriumResult
@@ -289,14 +291,15 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     else:
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
+    
+    ne_mc_move = NonequilibriumSwitchingMove(integrator, work_write_interval, subset_topology, atom_indices)
 
     ne_mc_move.reset()
 
     #apply the nonequilibrium move
     ne_mc_move.apply(thermodynamic_state, sampler_state)
 
-    #get the trajectory and cumulative work
-    trajectory = ne_mc_move.trajectory
+    #get the cumulative work
     cumulative_work = ne_mc_move.cumulative_work
 
     #create a result object and return that
@@ -308,6 +311,13 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         filepath_parts = trajectory_filename.split(".")
         filepath_parts[-1] = "cw.npy"
         cum_work_filepath = ".".join(filepath_parts)
+        
+        #if writing configurations was requested, get the trajectory
+        if write_configuration:
+            try:
+                trajectory = ne_mc_move.trajectory
+            except NoTrajectoryException:
+                trajectory = None
 
         write_nonequilibrium_trajectory(nonequilibrium_result, trajectory, trajectory_filename, cum_work_filepath)
 
@@ -455,7 +465,8 @@ def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult,
     final_work : float
         The final value of the work trajectory
     """
-    nonequilibrium_trajectory.save_hdf5(trajectory_filename)
+    if nonequilibrium_trajectory is not None:
+        nonequilibrium_trajectory.save_hdf5(trajectory_filename)
     np.save(cum_work_filename, nonequilibrium_result.cumulative_work)
 
     return nonequilibrium_result.cumulative_work[-1]
