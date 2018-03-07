@@ -468,9 +468,6 @@ class NonequilibriumSwitchingFEP(object):
         self._integrators = {0 : AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._forward_functions, nsteps_neq=ncmc_nsteps, temperature=temperature, splitting=self._splitting_string),
                              1: AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=self._reverse_functions, nsteps_neq=ncmc_nsteps, temperature=temperature, splitting=self._splitting_string)}
 
-        #create the forward and reverse MCMoves
-        self._ne_mc_moves = {n : NonequilibriumSwitchingMove(self._integrators[n], self._nsteps_per_iteration) for n in (0,1)}
-
         #create the equilibrium MCMove
         self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=n_equil_steps)
         self._equilibrium_mc_move.n_restart_attempts = 10
@@ -524,7 +521,7 @@ class NonequilibriumSwitchingFEP(object):
         endpoints = [0, 1]
         eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
         hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
-        n_neq_iterations_per_call_list = [self._n_neq_iterations_per_call, self._n_neq_iterations_per_call]
+        write_interval_list = [self._n_neq_iterations_per_call, self._n_neq_iterations_per_call]
         n_eq_iterations_per_call_list = [self._n_eq_iterations_per_call, self._n_eq_iterations_per_call]
         atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
         hybrid_factory_list = [self._factory, self._factory]
@@ -547,7 +544,7 @@ class NonequilibriumSwitchingFEP(object):
             endpoint_perturbation_results_list.append(self._map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
 
             #run a round of nonequilibrium switching:
-            nonequilibrium_results_list.append(self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._ne_mc_moves.values(), hybrid_topology_list, n_neq_iterations_per_call_list, atom_indices_to_save_list, noneq_trajectory_filenames))
+            nonequilibrium_results_list.append(self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), self._integrators.values(), hybrid_topology_list, write_interval_list, atom_indices_to_save_list, noneq_trajectory_filenames))
 
             self._current_iteration +=1
             print(self._current_iteration)
