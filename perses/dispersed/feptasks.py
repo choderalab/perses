@@ -151,6 +151,9 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         
         self._cumulative_work[0] = integrator.get_protocol_work()
 
+        if self._cumulative_work != 0.0:
+            raise RuntimeError("The initial cumulative work after reset was not zero.")
+
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
         for iteration in range(self._number_of_step_moves):
 
