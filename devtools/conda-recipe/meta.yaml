@@ -57,6 +57,7 @@ requirements:
     - pdbfixer
     - lxml
     - networkx >=2.0
+    - openeye-toolits
 
 test:
   requires:
