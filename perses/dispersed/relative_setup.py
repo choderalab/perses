@@ -117,10 +117,6 @@ class NonequilibriumFEPSetup(object):
         self._new_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._new_ligand_oemol)
         self._new_liands_md_topology = md.Topology.from_openmm(self._new_ligand_topology)
 
-        self._forcefield = app.ForceField(*forcefield_files)
-        self._forcefield.loadFile(StringIO(ffxml))
-
-        print("Generated forcefield")
 
         self._complex_md_topology_old = self._receptor_md_topology_old.join(self._old_ligand_md_topology)
         self._complex_topology_old = self._complex_md_topology_old.to_openmm()
@@ -145,6 +141,9 @@ class NonequilibriumFEPSetup(object):
             self._system_generator = SystemGenerator(forcefield_files, barostat=barostat, forcefield_kwargs={'nonbondedMethod' : self._nonbonded_method})
         else:
             self._system_generator = SystemGenerator(forcefield_files)
+
+        # Use same forcefield from SystemGenerator
+        self._forcefield = self._system_generator._forcefield
 
         #self._system_generator._forcefield.loadFile(StringIO(ffxml))
 
