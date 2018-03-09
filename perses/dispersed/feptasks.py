@@ -64,6 +64,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         super(NonequilibriumSwitchingMove, self).__init__(**kwargs)
         self._integrator = copy.deepcopy(integrator)
+        integrators.RestorableIntegrator.restore_interface(self._integrator)
         self._ncmc_nsteps = self._integrator._n_steps_neq
         
         self._work_save_interval = work_save_interval
@@ -163,9 +164,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
             #if we have a trajectory, we'll also write to it
             if self._topology is not None:
-                context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
-                                                 enforcePeriodicBox=thermodynamic_state.is_periodic)
-                sampler_state.update_from_context(context_state)
+                sampler_state.update_from_context(context)
                 
                 #record positions for writing to trajectory
                 #we need to check whether the user has requested to subset atoms (excluding water, for instance)
