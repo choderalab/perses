@@ -18,7 +18,7 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.1.0
+    - openmm >=7.2.0
     - parmed
     - openmoltools
     - alchemy >=1.2.3
@@ -42,7 +42,7 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.1.0
+    - openmm >=7.2.0
     - parmed
     - openmoltools
     - alchemy >=1.2.3
@@ -57,6 +57,10 @@ requirements:
     - pdbfixer
     - lxml
     - networkx >=2.0
+    - openeye-toolkits
+    - dask
+    - distributed
+    - progressbar2
 
 test:
   requires:
