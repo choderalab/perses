@@ -60,6 +60,7 @@ requirements:
     - openeye-toolkits
     - dask
     - distributed
+    - progressbar2
 
 test:
   requires:

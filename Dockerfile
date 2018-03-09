@@ -17,9 +17,9 @@ ENV PATH /miniconda/bin:$PATH
 RUN conda config --add channels omnia
 RUN conda update --yes -n base conda
 RUN conda config --add channels conda-forge
+RUN conda update --yes --all
 RUN conda config --add channels omnia/label/dev
 RUN conda config --add channels openeye
-RUN pip install progressbar2
 
 
 RUN conda install --yes conda-build jinja2 anaconda-client pip
