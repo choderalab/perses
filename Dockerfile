@@ -24,7 +24,7 @@ RUN conda config --add channels openeye
 
 RUN conda install --yes conda-build jinja2 anaconda-client pip
 
-RUN git clone -b container https://github.com/choderalab/perses
+RUN git clone https://github.com/choderalab/perses
 
 RUN conda build perses/devtools/conda-recipe
 RUN conda install --yes --use-local perses-dev
