@@ -58,6 +58,8 @@ requirements:
     - lxml
     - networkx >=2.0
     - openeye-toolkits
+    - dask
+    - distributed
 
 test:
   requires:
