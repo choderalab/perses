@@ -3,7 +3,7 @@ from simtk import openmm, unit
 import simtk.openmm.app as app
 import openeye.oechem as oechem
 from perses.dispersed import relative_setup, feptasks
-from openmmtools import states, alchemy, testsystems, integrators
+from openmmtools import states, alchemy, testsystems, integrators, cache
 import pickle
 
 def generate_example_waterbox_states(temperature=300.0*unit.kelvin, pressure=1.0*unit.atmosphere):
@@ -42,9 +42,14 @@ def test_run_nonequilibrium_switching_move():
     #make the EquilibriumResult object that will be used to initialize the protocol runs:
     eq_result = feptasks.EquilibriumResult(0.0, sampler_state)
     
-    #run the run_protocol task n_iterations times, checking that the context is correctly handled.
+    #run the NE switching move task n_iterations times, checking that the context is correctly handled.
     for i in range(n_iterations):
-        #serialize the integrator and deserialize to simulate transmission over the network.
-        dumped_integrator = pickle.dumps(integrator)
-        deserialized_integrator = pickle.loads(dumped_integrator)
-        ne_result = feptasks.run_protocol(eq_result, cpd_thermodynamic_state, deserialized_integrator, topology, 10)
+        ne_move = feptasks.NonequilibriumSwitchingMove(integrator, topology=topology, work_save_interval=10)
+        context, integrator = cache.global_context_cache.get_context(cpd_thermodynamic_state, integrator)
+        
+        assert context.getParameter("lambda") == 0.0
+        ne_move.apply(cpd_thermodynamic_state, sampler_state)
+
+        #check that the value changed to 1.0 for all parameters
+        assert context.getParameter("lambda") == 1.0
+
