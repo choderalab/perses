@@ -44,7 +44,7 @@ def test_run_nonequilibrium_switching_move():
     
     #run the NE switching move task n_iterations times, checking that the context is correctly handled.
     for i in range(n_iterations):
-        ne_move = feptasks.NonequilibriumSwitchingMove(integrator, topology=topology, work_save_interval=10)
+        ne_move = feptasks.NonequilibriumSwitchingMove(integrator, top=topology, work_save_interval=10)
         context, integrator = cache.global_context_cache.get_context(cpd_thermodynamic_state, integrator)
         
         assert context.getParameter("lambda") == 0.0
