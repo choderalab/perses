@@ -84,7 +84,6 @@ setup(name='perses',
       ext_modules=extensions,
       install_requires=[
         'openmm >=7.1.0',
-        'alchemy >=1.2.3',
         'numpy',
         'scipy',
         'numexpr',
