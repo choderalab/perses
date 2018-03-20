@@ -42,8 +42,8 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
     Parameters
     ----------
-    integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
-        The integrator that will be used for the nonequilibrium switching.
+    integrator_options : dict
+        The options used to create the integrator.
     work_save_interval : int, default None
         The frequency with which to record the cumulative total work. If None, only save the total work at the end
     top: md.Topology, default None
@@ -59,13 +59,14 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         The total work in kT.
     """
 
-    def __init__(self, integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator,
+    def __init__(self, integrator_options: dict,
         work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, **kwargs):
 
         super(NonequilibriumSwitchingMove, self).__init__(**kwargs)
-        self._integrator = copy.deepcopy(integrator)
+        self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=integrator_options['alchemical_functions'], nsteps_neq=integrator_options['ncmc_nsteps'], 
+                                                                                  temperature=integrator_options['temperature'], splitting=integrator_options['splitting_string'])
         integrators.RestorableIntegrator.restore_interface(self._integrator)
-        self._ncmc_nsteps = self._integrator._n_steps_neq
+        self._ncmc_nsteps = integrator_options['n_steps_neq']
         
         self._work_save_interval = work_save_interval
         
@@ -253,7 +254,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                 integrator: integrators.AlchemicalNonequilibriumLangevinIntegrator, topology: md.Topology, work_save_interval: int,
+                 integrator_dictionary_options : dict, topology: md.Topology, work_save_interval: int,
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
@@ -266,8 +267,8 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         The result of an equilibrium simulation
     thermodynamic_state : openmmtools.states.ThermodynamicState
         The thermodynamic state at which to run the protocol
-    integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
-        The integrator that will be used to perform the switching.
+    integrator_dictionary_options : dict
+        The options to use to create the integrator that will be used for switching
     topology : mdtraj.Topology
         An MDtraj topology for the system to generate trajectories
     work_save_interval : int
@@ -286,7 +287,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     """
     #get the sampler state needed for the simulation
     sampler_state = equilibrium_result.sampler_state
-
+    
     #get the atom indices we need to subset the topology and positions
     if atom_indices_to_save is None:
         atom_indices = list(range(topology.n_atoms))
@@ -295,7 +296,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
     
-    ne_mc_move = NonequilibriumSwitchingMove(integrator, work_save_interval, subset_topology, atom_indices)
+    ne_mc_move = NonequilibriumSwitchingMove(integrator_dictionary_options, work_save_interval, subset_topology, atom_indices)
 
     ne_mc_move.reset()
 
