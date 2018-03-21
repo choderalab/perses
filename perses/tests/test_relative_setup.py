@@ -3,8 +3,15 @@ from simtk import openmm, unit
 import simtk.openmm.app as app
 import openeye.oechem as oechem
 from perses.dispersed import relative_setup, feptasks
+import mdtraj as md
 from openmmtools import states, alchemy, testsystems, integrators, cache
 import pickle
+
+default_forward_functions = {
+        'lambda_sterics' : 'lambda',
+        'lambda_electrostatics' : 'lambda',
+    }
+
 
 def generate_example_waterbox_states(temperature=300.0*unit.kelvin, pressure=1.0*unit.atmosphere):
     """
@@ -35,21 +42,26 @@ def test_run_nonequilibrium_switching_move():
     """
     n_iterations = 5
     cpd_thermodynamic_state, sampler_state, topology = generate_example_waterbox_states()
+    
+    md_topology = md.Topology.from_openmm(topology)
 
     #make a BAOAB integrator for use with the run_protocol module
-    integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(splitting="V R O H O R V", nsteps_neq=100)
-
+    integrator_options = {'temperature': 300.0*unit.kelvin, 'alchemical_functions' : default_forward_functions, 'nsteps_neq' : 10, 'splitting_string' : 'V R O H R V'}
     #make the EquilibriumResult object that will be used to initialize the protocol runs:
     eq_result = feptasks.EquilibriumResult(0.0, sampler_state)
     
     #run the NE switching move task n_iterations times, checking that the context is correctly handled.
     for i in range(n_iterations):
-        ne_move = feptasks.NonequilibriumSwitchingMove(integrator, top=topology, work_save_interval=10)
+        ne_move = feptasks.NonequilibriumSwitchingMove(integrator_options, top=md_topology, work_save_interval=10)
+
+        integrator = ne_move._integrator
+
         context, integrator = cache.global_context_cache.get_context(cpd_thermodynamic_state, integrator)
         
-        assert context.getParameter("lambda") == 0.0
+        assert context.getParameter("lambda_sterics") == 0.0
+        assert integrator.getGlobalVariableByName("lambda") == 0.0
         ne_move.apply(cpd_thermodynamic_state, sampler_state)
 
         #check that the value changed to 1.0 for all parameters
-        assert context.getParameter("lambda") == 1.0
-
+        assert context.getParameter("lambda_sterics") == 1.0
+        assert integrator.getGlobalVariableByName("lambda") == 1.0
