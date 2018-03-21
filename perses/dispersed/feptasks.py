@@ -62,11 +62,11 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     def __init__(self, integrator_options: dict,
         work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, **kwargs):
 
-        super(NonequilibriumSwitchingMove, self).__init__(**kwargs)
-        self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=integrator_options['alchemical_functions'], nsteps_neq=integrator_options['ncmc_nsteps'], 
+        super(NonequilibriumSwitchingMove, self).__init__(n_steps=integrator_options['nsteps_neq'], **kwargs)
+        self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=integrator_options['alchemical_functions'], nsteps_neq=integrator_options['nsteps_neq'], 
                                                                                   temperature=integrator_options['temperature'], splitting=integrator_options['splitting_string'])
         integrators.RestorableIntegrator.restore_interface(self._integrator)
-        self._ncmc_nsteps = integrator_options['n_steps_neq']
+        self._ncmc_nsteps = integrator_options['nsteps_neq']
         
         self._work_save_interval = work_save_interval
         
@@ -148,12 +148,14 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
 
+        sampler_state.apply_to_context(context, ignore_velocities=True)
+
         # Subclasses may implement _before_integration().
         self._before_integration(context, thermodynamic_state)
         
-        self._cumulative_work[0] = integrator.get_protocol_work()
+        self._cumulative_work[0] = integrator.get_protocol_work(dimensionless=True)
 
-        if self._cumulative_work != 0.0:
+        if self._cumulative_work[0] != 0.0:
             raise RuntimeError("The initial cumulative work after reset was not zero.")
 
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
@@ -180,18 +182,12 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
                 self._trajectory_box_lengths[iteration, :] = [a, b, c]
                 self._trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
 
-
-        # We get also velocities here even if we don't need them because we
-        # will recycle this State to update the sampler state object. This
-        # way we won't need a second call to Context.getState().
-        context_state = context.getState(getPositions=True, enforcePeriodicBox=thermodynamic_state.is_periodic)
-
         self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
 
         # Subclasses can read here info from the context to update internal statistics.
         self._after_integration(context, thermodynamic_state)
 
-        sampler_state.update_from_context(context_state)
+        sampler_state.update_from_context(context)
 
     def reset(self):
         """
@@ -320,10 +316,9 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         if write_configuration:
             try:
                 trajectory = ne_mc_move.trajectory
+                write_nonequilibrium_trajectory(nonequilibrium_result, trajectory, trajectory_filename, cum_work_filepath)
             except NoTrajectoryException:
-                trajectory = None
-
-        write_nonequilibrium_trajectory(nonequilibrium_result, trajectory, trajectory_filename, cum_work_filepath)
+                pass
 
     return nonequilibrium_result
 
