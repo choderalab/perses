@@ -59,14 +59,14 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         The total work in kT.
     """
 
-    def __init__(self, integrator_options: dict,
+    def __init__(self, alchemical_functions: dict, splitting: str, temperature: unit.Quantity, nsteps_neq: int,
         work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, **kwargs):
 
-        super(NonequilibriumSwitchingMove, self).__init__(n_steps=integrator_options['nsteps_neq'], **kwargs)
-        self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=integrator_options['alchemical_functions'], nsteps_neq=integrator_options['nsteps_neq'], 
-                                                                                  temperature=integrator_options['temperature'], splitting=integrator_options['splitting_string'])
+        super(NonequilibriumSwitchingMove, self).__init__(n_steps=nsteps_neq, **kwargs)
+        self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions, nsteps_neq=nsteps_neq, 
+                                                                                  temperature=temperature, splitting=splitting)
         integrators.RestorableIntegrator.restore_interface(self._integrator)
-        self._ncmc_nsteps = integrator_options['nsteps_neq']
+        self._ncmc_nsteps = nsteps_neq
         
         self._work_save_interval = work_save_interval
         
@@ -250,7 +250,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                 integrator_dictionary_options : dict, topology: md.Topology, work_save_interval: int,
+                 alchemical_functions: dict, splitting: str, nstep_neq: int, topology: md.Topology, work_save_interval: int,
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
@@ -283,6 +283,8 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     """
     #get the sampler state needed for the simulation
     sampler_state = equilibrium_result.sampler_state
+
+    temperature = thermodynamic_state.temperature
     
     #get the atom indices we need to subset the topology and positions
     if atom_indices_to_save is None:
@@ -292,7 +294,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
     
-    ne_mc_move = NonequilibriumSwitchingMove(integrator_dictionary_options, work_save_interval, subset_topology, atom_indices)
+    ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions, splitting, temperature, nstep_neq, work_save_interval, subset_topology, atom_indices)
 
     ne_mc_move.reset()
 
