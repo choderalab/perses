@@ -213,8 +213,8 @@ class NonequilibriumFEPSetup(object):
         """
         modeller = app.Modeller(topology, positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name != "MOL"]
-        #modeller.delete(hs)
-        #modeller.addHydrogens(forcefield=self._forcefield)
+        modeller.delete(hs)
+        modeller.addHydrogens(forcefield=self._forcefield)
         print("preparing to add solvent")
         if self._solvate:
             print("preparing to add solvent")
@@ -545,7 +545,7 @@ class NonequilibriumSwitchingFEP(object):
             endpoint_perturbation_results_list.append(self._map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
 
             #run a round of nonequilibrium switching:
-            nonequilibrium_results_list.append(self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), alchemical_functions, splitting, nsteps_neq, hybrid_topology_list, write_interval_list, atom_indices_to_save_list, noneq_trajectory_filenames))
+            nonequilibrium_results_list.append(self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), alchemical_functions, nsteps_neq, hybrid_topology_list, write_interval_list, splitting, atom_indices_to_save_list, noneq_trajectory_filenames))
 
             self._current_iteration +=1
             print(self._current_iteration)

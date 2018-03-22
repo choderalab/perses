@@ -329,8 +329,8 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     return nonequilibrium_result
 
 def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                    nsteps_equil: int, topology: md.Topology, n_iterations : int, splitting: str="V R O R V",
-                    atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> EquilibriumResult:
+                    nsteps_equil: int, topology: md.Topology, n_iterations : int,
+                    atom_indices_to_save: List[int] = None, trajectory_filename: str = None, splitting: str="V R O R V") -> EquilibriumResult:
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
     as well as a trajectory of the positions after each application of an MCMove. This means that if the MCMove
@@ -356,6 +356,8 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
     trajectory_filename : str, optional, default None
         Full filepath of trajectory files. If none, trajectory files are not written.
+    splitting: str, default "V R O H R V"
+        The splitting string for the dynamics
     Returns
     -------
     equilibrium_result : EquilibriumResult

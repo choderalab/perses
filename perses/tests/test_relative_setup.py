@@ -48,14 +48,12 @@ def test_run_nonequilibrium_switching_move():
     
     md_topology = md.Topology.from_openmm(topology)
 
-    #make a BAOAB integrator for use with the run_protocol module
-    integrator_options = {'temperature': 300.0*unit.kelvin, 'alchemical_functions' : default_forward_functions, 'nsteps_neq' : 10, 'splitting_string' : 'V R O H R V'}
     #make the EquilibriumResult object that will be used to initialize the protocol runs:
     eq_result = feptasks.EquilibriumResult(0.0, sampler_state)
     
     #run the NE switching move task n_iterations times, checking that the context is correctly handled.
     for i in range(n_iterations):
-        ne_move = feptasks.NonequilibriumSwitchingMove(integrator_options, top=md_topology, work_save_interval=10)
+        ne_move = feptasks.NonequilibriumSwitchingMove(default_forward_functions, splitting="V R O H R V", temperature=300.0*unit.kelvin, nsteps_neq=10, top=md_topology, work_save_interval=10)
 
         integrator = ne_move._integrator
 
