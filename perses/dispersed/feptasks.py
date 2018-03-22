@@ -250,7 +250,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                 alchemical_functions: dict, splitting: str, nstep_neq: int, topology: md.Topology, work_save_interval: int,
+                 alchemical_functions: dict, nstep_neq: int, topology: md.Topology, work_save_interval: int, splitting: str="V R O H R V",
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
@@ -263,12 +263,16 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         The result of an equilibrium simulation
     thermodynamic_state : openmmtools.states.ThermodynamicState
         The thermodynamic state at which to run the protocol
-    integrator_dictionary_options : dict
-        The options to use to create the integrator that will be used for switching
+    alchemical_functions : dict
+        The alchemical functions to use for switching
+    nstep_neq : int
+        The number of nonequilibrium steps in the protocol
     topology : mdtraj.Topology
         An MDtraj topology for the system to generate trajectories
     work_save_interval : int
         How often to write the work and, if requested, configurations
+    splitting : str, default "V R O H R V"
+        The splitting string to use for the Langevin integration
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
     trajectory_filename : str, default None
@@ -325,7 +329,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     return nonequilibrium_result
 
 def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
-                    mc_move: mcmc.MCMCMove, topology: md.Topology, n_iterations : int,
+                    nsteps_equil: int, topology: md.Topology, n_iterations : int, splitting: str="V R O H R V",
                     atom_indices_to_save: List[int] = None, trajectory_filename: str = None) -> EquilibriumResult:
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
@@ -339,13 +343,15 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
        EquilibriumResult namedtuple containing the information necessary to resume
     thermodynamic_state : openmmtools.states.ThermodynamicState
         The thermodynamic state (including context parameters) that should be used
-    mc_move : openmmtools.mcmc.MCMove
-        The move to apply to the system
+    nsteps_equil : int
+        The number of equilibrium steps that a move should make when apply is called
     topology : mdtraj.Topology
         an MDTraj topology object used to construct the trajectory
     n_iterations : int
         The number of times to apply the move. Note that this is not the number of steps of dynamics; it is
         n_iterations*n_steps (which is set in the MCMove).
+    splitting: str, default "V R O H R V"
+        The splitting string for the dynamics
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
     trajectory_filename : str, optional, default None
@@ -366,6 +372,10 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
         atom_indices = atom_indices_to_save
 
     n_atoms = subset_topology.n_atoms
+
+    #construct the MCMove:
+    mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=nsteps_equil, splitting=splitting)
+    mc_move.n_restart_attempts = 10
 
     #create a numpy array for the trajectory
     trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
@@ -398,7 +408,7 @@ def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: 
 
     return equilibrium_result
 
-def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState, mc_move: mcmc.MCMCMove,
+def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState,
              max_iterations: int=20) -> states.SamplerState:
     """
     Minimize the given system and state, up to a maximum number of steps.
@@ -409,10 +419,6 @@ def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: stat
         The state at which the system could be minimized
     sampler_state : openmmtools.states.SamplerState
         The starting state at which to minimize the system.
-    mc_move : openmmtools.mcmc.MCMove
-        The move type. This is not directly relevant, but it will
-        determine whether a context can be reused. It is recommended that
-        the same move as the equilibrium protocol is used here.
     max_iterations : int, optional, default 20
         The maximum number of minimization steps. Default is 20.
 
@@ -421,6 +427,7 @@ def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: stat
     sampler_state : openmmtools.states.SamplerState
         The posititions and accompanying state following minimization
     """
+    mc_move = mcmc.LangevinSplittingDynamicsMove()
     mcmc_sampler = mcmc.MCMCSampler(thermodynamic_state, sampler_state, mc_move)
     mcmc_sampler.minimize(max_iterations=max_iterations)
     return mcmc_sampler.sampler_state

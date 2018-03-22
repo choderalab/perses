@@ -468,8 +468,7 @@ class NonequilibriumSwitchingFEP(object):
         self._temperature = temperature
 
         #create the equilibrium MCMove
-        self._equilibrium_mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=n_equil_steps)
-        self._equilibrium_mc_move.n_restart_attempts = 10
+        self._n_equil_steps = n_equil_steps
 
         #set the SamplerState for the lambda 0 and 1 equilibrium simulations
         self._lambda_one_sampler_state = SamplerState(self._initial_hybrid_positions, box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
@@ -499,7 +498,7 @@ class NonequilibriumSwitchingFEP(object):
         max_steps : int, default 50
             max number of steps for openmm minimizer.
         """
-        minimized = self._map(feptasks.minimize, self._hybrid_thermodynamic_states.values(), self._sampler_states.values(), [self._equilibrium_mc_move, self._equilibrium_mc_move])
+        minimized = self._map(feptasks.minimize, self._hybrid_thermodynamic_states.values(), self._sampler_states.values())
         _logger.info("Minimizing")
         return self._gather(minimized)
 
@@ -518,7 +517,7 @@ class NonequilibriumSwitchingFEP(object):
             The number of times to run the entire sequence described above
         """
         endpoints = [0, 1]
-        eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
+        nsteps_equil = [self._n_equil_steps, self._n_equil_steps]
         hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
         write_interval_list = [self._n_neq_iterations_per_call, self._n_neq_iterations_per_call]
         n_eq_iterations_per_call_list = [self._n_eq_iterations_per_call, self._n_eq_iterations_per_call]
@@ -540,7 +539,7 @@ class NonequilibriumSwitchingFEP(object):
                 noneq_trajectory_filenames = [None, None]
 
             #run a round of equilibrium
-            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, n_eq_iterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), nsteps_equil, hybrid_topology_list, n_eq_iterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
             #get the perturbations to nonalchemical states:
             endpoint_perturbation_results_list.append(self._map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
@@ -575,7 +574,7 @@ class NonequilibriumSwitchingFEP(object):
         n_iterations : int
             The number of times to apply the equilibrium MCMove
         """
-        eq_mc_move_list = [self._equilibrium_mc_move, self._equilibrium_mc_move]
+        nsteps_equil = [self._n_equil_steps, self._n_equil_steps]
         hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
         n_eq_iterations_per_call_list = [self._n_eq_iterations_per_call, self._n_eq_iterations_per_call]
         atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
@@ -587,7 +586,7 @@ class NonequilibriumSwitchingFEP(object):
             else:
                 equilibrium_trajectory_filenames = [None, None]
             #run a round of equilibrium
-            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), eq_mc_move_list, hybrid_topology_list, n_eq_iterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
+            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), nsteps_equil, hybrid_topology_list, n_eq_iterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
 
     def _adjust_for_correlation(self, timeseries_array: np.array):
         """
