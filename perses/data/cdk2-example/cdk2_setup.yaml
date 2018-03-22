@@ -12,7 +12,7 @@ new_ligand_index: 15
 #Provide the list of forcefield files. Non-standard (such as gaff.xml) should
 #be provided with a full path
 forcefield_files:
-    - /Users/grinawap/perses/perses/data/gaff.xml
+    - gaff.xml
     - amber99sbildn.xml
     - tip3p.xml
 
