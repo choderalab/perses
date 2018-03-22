@@ -85,6 +85,3 @@ def test_run_cdk2_iterations():
     fe_setup, ne_fep = relative_setup.run_setup(setup_options)
 
     ne_fep.run(n_iterations=1)
-
-if __name__=="__main__":
-    test_run_cdk2_iterations()

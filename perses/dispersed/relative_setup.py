@@ -101,7 +101,7 @@ class NonequilibriumFEPSetup(object):
         self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
 
         ffxml=forcefield_generators.generateForceFieldFromMolecules(mol_list)
-
+ 
         self._old_ligand_oemol.SetTitle("MOL")
         self._new_ligand_oemol.SetTitle("MOL")
 
