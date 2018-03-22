@@ -731,8 +731,10 @@ def run_setup(setup_options):
 
 
     setup_pickle_file = setup_options['save_setup_pickle_as']
-    
+
     fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=protein_pdb_filename, receptor_mol2_filename=receptor_mol2, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms, solvate=solvate)
+
+    pickle_outfile = open(setup_pickle_file, 'rb')
 
     try:
         pickle.dump(fe_setup, pickle_outfile)

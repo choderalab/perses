@@ -1,4 +1,6 @@
 import numpy as np
+import os
+from pkg_resources import resource_filename
 from simtk import openmm, unit
 import simtk.openmm.app as app
 import openeye.oechem as oechem
@@ -6,6 +8,7 @@ from perses.dispersed import relative_setup, feptasks
 import mdtraj as md
 from openmmtools import states, alchemy, testsystems, integrators, cache
 import pickle
+import yaml
 
 default_forward_functions = {
         'lambda_sterics' : 'lambda',
@@ -65,3 +68,23 @@ def test_run_nonequilibrium_switching_move():
         #check that the value changed to 1.0 for all parameters
         assert context.getParameter("lambda_sterics") == 1.0
         assert integrator.getGlobalVariableByName("lambda") == 1.0
+
+def test_run_cdk2_iterations():
+    """
+    Ensure that we can instantiate and run the cdk2 ligands in vacuum
+    """
+    setup_directory = resource_filename("perses", "data/cdk2-example")
+    os.chdir(setup_directory)
+    yaml_filename = "cdk2_setup.yaml"
+    yaml_file = open(yaml_filename, "r")
+    setup_options = yaml.load(yaml_file)
+    yaml_file.close()
+    setup_options['solvate'] = False
+    setup_options['phase'] = 'solvent'
+
+    fe_setup, ne_fep = relative_setup.run_setup(setup_options)
+
+    ne_fep.run(n_iterations=1)
+
+if __name__=="__main__":
+    test_run_cdk2_iterations()
