@@ -65,7 +65,6 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         super(NonequilibriumSwitchingMove, self).__init__(n_steps=nsteps_neq, **kwargs)
         self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions, nsteps_neq=nsteps_neq, 
                                                                                   temperature=temperature, splitting=splitting)
-        integrators.RestorableIntegrator.restore_interface(self._integrator)
         self._ncmc_nsteps = nsteps_neq
         
         self._work_save_interval = work_save_interval
