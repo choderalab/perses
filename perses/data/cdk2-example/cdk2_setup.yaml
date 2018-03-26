@@ -1,0 +1,67 @@
+#provide the full path of the protein PDB file
+protein_pdb: CDK2_fixed_nohet.pdb
+
+#provide the path to the ligand file with coordinates
+ligand_file: CDK2_ligands.mol2
+
+#The ligand file contains multiple ligands. Choose the indices of the ligands
+#between which we should compute a relative free energy
+old_ligand_index: 14
+new_ligand_index: 15
+
+#Provide the list of forcefield files. Non-standard (such as gaff.xml) should
+#be provided with a full path
+forcefield_files:
+    - gaff.xml
+    - amber99sbildn.xml
+    - tip3p.xml
+
+#the temperature and pressure of the simulation, as well as how much solvent paddding to add
+#units:
+#pressure: atm
+#temperature: Kelvin
+#padding: angstroms
+pressure: 1.0
+temperature: 300.0
+solvent_padding: 9.0
+
+
+#The name of the pickle file where we will save the setup object
+save_setup_pickle_as: fesetup.pkl
+
+#whether to compute the solvent or complex phase
+phase: solvent
+
+#the forward switching functions. The reverse ones will be computed from this
+forward_functions:
+    lambda_sterics: lambda
+    lambda_electrostatics: lambda
+    lambda_bonds: lambda
+    lambda_angles: lambda
+    lambda_torsions: lambda
+
+#The number of equilibrium steps to take between nonequilibrium switching events
+n_equilibrium_steps_per_iteration: 100
+
+#The length of the ncmc protocol
+n_steps_ncmc_protocol: 50
+
+#The number of NCMC steps per move application. This controls the output frequency
+#1 step/move application means writing out the work at every step.
+n_steps_per_move_application: 1
+
+#where to put the trajectories
+trajectory_directory: solvent_test
+
+#how to prefix the trajectory files (project-specific name)
+trajectory_prefix: cdk02
+
+#which atoms to save (MDTraj selection syntax)
+atom_selection: all
+
+#The location of the schduler. If it's null, a localhost scheduler is created
+scheduler_address: localhost
+
+#how many iterations to run (n_cycles*n_iterations_per_cycle)
+n_cycles: 5
+n_iterations_per_cycle: 1

@@ -79,12 +79,11 @@ setup(name='perses',
       package_data={'perses' : find_package_data('examples', 'perses') + find_package_data('perses/data', 'perses')}, # I think this is fixed
       zip_safe=False,
       entry_points={
-       'openmm.forcefielddir' : 'perses=perses.tests.utils.forcefield_directory',
+       'openmm.forcefielddir' : ['perses=perses:get_datadir']
       },
       ext_modules=extensions,
       install_requires=[
-        'openmm >=7.1.0',
-        'alchemy >=1.2.3',
+        'openmm >=7.2.0',
         'numpy',
         'scipy',
         'numexpr',
