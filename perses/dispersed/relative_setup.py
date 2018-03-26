@@ -117,8 +117,8 @@ class NonequilibriumFEPSetup(object):
         self._new_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._new_ligand_oemol)
         self._new_liands_md_topology = md.Topology.from_openmm(self._new_ligand_topology)
 
-        self._forcefield = app.ForceField(*forcefield_files)
-        self._forcefield.loadFile(StringIO(ffxml))
+        #self._forcefield = app.ForceField(*forcefield_files)
+        #self._forcefield.loadFile(StringIO(ffxml))
 
         print("Generated forcefield")
 
@@ -214,7 +214,7 @@ class NonequilibriumFEPSetup(object):
         modeller = app.Modeller(topology, positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name != "MOL"]
         modeller.delete(hs)
-        modeller.addHydrogens(forcefield=self._forcefield)
+        modeller.addHydrogens(forcefield=self._system_generator._forcefield)
         print("preparing to add solvent")
         if self._solvate:
             print("preparing to add solvent")
