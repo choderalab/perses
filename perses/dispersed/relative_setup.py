@@ -539,10 +539,11 @@ class NonequilibriumSwitchingFEP(object):
                 noneq_trajectory_filenames = [None, None]
 
             #run a round of equilibrium
-            self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), nsteps_equil, hybrid_topology_list, n_eq_iterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames)
-
+            self._equilibrium_results = self._gather(self._map(feptasks.run_equilibrium, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), nsteps_equil, hybrid_topology_list, n_eq_iterations_per_call_list, atom_indices_to_save_list, equilibrium_trajectory_filenames))
+            
             #get the perturbations to nonalchemical states:
-            endpoint_perturbation_results_list.append(self._map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints))
+            endpoint_perturbation_results_mapped = self._map(feptasks.compute_nonalchemical_perturbation, self._equilibrium_results, hybrid_factory_list, self._nonalchemical_thermodynamic_states.values(), endpoints)
+            endpoint_perturbation_results_list.append(list(endpoint_perturbation_results_mapped))
 
             #run a round of nonequilibrium switching:
             nonequilibrium_results_list.append(self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(), alchemical_functions, nsteps_neq, hybrid_topology_list, write_interval_list, splitting, atom_indices_to_save_list, noneq_trajectory_filenames))
