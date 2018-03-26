@@ -73,10 +73,15 @@ def test_run_cdk2_iterations():
     """
     setup_directory = resource_filename("perses", "data/cdk2-example")
     os.chdir(setup_directory)
+
     yaml_filename = "cdk2_setup.yaml"
     yaml_file = open(yaml_filename, "r")
     setup_options = yaml.load(yaml_file)
     yaml_file.close()
+
+    if not os.path.exists(setup_options['trajectory_directory']):
+        os.makedirs(setup_options['trajectory_directory'])
+        
     setup_options['solvate'] = False
     setup_options['phase'] = 'solvent'
     setup_options['scheduler_address'] = None
