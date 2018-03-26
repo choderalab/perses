@@ -79,7 +79,11 @@ def test_run_cdk2_iterations():
     yaml_file.close()
     setup_options['solvate'] = False
     setup_options['phase'] = 'solvent'
+    setup_options['scheduler_address'] = None
 
     fe_setup, ne_fep = relative_setup.run_setup(setup_options)
 
     ne_fep.run(n_iterations=1)
+
+if __name__=="__main__":
+    test_run_cdk2_iterations()
