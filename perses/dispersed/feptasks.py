@@ -60,7 +60,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
 
     def __init__(self, alchemical_functions: dict, splitting: str, temperature: unit.Quantity, nsteps_neq: int,
-        work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, **kwargs):
+        work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, save_configuration: bool=False, **kwargs):
 
         super(NonequilibriumSwitchingMove, self).__init__(n_steps=nsteps_neq, **kwargs)
         self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions, nsteps_neq=nsteps_neq, 
@@ -68,6 +68,8 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         self._ncmc_nsteps = nsteps_neq
         
         self._work_save_interval = work_save_interval
+
+        self._save_configuration = save_configuration
         
         #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
         #work before the end of the protocol as the end
@@ -85,14 +87,13 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         #if we have a trajectory, set up some ancillary variables:
         if self._topology is not None:
-            self._write_frames = True
             n_atoms = self._topology.n_atoms
             n_iterations = self._number_of_step_moves
             self._trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
             self._trajectory_box_lengths = np.zeros([n_iterations, 3])
             self._trajectory_box_angles = np.zeros([n_iterations, 3])
         else:
-            self._write_frames = False
+            self._save_configuration = False
 
         self._current_total_work = 0.0
 
@@ -167,7 +168,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             self._cumulative_work[iteration+1] = self._current_total_work
 
             #if we have a trajectory, we'll also write to it
-            if self._topology is not None:
+            if self._save_configuration:
                 sampler_state.update_from_context(context)
                 
                 #record positions for writing to trajectory
@@ -182,8 +183,9 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
                 a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
                 self._trajectory_box_lengths[iteration, :] = [a, b, c]
                 self._trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
-
-        self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
+        
+        if self._trajectory:
+            self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
 
         # Subclasses can read here info from the context to update internal statistics.
         self._after_integration(context, thermodynamic_state)
@@ -220,7 +222,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
     @property
     def trajectory(self):
-        if self._write_frames is None:
+        if self._save_configuration is None:
             raise NoTrajectoryException("Tried to access a trajectory without providing a topology.")
         elif self._trajectory is None:
             raise NoTrajectoryException("Tried to access a trajectory on a move that hasn't been used yet.")
@@ -252,7 +254,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                  alchemical_functions: dict, nstep_neq: int, topology: md.Topology, work_save_interval: int, splitting: str="V R O H R V",
-                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = True) -> NonequilibriumResult:
+                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
     that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
@@ -323,9 +325,11 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         if write_configuration:
             try:
                 trajectory = ne_mc_move.trajectory
-                write_nonequilibrium_trajectory(nonequilibrium_result, trajectory, trajectory_filename, cum_work_filepath)
+                write_nonequilibrium_trajectory(nonequilibrium_result, trajectory, trajectory_filename)
             except NoTrajectoryException:
                 pass
+        
+        np.save(cum_work_filepath, nonequilibrium_result.cumulative_work)
 
     return nonequilibrium_result
 
@@ -455,7 +459,7 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 
-def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult, nonequilibrium_trajectory: md.Trajectory, trajectory_filename: str, cum_work_filename: str) -> float:
+def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult, nonequilibrium_trajectory: md.Trajectory, trajectory_filename: str) -> float:
     """
     Write the results of a nonequilibrium switching trajectory to a file. The trajectory is written to an
     mdtraj hdf5 file, whereas the cumulative work is written to a numpy file.
@@ -468,8 +472,6 @@ def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult,
         The trajectory resulting from a nonequilibrium simulation
     trajectory_filename : str
         The full filepath for where to store the trajectory
-    cum_work_filename : str
-        The full filepath for where to store the work trajectory
 
     Returns
     -------
@@ -478,7 +480,6 @@ def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult,
     """
     if nonequilibrium_trajectory is not None:
         nonequilibrium_trajectory.save_hdf5(trajectory_filename)
-    np.save(cum_work_filename, nonequilibrium_result.cumulative_work)
 
     return nonequilibrium_result.cumulative_work[-1]
 
