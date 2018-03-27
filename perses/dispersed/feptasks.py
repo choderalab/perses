@@ -301,7 +301,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
     
-    ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions, splitting, temperature, nstep_neq, work_save_interval, subset_topology, atom_indices)
+    ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions, splitting, temperature, nstep_neq, work_save_interval, subset_topology, atom_indices, save_configuration=write_configuration)
 
     ne_mc_move.reset()
 
