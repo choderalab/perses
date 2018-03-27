@@ -73,6 +73,7 @@ def test_run_cdk2_iterations():
     """
     setup_directory = resource_filename("perses", "data/cdk2-example")
     os.chdir(setup_directory)
+    n_iterations = 2
 
     yaml_filename = "cdk2_setup.yaml"
     yaml_file = open(yaml_filename, "r")
@@ -86,9 +87,30 @@ def test_run_cdk2_iterations():
     setup_options['phase'] = 'solvent'
     setup_options['scheduler_address'] = None
 
+    length_of_protocol = setup_options['n_steps_ncmc_protocol']
+    write_interval = setup_options['n_steps_per_move_application']
+
+    n_work_values_per_iteration = length_of_protocol // write_interval
+
     fe_setup, ne_fep = relative_setup.run_setup(setup_options)
 
-    ne_fep.run(n_iterations=1)
+    ne_fep.run(n_iterations=n_iterations)
+
+    #now check that the correct number of iterations was written out:
+    os.chdir(setup_options['trajectory_directory'])
+    import glob
+
+    #for the verification of work writing, we add one to the work dimension, since the first work value is always zero
+
+    #check for lambda zero
+    lambda_zero_filenames = glob.glob("*0.cw.npy")
+    lambda_zero_npy = np.stack([np.load(filename) for filename in lambda_zero_filenames])
+    assert np.shape(lambda_zero_npy) == (n_iterations, n_work_values_per_iteration+1)
+
+    #check for lambda one
+    lambda_one_filenames = glob.glob("*1.cw.npy")
+    lambda_one_npy = np.stack([np.load(filename) for filename in lambda_one_filenames])
+    assert np.shape(lambda_one_npy) == (n_iterations, n_work_values_per_iteration+1)
 
 if __name__=="__main__":
     test_run_cdk2_iterations()
