@@ -218,7 +218,7 @@ class NonequilibriumFEPSetup(object):
         print("preparing to add solvent")
         if self._solvate:
             print("preparing to add solvent")
-            modeller.addSolvent(self._forcefield, model=model, padding=self._padding)
+            modeller.addSolvent(self._system_generator._forcefield, model=model, padding=self._padding)
             solvated_topology = modeller.getTopology()
             solvated_positions = modeller.getPositions()
             print("solvent added, parameterizing")
