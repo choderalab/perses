@@ -519,7 +519,7 @@ class NonequilibriumSwitchingFEP(object):
         endpoints = [0, 1]
         nsteps_equil = [self._n_equil_steps, self._n_equil_steps]
         hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
-        write_interval_list = [self._n_neq_iterations_per_call, self._n_neq_iterations_per_call]
+        write_interval_list = [self._nsteps_per_iteration, self._nsteps_per_iteration]
         n_eq_iterations_per_call_list = [self._n_eq_iterations_per_call, self._n_eq_iterations_per_call]
         atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
         hybrid_factory_list = [self._factory, self._factory]
