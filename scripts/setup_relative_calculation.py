@@ -52,6 +52,10 @@ if __name__=="__main__":
     total_iterations = n_cycles*n_iterations_per_cycle
 
     trajectory_directory = setup_options['trajectory_directory']
+
+    if not os.path.exists(trajectory_directory):
+        os.makedirs(trajectory_directory)
+
     trajectory_prefix = setup_options['trajectory_prefix']
 
     #write out topology proposals

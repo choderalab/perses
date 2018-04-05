@@ -36,6 +36,10 @@ script:
   - conda config --add channels omnia --add channels conda-forge
   # Add omnia dev channels
   - conda config --add channels omnia/label/dev
+  # Add OpenEye channel
+  - conda config --add channels openeye
+  # Update conda
+  - conda update --yes --all
   # Build the recipe
   - conda build devtools/conda-recipe
   # Install the package
