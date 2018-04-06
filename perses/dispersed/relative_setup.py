@@ -25,7 +25,7 @@ import logging
 import os
 import pickle
 import dask.distributed as distributed
-from yank.multistate import MultiStateReporter, sams
+from yank.multistate import MultiStateReporter, sams, replicaexchange
 
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove
 
@@ -766,6 +766,13 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
 
     def __init__(self, *args, hybrid_factory=None, **kwargs):
         super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
+
+class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchangeSampler):
+    """
+    ReplicaExchangeSampler that supports unsampled end states with a different number of positions
+    """
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
+        super(HybridRepexSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
 
 def run_setup(setup_options):
     """
