@@ -2,7 +2,9 @@ from __future__ import absolute_import
 from perses.dispersed import feptasks
 from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator, LangevinIntegrator
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
+from openmmtools import cache
 import openmmtools.mcmc as mcmc
+import openmmtools
 import openmmtools.alchemy as alchemy
 import pymbar
 import simtk.openmm as openmm
@@ -23,6 +25,7 @@ import logging
 import os
 import pickle
 import dask.distributed as distributed
+from yank.multistate import MultiStateReporter, sams
 
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove
 
@@ -99,8 +102,6 @@ class NonequilibriumFEPSetup(object):
         mol_list.append(self._new_ligand_oemol)
 
         self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
-
-        ffxml=forcefield_generators.generateForceFieldFromMolecules(mol_list)
  
         self._old_ligand_oemol.SetTitle("MOL")
         self._new_ligand_oemol.SetTitle("MOL")
@@ -684,6 +685,88 @@ class NonequilibriumSwitchingFEP(object):
         ddf_overall = np.sqrt(ddf0**2 + ddf1**2 + ddf**2)
         return -df0 + df + df1, ddf_overall
 
+class HybridCompatibilityMixin(object):
+    """
+    Mixin that allows the MultistateSampler to accommodate the situation where unsampled endpoints
+    have a different number of degrees of freedom.
+    """
+
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
+        self._hybrid_factory = hybrid_factory
+        super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
+
+    def _compute_replica_energies(self, replica_id):
+        """Compute the energy for the replica in every ThermodynamicState."""
+        # Initialize replica energies for each thermodynamic state.
+        energy_thermodynamic_states = np.zeros(self.n_states)
+        energy_unsampled_states = np.zeros(len(self._unsampled_states))
+
+        # Retrieve sampler state associated to this replica.
+        sampler_state = self._sampler_states[replica_id]
+
+        # Determine neighborhood
+        state_index = self._replica_thermodynamic_states[replica_id]
+        neighborhood = self._neighborhood(state_index)
+        # Only compute energies over neighborhoods
+        energy_neighborhood_states = energy_thermodynamic_states[neighborhood]  # Array, can be indexed like this
+        neighborhood_thermodynamic_states = [self._thermodynamic_states[n] for n in neighborhood]  # List
+
+        # Compute energy for all thermodynamic states.
+        for idx, (energies, states) in enumerate([(energy_neighborhood_states, neighborhood_thermodynamic_states),
+                                 (energy_unsampled_states, self._unsampled_states)]):
+            # Group thermodynamic states by compatibility.
+            compatible_groups, original_indices = openmmtools.states.group_by_compatibility(states)
+            
+            #Are we treating the unsampled states? if so, idx will be one:
+            if idx == 1:
+                unsampled_state = True
+            else:
+                unsampled_state = False
+
+            # Compute the reduced potentials of all the compatible states.
+            for compatible_group, state_indices in zip(compatible_groups, original_indices):
+                # Get the context, any Integrator works.
+                context, integrator = cache.global_context_cache.get_context(compatible_group[0])
+
+                #Are we trying to compute a potential at an unsampled (different number of particles) state?
+                if unsampled_state:
+                    if state_indices[0] == 0:
+                        positions = self._hybrid_factory.old_positions(sampler_state.positions)
+                    elif state_indices[0] == 1:
+                        positions = self._hybrid_factory.new_positions(sampler_state.positions)
+                    else:
+                        raise ValueError("This mixin isn't defined for more than two unsampled states")
+
+                    box_vectors = sampler_state.box_vectors
+
+                    context.setPositions(positions)
+                    context.setPeriodicBoxVectors(*box_vectors)
+                else:
+                    # Update positions and box vectors. We don't need
+                    # to set Context velocities for the potential.
+                    sampler_state.apply_to_context(context, ignore_velocities=True)
+
+                # Compute and update the reduced potentials.
+                compatible_energies = openmmtools.states.ThermodynamicState.reduced_potential_at_states(
+                    context, compatible_group)
+                for energy_idx, state_idx in enumerate(state_indices):
+                    energies[state_idx] = compatible_energies[energy_idx]
+
+        # Return the new energies.
+        return energy_neighborhood_states, energy_unsampled_states
+    
+    @property
+    def options(self):
+        return {"number_of_iterations" : self.number_of_iterations}
+
+class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
+    """
+    SAMSSampler that supports unsampled end states with a different number of positions
+    """
+
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
+        super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
+
 def run_setup(setup_options):
     """
     Run the setup pipeline and return the relevant setup objects based on a yaml input file.
@@ -726,7 +809,7 @@ def run_setup(setup_options):
         solvate = setup_options['solvate']
     except KeyError:
         solvate = True
-
+    
     pressure = setup_options['pressure'] * unit.atmosphere
     temperature = setup_options['temperature'] * unit.kelvin
     solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
