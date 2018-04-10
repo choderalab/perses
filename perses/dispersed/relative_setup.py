@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from perses.dispersed import feptasks
 from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator, LangevinIntegrator
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
-from openmmtools import cache
+from openmmtools import cache, states
 import openmmtools.mcmc as mcmc
 import openmmtools
 import openmmtools.alchemy as alchemy
@@ -766,6 +766,36 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
 
     def __init__(self, *args, hybrid_factory=None, **kwargs):
         super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
+        self._factory = hybrid_factory
+
+    def setup(self, n_states, temperature, storage_file, checkpoint_interval):
+        hybrid_system = self._factory.hybrid_system
+        initial_hybrid_positions = self._factory.hybrid_positions
+        alchemical_states = []
+        lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(hybrid_system)
+        alchemical_states.append(lambda_zero_alchemical_state)
+
+        for idx in range(n_states):
+            lambda_val = (1.0 + idx) / n_states
+            copied_state = copy.deepcopy(lambda_zero_alchemical_state)
+            copied_state.set_alchemical_parameters(lambda_val)
+            alchemical_states.append(copied_state)
+
+        thermostate = states.ThermodynamicState(hybrid_system, temperature=temperature)
+        thermodynamic_state_list = []
+        for alchemical_state in alchemical_states:
+            thermodynamic_state_list.append(states.CompoundThermodynamicState(copy.deepcopy(thermostate),
+                                                                              composable_states=[alchemical_state]))
+
+        nonalchemical_thermodynamic_states = [states.ThermodynamicState(self._factory._old_system, temperature=temperature),
+                                              states.ThermodynamicState(self._factory._new_system, temperature=temperature)]
+        sampler_state = states.SamplerState(initial_hybrid_positions,
+                                            box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
+        reporter = MultiStateReporter(storage_file, checkpoint_interval=checkpoint_interval)
+
+        self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state,
+                    storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
+
 
 class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchangeSampler):
     """
@@ -824,56 +854,72 @@ def run_setup(setup_options):
 
     setup_pickle_file = setup_options['save_setup_pickle_as']
 
-    fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=protein_pdb_filename, receptor_mol2_filename=receptor_mol2, pressure=pressure, temperature=temperature, solvent_padding=solvent_padding_angstroms, solvate=solvate)
+    if not setup_options['topology_proposal']:
+        fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,
+                                          protein_pdb_filename=protein_pdb_filename,
+                                          receptor_mol2_filename=receptor_mol2, pressure=pressure,
+                                          temperature=temperature, solvent_padding=solvent_padding_angstroms,
+                                          solvate=solvate)
 
-    pickle_outfile = open(setup_pickle_file, 'wb')
+        pickle_outfile = open(setup_pickle_file, 'wb')
 
-    try:
-        pickle.dump(fe_setup, pickle_outfile)
-    except Exception as e:
-        print(e)
-        print("Unable to save setup object as a pickle")
-    finally:
-        pickle_outfile.close()
+        try:
+            pickle.dump(fe_setup, pickle_outfile)
+        except Exception as e:
+            print(e)
+            print("Unable to save setup object as a pickle")
+        finally:
+            pickle_outfile.close()
 
-    print("Setup object has been created.")
+        print("Setup object has been created.")
 
-    phase = setup_options['phase']
+        for phase in ['complex', 'solvent']:
 
-    if phase == "complex":
-        topology_proposal = fe_setup.complex_topology_proposal
-        old_positions = fe_setup.complex_old_positions
-        new_positions = fe_setup.complex_new_positions
-    elif phase == "solvent":
-        topology_proposal = fe_setup.solvent_topology_proposal
-        old_positions = fe_setup.solvent_old_positions
-        new_positions = fe_setup.solvent_new_positions
+            if phase == "complex":
+                complex_topology_proposal = fe_setup.complex_topology_proposal
+                complex_old_positions = fe_setup.complex_old_positions
+                complex_new_positions = fe_setup.complex_new_positions
+            elif phase == "solvent":
+                solvent_topology_proposal = fe_setup.solvent_topology_proposal
+                solvent_old_positions = fe_setup.solvent_old_positions
+                solvent_new_positions = fe_setup.solvent_new_positions
+            else:
+                raise ValueError("Phase must be either complex or solvent.")
+
     else:
-        raise ValueError("Phase must be either complex or solvent.")
+        top_prop = np.load(setup_options['topology_proposal']).item()
+        complex_topology_proposal = top_prop['complex_topology_proposal']
+        complex_old_positions = top_prop['complex_old_positions']
+        complex_new_positions = top_prop['complex_new_positions']
+        solvent_topology_proposal = top_prop['solvent_topology_proposal']
+        solvent_old_positions = top_prop['solvent_old_positions']
+        solvent_new_positions = top_prop['solvent_new_positions']
 
-    forward_functions = setup_options['forward_functions']
+    if setup_options['fe_type'] == 'nonequilibrium':
 
-    n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
-    n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
-    n_steps_per_move_application = setup_options['n_steps_per_move_application']
+        forward_functions = setup_options['forward_functions']
 
-    trajectory_directory = setup_options['trajectory_directory']
-    trajectory_prefix = setup_options['trajectory_prefix']
-    atom_selection = setup_options['atom_selection']
+        n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+        n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
+        n_steps_per_move_application = setup_options['n_steps_per_move_application']
 
-    scheduler_address = setup_options['scheduler_address']
+        trajectory_directory = setup_options['trajectory_directory']
+        trajectory_prefix = setup_options['trajectory_prefix']
+        atom_selection = setup_options['atom_selection']
 
-    ne_fep = NonequilibriumSwitchingFEP(topology_proposal, old_positions, new_positions,
-                                                       forward_functions=forward_functions,
-                                                       n_equil_steps=n_equilibrium_steps_per_iteration,
-                                                       ncmc_nsteps=n_steps_ncmc_protocol,
-                                                       nsteps_per_iteration=n_steps_per_move_application,
-                                                       temperature=temperature,
-                                                       trajectory_directory=trajectory_directory,
-                                                       trajectory_prefix=trajectory_prefix,
-                                                       atom_selection=atom_selection,
-                                                       scheduler_address=scheduler_address)
+        scheduler_address = setup_options['scheduler_address']
 
-    print("Nonequilibrium switching driver class constructed")
+        ne_fep = NonequilibriumSwitchingFEP(topology_proposal, old_positions, new_positions,
+                                                           forward_functions=forward_functions,
+                                                           n_equil_steps=n_equilibrium_steps_per_iteration,
+                                                           ncmc_nsteps=n_steps_ncmc_protocol,
+                                                           nsteps_per_iteration=n_steps_per_move_application,
+                                                           temperature=temperature,
+                                                           trajectory_directory=trajectory_directory,
+                                                           trajectory_prefix=trajectory_prefix,
+                                                           atom_selection=atom_selection,
+                                                           scheduler_address=scheduler_address)
 
-    return fe_setup, ne_fep
+        print("Nonequilibrium switching driver class constructed")
+
+        return fe_setup, ne_fep

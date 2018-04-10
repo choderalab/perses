@@ -32,7 +32,8 @@ def get_topology_proposals(fe_setup):
 
     return topology_proposals
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     try:
        yaml_filename = sys.argv[1]
     except IndexError as e:
