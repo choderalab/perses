@@ -1,3 +1,4 @@
+import sys
 import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as unit
@@ -42,6 +43,8 @@ class HybridTopologyFactory(object):
     """
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
+
+    _SYSTEM_EPSILON = sys.float_info.epsilon
 
     def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None):
         """
@@ -1190,7 +1193,7 @@ class HybridTopologyFactory(object):
                 [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics.
-                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, 1.0, 0.0])
+                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, self._SYSTEM_EPSILON, 0.0])
                 self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0])
 
                 #Add the particle to the regular nonbonded force as required, but zero out interaction
@@ -1203,7 +1206,7 @@ class HybridTopologyFactory(object):
                 [charge, sigma, epsilon] = new_system_nonbonded_force.getParticleParameters(new_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics
-                self._hybrid_system_forces['core_sterics_force'].addParticle([1.0, 0.0, sigma, epsilon])
+                self._hybrid_system_forces['core_sterics_force'].addParticle([self._SYSTEM_EPSILON, 0.0, sigma, epsilon])
                 self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0, charge])
 
                 #Add the particle to the regular nonbonded force as required, but zero out interaction
