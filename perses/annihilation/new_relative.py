@@ -1193,7 +1193,7 @@ class HybridTopologyFactory(object):
                 [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics.
-                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, self._SYSTEM_EPSILON, 0.0])
+                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, 0.0])
                 self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0])
 
                 #Add the particle to the regular nonbonded force as required, but zero out interaction
@@ -1206,7 +1206,7 @@ class HybridTopologyFactory(object):
                 [charge, sigma, epsilon] = new_system_nonbonded_force.getParticleParameters(new_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics
-                self._hybrid_system_forces['core_sterics_force'].addParticle([self._SYSTEM_EPSILON, 0.0, sigma, epsilon])
+                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, 0.0, sigma, epsilon])
                 self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0, charge])
 
                 #Add the particle to the regular nonbonded force as required, but zero out interaction
