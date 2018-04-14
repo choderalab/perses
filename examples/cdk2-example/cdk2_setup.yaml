@@ -27,10 +27,14 @@ solvent_padding: 9.0
 
 
 #The name of the pickle file where we will save the setup object
-save_setup_pickle_as: fesetup.pkl
+save_setup_pickle_as: fesetup_hbonds.pkl
 
 #whether to compute the solvent or complex phase
-phase: solvent
+fe_type: sams
+
+topology_proposal: False
+
+n_states: 10
 
 #the forward switching functions. The reverse ones will be computed from this
 forward_functions:
@@ -48,19 +52,19 @@ n_steps_ncmc_protocol: 50
 
 #The number of NCMC steps per move application. This controls the output frequency
 #1 step/move application means writing out the work at every step.
-n_steps_per_move_application: 1
+n_steps_per_move_application: 1000
 
 #where to put the trajectories
-trajectory_directory: solvent_test
+trajectory_directory: cdk2_sams_hbonds
 
 #how to prefix the trajectory files (project-specific name)
-trajectory_prefix: cdk02
+trajectory_prefix: cdk2
 
 #which atoms to save (MDTraj selection syntax)
-atom_selection: all
+atom_selection: not water
 
 #The location of the schduler. If it's null, a localhost scheduler is created
-scheduler_address: localhost
+scheduler_address: null
 
 #how many iterations to run (n_cycles*n_iterations_per_cycle)
 n_cycles: 5
