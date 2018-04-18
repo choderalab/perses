@@ -44,7 +44,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=0.5, softcore_beta=12.0*unit.angstrom**2):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=None, softcore_beta=None):
         """
         Initialize the Hybrid topology factory.
 
@@ -68,10 +68,10 @@ class HybridTopologyFactory(object):
             default: as an atom is being disappeared, increase softcore strength. For core atoms, don't use softcore at endpoints, but interpolate to full softcore at lambda=0.5
             amber: same as default, but core is excluded from softcore
             classic: original scheme used by this code. All alchemical atoms interpolate to 0.25 * softcore at lambda=0.5, but don't use softcore at endpoints.
-        softcore_alpha: float, default 0.5
-            "alpha" parameter of softcore sterics
-        softcore_beta: unit, default 12*unit.angstrom**2
-            "beta" parameter of softcore electrostatics
+        softcore_alpha: float, default None
+            "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
+        softcore_beta: unit, default None
+            "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
         """
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
@@ -83,9 +83,16 @@ class HybridTopologyFactory(object):
         self._new_positions = new_positions
 
         self._use_dispersion_correction = use_dispersion_correction
-
-        self.softcore_alpha = softcore_alpha
-        self.softcore_beta = softcore_beta
+        
+        if softcore_alpha is None:
+            self.softcore_alpha = 0.5
+        else:
+            self.softcore_alpha = softcore_alpha
+        
+        if softcore_beta is None:
+            self.softcore_beta = 12*unit.angstrom**2
+        else:
+            self.softcore_beta = softcore_beta
         
         if softcore_method not in self._known_softcore_methods:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
