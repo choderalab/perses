@@ -773,12 +773,12 @@ class HybridTopologyFactory(object):
         if self._softcore_method == "default":
             sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics + (1 - dummyA*dummyB)*4*lambda_sterics*(1-lambda_sterics);"
             sterics_addition += "dummyA = select(step(2*epsilonA - epsilonA), 0, 1);"
-            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 1, 0);"
+            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 0, 1);"
 
         elif self._softcore_method == "amber":
             sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics;"
             sterics_addition += "dummyA = select(step(2*epsilonA - epsilonA), 0, 1);"
-            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 1, 0);"
+            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 0, 1);"
 
         elif self._softcore_method == "classic":
             sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
@@ -804,12 +804,12 @@ class HybridTopologyFactory(object):
         if self._softcore_method =="default":
             electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics) + (1- dummyA*dummyB)*4*lambda_electrostatics*(1-lambda_electrostatics);"
             electrostatics_addition += "dummyA = select(step(2*chargeprodA - chargeprodA), 0, 1);"
-            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 1, 0);"
+            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 0, 1);"
 
         elif self._softcore_method == "amber":
             electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics);"
             electrostatics_addition += "dummyA = select(step(2*chargeprodA - chargeprodA), 0, 1);"
-            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 1, 0);"
+            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 0, 1);"
 
         elif self._softcore_method == "classic":
             electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
