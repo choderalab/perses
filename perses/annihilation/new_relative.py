@@ -43,10 +43,9 @@ class HybridTopologyFactory(object):
     """
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
+    _known_softcore_methods = ['default', 'amber', 'classic']
 
-    _SYSTEM_EPSILON = sys.float_info.epsilon
-
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=None, softcore_beta=None):
         """
         Initialize the Hybrid topology factory.
 
@@ -65,6 +64,15 @@ class HybridTopologyFactory(object):
             names beginning with lambda_ and ending with each of bonds, angles, torsions, sterics, electrostatics.
             If functions is none, then the integrator will need to set each of these and parameter derivatives will be unavailable.
             If functions is not None, all lambdas must be specified.
+        softcore_method : str, default 'default'
+            The softcore method to use. The options are:
+            default: as an atom is being disappeared, increase softcore strength. For core atoms, don't use softcore at endpoints, but interpolate to full softcore at lambda=0.5
+            amber: same as default, but core is excluded from softcore
+            classic: original scheme used by this code. All alchemical atoms interpolate to 0.25 * softcore at lambda=0.5, but don't use softcore at endpoints.
+        softcore_alpha: float, default None
+            "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
+        softcore_beta: unit, default None
+            "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
         """
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
@@ -76,9 +84,21 @@ class HybridTopologyFactory(object):
         self._new_positions = new_positions
 
         self._use_dispersion_correction = use_dispersion_correction
+        
+        if softcore_alpha is None:
+            self.softcore_alpha = 0.5
+        else:
+            self.softcore_alpha = softcore_alpha
+        
+        if softcore_beta is None:
+            self.softcore_beta = 12*unit.angstrom**2
+        else:
+            self.softcore_beta = softcore_beta
+        
+        if softcore_method not in self._known_softcore_methods:
+            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
 
-        self.softcore_alpha=0.5
-        self.softcore_beta=12*unit.angstrom**2
+        self._softcore_method = softcore_method
 
         if functions:
             self._functions = functions
@@ -757,7 +777,23 @@ class HybridTopologyFactory(object):
         sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
         sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
         sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
-        sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+
+        if self._softcore_method == "default":
+            sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics + (1 - dummyA*dummyB)*4*lambda_sterics*(1-lambda_sterics);"
+            sterics_addition += "dummyA = select(step(2*epsilonA - epsilonA), 0, 1);"
+            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 0, 1);"
+
+        elif self._softcore_method == "amber":
+            sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics;"
+            sterics_addition += "dummyA = select(step(2*epsilonA - epsilonA), 0, 1);"
+            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 0, 1);"
+
+        elif self._softcore_method == "classic":
+            sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+
+        else:
+            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
+
         return sterics_addition
 
     def _nonbonded_custom_electrostatics_common(self):
@@ -772,7 +808,22 @@ class HybridTopologyFactory(object):
         electrostatics_addition = "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
         electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
         electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-        electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
+
+        if self._softcore_method =="default":
+            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics) + (1- dummyA*dummyB)*4*lambda_electrostatics*(1-lambda_electrostatics);"
+            electrostatics_addition += "dummyA = select(step(2*chargeprodA - chargeprodA), 0, 1);"
+            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 0, 1);"
+
+        elif self._softcore_method == "amber":
+            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics);"
+            electrostatics_addition += "dummyA = select(step(2*chargeprodA - chargeprodA), 0, 1);"
+            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 0, 1);"
+
+        elif self._softcore_method == "classic":
+            electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
+        else:
+            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
+
         return electrostatics_addition
 
     def _nonbonded_custom_nocutoff(self):
