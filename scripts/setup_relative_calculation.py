@@ -20,13 +20,13 @@ if __name__ == "__main__":
     setup_options = yaml.load(yaml_file)
     yaml_file.close()
 
-    setup_dict = relative_setup.run_setup(setup_options)
-    print("setup complete")
-
     trajectory_directory = setup_options['trajectory_directory']
 
     if not os.path.exists(trajectory_directory):
         os.makedirs(trajectory_directory)
+
+    setup_dict = relative_setup.run_setup(setup_options)
+    print("setup complete")
 
     trajectory_prefix = setup_options['trajectory_prefix']
     #write out topology proposals
@@ -90,12 +90,12 @@ if __name__ == "__main__":
                 setup_dict['hybrid_topology_factories'])
 
         hss = setup_dict['hybrid_sams_samplers']
+        free_energies = dict()
         for phase in ['complex', 'solvent']:
             hss_run = hss[phase]
             hss_run.minimize()
             hss_run.equilibrate(10)
             hss_run.extend(1000)
-            free_energies = dict()
             free_energies[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
             print("Finished phase %s with dG estimated as %.4f kT" % (phase, free_energies[phase]))
 

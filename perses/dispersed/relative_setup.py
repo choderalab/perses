@@ -913,6 +913,7 @@ def run_setup(setup_options):
     solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
 
     setup_pickle_file = setup_options['save_setup_pickle_as']
+    trajectory_directory = setup_options['trajectory_directory']
 
     if not setup_options['topology_proposal']:
         fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,
@@ -921,7 +922,7 @@ def run_setup(setup_options):
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms,
                                           solvate=solvate)
 
-        pickle_outfile = open(setup_pickle_file, 'wb')
+        pickle_outfile = open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb')
 
         try:
             pickle.dump(fe_setup, pickle_outfile)
@@ -986,7 +987,7 @@ def run_setup(setup_options):
             hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=2.0 * unit.femtosecond,
                                                                                 collision_rate=5.0 / unit.picosecond,
                                                                                 n_steps=n_steps_per_move_application,
-                                                                                reassign_velocities=True,
+                                                                                reassign_velocities=False,
                                                                                 n_restart_attempts=6),
                                            hybrid_factory=htf[phase])
             hss[phase].setup(n_states=n_states, temperature=300.0 * unit.kelvin,
