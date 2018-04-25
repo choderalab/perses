@@ -11,7 +11,7 @@ import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as unit
 import numpy as np
-from perses.tests.utils import createSystemFromIUPAC, get_data_filename, extractPositionsFromOEMOL
+from perses.tests.utils import giveOpenmmPositionsToOEMOL, get_data_filename, extractPositionsFromOEMOL
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, \
     SmallMoleculeSetProposalEngine
@@ -27,6 +27,7 @@ import os
 import pickle
 import dask.distributed as distributed
 from yank.multistate import MultiStateReporter, sams, replicaexchange
+import parmed as pm
 
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove
 
@@ -41,9 +42,8 @@ class NonequilibriumFEPSetup(object):
     """
 
     def __init__(self, ligand_file, old_ligand_index, new_ligand_index, forcefield_files, protein_pdb_filename=None,
-                 receptor_mol2_filename=None,
-                 pressure=1.0 * unit.atmosphere, temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms,
-                 solvate=True):
+                 receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere, temperature=300.0 * unit.kelvin,
+                 solvent_padding=9.0 * unit.angstroms, solvate=True, atom_map=None):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -99,30 +99,65 @@ class NonequilibriumFEPSetup(object):
         self._old_ligand_index = old_ligand_index
         self._new_ligand_index = new_ligand_index
 
-        self._old_ligand_oemol = self.load_sdf(self._ligand_file, index=self._old_ligand_index)
-        self._new_ligand_oemol = self.load_sdf(self._ligand_file, index=self._new_ligand_index)
+        if type(self._ligand_file) is not list:
+            self._old_ligand_oemol = self.load_sdf(self._ligand_file, index=self._old_ligand_index)
+            self._new_ligand_oemol = self.load_sdf(self._ligand_file, index=self._new_ligand_index)
 
-        mol_list.append(self._old_ligand_oemol)
-        mol_list.append(self._new_ligand_oemol)
+            mol_list.append(self._old_ligand_oemol)
+            mol_list.append(self._new_ligand_oemol)
 
-        self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
+            self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
 
-        ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
+            ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
 
-        self._old_ligand_oemol.SetTitle("MOL")
-        self._new_ligand_oemol.SetTitle("MOL")
+            self._old_ligand_oemol.SetTitle("MOL")
+            self._new_ligand_oemol.SetTitle("MOL")
 
-        self._new_ligand_smiles = oechem.OECreateSmiString(self._new_ligand_oemol,
-                                                           oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-        self._old_ligand_smiles = oechem.OECreateSmiString(self._old_ligand_oemol,
-                                                           oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+            self._new_ligand_smiles = oechem.OECreateSmiString(self._new_ligand_oemol,
+                                                               oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+            self._old_ligand_smiles = oechem.OECreateSmiString(self._old_ligand_oemol,
+                                                               oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
 
-        print(self._new_ligand_smiles)
-        print(self._old_ligand_smiles)
+            print(self._new_ligand_smiles)
+            print(self._old_ligand_smiles)
 
-        self._old_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._old_ligand_oemol)
+            self._old_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._old_ligand_oemol)
+
+            self._new_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._new_ligand_oemol)
+        else:
+            #self._old_ligand_topology = app.AmberPrmtopFile('%s.parm7' % self._ligand_file[0]).topology
+            #self._old_ligand_positions = app.AmberInpcrdFile('%s.rst7' % self._ligand_file[0]).positions
+            #self._old_ligand_oemol = forcefield_generators.generateOEMolFromTopologyResidue(next(self._old_ligand_topology.residues()))
+            #giveOpenmmPositionsToOEMOL(self._old_ligand_positions, self._old_ligand_oemol)
+            old_ligand = pm.load_file('%s.parm7' % self._ligand_file[0], '%s.rst7' % self._ligand_file[0])
+            self._old_ligand_topology = old_ligand.topology
+            self._old_ligand_positions = old_ligand.positions
+            self._old_ligand_oemol = self.load_sdf('%s.mol2' % self._ligand_file[0])
+            mol_list.append(self._old_ligand_oemol)
+            self._old_ligand_smiles(oechem.OECreateSmiString(self._old_ligand_oemol,
+                                                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens))
+
+            #self._new_ligand_topology = app.AmberPrmtopFile('%s.parm7' % self._ligand_file[1]).topology
+            #self._new_ligand_positions = app.AmberInpcrdFile('%s.rst7' % self._ligand_file[1]).positions
+            #self._new_ligand_oemol = forcefield_generators.generateOEMolFromTopologyResidue(
+            #    next(self._new_ligand_topology.residues()))
+            #giveOpenmmPositionsToOEMOL(self._new_ligand_positions, self._new_ligand_oemol)
+            new_ligand = pm.load_file('%s.parm7' % self._ligand_file[1], '%s.rst7' % self._ligand_file[1])
+            self._new_ligand_topology = new_ligand.topology
+            self._new_ligand_positions = new_ligand.positions
+            self._new_ligand_oemol = self.load_sdf('%s.mol2' % self._ligand_file[1])
+            mol_list.append(self._new_ligand_oemol)
+            self._new_ligand_smiles(oechem.OECreateSmiString(self._new_ligand_oemol,
+                                                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens))
+
+            old_ligand_parameter_set = pm.openmm.OpenMMParameterSet.from_structure(old_ligand)
+            new_ligand_parameter_set = pm.openmm.OpenMMParameterSet.from_structure(new_ligand)
+            ffxml = StringIO()
+            old_ligand_parameter_set.write(ffxml)
+            new_ligand_parameter_set.write(ffxml)
+            ffxml = ffxml.getvalue()
+
         self._old_ligand_md_topology = md.Topology.from_openmm(self._old_ligand_topology)
-        self._new_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._new_ligand_oemol)
         self._new_liands_md_topology = md.Topology.from_openmm(self._new_ligand_topology)
 
         #self._forcefield = app.ForceField(*forcefield_files)
@@ -160,7 +195,8 @@ class NonequilibriumFEPSetup(object):
 
         # self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_smiles, self._new_ligand_smiles, self._system_generator, residue_name="MOL")
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol,
-                                                                     self._system_generator, residue_name="MOL")
+                                                                     self._system_generator, residue_name="MOL",
+                                                                     atom_map=atom_map)
         self._geometry_engine = FFAllAngleGeometryEngine()
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
@@ -914,13 +950,19 @@ def run_setup(setup_options):
 
     setup_pickle_file = setup_options['save_setup_pickle_as']
     trajectory_directory = setup_options['trajectory_directory']
+    try:
+        atom_map_file = setup_options['atom_map']
+        with open(atom_map_file, 'r') as f:
+            atom_map = {int(x.split()[0]): int(x.split()[1]) for x in f.readlines()}
+    except Exception:
+        atom_map=None
 
     if not setup_options['topology_proposal']:
         fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms,
-                                          solvate=solvate)
+                                          solvate=solvate, atom_map=atom_map)
 
         pickle_outfile = open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb')
 

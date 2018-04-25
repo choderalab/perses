@@ -12,8 +12,6 @@ from openmmtools.constants import ONE_4PI_EPS0
 
 InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'core', 'environment'])
 
-_SYSTEM_EPSILON = sys.float_info.epsilon
-
 class HybridTopologyFactory(object):
     """
     This class generates a hybrid topology based on a perses topology proposal. This class treats atoms
@@ -45,8 +43,9 @@ class HybridTopologyFactory(object):
     """
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
+    _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None):
         """
         Initialize the Hybrid topology factory.
 
@@ -65,6 +64,15 @@ class HybridTopologyFactory(object):
             names beginning with lambda_ and ending with each of bonds, angles, torsions, sterics, electrostatics.
             If functions is none, then the integrator will need to set each of these and parameter derivatives will be unavailable.
             If functions is not None, all lambdas must be specified.
+        softcore_method : str, default 'default'
+            The softcore method to use. The options are:
+            default: as an atom is being disappeared, increase softcore strength. For core atoms, don't use softcore at endpoints, but interpolate to full softcore at lambda=0.5
+            amber: same as default, but core is excluded from softcore
+            classic: original scheme used by this code. All alchemical atoms interpolate to 0.25 * softcore at lambda=0.5, but don't use softcore at endpoints.
+        softcore_alpha: float, default None
+            "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
+        softcore_beta: unit, default None
+            "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
         """
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
@@ -77,8 +85,20 @@ class HybridTopologyFactory(object):
 
         self._use_dispersion_correction = use_dispersion_correction
 
-        self.softcore_alpha=0.5
-        self.softcore_beta=12*unit.angstrom**2
+        if softcore_alpha is None:
+            self.softcore_alpha = 0.5
+        else:
+            self.softcore_alpha = softcore_alpha
+
+        if softcore_beta is None:
+            self.softcore_beta = 12*unit.angstrom**2
+        else:
+            self.softcore_beta = softcore_beta
+
+        if softcore_method not in self._known_softcore_methods:
+            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
+
+        self._softcore_method = softcore_method
 
         if functions:
             self._functions = functions
@@ -757,7 +777,23 @@ class HybridTopologyFactory(object):
         sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
         sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
         sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
-        sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+
+        if self._softcore_method == "default":
+            sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics + (1 - dummyA*dummyB)*4*lambda_sterics*(1-lambda_sterics);"
+            sterics_addition += "dummyA = select(step(2*epsilonA - epsilonA), 0, 1);"
+            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 0, 1);"
+
+        elif self._softcore_method == "amber":
+            sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics;"
+            sterics_addition += "dummyA = select(step(2*epsilonA - epsilonA), 0, 1);"
+            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 0, 1);"
+
+        elif self._softcore_method == "classic":
+            sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+
+        else:
+            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
+
         return sterics_addition
 
     def _nonbonded_custom_electrostatics_common(self):
@@ -772,7 +808,22 @@ class HybridTopologyFactory(object):
         electrostatics_addition = "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
         electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
         electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-        electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
+
+        if self._softcore_method =="default":
+            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics) + (1- dummyA*dummyB)*4*lambda_electrostatics*(1-lambda_electrostatics);"
+            electrostatics_addition += "dummyA = select(step(2*chargeprodA - chargeprodA), 0, 1);"
+            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 0, 1);"
+
+        elif self._softcore_method == "amber":
+            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics);"
+            electrostatics_addition += "dummyA = select(step(2*chargeprodA - chargeprodA), 0, 1);"
+            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 0, 1);"
+
+        elif self._softcore_method == "classic":
+            electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
+        else:
+            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
+
         return electrostatics_addition
 
     def _nonbonded_custom_nocutoff(self):
@@ -894,8 +945,8 @@ class HybridTopologyFactory(object):
             sterics_energy_expression += 'lambda_sterics = ' + self._functions['lambda_sterics']
             electrostatics_energy_expression += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
         custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
-        custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
-        custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
+        #custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
+        #custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
         custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
         custom_bond_force.addGlobalParameter("softcore_beta", self.softcore_beta)
         custom_bond_force.addPerBondParameter("chargeprodA")
@@ -1193,7 +1244,7 @@ class HybridTopologyFactory(object):
                 [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics.
-                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, epsilon])
+                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, 0.0])
                 self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0])
 
                 #Add the particle to the regular nonbonded force as required, but zero out interaction
@@ -1206,7 +1257,7 @@ class HybridTopologyFactory(object):
                 [charge, sigma, epsilon] = new_system_nonbonded_force.getParticleParameters(new_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics
-                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, epsilon])
+                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, 0.0, sigma, epsilon])
                 self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0, charge])
 
                 #Add the particle to the regular nonbonded force as required, but zero out interaction
