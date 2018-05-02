@@ -24,6 +24,7 @@ except ImportError:
 import openmoltools
 import logging
 import time
+from typing import List, Dict
 try:
     from subprocess import getoutput  # If python 3
 except ImportError:
@@ -91,6 +92,126 @@ def deepcopy_topology(source_topology):
     topology = app.Topology()
     append_topology(topology, source_topology)
     return topology
+
+class SmallMoleculeAtomMapper(object):
+    """
+    This is a utility class for generating and retrieving sets of atom maps between molecules using OpenEye.
+    It additionally verifies that all atom maps lead to valid proposals, as well as checking that the graph of
+    proposals is not disconnected.
+    """
+
+    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None):
+        self._list_of_oemol = self._initialize_oemols(list_of_smiles)
+        
+        if atom_match_expression is None:
+            self._atom_expr = DEFAULT_ATOM_EXPRESSION
+        else:
+            self._atom_expr = atom_match_expression
+        
+        if bond_match_expression is None:
+            self._bond_expr = DEFAULT_BOND_EXPRESSION
+        else:
+            self._bond_expr = bond_match_expression
+
+    def _map_atoms(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, exhaustive: bool=True) -> List[Dict]:
+        """
+        Run the mapping on the two input molecules. This will return a list of atom maps. 
+        This is an internal method that is only intended to be used by other methods of this class.
+
+        Arguments
+        ---------
+        moleculeA : oechem.OEMol
+            The first oemol of the pair
+        moleculeB : oechem.OEMol
+            The second oemol of the pair
+        exhaustive: bool, default True
+            Whether to use an exhaustive procedure for enumerating MCS matches. Default True, but for large molecules,
+            may be prohibitively slow. 
+
+        Returns
+        -------
+        atom_matches: list of dict
+            This returns a list of dictionaries, where each dictionary is a map of the form {molA_atom: molB_atom}.
+            Atom maps with less than 3 mapped atoms, or where the map is not sufficient to begin a geometry proposal
+            will be returned separately.
+        failed_atom_matches : list of dict
+            This is a list of atom maps that cannot be used for geometry proposals. It is returned for debugging purposes.
+        """    
+
+        oegraphmol_current = oechem.OEGraphMol(moleculeA) # pattern molecule
+        oegraphmol_proposed = oechem.OEGraphMol(moleculeB) # target molecule
+        
+        if exhaustive:
+            mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
+        else:
+            mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
+           
+        mcs.Init(oegraphmol_current, self._atom_expr, self._bond_expr)
+
+        mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
+
+        #only use unique matches
+        unique = True
+
+        matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+
+        #if there are no matches at all, we return two empty lists.
+        if not matches:
+            return [], []
+
+        atom_matches = []
+        failed_atom_matches = []
+
+        for match in matches:
+            #if there are less than 3 mapped atoms, it can't be used for geometry proposals.
+            #Continue without recording it.
+            if match.NumAtoms() < 3:
+                continue
+
+            #extract the match as a dictionary.
+            b_to_a_atom_map = {}
+            for matchpair in match.GetAtoms():
+                a_index = matchpair.pattern.GetIdx()
+                b_index = matchpair.target.GetIdx()
+                b_to_a_atom_map[b_index] = a_index
+            
+            #Even if there are at least three atoms mapped, it is possible that the geometry proposal still cannot proceed
+            #An example of this would be mapping H-C-H -- There will be no topological torsions to use for the proposal.
+            if self._valid_match(moleculeA, moleculeB, b_to_a_atom_map):
+                atom_matches.append(b_to_a_atom_map)
+            else:
+                failed_atom_matches.append(b_to_a_atom_map)
+        
+        return atom_matches, failed_atom_matches
+
+    def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, mapping: Dict) -> bool:
+        """
+        Check that the map can allow for a geometry proposal. Essentially, this amounts to
+        """
+        raise NotImplementedError
+    def _initialize_oemols(self, list_of_smiles: List[str]) -> List[oechem.OEMol]:
+        """
+        Initialize the set of OEMols that we will use to construct the atom map
+
+        Arguments
+        ---------
+        list_of_smiles : list of str
+            list of smiles strings to use
+        
+        Returns
+        -------
+        list_of_oemol : list of oechem.OEmol
+            list of oechem.OEMol
+        """
+        list_of_oemol = []
+        for smiles in list_of_smiles:
+            mol = oechem.OEMol()
+            oechem.OESmilesToMol(mol, smiles)
+            oechem.OEAddExplicitHydrogens(mol)
+            list_of_oemol.append(mol)
+
+        return list_of_oemol
+
 
 from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
