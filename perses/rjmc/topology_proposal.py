@@ -13,6 +13,7 @@ import openeye.oechem as oechem
 import numpy as np
 import openeye.oeomega as oeomega
 import tempfile
+import networkx as nx
 from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -184,11 +185,89 @@ class SmallMoleculeAtomMapper(object):
         
         return atom_matches, failed_atom_matches
 
-    def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, mapping: Dict) -> bool:
+    def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, b_to_a_mapping: Dict) -> bool:
         """
-        Check that the map can allow for a geometry proposal. Essentially, this amounts to
+        Check that the map can allow for a geometry proposal. Essentially, this amounts to ensuring that there exists
+        a starting topological torsion. Examples of cases where this would not exist would include:
+        H-C-H, Cl-C-Cl, CH3, etc.
+
+        Arguments
+        ---------
+        moleculeA : oechem.OEMol
+            The first molecule in the mapping
+        moleculeB: oechem.OEMol
+            The second molecule used in the mapping
+        b_to_a_mapping : dict
+            The mapping from molecule B to molecule A
+
+        Returns
+        -------
+        is_valid : bool
+            Whether the mapping can be used to generate a geometry proposal
         """
-        raise NotImplementedError
+        graphA = self._mol_to_graph(moleculeA)
+        graphB = self._mol_to_graph(moleculeB)
+
+        #if both of these are good to make a map, we can make the map
+        return self._can_make_proposal(graphA, b_to_a_mapping.values()) and self._can_make_proposal(graphB, b_to_a_mapping.keys())
+
+    def _can_make_proposal(self, graph: nx.Graph, mapped_atoms: List) -> bool:
+        """
+        Check whether a given setup (molecule graph along with mapped atoms) can be proposed.
+        
+        Arguments
+        ---------
+        graph: nx.Graph
+            The molecule represented as a NetworkX graph
+        mapped_atoms : list
+            The list of atoms that have been mapped
+        
+        Returns
+        -------
+        can_make_proposal : bool
+            Whether this map permits the GeometryEngine to make a proposal
+        """
+
+        proposable = False
+        total_atoms = set(range(graph.number_of_nodes()))
+        unmapped_atoms = total_atoms - set(mapped_atoms)
+         
+        #find the set of atoms that are unmapped, but on the boundary with those that are mapped
+        boundary_atoms = nx.algorithms.node_boundary(graph, unmapped_atoms, mapped_atoms)
+
+        #now check if there is atom 3 hops away and has a position. Since we are starting with boundary
+        #atoms, there will never be a case where there is an atom with positions 3 hops away but no torsion
+        #A ring might cause this artifact, but there would be a torsion in that case.
+        for atom in boundary_atoms:
+            shortest_paths = nx.algorithms.shortest_path_length(graph, source=atom)
+            for other_atom, distance in shortest_paths.items():
+                if distance == 3 and other_atom in mapped_atoms:
+                    proposable = True
+        
+        return proposable
+
+    def _mol_to_graph(self, molecule: oechem.OEMol) -> nx.Graph:
+        """
+        Convert an OEMol to a networkx graph for analysis
+
+        Arguments
+        ---------
+        molecule : oechem.OEMol
+            Molecule to convert to a graph
+        
+        Returns
+        -------
+        g : nx.Graph
+            NetworkX graph representing the molecule
+        """
+        g = nx.Graph()
+        for atom in molecule.GetAtoms():
+            g.add_node(atom.GetIdx())
+        for bond in molecule.GetBonds():
+            g.add_edge(bond.GetBgnIdx(), bond.GetEndIdx(), bond=bond)
+        
+        return g
+
     def _initialize_oemols(self, list_of_smiles: List[str]) -> List[oechem.OEMol]:
         """
         Initialize the set of OEMols that we will use to construct the atom map
