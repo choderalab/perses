@@ -8,6 +8,7 @@ from collections import namedtuple
 import copy
 import warnings
 import logging
+import itertools
 import os
 import openeye.oechem as oechem
 import numpy as np
@@ -113,7 +114,97 @@ class SmallMoleculeAtomMapper(object):
             self._bond_expr = DEFAULT_BOND_EXPRESSION
         else:
             self._bond_expr = bond_match_expression
+        
+        self._molecules_mapped = False
+        self._molecule_maps = {}
+        self._failed_molecule_maps = {}
 
+    def map_all_molecules(self):
+        """
+        Run the atom mapping routines to get all atom maps. This automatically preserves only maps that contain enough torsions to propose.
+        It does not ensure that constraints do not change--use verify_constraints to check that property. This method is idempotent--running it a second
+        time will have no effect.
+        """
+        
+        if self._molecules_mapped:
+            _logger.info("The molecules have already been mapped. Returning.")
+            return
+
+        for molecule_pair in itertools.combinations(self._list_of_oemol, 2):
+            molecule_smiles_pair = (self._canonicalize_smiles(molecule) for molecule in molecule_pair)
+   
+            self._molecule_maps[molecule_smiles_pair] = []
+            self._failed_molecule_maps[molecule_smiles_pair] = []
+
+            atom_matches, failed_atom_matches = self._map_atoms(molecule_pair[0], molecule_pair[1])
+            
+            for atom_match in atom_matches:
+                self._molecule_maps[molecule_smiles_pair].append(atom_match)
+            
+            for failed_atom_match in failed_atom_matches:
+                self._failed_molecule_maps[molecule_smiles_pair].append(failed_atom_match)
+        
+        self._molecules_mapped = True
+    
+    def get_atom_maps(self, smiles_A: str, smiles_B: str) -> List[Dict]:
+        """
+        Given two canonical smiles strings, get the atom maps.
+
+        Arguments
+        ---------
+        smiles_A : str
+            Canonical smiles for the first molecule (keys)
+        smiles_B : str
+            Canonical smiles for the second molecule (values)
+
+        Returns
+        -------
+        atom_maps : list of dict
+            List of map of molecule_A_atom : molecule_B_atom
+        """
+        try:
+            atom_maps = self._molecule_maps[(smiles_A, smiles_B)]
+            return atom_maps
+        except KeyError:
+            try:
+                atom_maps = self._molecule_maps[(smiles_B, smiles_A)]
+                output_atom_maps = []
+                for atom_map in atom_maps:
+                    reversed_map = {value: key for key, value in atom_map.items()}
+                    output_atom_maps.append(reversed_map)
+                return output_atom_maps
+            except KeyError as e:
+                print("The requested pair was not found. Ensure you are using canonicalized smiles.")
+                raise e
+
+    def _check_proposal_matrix(self) -> bool:
+        """
+        In RJ calculations, we propose based on how many atoms are in common between molecules. This routine checks that the graph of proposals cannot
+        be separated.
+
+        Returns
+        -------
+        safe_proposals : bool
+            Whether the entire space can be reached from any point
+        """
+        pass
+
+    def _canonicalize_smiles(self, mol: oechem.OEMol) -> str:
+        """
+        Convert an oemol into canonical isomeric smiles
+
+        Parameters
+        ----------
+        mol : oechem.OEmol
+            OEMol for molecule
+        Returns
+        -------
+        iso_can_smiles : str
+            OpenEye isomeric canonical smiles corresponding to the input
+        """
+        iso_can_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
+        return iso_can_smiles
+    
     def _map_atoms(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, exhaustive: bool=True) -> List[Dict]:
         """
         Run the mapping on the two input molecules. This will return a list of atom maps. 
@@ -170,22 +261,22 @@ class SmallMoleculeAtomMapper(object):
                 continue
 
             #extract the match as a dictionary.
-            b_to_a_atom_map = {}
+            a_to_b_atom_map = {}
             for matchpair in match.GetAtoms():
                 a_index = matchpair.pattern.GetIdx()
                 b_index = matchpair.target.GetIdx()
-                b_to_a_atom_map[b_index] = a_index
+                a_to_b_atom_map[a_index] = b_index
             
             #Even if there are at least three atoms mapped, it is possible that the geometry proposal still cannot proceed
             #An example of this would be mapping H-C-H -- There will be no topological torsions to use for the proposal.
-            if self._valid_match(moleculeA, moleculeB, b_to_a_atom_map):
-                atom_matches.append(b_to_a_atom_map)
+            if self._valid_match(moleculeA, moleculeB, a_to_b_atom_map):
+                atom_matches.append(a_to_b_atom_map)
             else:
-                failed_atom_matches.append(b_to_a_atom_map)
+                failed_atom_matches.append(a_to_b_atom_map)
         
         return atom_matches, failed_atom_matches
 
-    def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, b_to_a_mapping: Dict) -> bool:
+    def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, a_to_b_mapping: Dict) -> bool:
         """
         Check that the map can allow for a geometry proposal. Essentially, this amounts to ensuring that there exists
         a starting topological torsion. Examples of cases where this would not exist would include:
@@ -209,7 +300,7 @@ class SmallMoleculeAtomMapper(object):
         graphB = self._mol_to_graph(moleculeB)
 
         #if both of these are good to make a map, we can make the map
-        return self._can_make_proposal(graphA, b_to_a_mapping.values()) and self._can_make_proposal(graphB, b_to_a_mapping.keys())
+        return self._can_make_proposal(graphA, a_to_b_mapping.keys()) and self._can_make_proposal(graphB, a_to_b_mapping.values())
 
     def _can_make_proposal(self, graph: nx.Graph, mapped_atoms: List) -> bool:
         """
