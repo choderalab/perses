@@ -9,6 +9,7 @@ import copy
 import warnings
 import logging
 import itertools
+import json
 import os
 import openeye.oechem as oechem
 import numpy as np
@@ -123,6 +124,10 @@ class SmallMoleculeAtomMapper(object):
         self._molecule_maps = {}
         self._failed_molecule_maps = {}
 
+        self._proposal_matrix = np.zeros([self._n_molecules, self._n_molecules])
+        self._proposal_matrix_generated = False
+        self._constraints_checked = False
+
     def map_all_molecules(self):
         """
         Run the atom mapping routines to get all atom maps. This automatically preserves only maps that contain enough torsions to propose.
@@ -181,6 +186,25 @@ class SmallMoleculeAtomMapper(object):
                 print("The requested pair was not found. Ensure you are using canonicalized smiles.")
                 raise e
 
+    def generate_and_check_proposal_matrix(self):
+        """
+        Generate a proposal matrix and check it for connectivity. Note that if constraints have not been checked, this may produce
+        a proposal matrix that makes proposals changing constraint lengths.
+        """
+
+        if not self._constraints_checked:
+            _logger.warn("Constraints have not been checked. Building proposal matrix, but it might result in error.")
+            _logger.warn("Call constraint_check() with an appropriate system generator to ensure this does not happen.")
+
+        proposal_matrix = self._create_proposal_matrix()
+        adjacency_matrix = proposal_matrix > 0.0
+        graph = nx.from_numpy_array(adjacency_matrix)
+        
+        if not nx.is_connected(graph):
+            _logger.warn("The graph of proposals is not connected! Some molecules will be unreachable.")
+        
+        self._proposal_matrix = proposal_matrix
+
     def _create_proposal_matrix(self) -> np.array:
         """
         In RJ calculations, we propose based on how many atoms are in common between molecules. This routine checks that the graph of proposals cannot
@@ -237,9 +261,9 @@ class SmallMoleculeAtomMapper(object):
         normalized_proposal_matrix = proposal_matrix / normalizing_constants[:, np.newaxis]
 
         return normalized_proposal_matrix
-
-
-    def _canonicalize_smiles(self, mol: oechem.OEMol) -> str:
+    
+    @staticmethod
+    def _canonicalize_smiles(mol: oechem.OEMol) -> str:
         """
         Convert an oemol into canonical isomeric smiles
 
@@ -448,7 +472,92 @@ class SmallMoleculeAtomMapper(object):
         mol : oechem.OEMol
             The OEMol corresponding to the requested smiles string.
         """
+        return self._oemol_dictionary[smiles_string]
 
+    def to_json(self) -> str:
+        """
+        Write out this class to JSON. This saves all information (including built molecules and maps, if present)
+
+        Returns
+        -------
+        json_str : str
+            JSON string representing this class
+        """
+        json_dict = {}
+        
+        #first, save all the things that are not too difficult to put into JSON
+        json_dict['molecule_maps'] = self._molecule_maps
+        json_dict['molecules_mapped'] = self._molecules_mapped
+        json_dict['failed_molecule_maps'] = self._failed_molecule_maps
+        json_dict['constraints_checked'] = self._constraints_checked
+        json_dict['bond_expr'] = self._bond_expr
+        json_dict['atom_expr'] = self._atom_expr
+        json_dict['proposal_matrix'] = self._proposal_matrix
+        json_dict['proposal_matrix_generated'] = self._proposal_matrix_generated
+        json_dict['unique_smiles_list'] = self._unique_smiles_list
+
+        #now we have to convert the OEMols to a string format that preserves the atom ordering in order to save them
+        #We will use the multi-molecule mol2 scheme, but instead of saving to a file, we will save to a string.
+
+        ofs = oechem.oemolostream()
+        ofs.SetFormat(oechem.OEFormat_MOL2)
+        ofs.openstring()
+
+        for mol in self._oemol_dictionary.values():
+            oechem.OEWriteMolecule(ofs, mol)
+       
+        molecule_string = ofs.GetString()
+        
+        ofs.close()
+
+        json_dict['molecules'] = molecule_string
+
+        return json.dumps(json_dict)
+
+    @classmethod
+    def from_json(cls, json_string: str) -> SmallMoleculeAtomMapper:
+        """
+        Restore this class from a saved JSON file.
+
+        Arguments
+        ---------
+        json_string : str
+            The JSON string representing the serialized class
+        
+        Returns
+        -------
+        atom_mapper : SmallMoleculeAtomMapper
+            An instance of the SmallMoleculeAtomMapper
+        """
+        json_dict = json.loads(json_string)
+
+        #first let's read in all the molecules that were saved as a string:
+        molecule_string = json_dict['molecules']
+
+        ifs = oechem.oemolistream()
+        ifs.SetFormat(oechem.OEFormat_MOL2)
+        ifs.openstring(molecule_string)
+
+        molecule_dictionary = {}
+        for mol in ifs.GetOEMols():
+            copied_mol = oechem.OEMol(mol)
+            canonical_smiles = SmallMoleculeAtomMapper._canonicalize_smiles(copied_mol)
+            molecule_dictionary[canonical_smiles] = copied_mol
+        
+        ifs.close()
+
+        bond_expr = json_dict['bond_expr']
+        atom_expr = json_dict['atom_expr']
+        smiles_list = json_dict['unique_smiles_list']
+
+        mapper = cls(smiles_list, atom_match_expression=atom_expr, bond_match_expression=bond_expr)
+
+        mapper._molecule_maps = json_dict['molecule_maps']
+        mapper._molecules_mapped = json_dict['molecules_mapped']
+        mapper._failed_molecule_maps = json_dict['failed_molecule_maps']
+        mapper._constraints_checked = json_dict['constraints_checked']
+        mapper._proposal_matrix = json_dict['proposal_matrix']
+        mapper._proposal_matrix_generated = json_dict['proposal_matrix_generated']
 
 from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
