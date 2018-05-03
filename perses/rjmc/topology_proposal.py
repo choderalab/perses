@@ -105,8 +105,9 @@ class SmallMoleculeAtomMapper(object):
 
     def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None):
 
-        self._unique_smiles_list = list(set(list_of_smiles))
-        self._oemol_dictionary = self._initialize_oemols(self._unique_smiles_list)
+        self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
+        self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
+        self._unique_smiles_list = list(self._oemol_dictionary.keys())
 
         self._n_molecules = len(self._unique_smiles_list)
 
@@ -138,10 +139,13 @@ class SmallMoleculeAtomMapper(object):
         if self._molecules_mapped:
             _logger.info("The molecules have already been mapped. Returning.")
             return
-
+        i =0
         for molecule_smiles_pair in itertools.combinations(self._oemol_dictionary.keys(), 2):
-            molecule_pair = (self._oemol_dictionary[molecule_smiles_pair] for molecule in molecule_smiles_pair)
-   
+            molecule_pair = tuple(self._oemol_dictionary[molecule] for molecule in molecule_smiles_pair)
+            
+            if i%100 ==0:
+                print("Completed %d" %i)
+
             self._molecule_maps[molecule_smiles_pair] = []
             self._failed_molecule_maps[molecule_smiles_pair] = []
 
@@ -152,7 +156,8 @@ class SmallMoleculeAtomMapper(object):
             
             for failed_atom_match in failed_atom_matches:
                 self._failed_molecule_maps[molecule_smiles_pair].append(failed_atom_match)
-        
+            
+            i+=1
         self._molecules_mapped = True
     
     def get_atom_maps(self, smiles_A: str, smiles_B: str) -> List[Dict]:
@@ -474,6 +479,23 @@ class SmallMoleculeAtomMapper(object):
         """
         return self._oemol_dictionary[smiles_string]
 
+    def get_smiles_index(self, smiles: str) -> int:
+        """
+        Get the index of the smiles in question
+
+        Arguments
+        ---------
+        smiles : str
+            Canonicalized smiles string to retrieve molecule
+        
+        Returns
+        -------
+        mol_index : int
+            Index of molecule in list
+        """
+        mol_index = self._unique_smiles_list.index(smiles)
+        return mol_index
+        
     def to_json(self) -> str:
         """
         Write out this class to JSON. This saves all information (including built molecules and maps, if present)
@@ -486,13 +508,13 @@ class SmallMoleculeAtomMapper(object):
         json_dict = {}
         
         #first, save all the things that are not too difficult to put into JSON
-        json_dict['molecule_maps'] = self._molecule_maps
+        json_dict['molecule_maps'] = {"_".join(smiles_names): maps for smiles_names, maps in self._molecule_maps.items()}
         json_dict['molecules_mapped'] = self._molecules_mapped
-        json_dict['failed_molecule_maps'] = self._failed_molecule_maps
+        json_dict['failed_molecule_maps'] = {"_".join(smiles_names): maps for smiles_names, maps in self._failed_molecule_maps.items()}
         json_dict['constraints_checked'] = self._constraints_checked
         json_dict['bond_expr'] = self._bond_expr
         json_dict['atom_expr'] = self._atom_expr
-        json_dict['proposal_matrix'] = self._proposal_matrix
+        json_dict['proposal_matrix'] = self._proposal_matrix.tolist()
         json_dict['proposal_matrix_generated'] = self._proposal_matrix_generated
         json_dict['unique_smiles_list'] = self._unique_smiles_list
 
@@ -506,7 +528,7 @@ class SmallMoleculeAtomMapper(object):
         for mol in self._oemol_dictionary.values():
             oechem.OEWriteMolecule(ofs, mol)
        
-        molecule_string = ofs.GetString()
+        molecule_string = str(ofs.GetString())
         
         ofs.close()
 
@@ -515,7 +537,7 @@ class SmallMoleculeAtomMapper(object):
         return json.dumps(json_dict)
 
     @classmethod
-    def from_json(cls, json_string: str) -> SmallMoleculeAtomMapper:
+    def from_json(cls, json_string: str):
         """
         Restore this class from a saved JSON file.
 
@@ -552,12 +574,26 @@ class SmallMoleculeAtomMapper(object):
 
         mapper = cls(smiles_list, atom_match_expression=atom_expr, bond_match_expression=bond_expr)
 
-        mapper._molecule_maps = json_dict['molecule_maps']
+        mapper._molecule_maps = {tuple(smiles for smiles in key.split("_")) : maps for key, maps in json_dict['molecule_maps'].items()}
         mapper._molecules_mapped = json_dict['molecules_mapped']
-        mapper._failed_molecule_maps = json_dict['failed_molecule_maps']
+        mapper._failed_molecule_maps = {tuple(smiles for smiles in key.split("_")) : maps for key, maps in json_dict['failed_molecule_maps'].items()}
         mapper._constraints_checked = json_dict['constraints_checked']
-        mapper._proposal_matrix = json_dict['proposal_matrix']
+        mapper._proposal_matrix = np.array(json_dict['proposal_matrix'])
         mapper._proposal_matrix_generated = json_dict['proposal_matrix_generated']
+
+        return mapper
+
+    @property
+    def proposal_matrix(self):
+        return self._proposal_matrix
+    
+    @property
+    def n_molecules(self):
+        return self._n_molecules
+    
+    @property
+    def smiles_list(self):
+        return self._unique_smiles_list
 
 from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
@@ -2286,6 +2322,114 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 pass
         removed_smiles = smiles_set.difference(safe_smiles)
         return safe_smiles, removed_smiles
+
+class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
+    """
+    This proposal engine uses the SmallMoleculeAtomMapper to have all atoms premapped and the proposal distribution pre-formed and checked.
+    It is intended to be substantially faster, as well as more robust (having excluded mappings that would not lead to a valid geometry proposal)
+    """
+
+    def __init__(self, atom_mapper: SmallMoleculeAtomMapper, system_generator: SystemGenerator, residue_name: str="MOL", storage: NetCDFStorageView=None):
+        self._atom_mapper = atom_mapper
+        self._atom_mapper.map_all_molecules()
+        self._atom_mapper.generate_and_check_proposal_matrix()
+        self._proposal_matrix = self._atom_mapper.proposal_matrix
+
+        self._n_molecules = self._atom_mapper.n_molecules
+        
+        super(PremappedSmallMoleculeSetProposalEngine, self).__init__(self._atom_mapper.smiles_list, system_generator, residue_name=residue_name,
+                 proposal_metadata=None, storage=storage,
+                 always_change=True)
+
+    def propose(self, current_system, current_topology, current_metadata=None):
+        """
+        Propose the next state, given the current state
+
+        Parameters
+        ----------
+        current_system : openmm.System object
+            the system of the current state
+        current_topology : app.Topology object
+            the topology of the current state
+        current_metadata : dict
+            dict containing current smiles as a key
+
+        Returns
+        -------
+        proposal : TopologyProposal object
+           topology proposal object
+        """
+        # Determine SMILES string for current small molecule
+        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+
+        # Remove the small molecule from the current Topology object
+        current_receptor_topology = self._remove_small_molecule(current_topology)
+
+        # Find the initial atom index of the small molecule in the current topology
+        old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
+
+        # Determine atom indices of the small molecule in the current topology
+        old_alchemical_atoms = range(old_mol_start_index, len_old_mol)
+
+        # Select the next molecule SMILES given proposal probabilities
+        current_mol_index = self._atom_mapper.get_smiles_index(current_mol_smiles)
+
+        #get probability vector for proposal
+        proposal_probability = self._probability_matrix[current_mol_index, :]
+
+        #propose next index
+        proposed_index = np.random.choice(range(self._n_molecules), p=proposal_probability)
+        
+        #proposal logp
+        proposed_logp = np.log(proposal_probability[proposed_index])
+        
+        #reverse proposal logp
+        reverse_logp = np.log(self._proposal_matrix[proposed_index, current_mol_index])
+
+        #logp overall of proposal
+        logp_proposal = reverse_logp - proposed_logp
+
+        #get the oemol corresponding to the proposed molecule:
+        proposed_mol_smiles = self._atom_mapper.smiles_list[proposed_index]
+        proposed_mol = self._atom_mapper.get_oemol_from_smiles(proposed_mol_smiles)
+
+        # Build the new Topology object, including the proposed molecule
+        new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
+        new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
+
+        # Generate an OpenMM System from the proposed Topology
+        new_system = self._system_generator.build_system(new_topology)
+
+        # Determine atom mapping between old and new molecules
+        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose, allow_ring_breaking=self._allow_ring_breaking)
+
+        # Adjust atom mapping indices for the presence of the receptor
+        adjusted_atom_map = {}
+        for (key, value) in mol_atom_map.items():
+            adjusted_atom_map[key+new_mol_start_index] = value + old_mol_start_index
+
+        # Incorporate atom mapping of all environment atoms
+        old_mol_offset = len_old_mol
+        for i in range(new_mol_start_index):
+            if i >= old_mol_start_index:
+                old_idx = i + old_mol_offset
+            else:
+                old_idx = i
+            adjusted_atom_map[i] = old_idx
+
+        # Create the TopologyProposal onbject
+        proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
+            old_topology=current_topology, new_topology=new_topology,
+            old_system=current_system, new_system=new_system,
+            old_alchemical_atoms=old_alchemical_atoms,
+            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
+
+        ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
+        ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
+        _logger.info('Proposed transformation would delete %d atoms and create %d atoms.' % (ndelete, ncreate))
+
+        return proposal
+
 
 class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     """
