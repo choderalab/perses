@@ -103,8 +103,12 @@ class SmallMoleculeAtomMapper(object):
     """
 
     def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None):
-        self._list_of_oemol = self._initialize_oemols(list_of_smiles)
-        
+
+        self._unique_smiles_list = list(set(list_of_smiles))
+        self._oemol_dictionary = self._initialize_oemols(self._unique_smiles_list)
+
+        self._n_molecules = len(self._unique_smiles_list)
+
         if atom_match_expression is None:
             self._atom_expr = DEFAULT_ATOM_EXPRESSION
         else:
@@ -130,8 +134,8 @@ class SmallMoleculeAtomMapper(object):
             _logger.info("The molecules have already been mapped. Returning.")
             return
 
-        for molecule_pair in itertools.combinations(self._list_of_oemol, 2):
-            molecule_smiles_pair = (self._canonicalize_smiles(molecule) for molecule in molecule_pair)
+        for molecule_smiles_pair in itertools.combinations(self._oemol_dictionary.keys(), 2):
+            molecule_pair = (self._oemol_dictionary[molecule_smiles_pair] for molecule in molecule_smiles_pair)
    
             self._molecule_maps[molecule_smiles_pair] = []
             self._failed_molecule_maps[molecule_smiles_pair] = []
@@ -177,17 +181,63 @@ class SmallMoleculeAtomMapper(object):
                 print("The requested pair was not found. Ensure you are using canonicalized smiles.")
                 raise e
 
-    def _check_proposal_matrix(self) -> bool:
+    def _create_proposal_matrix(self) -> np.array:
         """
         In RJ calculations, we propose based on how many atoms are in common between molecules. This routine checks that the graph of proposals cannot
-        be separated.
+        be separated. In calculating the proposal matrix, we use the min(n_atom_mapped) when there are multiple maps.
 
         Returns
         -------
-        safe_proposals : bool
-            Whether the entire space can be reached from any point
+        normalized_proposal_matrix : np.array of float
+            The proposal matrix
         """
-        pass
+        proposal_matrix = np.zeros([self._n_molecules, self._n_molecules])
+        
+        for smiles_pair, atom_maps in self._molecule_maps.items():
+
+            #retrieve the smiles strings of these molecules
+            molecule_A = smiles_pair[0]
+            molecule_B = smiles_pair[1]
+            
+            #retrieve the indices of these molecules from the list of smiles
+            molecule_A_idx = self._unique_smiles_list.index(molecule_A)
+            molecule_B_idx = self._unique_smiles_list.index(molecule_B)
+            
+            #if there are no maps, we can't propose
+            if len(atom_maps) == 0:
+                proposal_matrix[molecule_A_idx, molecule_B_idx] = 0.0
+                proposal_matrix[molecule_B_idx, molecule_A_idx] = 0.0
+                continue
+
+            #get a list of the number of atoms mapped for each map
+            number_of_atoms_in_maps = [len(atom_map.keys()) for atom_map in atom_maps]
+
+            unnormalized_proposal_probability = float(min(number_of_atoms_in_maps))
+
+
+            proposal_matrix[molecule_A_idx, molecule_B_idx] = unnormalized_proposal_probability
+            proposal_matrix[molecule_B_idx, molecule_A_idx] = unnormalized_proposal_probability
+
+        #normalize the proposal_matrix:
+
+        #First compute the normalizing constants by summing the rows
+        normalizing_constants = np.sum(proposal_matrix, axis=1)
+
+        #If any normalizing constants are zero, that means that the molecule is completely unproposable:
+        if np.any(normalizing_constants==0.0):
+            where_zero = np.where(normalizing_constants==0.0)[0]
+            failed_molecules = []
+            for zero_idx in where_zero:
+                failed_molecules.append(self._unique_smiles_list[zero_idx])
+
+            print("The following molecules are unproposable:\n")
+            print(failed_molecules)
+            raise ValueError("Some molecules could not be proposed. Make sure the atom mapping criteria do not completely exclude a molecule.")
+        
+        normalized_proposal_matrix = proposal_matrix / normalizing_constants[:, np.newaxis]
+
+        return normalized_proposal_matrix
+
 
     def _canonicalize_smiles(self, mol: oechem.OEMol) -> str:
         """
@@ -276,7 +326,7 @@ class SmallMoleculeAtomMapper(object):
         
         return atom_matches, failed_atom_matches
 
-    def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, a_to_b_mapping: Dict) -> bool:
+    def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, a_to_b_mapping: Dict[int, int]) -> bool:
         """
         Check that the map can allow for a geometry proposal. Essentially, this amounts to ensuring that there exists
         a starting topological torsion. Examples of cases where this would not exist would include:
@@ -359,7 +409,7 @@ class SmallMoleculeAtomMapper(object):
         
         return g
 
-    def _initialize_oemols(self, list_of_smiles: List[str]) -> List[oechem.OEMol]:
+    def _initialize_oemols(self, list_of_smiles: List[str]) -> Dict[str, oechem.OEMol]:
         """
         Initialize the set of OEMols that we will use to construct the atom map
 
@@ -370,17 +420,34 @@ class SmallMoleculeAtomMapper(object):
         
         Returns
         -------
-        list_of_oemol : list of oechem.OEmol
-            list of oechem.OEMol
+        dict_of_oemol : dict of oechem.OEmol
+            dict of canonical_smiles : oechem.OEMol
         """
-        list_of_oemol = []
+        dict_of_oemol = {}
         for smiles in list_of_smiles:
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smiles)
             oechem.OEAddExplicitHydrogens(mol)
-            list_of_oemol.append(mol)
+            canonical_smiles = self._canonicalize_smiles(mol)
+            dict_of_oemol[canonical_smiles] = mol
 
-        return list_of_oemol
+        return dict_of_oemol
+
+    def get_oemol_from_smiles(self, smiles_string: str) -> oechem.OEMol:
+        """
+        Get the OEMol corresponding to the smiles string requested. This method exists
+        to avoid having atom order rearranged by regeneration from smiles.
+
+        Arguments
+        ---------
+        smiles_string : str
+            The smiles string for which to retrieve the OEMol. Only pre-existing OEMols are allowed
+        
+        Returns
+        -------
+        mol : oechem.OEMol
+            The OEMol corresponding to the requested smiles string.
+        """
 
 
 from perses.rjmc.geometry import NoTorsionError
