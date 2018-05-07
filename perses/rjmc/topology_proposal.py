@@ -2392,6 +2392,9 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         #get the oemol corresponding to the proposed molecule:
         proposed_mol_smiles = self._atom_mapper.smiles_list[proposed_index]
         proposed_mol = self._atom_mapper.get_oemol_from_smiles(proposed_mol_smiles)
+        
+        #You will get a weird error if you don't assign atom names.
+        oechem.OETriposAtomNames(proposed_mol)
 
         # Build the new Topology object, including the proposed molecule
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
