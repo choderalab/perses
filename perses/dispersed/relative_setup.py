@@ -872,7 +872,7 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
         compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
 
         thermodynamic_state_list = [compound_thermodynamic_state]
-        
+
         for idx in range(n_states):
             lambda_val = (1.0 + idx) / n_states
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
@@ -955,7 +955,7 @@ def run_setup(setup_options):
     except Exception:
         atom_map=None
 
-    if not setup_options['topology_proposal']:
+    if 'topology_proposal' not in setup_options:
         fe_setup = NonequilibriumFEPSetup(ligand_file, old_ligand_index, new_ligand_index, forcefield_files,
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
