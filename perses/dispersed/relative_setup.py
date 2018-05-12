@@ -865,21 +865,19 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
     def setup(self, n_states, temperature, storage_file, checkpoint_interval):
         hybrid_system = self._factory.hybrid_system
         initial_hybrid_positions = self._factory.hybrid_positions
-        alchemical_states = []
         lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(hybrid_system)
-        alchemical_states.append(lambda_zero_alchemical_state)
-
-        for idx in range(n_states):
-            lambda_val = (1.0 + idx) / n_states
-            copied_state = copy.deepcopy(lambda_zero_alchemical_state)
-            copied_state.set_alchemical_parameters(lambda_val)
-            alchemical_states.append(copied_state)
+        lambda_zero_alchemical_state.set_alchemical_parameters(1.0)
 
         thermostate = states.ThermodynamicState(hybrid_system, temperature=temperature)
-        thermodynamic_state_list = []
-        for alchemical_state in alchemical_states:
-            thermodynamic_state_list.append(states.CompoundThermodynamicState(copy.deepcopy(thermostate),
-                                                                              composable_states=[alchemical_state]))
+        compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
+
+        thermodynamic_state_list = [compound_thermodynamic_state]
+        
+        for idx in range(n_states):
+            lambda_val = (1.0 + idx) / n_states
+            compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
+            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
+            thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
         nonalchemical_thermodynamic_states = [
             states.ThermodynamicState(self._factory._old_system, temperature=temperature),
