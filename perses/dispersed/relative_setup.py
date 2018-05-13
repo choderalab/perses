@@ -884,7 +884,8 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
             states.ThermodynamicState(self._factory._new_system, temperature=temperature)]
         sampler_state = states.SamplerState(initial_hybrid_positions,
                                             box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
-        reporter = MultiStateReporter(storage_file, checkpoint_interval=checkpoint_interval)
+
+        reporter = storage_file
 
         self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state,
                     storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
@@ -990,10 +991,14 @@ def run_setup(setup_options):
     trajectory_directory = setup_options['trajectory_directory']
     trajectory_prefix = setup_options['trajectory_prefix']
 
+    if 'atom_selection' in setup_options:
+        atom_selection = setup_options['atom_selection']
+    else:
+        atom_selection = None
+
     if setup_options['fe_type'] == 'nonequilibrium':
         forward_functions = setup_options['forward_functions']
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
-        atom_selection = setup_options['atom_selection']
         scheduler_address = setup_options['scheduler_address']
 
         ne_fep = dict()
@@ -1023,6 +1028,14 @@ def run_setup(setup_options):
             htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase])
+            
+            if atom_selection:
+                selection_indices = htf[phase].hybrid_topology.select(atom_selection)
+            else:
+                selection_indices = None
+            
+            storage_name = "-".join([trajectory_prefix, '%s.nc' % phase])
+            reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices)
 
             hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=2.0 * unit.femtosecond,
                                                                                 collision_rate=5.0 / unit.picosecond,
@@ -1031,8 +1044,7 @@ def run_setup(setup_options):
                                                                                 n_restart_attempts=6),
                                            hybrid_factory=htf[phase])
             hss[phase].setup(n_states=n_states, temperature=300.0 * unit.kelvin,
-                             storage_file=os.path.join(trajectory_directory, '-'.join([trajectory_prefix, '%s.nc'
-                                                                                       % phase])),
-                             checkpoint_interval=1)
+                             storage_file=reporter,
+                             checkpoint_interval=10)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_sams_samplers': hss}
