@@ -672,13 +672,17 @@ class HybridTopologyFactory(object):
             standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
-            [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
-            delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
-            r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
-            standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
-            standard_nonbonded_force.setEwaldErrorTolerance(delta)
-            standard_nonbonded_force.setCutoffDistance(r_cutoff)
+            if self._exact_pme:
+                hybrid_old_nonbonded_force = openmm.NonbondedForce()
+                hybrid_new_nonbonded_force = openmm.NonbondedForce() #these will handle electrostatics only for exact PME
+            else:
+                [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
+                delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
+                r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
+                sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
+                standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+                standard_nonbonded_force.setEwaldErrorTolerance(delta)
+                standard_nonbonded_force.setCutoffDistance(r_cutoff)
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
 
@@ -712,8 +716,10 @@ class HybridTopologyFactory(object):
 
 
         electrostatics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
+        
+        if not self._exact_pme:
+            self._hybrid_system.addForce(electrostatics_custom_nonbonded_force)
 
-        self._hybrid_system.addForce(electrostatics_custom_nonbonded_force)
         self._hybrid_system_forces['core_electrostatics_force'] = electrostatics_custom_nonbonded_force
 
         total_sterics_energy = "U_sterics;" + sterics_energy_expression + sterics_mixing_rules
@@ -755,19 +761,44 @@ class HybridTopologyFactory(object):
             switching_distance = self._old_system_forces['NonbondedForce'].getSwitchingDistance()
             standard_nonbonded_force.setUseSwitchingFunction(True)
             standard_nonbonded_force.setSwitchingDistance(switching_distance)
+
+            if self._exact_pme:
+                hybrid_old_nonbonded_force.setUseSwitchingFunction(True)
+                hybrid_old_nonbonded_force.setSwitchingDistance(switching_distance)
+
+                hybrid_new_nonbonded_force.setUseSwitchingFunction(True)
+                hybrid_new_nonbonded_force.setSwitchingDistance(switching_distance)
+
             sterics_custom_nonbonded_force.setUseSwitchingFunction(True)
             sterics_custom_nonbonded_force.setSwitchingDistance(switching_distance)
             electrostatics_custom_nonbonded_force.setUseSwitchingFunction(True)
             electrostatics_custom_nonbonded_force.setSwitchingDistance(switching_distance)
         else:
+            if self._exact_pme:
+                hybrid_old_nonbonded_force.setUseSwitchingFunction(False)
+                hybrid_new_nonbonded_force.setUseSwitchingFunction(False)
+
             standard_nonbonded_force.setUseSwitchingFunction(False)
             electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False)
             sterics_custom_nonbonded_force.setUseSwitchingFunction(False)
+
+        #add the CustomCVForce to handle interpolation between electrostatics in exact PME:
+        if self._exact_pme:
+            cv_electrostatics_force = openmm.CustomCVForce("lambda_electrostatics*forceA + (1-lambda_electrostatics)*forceB")
+            cv_electrostatics_force.addCollectiveVariable("forceA", hybrid_old_nonbonded_force)
+            cv_electrostatics_force.addCollectiveVariable("forceB", hybrid_new_electrostatics_force)
+            cv_electrostatics_force.addGlobalParameter("lambda_electrostatics", 0.0)
+            self._hybrid_system_forces['cv_electrostatics_force'] = cv_electrostatics_force
+            self._hybrid_system.addForce(cv_electrostatics_force)
 
         #Add a CustomBondForce for exceptions:
         custom_nonbonded_bond_force = self._nonbonded_custom_bond_force(sterics_energy_expression, electrostatics_energy_expression)
         self._hybrid_system.addForce(custom_nonbonded_bond_force)
         self._hybrid_system_forces['core_nonbonded_bond_force'] = custom_nonbonded_bond_force
+        if self._exact_pme:
+            self._hybrid_system_forces['hybrid_old_nonbonded_force'] = hybrid_old_nonbonded_force
+            self._hybrid_system_forces['hybrid_new_nonbonded_force'] = hybrid_new_nonbonded_force
+
 
     def _nonbonded_custom_sterics_common(self):
         """
@@ -976,7 +1007,7 @@ class HybridTopologyFactory(object):
                 custom_bond_force.addEnergyParameterDerivative('lambda')
             else:
                 custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
-                
+
             custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
             custom_bond_force.addPerBondParameter("sigmaA")
             custom_bond_force.addPerBondParameter("epsilonA")
