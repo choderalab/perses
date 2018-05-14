@@ -947,25 +947,41 @@ class HybridTopologyFactory(object):
         #we don't need to check that the keys exist, since by the time this is called, these are already checked.
         if self._has_functions:
             sterics_energy_expression += 'lambda_sterics = ' + self._functions['lambda_sterics']
-            electrostatics_energy_expression += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
-        custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
-        custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
-        custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
-        custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
-        custom_bond_force.addGlobalParameter("softcore_beta", self.softcore_beta)
-        custom_bond_force.addPerBondParameter("chargeprodA")
-        custom_bond_force.addPerBondParameter("sigmaA")
-        custom_bond_force.addPerBondParameter("epsilonA")
-        custom_bond_force.addPerBondParameter("chargeprodB")
-        custom_bond_force.addPerBondParameter("sigmaB")
-        custom_bond_force.addPerBondParameter("epsilonB")
+            if not self._exact_pme:
+                electrostatics_energy_expression += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
+        if not self._exact_pme:
+            custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
 
-        if self._has_functions:
-            custom_bond_force.addGlobalParameter('lambda', 0.0)
-            custom_bond_force.addEnergyParameterDerivative('lambda')
+            if self._has_functions:
+                custom_bond_force.addGlobalParameter('lambda', 0.0)
+                custom_bond_force.addEnergyParameterDerivative('lambda')
+            else:
+                custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
+                custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
+
+            custom_bond_force.addGlobalParameter("softcore_beta", self.softcore_beta)
+            custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
+            custom_bond_force.addGlobalParameter("softcore_beta", self.softcore_beta)
+            custom_bond_force.addPerBondParameter("chargeprodA")
+            custom_bond_force.addPerBondParameter("sigmaA")
+            custom_bond_force.addPerBondParameter("epsilonA")
+            custom_bond_force.addPerBondParameter("chargeprodB")
+            custom_bond_force.addPerBondParameter("sigmaB")
+            custom_bond_force.addPerBondParameter("epsilonB")
         else:
-            custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
-            custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
+            custom_bond_force = openmm.CustomBondForce("U_sterics" + sterics_energy_expression) #if exact PME, electrostatics are handled elsewhere
+
+            if self._has_functions:
+                custom_bond_force.addGlobalParameter('lambda', 0.0)
+                custom_bond_force.addEnergyParameterDerivative('lambda')
+            else:
+                custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
+                
+            custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
+            custom_bond_force.addPerBondParameter("sigmaA")
+            custom_bond_force.addPerBondParameter("epsilonA")
+            custom_bond_force.addPerBondParameter("sigmaB")
+            custom_bond_force.addPerBondParameter("epsilonB")
 
         return custom_bond_force
 
