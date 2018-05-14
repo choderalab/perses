@@ -45,7 +45,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=None, softcore_beta=None):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=None, softcore_beta=None, exact_pme=False):
         """
         Initialize the Hybrid topology factory.
 
@@ -73,6 +73,9 @@ class HybridTopologyFactory(object):
             "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
         softcore_beta: unit, default None
             "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
+        exact_pme: bool, default False
+            Whether to use the standard nonbonded force for electrostatics. This has the advantage of resulting in exact PME,
+            but may be considerably slower. Default is false.
         """
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
@@ -82,6 +85,7 @@ class HybridTopologyFactory(object):
         self._hybrid_system_forces = dict()
         self._old_positions = current_positions
         self._new_positions = new_positions
+        self._exact_pme = exact_pme
 
         self._use_dispersion_correction = use_dispersion_correction
         
