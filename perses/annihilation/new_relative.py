@@ -1573,6 +1573,10 @@ class HybridTopologyFactory(object):
         hybrid_to_old_map = {value: key for key, value in self._old_to_hybrid_map.items()}
         hybrid_to_new_map = {value: key for key, value in self._new_to_hybrid_map.items()}
 
+        if self._exact_pme:
+            hybrid_old_nonbonded_force = self._hybrid_system_forces['hybrid_old_nonbonded_force']
+            hybrid_new_nonbonded_force = self._hybrid_system_forces['hybrid_new_nonbonded_force']
+
         #first, loop through the old system's exceptions and add them to the hybrid appropriately:
         for exception_pair, exception_parameters in self._old_system_exceptions.items():
 
@@ -1588,21 +1592,37 @@ class HybridTopologyFactory(object):
             #in this case, the interaction is only covered by the regular nonbonded force, and as such will be copied to that force
             #in the unique-old case, it is handled elsewhere due to internal peculiarities regarding exceptions
             if index_set.issubset(self._atom_classes['environment_atoms']):
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
 
-            #otherwise, check if one of the atoms in the set is in the unique_old_group:
-            elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) > 0:
+                if not self._exact_pme:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+                else:
+                    hybrid_old_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old) #add to both, since the exceptions should be present in both cases.
+                    hybrid_new_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+
+            #otherwise, check if one of the atoms in the set is in the unique_old_group. Previously, we had >0 here as the condition, but that would seem to include the case where both atoms were unique old
+            elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) == 1:
                 #if it is, we should add it to the CustomBondForce for the nonbonded exceptions, and have it remain on
                 #by having the two endpoints with the same parameters.
                 #Currently, we keep sigma at the same value
-                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
+
+                if not self._exact_pme:
+                    self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
                                                                                  [chargeProd_old, sigma_old,
                                                                                   epsilon_old, chargeProd_old,
                                                                                   sigma_old, epsilon_old])
+                    self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+
+                else:
+                    self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                                                                                 [sigma_old,
+                                                                                  epsilon_old,
+                                                                                  sigma_old, epsilon_old])
+
+                    hybrid_old_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+                    hybrid_new_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)                     
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             #In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
@@ -1616,14 +1636,24 @@ class HybridTopologyFactory(object):
                     new_system_nonbonded_force, index1_new, index2_new)
 
                 #Now add a term to the CustomBondForce to interpolate between the new and old systems:
-                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                if not self._exact_pme:
+                    self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
                                                                                  [chargeProd_old, sigma_old,
                                                                                   epsilon_old, chargeProd_new,
                                                                                   sigma_new, epsilon_new])
+                    self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+
+                else:
+                    self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                                                                                 [sigma_old,
+                                                                                  epsilon_old,
+                                                                                  sigma_new, epsilon_new])
+
+                    hybrid_old_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+                    hybrid_new_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
         #now, loop through the new system to collect remaining interactions. The only that remain here are
         #uniquenew-uniquenew, uniquenew-core, and uniquenew-environment.
@@ -1644,14 +1674,25 @@ class HybridTopologyFactory(object):
             #look for the final class- interactions between uniquenew-core and uniquenew-environment. They are treated
             #similarly: they are simply on and constant the entire time (as a valence term)
             elif len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
+
+                if not self._exact_pme:
+                    self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
                                                                                  [chargeProd_new, sigma_new,
                                                                                   epsilon_new, chargeProd_new,
                                                                                   sigma_new, epsilon_new])
+                    self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                
+                else:
+                    self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                                                                                 [sigma_new,
+                                                                                  epsilon_new,
+                                                                                  sigma_new, epsilon_new])
+
+                    hybrid_old_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
+                    hybrid_new_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
     def _find_exception(self, force, index1, index2):
         """
