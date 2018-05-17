@@ -673,26 +673,25 @@ class HybridTopologyFactory(object):
             standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
+            delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
+            r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
+            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
             if self._exact_pme:
                 hybrid_old_nonbonded_force = openmm.NonbondedForce()
                 hybrid_new_nonbonded_force = openmm.NonbondedForce() #these will handle electrostatics only for exact PME
-            else:
-                [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
-                delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
-                r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-                sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
-                if not self._exact_pme:
-                    standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
-                    standard_nonbonded_force.setEwaldErrorTolerance(delta)
-                    standard_nonbonded_force.setCutoffDistance(r_cutoff)
-                else:
-                    hybrid_old_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
-                    hybrid_old_nonbonded_force.setEwaldErrorTolerance(delta)
-                    hybrid_old_nonbonded_force.setCutoffDistance(r_cutoff)
+                hybrid_old_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+                hybrid_old_nonbonded_force.setEwaldErrorTolerance(delta)
+                hybrid_old_nonbonded_force.setCutoffDistance(r_cutoff)
 
-                    hybrid_new_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
-                    hybrid_new_nonbonded_force.setEwaldErrorTolerance(delta)
-                    hybrid_new_nonbonded_force.setCutoffDistance(r_cutoff)
+                hybrid_new_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+                hybrid_new_nonbonded_force.setEwaldErrorTolerance(delta)
+                hybrid_new_nonbonded_force.setCutoffDistance(r_cutoff)
+
+            else:
+                standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+                standard_nonbonded_force.setEwaldErrorTolerance(delta)
+                standard_nonbonded_force.setCutoffDistance(r_cutoff)
 
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
