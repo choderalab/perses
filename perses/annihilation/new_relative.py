@@ -826,7 +826,6 @@ class HybridTopologyFactory(object):
             self._hybrid_system_forces['hybrid_old_nonbonded_force'] = hybrid_old_nonbonded_force
             self._hybrid_system_forces['hybrid_new_nonbonded_force'] = hybrid_new_nonbonded_force
 
-
     def _nonbonded_custom_sterics_common(self):
         """
         Get a custom sterics expression that is common to all nonbonded methods
@@ -1309,6 +1308,7 @@ class HybridTopologyFactory(object):
         """
         old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
         new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
+
         hybrid_to_old_map = self._hybrid_to_old_map
         hybrid_to_new_map = self._hybrid_to_new_map
 
@@ -1326,13 +1326,13 @@ class HybridTopologyFactory(object):
 
                 if not self._exact_pme:
                     self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0])
+
+                    #still add the particle to the regular nonbonded force, but with zeroed out parameters.
+                    self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
+
                 else:
                     self._hybrid_system_forces['hybrid_old_nonbonded_force'].addParticle(charge, 1.0, 0.0) #handle with regular nonbonded force
                     self._hybrid_system_forces['hybrid_new_nonbonded_force'].addParticle(0.0, 1.0, 0.0) 
-
-                #Add the particle to the regular nonbonded force as required, but zero out interaction
-                #it will be handled by an exception
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
 
             elif particle_index in self._atom_classes['unique_new_atoms']:
                 #get the parameters in the new system
@@ -1344,13 +1344,12 @@ class HybridTopologyFactory(object):
 
                 if not self._exact_pme:
                     self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0, charge])
+
+                    #still add the particle to the regular nonbonded force, but with zeroed out parameters.
+                    self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
                 else:
                     self._hybrid_system_forces['hybrid_old_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
                     self._hybrid_system_forces['hybrid_new_nonbonded_force'].addParticle(charge, 1.0, 0.0)
-
-                #Add the particle to the regular nonbonded force as required, but zero out interaction
-                #it will be handled by an exception
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
 
 
             elif particle_index in self._atom_classes['core_atoms']:
@@ -1365,12 +1364,12 @@ class HybridTopologyFactory(object):
 
                 if not self._exact_pme:
                     self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge_old, charge_new])
+                    #still add the particle to the regular nonbonded force, but with zeroed out parameters.
+                    self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
+
                 else:
                     self._hybrid_system_forces['hybrid_old_nonbonded_force'].addParticle(charge_old, 1.0, 0.0)
                     self._hybrid_system_forces['hybrid_new_nonbonded_force'].addParticle(charge_new, 1.0, 0.0)
-
-                #still add the particle to the regular nonbonded force, but with zeroed out parameters.
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
 
             #otherwise, the particle is in the environment
             else:
@@ -1380,10 +1379,14 @@ class HybridTopologyFactory(object):
 
                 #add the particle to the hybrid custom sterics and electrostatics, but they dont change
                 self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, epsilon])
-                self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, charge])
 
-                #add the environment atoms to the regular nonbonded force as well:
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+                if not self._exact_pme:
+                    self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, charge])
+                    #add the environment atoms to the regular nonbonded force as well:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
+                else:
+                    self._hybrid_system_forces['hybrid_old_nonbonded_force'].addParticle(charge, 1.0, 0.0)
+                    self._hybrid_system_forces['hybrid_new_nonbonded_force'].addParticle(charge, 1.0, 0.0)
 
         self._handle_interaction_groups()
         self._handle_hybrid_exceptions()
