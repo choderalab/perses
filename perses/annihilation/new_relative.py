@@ -656,10 +656,11 @@ class HybridTopologyFactory(object):
             One of the openmm.NonbondedForce nonbonded methods.
         """
 
-        #Add a regular nonbonded force for all interactions that are not changing.
-        standard_nonbonded_force = openmm.NonbondedForce()
-        self._hybrid_system.addForce(standard_nonbonded_force)
-        self._hybrid_system_forces['standard_nonbonded_force'] = standard_nonbonded_force
+        #Add a regular nonbonded force for all interactions that are not changing, but only if we aren't doing exact PME
+        if not self._exact_pme:
+            standard_nonbonded_force = openmm.NonbondedForce()
+            self._hybrid_system.addForce(standard_nonbonded_force)
+            self._hybrid_system_forces['standard_nonbonded_force'] = standard_nonbonded_force
 
         # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
         # Select functional form based on nonbonded method.
@@ -680,13 +681,28 @@ class HybridTopologyFactory(object):
                 delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
                 r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
                 sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
-                standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
-                standard_nonbonded_force.setEwaldErrorTolerance(delta)
-                standard_nonbonded_force.setCutoffDistance(r_cutoff)
+                if not self._exact_pme:
+                    standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+                    standard_nonbonded_force.setEwaldErrorTolerance(delta)
+                    standard_nonbonded_force.setCutoffDistance(r_cutoff)
+                else:
+                    hybrid_old_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+                    hybrid_old_nonbonded_force.setEwaldErrorTolerance(delta)
+                    hybrid_old_nonbonded_force.setCutoffDistance(r_cutoff)
+
+                    hybrid_new_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
+                    hybrid_new_nonbonded_force.setEwaldErrorTolerance(delta)
+                    hybrid_new_nonbonded_force.setCutoffDistance(r_cutoff)
+
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
 
-        standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+        if not self._exact_pme:
+            standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+        else:
+            hybrid_old_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+            hybrid_new_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+
         sterics_energy_expression += self._nonbonded_custom_sterics_common()
         electrostatics_energy_expression += self._nonbonded_custom_electrostatics_common()
 
@@ -777,16 +793,27 @@ class HybridTopologyFactory(object):
             if self._exact_pme:
                 hybrid_old_nonbonded_force.setUseSwitchingFunction(False)
                 hybrid_new_nonbonded_force.setUseSwitchingFunction(False)
-
-            standard_nonbonded_force.setUseSwitchingFunction(False)
-            electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False)
+            else:
+                standard_nonbonded_force.setUseSwitchingFunction(False)
+                electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False)
+            
             sterics_custom_nonbonded_force.setUseSwitchingFunction(False)
 
         #add the CustomCVForce to handle interpolation between electrostatics in exact PME:
         if self._exact_pme:
-            cv_electrostatics_force = openmm.CustomCVForce("lambda_electrostatics*forceA + (1-lambda_electrostatics)*forceB")
+
+            electrostatics_energy = "lambda_electrostatics*forceA + (1-lambda_electrostatics)*forceB;"
+
+            if self._has_functions:
+                try:
+                    electrostatics_energy += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
+                except KeyError as e:
+                    print("Functions were provided, but there is no entry for electrostatics")
+                    raise e
+
+            cv_electrostatics_force = openmm.CustomCVForce(electrostatics_energy)
             cv_electrostatics_force.addCollectiveVariable("forceA", hybrid_old_nonbonded_force)
-            cv_electrostatics_force.addCollectiveVariable("forceB", hybrid_new_electrostatics_force)
+            cv_electrostatics_force.addCollectiveVariable("forceB", hybrid_new_nonbonded_force)
             cv_electrostatics_force.addGlobalParameter("lambda_electrostatics", 0.0)
             self._hybrid_system_forces['cv_electrostatics_force'] = cv_electrostatics_force
             self._hybrid_system.addForce(cv_electrostatics_force)
