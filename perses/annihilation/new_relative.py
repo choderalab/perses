@@ -178,6 +178,10 @@ class HybridTopologyFactory(object):
         self._old_system_exceptions = self._generate_dict_from_exceptions(self._old_system_forces['NonbondedForce'])
         self._new_system_exceptions = self._generate_dict_from_exceptions(self._new_system_forces['NonbondedForce'])
 
+        #adjust exclusions if we're using exact PME
+        if self._exact_pme:
+            self._adjust_exceptions_for_exact_pme()
+
         #copy over relevant virtual sites
         self._handle_virtual_sites()
 
@@ -768,7 +772,13 @@ class HybridTopologyFactory(object):
 
         #set the use of dispersion correction to be the same between the new nonbonded force and the old one:
         if self._old_system_forces['NonbondedForce'].getUseDispersionCorrection():
-            self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(True)
+
+            if not self._exact_pme:
+                self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(True)
+            else:
+                hybrid_old_nonbonded_force.setUseDispersionCorrection(True)
+                hybrid_new_nonbonded_force.setUseDispersionCorrection(True)
+
             if self._use_dispersion_correction:
                 sterics_custom_nonbonded_force.setUseLongRangeCorrection(True)
 
@@ -1025,7 +1035,7 @@ class HybridTopologyFactory(object):
             custom_bond_force.addPerBondParameter("sigmaB")
             custom_bond_force.addPerBondParameter("epsilonB")
         else:
-            custom_bond_force = openmm.CustomBondForce("U_sterics" + sterics_energy_expression) #if exact PME, electrostatics are handled elsewhere
+            custom_bond_force = openmm.CustomBondForce("U_sterics;" + sterics_energy_expression) #if exact PME, electrostatics are handled elsewhere
 
             if self._has_functions:
                 custom_bond_force.addGlobalParameter('lambda', 0.0)
@@ -1512,7 +1522,7 @@ class HybridTopologyFactory(object):
                     hybrid_old_nonbonded_force.addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
 
             #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
-            elif not self._exact_pme:
+            else:
                 [charge0, sigma0, epsilon0] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[0])
                 [charge1, sigma1, epsilon1] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[1])
                 chargeProd = charge0*charge1
@@ -1590,6 +1600,9 @@ class HybridTopologyFactory(object):
 
             #in this case, the interaction is only covered by the regular nonbonded force, and as such will be copied to that force
             #in the unique-old case, it is handled elsewhere due to internal peculiarities regarding exceptions
+            if index_set.issubset(self._atom_classes['unique_old_atoms']):
+                continue
+
             if index_set.issubset(self._atom_classes['environment_atoms']):
 
                 if not self._exact_pme:
@@ -1599,7 +1612,7 @@ class HybridTopologyFactory(object):
                     hybrid_new_nonbonded_force.addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
 
             #otherwise, check if one of the atoms in the set is in the unique_old_group. Previously, we had >0 here as the condition, but that would seem to include the case where both atoms were unique old
-            elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) == 1:
+            elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) > 0:
                 #if it is, we should add it to the CustomBondForce for the nonbonded exceptions, and have it remain on
                 #by having the two endpoints with the same parameters.
                 #Currently, we keep sigma at the same value
@@ -1867,6 +1880,54 @@ class HybridTopologyFactory(object):
         for idx in range(n_atoms_new):
             new_positions[idx, :] = hybrid_positions[self._new_to_hybrid_map[idx], :]
         return new_positions
+
+    def _adjust_exceptions_for_exact_pme(self):
+        """
+        This is a utility method to adjust exceptions so that there are no mismatched exclusions when exact PME is requested.
+        When it finds a mismatch, it slightly adjusts the exclusion parameters so that they are not quite zero, avoiding the OpenMM error.
+        This should never be called if exact PME is not requested.
+        """
+        if not self._exact_pme:
+            raise RuntimeError("Exception adjustment should never be called when exact PME is not requested.")
+        
+        #use this as an "almost zero exception" so that it is effectively but not technically excluded
+        almost_zero_exceptions  = [1.0e-8*unit.coulomb**2, 1.0*unit.nanometers, 1.0e-8*unit.kilojoule_per_mole]
+        
+        #build up the set of old exceptions that are exclusions (zero out all parameters)
+        old_exclusions = set()
+        for exception_idx, exception_paramters in self._old_system_exceptions.items():
+            exception_param_array = np.array([parm.value_in_unit_system(unit.md_unit_system) for parm in exception_paramters])
+            if np.all(exception_param_array==0.0):
+                hybrid_indices = frozenset(self._old_to_hybrid_map[idx] for idx in exception_idx)
+                old_exclusions.add(hybrid_indices)
+        
+        #repeat the same for new exceptions
+        new_exclusions = set()
+        for exception_idx, exception_paramters in self._new_system_exceptions.items():
+            exception_param_array = np.array([parm.value_in_unit_system(unit.md_unit_system) for parm in exception_paramters])
+            if np.all(exception_param_array==0.0):
+                hybrid_indices = frozenset(self._new_to_hybrid_map[idx] for idx in exception_idx)
+                new_exclusions.add(hybrid_indices)
+
+        #we find the exclusions that are in common--there's no need to fix these
+        common_exclusions = old_exclusions.intersection(new_exclusions)
+        
+        #remove the ones in common from each
+        old_exclusions_to_modify = old_exclusions - common_exclusions
+        new_exclusions_to_modify = new_exclusions - common_exclusions
+        
+        #loop through the old exclusions in hybrid indices, convert to old indices, and adjust the parameters
+        for old_exclusion in old_exclusions_to_modify:
+            old_system_indices = (self._hybrid_to_old_map[idx] for idx in old_exclusion)
+            self._old_system_exceptions[old_system_indices] = almost_zero_exceptions
+            self._old_system_exceptions[old_system_indices[-1]] = almost_zero_exceptions
+        
+        #repeat the above for new exclusions
+        for new_exclusion in new_exclusions_to_modify:
+            new_system_indices = (self._hybrid_to_new_map[idx] for idx in new_exclusion)
+            self._new_system_exceptions[new_system_indices] = almost_zero_exceptions
+            self._new_system_exceptions[new_system_indices[-1]] = almost_zero_exceptions
+        
 
     @property
     def hybrid_system(self):
