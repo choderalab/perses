@@ -59,18 +59,18 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         The total work in kT.
     """
 
-    def __init__(self, alchemical_functions: dict, splitting: str, temperature: unit.Quantity, nsteps_neq: int,
-        work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, save_configuration: bool=False, **kwargs):
+    def __init__(self, alchemical_functions: dict, splitting: str, temperature: unit.Quantity, nsteps_neq: int, timestep: unit.Quantity,
+        work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, save_configuration: bool=False, measure_shadow_work: bool=False, **kwargs):
 
         super(NonequilibriumSwitchingMove, self).__init__(n_steps=nsteps_neq, **kwargs)
         self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions, nsteps_neq=nsteps_neq, 
-                                                                                  temperature=temperature, splitting=splitting)
+                                                                                  temperature=temperature, splitting=splitting, timestep=timestep, measure_shadow_work=measure_shadow_work)
         self._ncmc_nsteps = nsteps_neq
         
         self._work_save_interval = work_save_interval
 
         self._save_configuration = save_configuration
-        
+        self._measure_shadow_work = measure_shadow_work
         #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
         #work before the end of the protocol as the end
         if self._ncmc_nsteps % self._work_save_interval != 0:
@@ -80,6 +80,8 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         #use the number of step moves plus one, since the first is always zero
         self._cumulative_work = np.zeros(self._number_of_step_moves+1)
+        self._shadow_work = np.zeros(self._number_of_step_moves+1)
+        self._protocol_work = np.zeros(self._number_of_step_moves+1)
 
         self._topology = top
         self._subset_atoms = subset_atoms
@@ -164,7 +166,15 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         for iteration in range(self._number_of_step_moves):
 
             integrator.step(self._work_save_interval)
-            self._current_total_work = integrator.get_protocol_work(dimensionless=True)
+            self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)
+            self._protocol_work[iteration+1] = self._current_protocol_work
+            if self._measure_shadow_work:
+                shadow_work = integrator.get_shadow_work(dimensionless=True) 
+                self._current_total_work = shadow_work + self._current_protocol_work
+                self._shadow_work[iteration+1] = shadow_work
+            else:
+                self.current_total_work = self._current_protocol_work
+
             self._cumulative_work[iteration+1] = self._current_total_work
 
             #if we have a trajectory, we'll also write to it
@@ -233,6 +243,16 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     def cumulative_work(self):
         return self._cumulative_work
 
+    @property
+    def shadow_work(self):
+        if not self._measure_shadow_work:
+            raise ValueError("Can't return shadow work if it isn't being measured")
+        return self._shadow_work
+    
+    @property
+    def protocol_work(self):
+        return self._protocol_work
+
     def __getstate__(self):
         dictionary = super(NonequilibriumSwitchingMove, self).__getstate__()
         dictionary['integrator'] = pickle.dumps(self._integrator)
@@ -254,7 +274,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                  alchemical_functions: dict, nstep_neq: int, topology: md.Topology, work_save_interval: int, splitting: str="V R O H R V",
-                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False) -> NonequilibriumResult:
+                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
     that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
@@ -282,6 +302,8 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         Full filepath of output trajectory, if desired. If None, no trajectory file is written.
     write_configuration : bool, default False
         Whether to also write configurations of the trajectory at the requested interval.
+    timestep : unit.Quantity, default 1 fs
+        The timestep to use in the integrator
     Returns
     -------
     nonequilibrium_result : NonequilibriumResult
@@ -301,7 +323,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
     
-    ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions, splitting, temperature, nstep_neq, work_save_interval, subset_topology, atom_indices, save_configuration=write_configuration)
+    ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions, splitting, temperature, nstep_neq, timestep, work_save_interval, subset_topology, atom_indices, save_configuration=write_configuration)
 
     ne_mc_move.reset()
 
@@ -335,7 +357,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
 
 def run_equilibrium(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                     nsteps_equil: int, topology: md.Topology, n_iterations : int,
-                    atom_indices_to_save: List[int] = None, trajectory_filename: str = None, splitting: str="V R O R V") -> EquilibriumResult:
+                    atom_indices_to_save: List[int] = None, trajectory_filename: str = None, splitting: str="V R O R V", timestep: unit.Quantity=1.0*unit.femtoseconds) -> EquilibriumResult:
     """
     Run nsteps of equilibrium sampling at the specified thermodynamic state and return the final sampler state
     as well as a trajectory of the positions after each application of an MCMove. This means that if the MCMove
