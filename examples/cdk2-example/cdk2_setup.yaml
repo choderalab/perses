@@ -1,8 +1,8 @@
 #provide the full path of the protein PDB file
-protein_pdb: /home/ballen/PycharmProjects/perses/examples/cdk2-example/CDK2_fixed_nohet.pdb
+protein_pdb: CDK2_fixed_nohet.pdb
 
 #provide the path to the ligand file with coordinates
-ligand_file: /home/ballen/PycharmProjects/perses/examples/cdk2-example/CDK2_ligands.mol2
+ligand_file: CDK2_ligands.mol2
 
 #The ligand file contains multiple ligands. Choose the indices of the ligands
 #between which we should compute a relative free energy
@@ -30,9 +30,9 @@ solvent_padding: 9.0
 save_setup_pickle_as: fesetup_hbonds.pkl
 
 #whether to compute the solvent or complex phase
-fe_type: sams
+fe_type: nonequilibrium
 
-topology_proposal: /home/ballen/PycharmProjects/perses/examples/cdk2-example/cdk2_sams_hbonds/cdk2topology_proposals.npy
+#topology_proposal: /home/ballen/PycharmProjects/perses/examples/cdk2-example/cdk2_sams_hbonds/cdk2topology_proposals.npy
 
 n_states: 50
 
@@ -62,6 +62,10 @@ trajectory_prefix: cdk2
 
 #which atoms to save (MDTraj selection syntax)
 atom_selection: not water
+
+#which phases do we want to run:
+phases:
+    - solvent
 
 #The location of the schduler. If it's null, a localhost scheduler is created
 scheduler_address: null
