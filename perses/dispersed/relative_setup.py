@@ -414,7 +414,7 @@ class NonequilibriumSwitchingFEP(object):
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=None, n_equil_steps=1000, ncmc_nsteps=100, nsteps_per_iteration=1,
                  temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
-                 atom_selection="not water", scheduler_address=None):
+                 atom_selection="not water", scheduler_address=None, eq_splitting_string="V R O R V", neq_splitting_string="V R O H R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class
 
@@ -447,6 +447,10 @@ class NonequilibriumSwitchingFEP(object):
             all water.
         scheduler_address : str, default None
             The address of the dask scheduler. If None, local will be used.
+        eq_splitting_string : str, default V R O R V
+            The integrator splitting to use for equilibrium simulation
+        neq_splitting_string : str, default V R O H R V
+            The integrator splitting to use for the nonequilibrium simulation
         """
         if scheduler_address is None:
             self._map = map
@@ -474,7 +478,11 @@ class NonequilibriumSwitchingFEP(object):
                                    self._forward_functions.items()}
 
         # setup splitting string:
-        self._splitting_string = "V R O H R V"
+        self._neq_splitting_string = neq_splitting_string
+        self._eq_splitting_string = eq_splitting_string
+
+        self._measure_shadow_work = measure_shadow_work
+
         # set up some class attributes
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
@@ -486,6 +494,8 @@ class NonequilibriumSwitchingFEP(object):
         self._one_endpoint_n_atoms = topology_proposal.n_atoms_new
         self._atom_selection = atom_selection
         self._current_iteration = 0
+
+        self._timestep = timestep
 
         if self._trajectory_directory and self._trajectory_prefix:
             self._write_traj = True
@@ -602,8 +612,11 @@ class NonequilibriumSwitchingFEP(object):
         atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
         hybrid_factory_list = [self._factory, self._factory]
         alchemical_functions = [self._forward_functions, self._reverse_functions]
-        splitting = [self._splitting_string, self._splitting_string]
+        splitting = [self._neq_splitting_string, self._neq_splitting_string]
+        eq_splitting = [self._eq_splitting_string, self._eq_splitting_string]
         nsteps_neq = [self._ncmc_nsteps, self._ncmc_nsteps]
+        measure_shadow_work = [self._measure_shadow_work, self._measure_shadow_work]
+        timestep = [self._timestep, self._timestep]
 
         endpoint_perturbation_results_list = []
         nonequilibrium_results_list = []
@@ -623,7 +636,7 @@ class NonequilibriumSwitchingFEP(object):
                                                                self._hybrid_thermodynamic_states.values(), nsteps_equil,
                                                                hybrid_topology_list, n_eq_iterations_per_call_list,
                                                                atom_indices_to_save_list,
-                                                               equilibrium_trajectory_filenames))
+                                                               equilibrium_trajectory_filenames, eq_splitting, timestep))
 
             # get the perturbations to nonalchemical states:
             endpoint_perturbation_results_mapped = self._map(feptasks.compute_nonalchemical_perturbation,
@@ -636,7 +649,7 @@ class NonequilibriumSwitchingFEP(object):
             nonequilibrium_results_list.append(
                 self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(),
                           alchemical_functions, nsteps_neq, hybrid_topology_list, write_interval_list, splitting,
-                          atom_indices_to_save_list, noneq_trajectory_filenames))
+                          atom_indices_to_save_list, noneq_trajectory_filenames, timestep, measure_shadow_work))
 
             self._current_iteration += 1
             print(self._current_iteration)
@@ -668,6 +681,8 @@ class NonequilibriumSwitchingFEP(object):
         hybrid_topology_list = [self._factory.hybrid_topology, self._factory.hybrid_topology]
         n_eq_iterations_per_call_list = [self._n_eq_iterations_per_call, self._n_eq_iterations_per_call]
         atom_indices_to_save_list = [self._atom_selection_indices, self._atom_selection_indices]
+        eq_splitting = [self._eq_splitting_string, self._eq_splitting_string]
+        timestep = [self._timestep, self._timestep]
 
         for i in range(n_iterations):
 
@@ -679,7 +694,7 @@ class NonequilibriumSwitchingFEP(object):
             self._equilibrium_results = self._map(feptasks.run_equilibrium, self._equilibrium_results,
                                                   self._hybrid_thermodynamic_states.values(), nsteps_equil,
                                                   hybrid_topology_list, n_eq_iterations_per_call_list,
-                                                  atom_indices_to_save_list, equilibrium_trajectory_filenames)
+                                                  atom_indices_to_save_list, equilibrium_trajectory_filenames, eq_splitting, timestep)
 
     def _adjust_for_correlation(self, timeseries_array: np.array):
         """
