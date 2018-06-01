@@ -30,7 +30,7 @@ import simtk.unit as unit
 
 #Make containers for results from tasklets. This allows us to chain tasks together easily.
 EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('reduced_potential', float)])
-NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', np.array)])
+NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', np.array), ('protocol_work', np.array), ('shadow_work', np.array)])
 
 class NoTrajectoryException(Exception):
     pass
@@ -274,7 +274,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: states.ThermodynamicState,
                  alchemical_functions: dict, nstep_neq: int, topology: md.Topology, work_save_interval: int, splitting: str="V R O H R V",
-                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds) -> NonequilibriumResult:
+                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds, measure_shadow_work: bool=False) -> NonequilibriumResult:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
     that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
@@ -323,7 +323,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
     
-    ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions, splitting, temperature, nstep_neq, timestep, work_save_interval, subset_topology, atom_indices, save_configuration=write_configuration)
+    ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions, splitting, temperature, nstep_neq, timestep, work_save_interval, subset_topology, atom_indices, save_configuration=write_configuration, measure_shadow_work=measure_shadow_work)
 
     ne_mc_move.reset()
 
@@ -333,15 +333,34 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     #get the cumulative work
     cumulative_work = ne_mc_move.cumulative_work
 
+    #get the protocol work
+    protocol_work = ne_mc_move.protocol_work
+
+    #if we're measuring shadow work, get that. Otherwise just fill in zeros:
+    if measure_shadow_work:
+        shadow_work = ne_mc_move.shadow_work
+    else:
+        shadow_work = np.zeros_like(protocol_work)
+
     #create a result object and return that
-    nonequilibrium_result = NonequilibriumResult(cumulative_work)
+    nonequilibrium_result = NonequilibriumResult(cumulative_work, protocol_work, shadow_work)
 
     #if desired, write nonequilibrium trajectories:
     if trajectory_filename is not None:
         #to get the filename for cumulative work, replace the extension of the trajectory file with .cw.npy
         filepath_parts = trajectory_filename.split(".")
-        filepath_parts[-1] = "cw.npy"
-        cum_work_filepath = ".".join(filepath_parts)
+        cw_filepath_parts = copy.deepcopy(filepath_parts)
+        pw_filepath_parts = copy.deepcopy(filepath_parts)
+        if measure_shadow_work:
+            sw_filepath_parts = copy.deepcopy(filepath_parts)
+            sw_filepath_parts[-1] = "sw.npy"
+            shad_work_filepath = ".".join(sw_filepath_parts)
+
+        cw_filepath_parts[-1] = "cw.npy"
+        pw_filepath_parts[-1] = "pw.npy"
+
+        cum_work_filepath = ".".join(cw_filepath_parts)
+        prot_work_filepath = ".".join(pw_filepath_parts)
         
         #if writing configurations was requested, get the trajectory
         if write_configuration:
@@ -352,6 +371,10 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
                 pass
         
         np.save(cum_work_filepath, nonequilibrium_result.cumulative_work)
+        np.save(prot_work_filepath, nonequilibrium_result.protocol_work)
+
+        if measure_shadow_work:
+            np.save(shad_work_filepath, nonequilibrium_result.shadow_work)
 
     return nonequilibrium_result
 
