@@ -1058,8 +1058,8 @@ def run_setup(setup_options):
                                                        trajectory_directory=trajectory_directory,
                                                        trajectory_prefix='-'.join([trajectory_prefix, '%s' % phase]),
                                                        atom_selection=atom_selection,
-                                                       scheduler_address=scheduler_address, splitting=eq_splitting,
-                                                       neq_splitting=neq_splitting,
+                                                       scheduler_address=scheduler_address, eq_splitting_string=eq_splitting,
+                                                       neq_splitting_string=neq_splitting,
                                                        timestep=timestep,
                                                        measure_shadow_work=measure_shadow_work)
 
