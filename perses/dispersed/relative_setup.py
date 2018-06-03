@@ -617,6 +617,7 @@ class NonequilibriumSwitchingFEP(object):
         nsteps_neq = [self._ncmc_nsteps, self._ncmc_nsteps]
         measure_shadow_work = [self._measure_shadow_work, self._measure_shadow_work]
         timestep = [self._timestep, self._timestep]
+        write_configuration = [self._write_traj, self._write_traj]
 
         endpoint_perturbation_results_list = []
         nonequilibrium_results_list = []
@@ -649,7 +650,7 @@ class NonequilibriumSwitchingFEP(object):
             nonequilibrium_results_list.append(
                 self._map(feptasks.run_protocol, self._equilibrium_results, self._hybrid_thermodynamic_states.values(),
                           alchemical_functions, nsteps_neq, hybrid_topology_list, write_interval_list, splitting,
-                          atom_indices_to_save_list, noneq_trajectory_filenames, timestep, measure_shadow_work))
+                          atom_indices_to_save_list, noneq_trajectory_filenames, write_configuration, timestep, measure_shadow_work))
 
             self._current_iteration += 1
             print(self._current_iteration)
@@ -1011,13 +1012,17 @@ def run_setup(setup_options):
     else:
         atom_selection = None
 
+    if 'phases' in setup_options:
+        phases = setup_options['phases']
+    else:
+        phases = ['complex', 'solvent']
     if setup_options['fe_type'] == 'nonequilibrium':
         forward_functions = setup_options['forward_functions']
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
         scheduler_address = setup_options['scheduler_address']
 
         ne_fep = dict()
-        for phase in ['complex', 'solvent']:
+        for phase in phases:
             ne_fep[phase] = NonequilibriumSwitchingFEP(top_prop['%s_topology_proposal' % phase],
                                                        top_prop['%s_old_positions' % phase],
                                                        top_prop['%s_new_positions' % phase],
@@ -1039,7 +1044,7 @@ def run_setup(setup_options):
         n_states = setup_options['n_states']
         htf = dict()
         hss = dict()
-        for phase in ['complex', 'solvent']:
+        for phase in phases:
             htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase])
