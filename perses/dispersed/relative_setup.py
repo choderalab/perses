@@ -959,6 +959,30 @@ def run_setup(setup_options):
     except KeyError:
         solvate = True
 
+
+    if "timestep" in setup_options:
+        timestep = setup_options['timestep'] * unit.femtoseconds
+    else:
+        timestep = 1.0 * unit.femtoseconds
+
+    if "neq_splitting" in setup_options:
+        neq_splitting = setup_options['neq_splitting']
+
+        try:
+            eq_ splitting = setup_options['eq_splitting']
+        except KeyError as e:
+            print("If you specify a nonequilibrium splitting string, you must also specify an equilibrium one.")
+            raise e
+    
+    else:
+        eq_splitting = "V R O R V"
+        neq_splitting = "V R O H R V"
+
+    if "measure_shadow_work" in setup_options:
+        measure_shadow_work = setup_options['measure_shadow_work']
+    else:
+        measure_shadow_work = False
+
     pressure = setup_options['pressure'] * unit.atmosphere
     temperature = setup_options['temperature'] * unit.kelvin
     solvent_padding_angstroms = setup_options['solvent_padding'] * unit.angstrom
@@ -1034,7 +1058,10 @@ def run_setup(setup_options):
                                                        trajectory_directory=trajectory_directory,
                                                        trajectory_prefix='-'.join([trajectory_prefix, '%s' % phase]),
                                                        atom_selection=atom_selection,
-                                                       scheduler_address=scheduler_address)
+                                                       scheduler_address=scheduler_address, splitting=eq_splitting,
+                                                       neq_splitting=neq_splitting,
+                                                       timestep=timestep,
+                                                       measure_shadow_work=measure_shadow_work)
 
         print("Nonequilibrium switching driver class constructed")
 

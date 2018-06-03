@@ -32,10 +32,6 @@ save_setup_pickle_as: fesetup_hbonds.pkl
 #whether to compute the solvent or complex phase
 fe_type: nonequilibrium
 
-#topology_proposal: /home/ballen/PycharmProjects/perses/examples/cdk2-example/cdk2_sams_hbonds/cdk2topology_proposals.npy
-
-n_states: 50
-
 #the forward switching functions. The reverse ones will be computed from this
 forward_functions:
     lambda_sterics: lambda
@@ -55,7 +51,7 @@ n_steps_ncmc_protocol: 50
 n_steps_per_move_application: 1000
 
 #where to put the trajectories
-trajectory_directory: cdk2_sams_hbonds
+trajectory_directory: cdk2_neq_hbonds
 
 #how to prefix the trajectory files (project-specific name)
 trajectory_prefix: cdk2
@@ -66,6 +62,18 @@ atom_selection: not water
 #which phases do we want to run:
 phases:
     - solvent
+
+#timestep in fs
+timestep: 1.0
+
+#splitting string for equilibrium integration:
+eq_splitting: V R O R V
+
+#splitting string for nonequilibrium switching:
+neq_splitting: V R O H R V
+
+#whether to measure shadow work:
+measure_shadow_work: False
 
 #The location of the schduler. If it's null, a localhost scheduler is created
 scheduler_address: null

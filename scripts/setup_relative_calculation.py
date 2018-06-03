@@ -6,6 +6,7 @@ import progressbar
 import os
 import sys
 import logging
+from simtk import unit
 logging.basicConfig(level=logging.DEBUG)
 
 
@@ -13,15 +14,19 @@ if __name__ == "__main__":
     try:
        yaml_filename = sys.argv[1]
     except IndexError as e:
+        yaml_filename = "/Users/grinawap/perses/examples/cdk2-example/cdk2_setup.yaml"
         print("You need to specify the setup yaml file as an argument to the script.")
-        raise e
+        #raise e
 
     yaml_file = open(yaml_filename, 'r')
     setup_options = yaml.load(yaml_file)
     yaml_file.close()
 
     trajectory_directory = setup_options['trajectory_directory']
-
+    if 'phases' in setup_options:
+        phases = setup_options['phases']
+    else:
+        phases = ['complex', 'solvent']
     if not os.path.exists(trajectory_directory):
         os.makedirs(trajectory_directory)
 
@@ -39,7 +44,7 @@ if __name__ == "__main__":
         total_iterations = n_cycles*n_iterations_per_cycle
 
         ne_fep = setup_dict['ne_fep']
-        for phase in ['complex', 'solvent']:
+        for phase in phases:
             ne_fep_run = ne_fep[phase]
             hybrid_factory = ne_fep_run._factory
             np.save(os.path.join(trajectory_directory, "%s_%s_hybrid_factory.npy" % (trajectory_prefix, phase)),
@@ -91,7 +96,7 @@ if __name__ == "__main__":
 
         hss = setup_dict['hybrid_sams_samplers']
         free_energies = dict()
-        for phase in ['complex', 'solvent']:
+        for phase in phases:
             hss_run = hss[phase]
             hss_run.minimize()
             hss_run.equilibrate(10)
