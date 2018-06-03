@@ -969,7 +969,7 @@ def run_setup(setup_options):
         neq_splitting = setup_options['neq_splitting']
 
         try:
-            eq_ splitting = setup_options['eq_splitting']
+            eq_splitting = setup_options['eq_splitting']
         except KeyError as e:
             print("If you specify a nonequilibrium splitting string, you must also specify an equilibrium one.")
             raise e
