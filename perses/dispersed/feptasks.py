@@ -26,7 +26,7 @@ from perses.annihilation.new_relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
 import pickle
 import simtk.unit as unit
-
+from openmmtools.constants import kB
 
 #Make containers for results from tasklets. This allows us to chain tasks together easily.
 EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('reduced_potential', float)])
@@ -63,10 +63,15 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, save_configuration: bool=False, measure_shadow_work: bool=False, **kwargs):
 
         super(NonequilibriumSwitchingMove, self).__init__(n_steps=nsteps_neq, **kwargs)
+        print(timestep)
+        if measure_shadow_work:
+            measure_heat = True
+        
         self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions, nsteps_neq=nsteps_neq, 
-                                                                                  temperature=temperature, splitting=splitting, timestep=timestep, measure_shadow_work=measure_shadow_work)
+                                                                                  temperature=temperature, splitting=splitting, timestep=timestep, measure_heat=measure_heat)
         self._ncmc_nsteps = nsteps_neq
         
+        self._beta = 1.0 / (kB*temperature)
         self._work_save_interval = work_save_interval
 
         self._save_configuration = save_configuration
@@ -80,8 +85,9 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         #use the number of step moves plus one, since the first is always zero
         self._cumulative_work = np.zeros(self._number_of_step_moves+1)
-        self._shadow_work = np.zeros(self._number_of_step_moves+1)
+        self._shadow_work = 0.0
         self._protocol_work = np.zeros(self._number_of_step_moves+1)
+        self._heat = 0.0
 
         self._topology = top
         self._subset_atoms = subset_atoms
@@ -152,7 +158,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         
         integrator.reset()
 
-        sampler_state.apply_to_context(context, ignore_velocities=True)
+        sampler_state.apply_to_context(context, ignore_velocities=False)
 
         # Subclasses may implement _before_integration().
         self._before_integration(context, thermodynamic_state)
@@ -161,21 +167,16 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         if self._cumulative_work[0] != 0.0:
             raise RuntimeError("The initial cumulative work after reset was not zero.")
-
+        
+        if self._measure_shadow_work:
+            initial_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
         for iteration in range(self._number_of_step_moves):
 
             integrator.step(self._work_save_interval)
             self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)
             self._protocol_work[iteration+1] = self._current_protocol_work
-            if self._measure_shadow_work:
-                shadow_work = integrator.get_shadow_work(dimensionless=True) 
-                self._current_total_work = shadow_work + self._current_protocol_work
-                self._shadow_work[iteration+1] = shadow_work
-            else:
-                self.current_total_work = self._current_protocol_work
-
-            self._cumulative_work[iteration+1] = self._current_total_work
+            self._cumulative_work[iteration+1] = self._protocol_work 
 
             #if we have a trajectory, we'll also write to it
             if self._save_configuration:
@@ -196,6 +197,15 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         
         if self._trajectory:
             self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
+        
+        self._current_total_work = self._current_protocol_work
+
+        if self._measure_shadow_work:
+            total_heat = integrator.get_heat(dimensionless=True)
+            final_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
+            total_energy_change = final_energy - initial_energy
+            self._shadow_work = total_energy_change - (total_heat + self._protocol_work[-1])
+            self._current_total_work += self._shadow_work
 
         # Subclasses can read here info from the context to update internal statistics.
         self._after_integration(context, thermodynamic_state)
@@ -312,7 +322,6 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     """
     #get the sampler state needed for the simulation
     sampler_state = equilibrium_result.sampler_state
-
     temperature = thermodynamic_state.temperature
     
     #get the atom indices we need to subset the topology and positions
