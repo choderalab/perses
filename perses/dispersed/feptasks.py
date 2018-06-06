@@ -383,7 +383,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
         np.save(prot_work_filepath, nonequilibrium_result.protocol_work)
 
         if measure_shadow_work:
-            np.save(shad_work_filepath, nonequilibrium_result.shadow_work)
+            np.save(shad_work_filepath, shadow_work)
 
     return nonequilibrium_result
 
