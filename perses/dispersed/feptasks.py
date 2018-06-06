@@ -176,7 +176,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             integrator.step(self._work_save_interval)
             self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)
             self._protocol_work[iteration+1] = self._current_protocol_work
-            self._cumulative_work[iteration+1] = self._protocol_work 
+            self._cumulative_work[iteration+1] = self._protocol_work [iteration+1]
 
             #if we have a trajectory, we'll also write to it
             if self._save_configuration:
