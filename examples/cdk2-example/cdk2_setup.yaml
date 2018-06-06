@@ -48,7 +48,7 @@ n_steps_ncmc_protocol: 50
 
 #The number of NCMC steps per move application. This controls the output frequency
 #1 step/move application means writing out the work at every step.
-n_steps_per_move_application: 1000
+n_steps_per_move_application: 10
 
 #where to put the trajectories
 trajectory_directory: cdk2_neq_hbonds
@@ -73,7 +73,7 @@ eq_splitting: V R O R V
 neq_splitting: V R O H R V
 
 #whether to measure shadow work:
-measure_shadow_work: False
+measure_shadow_work: True
 
 #The location of the schduler. If it's null, a localhost scheduler is created
 scheduler_address: null
