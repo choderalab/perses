@@ -33,6 +33,8 @@ if __name__ == "__main__":
     setup_dict = relative_setup.run_setup(setup_options)
     print("setup complete")
 
+    n_equilibration_iterations = setup_dict['n_equilibration_iterations']
+
     trajectory_prefix = setup_options['trajectory_prefix']
     #write out topology proposals
     np.save(os.path.join(trajectory_directory, trajectory_prefix+"topology_proposals.npy"),
@@ -51,7 +53,7 @@ if __name__ == "__main__":
                     hybrid_factory)
 
             print("equilibrating")
-            ne_fep_run.equilibrate(n_iterations=100)
+            ne_fep_run.equilibrate(n_iterations=n_equilibration_iterations)
 
             print("equilibration complete")
             bar = progressbar.ProgressBar(redirect_stdout=True, max_value=total_iterations)
@@ -99,7 +101,7 @@ if __name__ == "__main__":
         for phase in phases:
             hss_run = hss[phase]
             hss_run.minimize()
-            hss_run.equilibrate(10)
+            hss_run.equilibrate(n_equilibration_iterations)
             hss_run.extend(1000)
             free_energies[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
             print("Finished phase %s with dG estimated as %.4f kT" % (phase, free_energies[phase]))
