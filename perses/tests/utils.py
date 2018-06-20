@@ -551,7 +551,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     # Add both to an OEGraphMol reaction
     rmol = oechem.OEGraphMol()
     rmol.SetRxn(True)
-    atbs = oechem.AtomBondSet()
+    atbs = oechem.OEAtomBondSet()
     def add_molecule(mol):
         # Add atoms
         new_atoms = list()
