@@ -45,7 +45,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=None, softcore_beta=None):
         """
         Initialize the Hybrid topology factory.
 
@@ -84,6 +84,19 @@ class HybridTopologyFactory(object):
         self._new_positions = new_positions
 
         self._use_dispersion_correction = use_dispersion_correction
+        
+        if softcore_alpha is None:
+            self.softcore_alpha = 0.5
+        else:
+            self.softcore_alpha = softcore_alpha
+        
+        if softcore_beta is None:
+            self.softcore_beta = 12*unit.angstrom**2
+        else:
+            self.softcore_beta = softcore_beta
+        
+        if softcore_method not in self._known_softcore_methods:
+            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
 
         if softcore_alpha is None:
             self.softcore_alpha = 0.5
@@ -97,6 +110,7 @@ class HybridTopologyFactory(object):
 
         if softcore_method not in self._known_softcore_methods:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
+
 
         self._softcore_method = softcore_method
 
