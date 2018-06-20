@@ -53,7 +53,7 @@ def test_run_nonequilibrium_switching_move():
     
     #run the NE switching move task n_iterations times, checking that the context is correctly handled.
     for i in range(n_iterations):
-        ne_move = feptasks.NonequilibriumSwitchingMove(default_forward_functions, splitting="V R O H R V", temperature=300.0*unit.kelvin, nsteps_neq=10, top=md_topology, work_save_interval=10)
+        ne_move = feptasks.NonequilibriumSwitchingMove(default_forward_functions, splitting="V R O H R V", temperature=300.0*unit.kelvin, nsteps_neq=10, timestep=1.0*unit.femtoseconds, top=md_topology, work_save_interval=10)
 
         integrator = ne_move._integrator
 
@@ -92,9 +92,9 @@ def test_run_cdk2_iterations():
 
     n_work_values_per_iteration = length_of_protocol // write_interval
 
-    fe_setup, ne_fep = relative_setup.run_setup(setup_options)
+    setup_dict = relative_setup.run_setup(setup_options)
 
-    ne_fep.run(n_iterations=n_iterations)
+    setup_dict['ne_fep']['solvent'].run(n_iterations=n_iterations)
 
     #now check that the correct number of iterations was written out:
     os.chdir(setup_options['trajectory_directory'])
@@ -114,3 +114,4 @@ def test_run_cdk2_iterations():
 
 if __name__=="__main__":
     test_run_cdk2_iterations()
+    test_run_nonequilibrium_switching_move()

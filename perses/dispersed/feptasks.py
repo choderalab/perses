@@ -66,6 +66,8 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         print(timestep)
         if measure_shadow_work:
             measure_heat = True
+        else:
+            measure_heat = False
         
         self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions, nsteps_neq=nsteps_neq, 
                                                                                   temperature=temperature, splitting=splitting, timestep=timestep, measure_heat=measure_heat)
