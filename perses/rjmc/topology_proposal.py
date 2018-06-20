@@ -1297,7 +1297,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
                  atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
-                 always_change=True):
+                 always_change=True, atom_map=None):
 
         # Default atom and bond expressions for MCSS
         self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
@@ -1319,6 +1319,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
         self._probability_matrix = self._calculate_probability_matrix(self._smiles_list)
+
+        self._atom_map = atom_map
 
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
 
@@ -1363,7 +1365,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
-        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose, allow_ring_breaking=self._allow_ring_breaking)
+        if not self._atom_map:
+            mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr,
+                                                  bond_expr=self.bond_expr, verbose=self.verbose,
+                                                  allow_ring_breaking=self._allow_ring_breaking)
+        else:
+            mol_atom_map = self._atom_map
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
@@ -1826,13 +1833,13 @@ class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     functionality.
     """
 
-    def __init__(self, old_mol, new_mol, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
+    def __init__(self, old_mol, new_mol, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, atom_map=None):
         self._old_mol_smiles = oechem.OECreateSmiString(old_mol, OESMILES_OPTIONS)
         self._new_mol_smiles = oechem.OECreateSmiString(new_mol, OESMILES_OPTIONS)
         self._old_mol = old_mol
         self._new_mol = new_mol
 
-        super(TwoMoleculeSetProposalEngine, self).__init__([self._old_mol_smiles, self._new_mol_smiles], system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr)
+        super(TwoMoleculeSetProposalEngine, self).__init__([self._old_mol_smiles, self._new_mol_smiles], system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr, atom_map=atom_map)
 
         self._allow_ring_breaking = False # don't allow ring breaking
 

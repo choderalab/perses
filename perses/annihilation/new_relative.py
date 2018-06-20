@@ -98,6 +98,20 @@ class HybridTopologyFactory(object):
         if softcore_method not in self._known_softcore_methods:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
 
+        if softcore_alpha is None:
+            self.softcore_alpha = 0.5
+        else:
+            self.softcore_alpha = softcore_alpha
+
+        if softcore_beta is None:
+            self.softcore_beta = 12*unit.angstrom**2
+        else:
+            self.softcore_beta = softcore_beta
+
+        if softcore_method not in self._known_softcore_methods:
+            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
+
+
         self._softcore_method = softcore_method
 
         if functions:
@@ -945,8 +959,8 @@ class HybridTopologyFactory(object):
             sterics_energy_expression += 'lambda_sterics = ' + self._functions['lambda_sterics']
             electrostatics_energy_expression += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
         custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
-        custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
-        custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
+        #custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
+        #custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
         custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
         custom_bond_force.addGlobalParameter("softcore_beta", self.softcore_beta)
         custom_bond_force.addPerBondParameter("chargeprodA")

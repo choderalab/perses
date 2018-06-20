@@ -603,10 +603,9 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     oechem.OEGenerate2DCoordinates(rmol)
     rdisp = oedepict.OE2DMolDisplay(rmol, opts)
 
-    #colors = [c for c in oechem.OEGetLightColors()]
-    #highlightstyle = oedepict.OEHighlightStyle_BallAndStick
+    colors = [c for c in oechem.OEGetLightColors()]
+    highlightstyle = oedepict.OEHighlightStyle_BallAndStick
     #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
-    #oedepict.OEAddHighlighting(rdisp, colors[0], highlightstyle, common_atoms_and_bonds)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
 
