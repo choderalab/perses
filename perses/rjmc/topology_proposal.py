@@ -401,6 +401,7 @@ class SmallMoleculeAtomMapper(object):
         proposable = False
         total_atoms = set(range(graph.number_of_nodes()))
         unmapped_atoms = total_atoms - set(mapped_atoms)
+        mapped_atoms_set = set(mapped_atoms)
          
         #find the set of atoms that are unmapped, but on the boundary with those that are mapped
         boundary_atoms = nx.algorithms.node_boundary(graph, unmapped_atoms, mapped_atoms)
@@ -412,7 +413,10 @@ class SmallMoleculeAtomMapper(object):
             shortest_paths = nx.algorithms.shortest_path_length(graph, source=atom)
             for other_atom, distance in shortest_paths.items():
                 if distance == 3 and other_atom in mapped_atoms:
-                    proposable = True
+                    #find all shortest paths to the other atom. if any of them have all atoms with positions, it can be proposed
+                    shortest_path = nx.shortest_path(source=atom, target=other_atom)
+                    if len(mapped_atoms_set.intersection(shortest_path)) == 3:
+                        proposable = True
         
         return proposable
 
