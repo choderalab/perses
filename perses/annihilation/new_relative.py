@@ -84,17 +84,17 @@ class HybridTopologyFactory(object):
         self._new_positions = new_positions
 
         self._use_dispersion_correction = use_dispersion_correction
-        
+
         if softcore_alpha is None:
             self.softcore_alpha = 0.5
         else:
             self.softcore_alpha = softcore_alpha
-        
+
         if softcore_beta is None:
             self.softcore_beta = 12*unit.angstrom**2
         else:
             self.softcore_beta = softcore_beta
-        
+
         if softcore_method not in self._known_softcore_methods:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
 
@@ -700,31 +700,32 @@ class HybridTopologyFactory(object):
 
         custom_nonbonded_method = self._translate_nonbonded_method_to_custom(self._nonbonded_method)
 
+        # TODO: Delete
         # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
-        total_electrostatics_energy = "U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules
-        if self._has_functions:
-            try:
-                total_electrostatics_energy += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
-            except KeyError as e:
-                print("Functions were provided, but there is no entry for electrostatics")
-                raise e
+        #total_electrostatics_energy = "U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules
+        #if self._has_functions:
+        #    try:
+        #        total_electrostatics_energy += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
+        #    except KeyError as e:
+        #        print("Functions were provided, but there is no entry for electrostatics")
+        #        raise e
 
-        electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce(total_electrostatics_energy)
-        electrostatics_custom_nonbonded_force.addGlobalParameter("softcore_beta", self.softcore_beta)
-        electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
-        electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
+        #electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce(total_electrostatics_energy)
+        #electrostatics_custom_nonbonded_force.addGlobalParameter("softcore_beta", self.softcore_beta)
+        #electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeA") # partial charge initial
+        #electrostatics_custom_nonbonded_force.addPerParticleParameter("chargeB") # partial charge final
 
-        if self._has_functions:
-            electrostatics_custom_nonbonded_force.addGlobalParameter("lambda", 0.0)
-            electrostatics_custom_nonbonded_force.addEnergyParameterDerivative('lambda')
-        else:
-            electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0)
+        #if self._has_functions:
+        #    electrostatics_custom_nonbonded_force.addGlobalParameter("lambda", 0.0)
+        #    electrostatics_custom_nonbonded_force.addEnergyParameterDerivative('lambda')
+        #else:
+        #    electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 0.0)
 
 
-        electrostatics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
+        #electrostatics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
 
-        self._hybrid_system.addForce(electrostatics_custom_nonbonded_force)
-        self._hybrid_system_forces['core_electrostatics_force'] = electrostatics_custom_nonbonded_force
+        #self._hybrid_system.addForce(electrostatics_custom_nonbonded_force)
+        #self._hybrid_system_forces['core_electrostatics_force'] = electrostatics_custom_nonbonded_force
 
         total_sterics_energy = "U_sterics;" + sterics_energy_expression + sterics_mixing_rules
         if self._has_functions:
@@ -767,17 +768,18 @@ class HybridTopologyFactory(object):
             standard_nonbonded_force.setSwitchingDistance(switching_distance)
             sterics_custom_nonbonded_force.setUseSwitchingFunction(True)
             sterics_custom_nonbonded_force.setSwitchingDistance(switching_distance)
-            electrostatics_custom_nonbonded_force.setUseSwitchingFunction(True)
-            electrostatics_custom_nonbonded_force.setSwitchingDistance(switching_distance)
+            #electrostatics_custom_nonbonded_force.setUseSwitchingFunction(True) # TODO: Delete
+            #electrostatics_custom_nonbonded_force.setSwitchingDistance(switching_distance) # TODO: Delete
         else:
             standard_nonbonded_force.setUseSwitchingFunction(False)
-            electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False)
+            #electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False) # TODO: Delete
             sterics_custom_nonbonded_force.setUseSwitchingFunction(False)
 
+        # TODO: Delete
         #Add a CustomBondForce for exceptions:
-        custom_nonbonded_bond_force = self._nonbonded_custom_bond_force(sterics_energy_expression, electrostatics_energy_expression)
-        self._hybrid_system.addForce(custom_nonbonded_bond_force)
-        self._hybrid_system_forces['core_nonbonded_bond_force'] = custom_nonbonded_bond_force
+        #custom_nonbonded_bond_force = self._nonbonded_custom_bond_force(sterics_energy_expression, electrostatics_energy_expression)
+        #self._hybrid_system.addForce(custom_nonbonded_bond_force)
+        #self._hybrid_system_forces['core_nonbonded_bond_force'] = custom_nonbonded_bond_force
 
     def _nonbonded_custom_sterics_common(self):
         """
@@ -1259,11 +1261,12 @@ class HybridTopologyFactory(object):
 
                 #add the particle to the hybrid custom sterics and electrostatics.
                 self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, 0.0])
-                self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0])
+                #self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, 0.0]) # TODO: Remove once core_electrostatics_force is eliminated
 
-                #Add the particle to the regular nonbonded force as required, but zero out interaction
-                #it will be handled by an exception
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
+                # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
+                particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, 0.0)
+                # Charge will be turned on at lambda_electrostatics = 0, off at lambda_electrostatics = 1
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, -charge, 0, 0)
 
             elif particle_index in self._atom_classes['unique_new_atoms']:
                 #get the parameters in the new system
@@ -1272,12 +1275,12 @@ class HybridTopologyFactory(object):
 
                 #add the particle to the hybrid custom sterics and electrostatics
                 self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, 0.0, sigma, epsilon])
-                self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0, charge])
+                #self._hybrid_system_forces['core_electrostatics_force'].addParticle([0.0, charge]) # TODO: Remove once core_electrostatics_force is eliminated
 
-                #Add the particle to the regular nonbonded force as required, but zero out interaction
-                #it will be handled by an exception
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
-
+                # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
+                particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, sigma, 0.0)
+                # Charge will be turned off at lambda_electrostatics = 0, on at lambda_electrostatics = 1
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, +charge, 0, 0)
 
             elif particle_index in self._atom_classes['core_atoms']:
                 #get the parameters in the new and old systems:
@@ -1288,10 +1291,13 @@ class HybridTopologyFactory(object):
 
                 #add the particle to the custom forces, interpolating between the two parameters
                 self._hybrid_system_forces['core_sterics_force'].addParticle([sigma_old, epsilon_old, sigma_new, epsilon_new])
-                self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge_old, charge_new])
+                #self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge_old, charge_new])
 
                 #still add the particle to the regular nonbonded force, but with zeroed out parameters.
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, 1.0, 0.0)
+                particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge_old, 0.5*(sigma_old+sigma_new), 0.0)
+                # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
+                # TODO: We could also interpolate the Lennard-Jones here instead of core_sterics force so that core_sterics_force could just be softcore
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, (charge_new - charge_old), 0, 0)
 
             #otherwise, the particle is in the environment
             else:
@@ -1301,13 +1307,13 @@ class HybridTopologyFactory(object):
 
                 #add the particle to the hybrid custom sterics and electrostatics, but they dont change
                 self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, epsilon])
-                self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, charge])
+                #self._hybrid_system_forces['core_electrostatics_force'].addParticle([charge, charge]) # TODO: Remove once core_electrostatics_force is eliminated
 
                 #add the environment atoms to the regular nonbonded force as well:
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
 
         self._handle_interaction_groups()
-        self._handle_hybrid_exceptions()
+        #self._handle_hybrid_exceptions() # TODO: Delete?
         self._handle_original_exceptions()
 
     def _generate_dict_from_exceptions(self, force):
@@ -1350,7 +1356,7 @@ class HybridTopologyFactory(object):
         Must be called after particles are added to the Nonbonded forces
         """
         #get the force objects for convenience:
-        electrostatics_custom_force = self._hybrid_system_forces['core_electrostatics_force']
+        #electrostatics_custom_force = self._hybrid_system_forces['core_electrostatics_force'] # TODO: Delete
         sterics_custom_force = self._hybrid_system_forces['core_sterics_force']
 
         #also prepare the atom classes
@@ -1360,22 +1366,22 @@ class HybridTopologyFactory(object):
         environment_atoms = self._atom_classes['environment_atoms']
 
 
-        electrostatics_custom_force.addInteractionGroup(unique_old_atoms, core_atoms)
+        #electrostatics_custom_force.addInteractionGroup(unique_old_atoms, core_atoms) # TODO: Delete
         sterics_custom_force.addInteractionGroup(unique_old_atoms, core_atoms)
 
-        electrostatics_custom_force.addInteractionGroup(unique_old_atoms, environment_atoms)
+        #electrostatics_custom_force.addInteractionGroup(unique_old_atoms, environment_atoms) # TODO: Delete
         sterics_custom_force.addInteractionGroup(unique_old_atoms, environment_atoms)
 
-        electrostatics_custom_force.addInteractionGroup(unique_new_atoms, core_atoms)
+        #electrostatics_custom_force.addInteractionGroup(unique_new_atoms, core_atoms) # TODO: Delete
         sterics_custom_force.addInteractionGroup(unique_new_atoms, core_atoms)
 
-        electrostatics_custom_force.addInteractionGroup(unique_new_atoms, environment_atoms)
+        #electrostatics_custom_force.addInteractionGroup(unique_new_atoms, environment_atoms) # TODO: Delete
         sterics_custom_force.addInteractionGroup(unique_new_atoms, environment_atoms)
 
-        electrostatics_custom_force.addInteractionGroup(core_atoms, environment_atoms)
+        #electrostatics_custom_force.addInteractionGroup(core_atoms, environment_atoms) # TODO: Delete
         sterics_custom_force.addInteractionGroup(core_atoms, environment_atoms)
 
-        electrostatics_custom_force.addInteractionGroup(core_atoms, core_atoms)
+        #electrostatics_custom_force.addInteractionGroup(core_atoms, core_atoms) # TODO: Delete
         sterics_custom_force.addInteractionGroup(core_atoms, core_atoms)
 
     def _handle_hybrid_exceptions(self):
@@ -1484,14 +1490,16 @@ class HybridTopologyFactory(object):
                 #if it is, we should add it to the CustomBondForce for the nonbonded exceptions, and have it remain on
                 #by having the two endpoints with the same parameters.
                 #Currently, we keep sigma at the same value
-                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
-                                                                                 [chargeProd_old, sigma_old,
-                                                                                  epsilon_old, chargeProd_old,
-                                                                                  sigma_old, epsilon_old])
+                #self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid, # TODO: Delete this when we remove core_nonbonded_bond_force
+                #                                                                 [chargeProd_old, sigma_old,
+                #                                                                  epsilon_old, chargeProd_old,
+                #                                                                  sigma_old, epsilon_old])
+
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                #self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid) # TODO: Remove once core_electrostatics_force is eliminated
 
             #If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             #In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
@@ -1505,14 +1513,17 @@ class HybridTopologyFactory(object):
                     new_system_nonbonded_force, index1_new, index2_new)
 
                 #Now add a term to the CustomBondForce to interpolate between the new and old systems:
-                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
-                                                                                 [chargeProd_old, sigma_old,
-                                                                                  epsilon_old, chargeProd_new,
-                                                                                  sigma_new, epsilon_new])
+                #self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid, # TODO: Delete this when we remove core_nonbonded_bond_force
+                #                                                                 [chargeProd_old, sigma_old,
+                #                                                                  epsilon_old, chargeProd_new,
+                #                                                                  sigma_new, epsilon_new])
+                exception_index = self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+                self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_electrostatics', exception_index, (chargeProd_new - chargeProd_old), 0, 0)
+                self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_sterics', exception_index, 0, (sigma_new - sigma_old), (epsilon_new - epsilon_old))
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                #self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid) # TODO: Remove once core_electrostatics_force is eliminated
 
         #now, loop through the new system to collect remaining interactions. The only that remain here are
         #uniquenew-uniquenew, uniquenew-core, and uniquenew-environment.
@@ -1533,14 +1544,16 @@ class HybridTopologyFactory(object):
             #look for the final class- interactions between uniquenew-core and uniquenew-environment. They are treated
             #similarly: they are simply on and constant the entire time (as a valence term)
             elif len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid,
-                                                                                 [chargeProd_new, sigma_new,
-                                                                                  epsilon_new, chargeProd_new,
-                                                                                  sigma_new, epsilon_new])
+                #self._hybrid_system_forces['core_nonbonded_bond_force'].addBond(index1_hybrid, index2_hybrid, # TODO: Delete this when we remove core_nonbonded_bond_force
+                #                                                                 [chargeProd_new, sigma_new,
+                #                                                                  epsilon_new, chargeProd_new,
+                #                                                                  sigma_new, epsilon_new])
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
+
 
                 #We also need to exclude this interaction from the custom nonbonded forces, otherwise we'll be double counting
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
-                self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid)
+                #self._hybrid_system_forces['core_electrostatics_force'].addExclusion(index1_hybrid, index2_hybrid) # TODO: Remove once core_electrostatics_force is eliminated
 
     def _find_exception(self, force, index1, index2):
         """
