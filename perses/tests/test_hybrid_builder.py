@@ -2,6 +2,12 @@ from simtk.openmm import app
 from simtk import unit, openmm
 import numpy as np
 import os
+
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
+
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, TopologyProposal
@@ -123,18 +129,18 @@ leu_bonds = [
 
 forcefield = app.ForceField('amber99sbildn.xml')
 
-def generate_vacuum_topology_proposal(mol_name="naphthalene", ref_mol_name="benzene"):
+def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene"):
     """
     Generate a test vacuum topology proposal, current positions, and new positions triplet
     from two IUPAC molecule names.
 
     Parameters
     ----------
-    mol_name : str, optional
+    current_mol_name : str, optional
         name of the first molecule
-    ref_mol_name : str, optional
+    proposed_mol_name : str, optional
         name of the second molecule
-    
+
     Returns
     -------
     topology_proposal : perses.rjmc.topology_proposal
@@ -148,26 +154,29 @@ def generate_vacuum_topology_proposal(mol_name="naphthalene", ref_mol_name="benz
 
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
 
-    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
+    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
 
-    initial_smiles = oechem.OEMolToSmiles(m)
-    final_smiles = oechem.OEMolToSmiles(refmol)
+    initial_smiles = oechem.OEMolToSmiles(current_mol)
+    final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    ffxml = forcefield_generators.generateForceFieldFromMolecules([current_mol, proposed_mol])
+    forcefield.loadFile(StringIO(ffxml))
+    #forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
+    system_generator._forcefield.loadFile(StringIO(ffxml))
     geometry_engine = FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
+        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
 
     #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old)
+    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
 
     #generate new positions with geometry engine
     new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
@@ -185,7 +194,7 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
         name of the first molecule
     ref_mol_name : str, optional
         name of the second molecule
-    
+
     Returns
     -------
     topology_proposal : perses.rjmc.topology_proposal
