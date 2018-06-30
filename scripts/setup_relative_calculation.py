@@ -32,8 +32,9 @@ if __name__ == "__main__":
 
     setup_dict = relative_setup.run_setup(setup_options)
     print("setup complete")
+    print('setup_dict keys: {}'.format(setup_dict.keys()))
 
-    n_equilibration_iterations = setup_dict['n_equilibration_iterations']
+    n_equilibration_iterations = setup_options['n_equilibration_iterations']
 
     trajectory_prefix = setup_options['trajectory_prefix']
     #write out topology proposals
