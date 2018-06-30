@@ -187,7 +187,8 @@ class NonequilibriumFEPSetup(object):
                 barostat = None
             self._system_generator = SystemGenerator(forcefield_files, barostat=barostat,
                                                      forcefield_kwargs={'nonbondedMethod': self._nonbonded_method,
-                                                                        'constraints': app.HBonds})
+                                                                        'constraints': app.HBonds,
+                                                                        'hydrogenMass': 4 * unit.amus})
         else:
             self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'constraints': app.HBonds})
 
@@ -878,11 +879,11 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
         super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
         self._factory = hybrid_factory
 
-    def setup(self, n_states, temperature, storage_file, checkpoint_interval):
+    def setup(self, n_states, temperature, storage_file):
         hybrid_system = self._factory.hybrid_system
         initial_hybrid_positions = self._factory.hybrid_positions
         lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(hybrid_system)
-        lambda_zero_alchemical_state.set_alchemical_parameters(1.0)
+        #lambda_zero_alchemical_state.set_alchemical_parameters(1.0)
 
         thermostate = states.ThermodynamicState(hybrid_system, temperature=temperature)
         compound_thermodynamic_state = states.CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
@@ -1074,7 +1075,7 @@ def run_setup(setup_options):
         for phase in phases:
             htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
-                                               top_prop['%s_new_positions' % phase])
+                                               top_prop['%s_new_positions' % phase], softcore_method='amber')
             
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
@@ -1082,16 +1083,17 @@ def run_setup(setup_options):
                 selection_indices = None
             
             storage_name = "-".join([trajectory_prefix, '%s.nc' % phase])
-            reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices)
+            reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
+                                          checkpoint_interval=10)
 
-            hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinDynamicsMove(timestep=2.0 * unit.femtosecond,
-                                                                                collision_rate=5.0 / unit.picosecond,
-                                                                                n_steps=n_steps_per_move_application,
-                                                                                reassign_velocities=False,
-                                                                                n_restart_attempts=6),
-                                           hybrid_factory=htf[phase])
-            hss[phase].setup(n_states=n_states, temperature=300.0 * unit.kelvin,
-                             storage_file=reporter,
-                             checkpoint_interval=10)
+            hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=4.0 * unit.femtosecond,
+                                                                                         collision_rate=5.0 / unit.picosecond,
+                                                                                         n_steps=n_steps_per_move_application,
+                                                                                         reassign_velocities=False,
+                                                                                         n_restart_attempts=6,
+                                                                                         splitting="V R R R O R R R V"),
+                                           hybrid_factory=htf[phase], online_analysis_interval=10,
+                                           online_analysis_target_error=0.2, online_analysis_minimum_iterations=10)
+            hss[phase].setup(n_states=n_states, temperature=300.0 * unit.kelvin, storage_file=reporter)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_sams_samplers': hss}
