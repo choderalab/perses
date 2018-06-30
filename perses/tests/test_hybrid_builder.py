@@ -162,15 +162,12 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    #ffxml = forcefield_generators.generateForceFieldFromMolecules([current_mol, proposed_mol])
-    #forcefield.loadFile(StringIO(ffxml))
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
-    system_generator._forcefield.loadFile(StringIO(ffxml))
     geometry_engine = FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
@@ -217,8 +214,6 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    #ffxml = forcefield_generators.generateForceFieldFromMolecules([current_mol, proposed_mol])
-    #forcefield.loadFile(StringIO(ffxml))
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     modeller = app.Modeller(top_old, pos_old)
@@ -233,7 +228,6 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     gaff_filename = get_data_filename('data/gaff.xml')
 
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
-    #system_generator._forcefield.loadFile(StringIO(ffxml))
     geometry_engine = FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
