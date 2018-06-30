@@ -13,8 +13,8 @@ new_ligand_index: 15
 #be provided with a full path
 forcefield_files:
     - gaff.xml
-    - amber99sbildn.xml
-    - tip3p.xml
+    - amber14/protein.ff14SB.xml
+    - amber14/tip3p.xml
 
 #the temperature and pressure of the simulation, as well as how much solvent paddding to add
 #units:
@@ -31,7 +31,9 @@ save_setup_pickle_as: fesetup_hbonds.pkl
 
 #the type of free energy calculation.
 #currently, this could be either nonequilibrium or sams
-fe_type: nonequilibrium
+fe_type: sams
+
+n_states: 100
 
 #the forward switching functions. The reverse ones will be computed from this. Only valid for nonequilibrium switching
 forward_functions:
@@ -42,17 +44,17 @@ forward_functions:
     lambda_torsions: lambda
 
 #the number of equilibration iterations:
-n_equilibration_iterations: 100
+n_equilibration_iterations: 10
 
 #The number of equilibrium steps to take between nonequilibrium switching events (only valid for nonequiibrium switching)
-n_equilibrium_steps_per_iteration: 100
+n_equilibrium_steps_per_iteration: 1000
 
 #The length of the ncmc protocol (only valid for nonequilibrium switching)
 n_steps_ncmc_protocol: 50
 
 #The number of NCMC steps per move application. This controls the output frequency
 #1 step/move application means writing out the work at every step. (only valid for nonequilibrium switching)
-n_steps_per_move_application: 10
+n_steps_per_move_application: 2500
 
 #where to put the trajectories
 trajectory_directory: cdk2_neq_hbonds
@@ -66,6 +68,7 @@ atom_selection: not water
 #which phases do we want to run (solvent, complex, or both solvent and complex in the list are acceptable):
 phases:
     - solvent
+    - complex
 
 #timestep in fs
 timestep: 1.0
@@ -83,5 +86,5 @@ measure_shadow_work: True
 scheduler_address: null
 
 #how many iterations to run (n_cycles*n_iterations_per_cycle) (only valid for nonequilibrium switching)
-n_cycles: 5
+n_cycles: 10000
 n_iterations_per_cycle: 1
