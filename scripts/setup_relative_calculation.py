@@ -100,7 +100,7 @@ if __name__ == "__main__":
         hss = setup_dict['hybrid_sams_samplers']
         logZ = dict()
         free_energies = dict()
-        for phase in ['complex', 'solvent']:
+        for phase in phases:
             hss_run = hss[phase]
             hss_run.minimize()
             hss_run.equilibrate(n_equilibration_iterations)
@@ -112,4 +112,3 @@ if __name__ == "__main__":
             print("Finished phase %s with logZ dG estimated as %.4f kT" % (phase, logZ[phase]))
 
         print("Total ddG is estimated as %.4f kT" % (free_energies['complex'] - free_energies['solvent']))
-        print("Total logZ ddG is estimated as %.4f kT" % (logZ['complex'] - logZ['solvent']))

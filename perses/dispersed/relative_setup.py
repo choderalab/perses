@@ -1051,7 +1051,7 @@ def run_setup(setup_options):
             ne_fep[phase] = NonequilibriumSwitchingFEP(top_prop['%s_topology_proposal' % phase],
                                                        top_prop['%s_old_positions' % phase],
                                                        top_prop['%s_new_positions' % phase],
-                                                       forward_functions=forward_functions,
+                                                       forward_functions=forward_functions, 
                                                        n_equil_steps=n_equilibrium_steps_per_iteration,
                                                        ncmc_nsteps=n_steps_ncmc_protocol,
                                                        nsteps_per_iteration=n_steps_per_move_application,

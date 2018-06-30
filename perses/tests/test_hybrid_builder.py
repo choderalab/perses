@@ -162,15 +162,12 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    ffxml = forcefield_generators.generateForceFieldFromMolecules([current_mol, proposed_mol])
-    forcefield.loadFile(StringIO(ffxml))
-    #forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'])
-    system_generator._forcefield.loadFile(StringIO(ffxml))
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
@@ -183,16 +180,16 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     return topology_proposal, pos_old, new_positions
 
-def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
     """
     Generate a test solvated topology proposal, current positions, and new positions triplet
     from two IUPAC molecule names.
 
     Parameters
     ----------
-    mol_name : str, optional
+    current_mol_name : str, optional
         name of the first molecule
-    ref_mol_name : str, optional
+    proposed_mol_name : str, optional
         name of the second molecule
 
     Returns
@@ -209,11 +206,11 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
 
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
 
-    m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
+    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
 
-    initial_smiles = oechem.OEMolToSmiles(m)
-    final_smiles = oechem.OEMolToSmiles(refmol)
+    initial_smiles = oechem.OEMolToSmiles(current_mol)
+    final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
@@ -228,13 +225,12 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
 
     solvated_system.addForce(barostat)
 
-
     gaff_filename = get_data_filename('data/gaff.xml')
 
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
     geometry_engine = FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=mol_name)
+        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
@@ -315,7 +311,7 @@ def check_result(results, threshold=3.0, neffmin=10):
 
 def test_simple_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal()
+    topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal(current_mol_name='imatinib', proposed_mol_name='nilotinib')
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -329,7 +325,7 @@ def test_simple_overlap():
 @skipIf(istravis, "Skip expensive test on travis")
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
-    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(mol_name='imatinib', ref_mol_name='nilotinib')
+    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(current_mol_name='imatinib', proposed_mol_name='nilotinib')
     results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
