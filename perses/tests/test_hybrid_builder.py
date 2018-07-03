@@ -325,7 +325,23 @@ def test_simple_overlap():
 @skipIf(istravis, "Skip expensive test on travis")
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
-    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(current_mol_name='imatinib', proposed_mol_name='nilotinib')
+    name1 = 'imatinib'
+    name2 = 'nilotinib'
+
+    print(name1, name2)
+    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(current_mol_name=name1, proposed_mol_name=name2)
+    results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
+
+    for idx, lambda_result in enumerate(results):
+        try:
+            check_result(lambda_result)
+        except Exception as e:
+            message = "solvated imatinib->nilotinib failed at lambda %d \n" % idx
+            message += str(e)
+            raise Exception(message)
+
+    print(name2, name1)
+    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(current_mol_name=name2, proposed_mol_name=name1)
     results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
