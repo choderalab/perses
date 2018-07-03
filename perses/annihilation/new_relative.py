@@ -928,7 +928,8 @@ class HybridTopologyFactory(object):
         if self._has_functions:
             sterics_energy_expression += 'lambda_sterics = ' + self._functions['lambda_sterics']
             electrostatics_energy_expression += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
-        custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
+        #custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
+        custom_bond_force = openmm.CustomBondForce("U_sterics;" + sterics_energy_expression + electrostatics_energy_expression) # DEBUG
         custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
         custom_bond_force.addGlobalParameter("softcore_beta", self.softcore_beta)
         custom_bond_force.addPerBondParameter("chargeprodA")
