@@ -1456,7 +1456,11 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
-            #otherwise, check if one of the atoms in the set is in the unique_old_group:
+            #we have already handled unique old - unique old exceptions
+            elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) == 2:
+                continue
+
+            #otherwise, check if one of the atoms in the set is in the unique_old_group and the other is not:
             elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) == 1:
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
