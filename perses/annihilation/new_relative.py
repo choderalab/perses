@@ -45,7 +45,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=None, softcore_beta=None):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=None, softcore_beta=None, annihilate_intraunique_charges=False):
         """
         Initialize the Hybrid topology factory.
 
@@ -73,6 +73,9 @@ class HybridTopologyFactory(object):
             "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
         softcore_beta: unit, default None
             "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
+        annihilate_intraunique_charges: bool, optional, default False
+            If True, unique old/new atoms will be discharged as part of the switching process
+
         """
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
@@ -1271,6 +1274,7 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
 
         self._handle_interaction_groups()
+        self._handle_hybrid_exceptions()
         self._handle_original_exceptions()
 
     def _generate_dict_from_exceptions(self, force):
@@ -1333,6 +1337,87 @@ class HybridTopologyFactory(object):
         sterics_custom_force.addInteractionGroup(core_atoms, environment_atoms)
 
         sterics_custom_force.addInteractionGroup(core_atoms, core_atoms)
+
+    def _handle_hybrid_exceptions(self):
+        """
+        Instead of excluding interactions that shouldn't occur, we provide exceptions for interactions that were zeroed
+        out but should occur.
+        Returns
+        -------
+        """
+        print("handling exceptions")
+
+        old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
+        new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
+
+        import itertools
+        #prepare the atom classes
+        unique_old_atoms = self._atom_classes['unique_old_atoms']
+        unique_new_atoms = self._atom_classes['unique_new_atoms']
+
+        #get the list of interaction pairs for which we need to set exceptions:
+        unique_old_pairs = list(itertools.combinations(unique_old_atoms, 2))
+        unique_new_pairs = list(itertools.combinations(unique_new_atoms, 2))
+
+        #add back the interactions of the old unique atoms, unless there are exceptions
+        for atom_pair in unique_old_pairs:
+            #since the pairs are indexed in the dictionary by the old system indices, we need to convert
+            old_index_atom_pair = (self._hybrid_to_old_map[atom_pair[0]], self._hybrid_to_old_map[atom_pair[1]])
+
+            #now we check if the pair is in the exception dictionary
+            if old_index_atom_pair in self._old_system_exceptions:
+                [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair]
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+
+            #check if the pair is in the reverse order and use that if so
+            elif old_index_atom_pair[::-1] in self._old_system_exceptions:
+                [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair[::-1]]
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+
+            #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
+            else:
+                [charge0, sigma0, epsilon0] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[0])
+                [charge1, sigma1, epsilon1] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[1])
+                chargeProd = charge0*charge1
+                if self.annihilate_intraunique_charges:
+                    chargeProd *= 0.0
+                epsilon = unit.sqrt(epsilon0*epsilon1)
+                sigma = 0.5*(sigma0+sigma1)
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+
+        #add back the interactions of the new unique atoms, unless there are exceptions
+        for atom_pair in unique_new_pairs:
+            #since the pairs are indexed in the dictionary by the new system indices, we need to convert
+            new_index_atom_pair = (self._hybrid_to_new_map[atom_pair[0]], self._hybrid_to_new_map[atom_pair[1]])
+
+            #now we check if the pair is in the exception dictionary
+            if new_index_atom_pair in self._new_system_exceptions:
+                [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair]
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+
+            #check if the pair is present in the reverse order and use that if so
+            elif new_index_atom_pair[::-1] in self._new_system_exceptions:
+                [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair[::-1]]
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+
+            #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
+            else:
+                [charge0, sigma0, epsilon0] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[0])
+                [charge1, sigma1, epsilon1] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[1])
+                chargeProd = charge0*charge1
+                if self.annihilate_intraunique_charges:
+                    chargeProd *= 0.0
+                epsilon = unit.sqrt(epsilon0*epsilon1)
+                sigma = 0.5*(sigma0+sigma1)
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+
+        print("done handling exceptions")
 
     def _handle_original_exceptions(self):
         """
