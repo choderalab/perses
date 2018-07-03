@@ -45,7 +45,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='default', softcore_alpha=None, softcore_beta=None, annihilate_intraunique_charges=True):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None, annihilate_intraunique_charges=True):
         """
         Initialize the Hybrid topology factory.
 
@@ -906,47 +906,6 @@ class HybridTopologyFactory(object):
         electrostatics_mixing_rules = "chargeprodA = chargeA1*chargeA2;" # mixing rule for charges
         electrostatics_mixing_rules += "chargeprodB = chargeB1*chargeB2;" # mixing rule for charges
         return sterics_mixing_rules, electrostatics_mixing_rules
-
-    def _nonbonded_custom_bond_force(self, sterics_energy_expression, electrostatics_energy_expression):
-        """
-        Add a CustomBondForce to represent the exceptions in the NonbondedForce
-
-        Parameters
-        ----------
-        sterics_energy_expression : str
-            The complete energy expression being used for sterics
-        electrostatics_energy_expression : str
-            The complete energy expression being used for electrostatics
-
-        Returns
-        -------
-        custom_bond_force : openmm.CustomBondForce
-            The custom bond force for the nonbonded exceptions
-        """
-        #Create the force and add its relevant parameters.
-        #we don't need to check that the keys exist, since by the time this is called, these are already checked.
-        if self._has_functions:
-            sterics_energy_expression += 'lambda_sterics = ' + self._functions['lambda_sterics']
-            electrostatics_energy_expression += 'lambda_electrostatics = ' + self._functions['lambda_electrostatics']
-        #custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
-        custom_bond_force = openmm.CustomBondForce("U_sterics;" + sterics_energy_expression + electrostatics_energy_expression) # DEBUG
-        custom_bond_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
-        custom_bond_force.addGlobalParameter("softcore_beta", self.softcore_beta)
-        custom_bond_force.addPerBondParameter("chargeprodA")
-        custom_bond_force.addPerBondParameter("sigmaA")
-        custom_bond_force.addPerBondParameter("epsilonA")
-        custom_bond_force.addPerBondParameter("chargeprodB")
-        custom_bond_force.addPerBondParameter("sigmaB")
-        custom_bond_force.addPerBondParameter("epsilonB")
-
-        if self._has_functions:
-            custom_bond_force.addGlobalParameter('lambda', 0.0)
-            custom_bond_force.addEnergyParameterDerivative('lambda')
-        else:
-            custom_bond_force.addGlobalParameter("lambda_electrostatics", 0.0)
-            custom_bond_force.addGlobalParameter("lambda_sterics", 0.0)
-
-        return custom_bond_force
 
     def _find_bond_parameters(self, bond_force, index1, index2):
         """
