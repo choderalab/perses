@@ -1324,7 +1324,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
 
-    def propose(self, current_system, current_topology, current_metadata=None):
+    def propose(self, current_system, current_topology, current_mol=None, proposed_mol=None, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -1336,6 +1336,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             the topology of the current state
         current_metadata : dict
             dict containing current smiles as a key
+        current_mol : OEMol, optional, default=None
+            If specified, use this OEMol instead of converting from topology
+        proposed_mol : OEMol, optional, default=None
+            If specified, use this OEMol instead of converting from topology
 
         Returns
         -------
@@ -1343,7 +1347,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
            topology proposal object
         """
         # Determine SMILES string for current small molecule
-        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+        if current_mol is None:
+            current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+        else:
+            # TODO: Make sure we're using canonical mol to smiles conversion
+            current_mol_smiles = oechem.OEMolToSmiles(current_mol)
 
         # Remove the small molecule from the current Topology object
         current_receptor_topology = self._remove_small_molecule(current_topology)
@@ -1355,7 +1363,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         old_alchemical_atoms = range(old_mol_start_index, len_old_mol)
 
         # Select the next molecule SMILES given proposal probabilities
-        proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
+        if proposed_mol is None:
+            proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
+        else:
+            # TODO: Make sure we're using canonical mol to smiles conversion
+            proposed_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            logp_proposal = 0.0
 
         # Build the new Topology object, including the proposed molecule
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)

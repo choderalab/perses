@@ -18,7 +18,8 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.2.0
+    - cuda92
+    - openmm ==7.3.0
     - parmed
     - openmoltools
     - alchemy >=1.2.3
@@ -43,7 +44,8 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.2.0
+    - cuda92
+    - openmm ==7.3.0
     - parmed
     - openmoltools
     - alchemy >=1.2.3

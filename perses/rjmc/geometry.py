@@ -373,6 +373,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         oemol : openeye.oechem.OEMol
             an oemol representation of the residue with topology indices
         """
+        # TODO: This seems to be broken. Can we fix it?
         from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
         external_bonds = list(res.external_bonds())
         for bond in external_bonds:
