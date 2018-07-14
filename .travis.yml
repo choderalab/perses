@@ -40,6 +40,8 @@ script:
   - conda config --add channels openeye
   # Update conda
   - conda update --yes --all
+  # List conda environment
+  - conda list
   # Build the recipe
   - conda build devtools/conda-recipe
   # Install the package
