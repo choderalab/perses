@@ -166,7 +166,6 @@ class NCMCEngine(object):
 
         return final_reduced_potential - initial_reduced_potential
 
-
     def _topology_proposal_to_thermodynamic_states(self, topology_proposal):
         """
         Convert a topology proposal to thermodynamic states for the end systems. This will be used to compute the
@@ -215,6 +214,11 @@ class NCMCEngine(object):
         """
         try:
             hybrid_factory = self._hybrid_cache[topology_proposal]
+
+            #If we've retrieved the factory from the cache, update it to include the relevant positions
+            hybrid_factory._old_positions = current_positions
+            hybrid_factory._new_positions = new_positions
+            hybrid_factory._compute_hybrid_positions()
         except KeyError:
             hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
             self._hybrid_cache[topology_proposal] = hybrid_factory
@@ -321,7 +325,7 @@ class NCMCEngine(object):
         logP_NCMC = integrator.getLogAcceptanceProbability(context)
         return final_positions, logP_NCMC
 
-    def integrate(self, topology_proposal, initial_positions, direction='insert', platform=None, iteration=None):
+    def integrate(self, topology_proposal, initial_positions, proposed_positions, iteration=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
 
@@ -334,12 +338,8 @@ class NCMCEngine(object):
             Contains old/new Topology and System objects and atom mappings.
         initial_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
             Positions of the atoms at the beginning of the NCMC switching.
-        direction : str, optional, default='insert'
-            Direction of alchemical switching:
-                'insert' causes lambda to switch from 0 to 1 over nsteps steps of integration
-                'delete' causes lambda to switch from 1 to 0 over nsteps steps of integration
-        platform : simtk.openmm.Platform, optional, default=None
-            If not None, this platform is used for integration.
+        proposed_positions : imtk.unit.Quantity with dimension [natoms, 3] with units of distance.
+            Positions of new system atoms at beginning of NCMC switching
         iteration : int, optional, default=None
             Iteration number, for storage purposes.
 
@@ -353,15 +353,15 @@ class NCMCEngine(object):
             The NCMC energy contribution to the log acceptance probability (Eqs. 62 and 63)
 
         """
-        if direction not in ['insert', 'delete']:
-            raise Exception("'direction' must be one of ['insert', 'delete']; was '%s' instead" % direction)
 
-        assert quantity_is_finite(initial_positions) == True
+        assert quantity_is_finite(initial_positions) == True and quantity_is_finite(proposed_positions) == True
+
+        #generate or retrieve the hybrid topology factory:
+        hybrid_factory = self.make_alchemical_system(topology_proposal, initial_positions, new_positions)
+
+        
 
         topology, indices, system = self._choose_system_from_direction(topology_proposal, direction)
-
-        # Create alchemical system.
-        alchemical_system = self.make_alchemical_system(system, indices, direction=direction)
 
         functions = self._get_functions(alchemical_system)
         integrator = self._choose_integrator(alchemical_system, functions, direction)
