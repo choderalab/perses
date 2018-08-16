@@ -4,6 +4,7 @@ import copy
 import logging
 import traceback
 from simtk import openmm, unit
+from perses.dispersed.feptasks import NonequilibriumSwitchingMove, compute_reduced_potential
 from perses.storage import NetCDFStorageView
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.tests.utils import quantity_is_finite
@@ -136,7 +137,7 @@ class NCMCEngine(object):
         beta = 1.0 / kT
         return beta
 
-    def _computeEnergyContribution(self, integrator):
+    def _compute_energy_contribution(self, hybrid_thermodynamic_state, initial_sampler_state, final_sampler_state):
         """
         Compute NCMC energy contribution to log probability.
 
@@ -145,25 +146,51 @@ class NCMCEngine(object):
 
         Parameters
         ----------
-        itegrator : NCMCAlchemicalIntegrator subclasses
-            NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context
-            Alchemical context
-        system : simtk.unit.System
-            Real fully-interacting system.
-        initial_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
-            The positions of the alchemical system at the start of the NCMC protocol
-        final_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
-            The positions of the alchemical system at the end of the NCMC protocol
-        direction : str, optional, default='insert'
-            Direction of topology proposal to use for identifying alchemical atoms (allowed values: ['insert', 'delete'])
+        hybrid_thermodynamic_state : openmmtools.states.CompoundThermodynamicState
+            The thermodynamic state of the hybrid sampler.
+        initial_sampler_state : openmmtools.states.SamplerState
+            The sampler state of the nonalchemical system at the start of the NCMC protocol with box vectors
+        final_sampler_state : openmmtools.states.SamplerState
+            The sampler state of the nonalchemical system at the end of the NCMC protocol
 
         Returns
         -------
         logP_energy : float
             The NCMC energy contribution to log probability.
         """
-        raise NotImplementedError
+        initial_state = hybrid_thermodynamic_state.set_alchemical_parameters(0.0)
+        initial_reduced_potential = compute_reduced_potential(initial_state, initial_sampler_state)
+
+        final_state = hybrid_thermodynamic_state.set_alchemical_parameters(1.0)
+        final_reduced_potential = compute_reduced_potential(final_state, final_sampler_state)
+
+        return final_reduced_potential - initial_reduced_potential
+
+
+    def _topology_proposal_to_thermodynamic_states(self, topology_proposal):
+        """
+        Convert a topology proposal to thermodynamic states for the end systems. This will be used to compute the
+        "logP_energy" quantity.
+
+        Arguments
+        ---------
+        topology_proposal : perses.rjmc.TopologyProposal
+            topology proposal for whose endpoint systems we want ThermodynamicStates
+        
+        Returns
+        -------
+        old_thermodynamic_state : openmmtools.states.ThermodynamicState
+            The old system (nonalchemical) thermodynamic state
+        new_thermodynamic_state : openmmtools.states.ThermodynamicState
+            The new system (nonalchemical) thermodynamic state
+        """
+        systems = [topology_proposal.old_system, topology_proposal.new_system]
+        thermostates = []
+        for system in systems:
+            thermodynamic_state = ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure)
+            thermostates.append(thermodynamic_state)
+        
+        return thermostates[0], thermostates[1]
 
     def make_alchemical_system(self, topology_proposal, current_positions, new_positions):
         """
