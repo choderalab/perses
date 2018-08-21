@@ -10,7 +10,8 @@ from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
 from openmmtools.cache import LRUCache, ContextCache
-from openmmtools.states import ThermodynamicState, SamplerState
+from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
+from openmmtools.alchemy import AlchemicalState
 
 
 default_functions = {
@@ -69,7 +70,10 @@ class NCMCEngine(object):
 
     """
 
-    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps, steps_per_propagation=default_steps_per_propagation, timestep=default_timestep, constraint_tolerance=None, platform=None, write_ncmc_interval=None, integrator_type='GHMC', storage=None, verbose=False, LRUCapacity=10):
+    def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps,
+                 steps_per_propagation=default_steps_per_propagation, timestep=default_timestep,
+                 constraint_tolerance=None, platform=None, write_ncmc_interval=None, measure_shadow_work=False,
+                 integrator_splitting='V R O H R V', storage=None, verbose=False, LRUCapacity=10, pressure=None, save_configuration=False):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -93,14 +97,18 @@ class NCMCEngine(object):
         write_ncmc_interval : int, optional, default=None
             If a positive integer is specified, a snapshot frame will be written to storage with the specified interval on NCMC switching.
             'storage' must also be specified.
-        integrator_type : str, optional, default='GHMC'
-            NCMC internal integrator type ['GHMC', 'VV']
+        measure_shadow_work : bool, optional, default False
+            Whether to measure shadow work
+        integrator_splitting : str, optional, default='V R O H R V'
+            NCMC internal integrator splitting based on OpenMMTools Langevin splittings
         storage : NetCDFStorageView, optional, default=None
             If specified, write data using this class.
         verbose : bool, optional, default=False
             If True, print debug information.
         LRUCapacity : int, default 10
             Capacity of LRU cache for hybrid systems
+        pressure : float, default None
+            The pressure to use for the simulation. If None, no barostat
         """
         # Handle some defaults.
         if functions == None:
@@ -118,11 +126,13 @@ class NCMCEngine(object):
         self._timestep = timestep
         self._constraint_tolerance = constraint_tolerance
         self._platform = platform
-        self._integrator_type = integrator_type
+        self._integrator_splitting = integrator_splitting
         self._steps_per_propagation = steps_per_propagation
         self._verbose = verbose
+        self._pressure = pressure
         self._disable_barostat = False
         self._hybrid_cache = LRUCache(capacity=LRUCapacity)
+        self._measure_shadow_work = measure_shadow_work
 
         self._nattempted = 0
 
@@ -130,6 +140,8 @@ class NCMCEngine(object):
         if storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
         self._write_ncmc_interval = write_ncmc_interval
+        self._work_save_interval = write_ncmc_interval
+        self._save_configuration = save_configuration
 
     @property
     def beta(self):
@@ -225,106 +237,6 @@ class NCMCEngine(object):
 
         return hybrid_factory
 
-    def _integrate_switching(self, integrator, context, topology, indices, iteration, direction):
-        """
-        Runs `self.nsteps` integrator steps
-
-        For `delete`, lambda will go from 1 to 0
-        For `insert`, lambda will go from 0 to 1
-
-        Parameters
-        ----------
-        itegrator : NCMCAlchemicalIntegrator subclasses
-            NCMC switching integrator to annihilate or introduce particles alchemically.
-        context : openmm.Context
-            Alchemical context
-        topology : openmm.app.Topology
-            Alchemical topology being modified
-        indices : list(int)
-            List of the indices of atoms that are turned on / off
-        iteration : int or None
-            Iteration number, for storage purposes.
-        direction : str
-            Direction of alchemical switching:
-                'insert' causes lambda to switch from 0 to 1 over nsteps steps of integration
-                'delete' causes lambda to switch from 1 to 0 over nsteps steps of integration
-
-        Returns
-        -------
-        final_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
-            The final positions after `nsteps` steps of alchemical switching
-        logP_NCMC : float
-            The log acceptance probability of the NCMC moves
-        """
-        # Integrate switching
-        try:
-            # Write atom indices that are changing.
-            if self._storage:
-                self._storage.write_object('atomindices', indices, iteration=iteration)
-
-            nsteps = self._n_steps
-
-            # Allocate storage for work.
-            total_work = np.zeros([nsteps+1], np.float64) # work[n] is the accumulated total work up to step n
-            shadow_work = np.zeros([nsteps+1], np.float64) # work[n] is the accumulated shadow work up to step n
-            protocol_work = np.zeros([nsteps+1], np.float64) # work[n] is the accumulated protocol work up to step n
-
-            # Write trajectory frame.
-            if self._storage and self.write_ncmc_interval:
-                positions = context.getState(getPositions=True, enforcePeriodicBox=True).getPositions(asNumpy=True)
-                self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=0, nframes=(self.nsteps+1))
-
-            # Perform NCMC integration.
-            for step in range(nsteps):
-                # Take a step.
-                try:
-                    integrator.step(1)
-                except Exception as e:
-                    print(e)
-                    for index in range(integrator.getNumGlobalVariables()):
-                        name = integrator.getGlobalVariableName(index)
-                        val = integrator.getGlobalVariable(index)
-                        print(name, val)
-                    for index in range(integrator.getNumPerDofVariables()):
-                        name = integrator.getPerDofVariableName(index)
-                        val = integrator.getPerDofVariable(index)
-                        print(name, val)
-
-                # Store accumulated work
-                total_work[step+1] = integrator.getTotalWork(context)
-                shadow_work[step+1] = integrator.getShadowWork(context)
-                protocol_work[step+1] = integrator.getProtocolWork(context)
-
-                # Write trajectory frame.
-                if self._storage and self.write_ncmc_interval and (self.write_ncmc_interval % (step+1) == 0):
-                    positions = context.getState(getPositions=True, enforcePeriodicBox=True).getPositions(asNumpy=True)
-                    assert quantity_is_finite(positions) == True
-                    self._storage.write_configuration('positions', positions, topology, iteration=iteration, frame=(step+1), nframes=(self.nsteps+1))
-
-            # Store work values.
-            if self._storage:
-                self._storage.write_array('total_work_%s' % direction, total_work, iteration=iteration)
-                self._storage.write_array('shadow_work_%s' % direction, shadow_work, iteration=iteration)
-                self._storage.write_array('protocol_work_%s' % direction, protocol_work, iteration=iteration)
-
-        except Exception as e:
-            # Trap NaNs as a special exception (allowing us to reject later, if desired)
-            if str(e) == "Particle coordinate is nan":
-                msg = "Particle coordinate is nan during NCMC integration while using integrator_type '%s'" % self.integrator_type
-                if self.integrator_type == 'GHMC':
-                    msg += '\n'
-                    msg += 'This should NEVER HAPPEN with GHMC!'
-                raise NaNException(msg)
-            else:
-                traceback.print_exc()
-                raise e
-
-        # Store final positions and log acceptance probability.
-        final_positions = context.getState(getPositions=True, enforcePeriodicBox=True).getPositions(asNumpy=True)
-        assert quantity_is_finite(final_positions) == True
-        logP_NCMC = integrator.getLogAcceptanceProbability(context)
-        return final_positions, logP_NCMC
-
     def integrate(self, topology_proposal, initial_positions, proposed_positions, iteration=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
@@ -357,24 +269,33 @@ class NCMCEngine(object):
         assert quantity_is_finite(initial_positions) == True and quantity_is_finite(proposed_positions) == True
 
         #generate or retrieve the hybrid topology factory:
-        hybrid_factory = self.make_alchemical_system(topology_proposal, initial_positions, new_positions)
+        hybrid_factory = self.make_alchemical_system(topology_proposal, initial_positions, proposed_positions)
 
         topology = hybrid_factory.hybrid_topology
 
+        #generate the corresponding thermodynamic and sampler states so that we can use the NonequilibriumSwitchingMove:
+        
+        #First generate the thermodynamic state:
+        hybrid_system = hybrid_factory.hybrid_system
+        hybrid_thermodynamic_state = ThermodynamicState(hybrid_system, temperature=self._temperature, pressure=self._pressure)
 
-        topology, indices, system = self._choose_system_from_direction(topology_proposal, direction)
+        #Now create an AlchemicalState from the hybrid system:
+        alchemical_state = AlchemicalState.from_system(hybrid_system)
+        alchemical_state.set_alchemical_parameters(0.0)
 
-        functions = self._get_functions(alchemical_system)
-        integrator = self._choose_integrator(alchemical_system, functions, direction)
-        context = self._create_context(alchemical_system, integrator, initial_positions)
+        #Now create a compound thermodynamic state that combines the hybrid thermodynamic state with the alchemical state:
+        compound_thermodynamic_state = CompoundThermodynamicState(hybrid_thermodynamic_state, composable_states=[alchemical_state])
 
-        # Integrate switching
-        final_positions, logP_work = self._integrate_switching(integrator, context, topology, indices, iteration, direction)
+        #construct a sampler state from the 
+
+        #create the nonequilibrium move:
+        ne_move = NonequilibriumSwitchingMove(self._functions, self._integrator_splitting, self._temperature, self._nsteps, self._timestep, 
+                                              work_save_interval=self._work_save_interval, top=topology,subset_atoms=None,
+                                              save_configuration=self._save_configuration, measure_shadow_work=self._measure_shadow_work)
+
 
         # Compute contribution from switching between real and alchemical systems in correct order
         logP_energy = self._computeEnergyContribution(integrator)
-
-        self._clean_up_integration(alchemical_system, context, integrator)
 
         # Return
         return [final_positions, logP_work, logP_energy]
