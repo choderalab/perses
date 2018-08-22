@@ -237,7 +237,7 @@ class NCMCEngine(object):
 
         return hybrid_factory
 
-    def integrate(self, topology_proposal, initial_positions, proposed_positions, iteration=None):
+    def integrate(self, topology_proposal, initial_sampler_state, proposed_sampler_state, iteration=None):
         """
         Performs NCMC switching to either delete or insert atoms according to the provided `topology_proposal`.
 
@@ -248,28 +248,27 @@ class NCMCEngine(object):
         ----------
         topology_proposal : TopologyProposal
             Contains old/new Topology and System objects and atom mappings.
-        initial_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the atoms at the beginning of the NCMC switching.
-        proposed_positions : imtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of new system atoms at beginning of NCMC switching
+        initial_sampler_state : openmmtools.states.SamplerState representing the initial (old) system
+            Configurational properties of the atoms at the beginning of the NCMC switching.
+        proposed_sampler_state : openmmtools.states.SamplerState representing the proposed (post-geometry new) system
+            Configurational properties new system atoms at beginning of NCMC switching
         iteration : int, optional, default=None
             Iteration number, for storage purposes.
 
         Returns
         -------
-        final_positions : simtk.unit.Quantity of dimensions [nparticles,3] with units compatible with angstroms
-            The final positions after `nsteps` steps of alchemical switching
+        final_sampler_state : The sampler state of the new system after NCMC switching
+            The final configurational properties after `nsteps` steps of alchemical switching, and reversion to the nonalchemical system
         logP_work : float
             The NCMC work contribution to the log acceptance probability (Eqs. 62 and 63)
         logP_energy : float
-            The NCMC energy contribution to the log acceptance probability (Eqs. 62 and 63)
-
+            The contribution of transforming to and from the hybrid system to the log acceptance probability (Eqs. 62 and 63)
         """
 
-        assert quantity_is_finite(initial_positions) == True and quantity_is_finite(proposed_positions) == True
+        assert not initial_sampler_state.has_nan() and not proposed_sampler_state.has_nan()
 
         #generate or retrieve the hybrid topology factory:
-        hybrid_factory = self.make_alchemical_system(topology_proposal, initial_positions, proposed_positions)
+        hybrid_factory = self.make_alchemical_system(topology_proposal, initial_sampler_state.positions, proposed_sampler_state.positions)
 
         topology = hybrid_factory.hybrid_topology
 
@@ -286,16 +285,31 @@ class NCMCEngine(object):
         #Now create a compound thermodynamic state that combines the hybrid thermodynamic state with the alchemical state:
         compound_thermodynamic_state = CompoundThermodynamicState(hybrid_thermodynamic_state, composable_states=[alchemical_state])
 
-        #construct a sampler state from the 
+        #construct a sampler state from the hybrid positions and the box vectors of the initial sampler state:
+        initial_hybrid_positions = hybrid_factory.hybrid_positions
+        initial_hybrid_box_vectors = initial_sampler_state.box_vectors
+
+        initial_hybrid_sampler_state = SamplerState(initial_hybrid_positions, box_vectors=initial_hybrid_box_vectors)
+        final_hybrid_sampler_state = copy.deepcopy(initial_hybrid_sampler_state)
 
         #create the nonequilibrium move:
         ne_move = NonequilibriumSwitchingMove(self._functions, self._integrator_splitting, self._temperature, self._nsteps, self._timestep, 
                                               work_save_interval=self._work_save_interval, top=topology,subset_atoms=None,
                                               save_configuration=self._save_configuration, measure_shadow_work=self._measure_shadow_work)
+        
+        #run the NCMC protocol
+        ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
 
+        #get the total work:
+        logP_work = - ne_move.current_total_work
 
-        # Compute contribution from switching between real and alchemical systems in correct order
-        logP_energy = self._computeEnergyContribution(integrator)
+        # Compute contribution of transforming to and from the hybrid system:
+        logP_energy = self._compute_energy_contribution(compound_thermodynamic_state, initial_hybrid_sampler_state, final_hybrid_sampler_state)
+
+        #compute the output SamplerState, which has the atoms only for the new system post-NCMC:
+        new_positions = hybrid_factory.new_positions(final_hybrid_sampler_state.positions)
+        new_box_vectors = final_hybrid_sampler_state.box_vectors
+        final_sampler_state = SamplerState(new_positions, box_vectors=new_box_vectors)
 
         # Return
-        return [final_positions, logP_work, logP_energy]
+        return [final_sampler_state, logP_work, logP_energy]
