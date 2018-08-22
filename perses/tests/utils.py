@@ -79,7 +79,6 @@ def extractPositionsFromOEMOL(molecule):
 
 def giveOpenmmPositionsToOEMOL(positions, molecule):
     assert molecule.NumAtoms() == len(positions)
-#    positions = positions.in_units_of(unit.angstrom)
     coords = molecule.GetCoords()
     for key in coords.keys(): # openmm in nm, openeye in A
         coords[key] = (positions[key][0]/unit.angstrom,positions[key][1]/unit.angstrom,positions[key][2]/unit.angstrom)
@@ -196,9 +195,9 @@ def generate_gaff_xml():
     params = parmed.amber.AmberParameterSet.from_leaprc(leaprc)
     params = parmed.openmm.OpenMMParameterSet.from_parameterset(params)
     citations = """\
-Wang, J., Wang, W., Kollman P. A.; Case, D. A. "Automatic atom type and bond type perception in molecular mechanical calculations". Journal of Molecular Graphics and Modelling , 25, 2006, 247260.
-Wang, J., Wolf, R. M.; Caldwell, J. W.;Kollman, P. A.; Case, D. A. "Development and testing of a general AMBER force field". Journal of Computational Chemistry, 25, 2004, 1157-1174.
-"""
+    Wang, J., Wang, W., Kollman P. A.; Case, D. A. "Automatic atom type and bond type perception in molecular mechanical calculations". Journal of Molecular Graphics and Modelling , 25, 2006, 247260.
+    Wang, J., Wolf, R. M.; Caldwell, J. W.;Kollman, P. A.; Case, D. A. "Development and testing of a general AMBER force field". Journal of Computational Chemistry, 25, 2004, 1157-1174.
+    """
     ffxml = str()
     gaff_xml = StringIO(ffxml)
     provenance=dict(OriginalFile='gaff.dat', Reference=citations)
@@ -797,3 +796,46 @@ def check_system(system):
             outfile.write(serialized_system)
             outfile.close()
             raise Exception(msg)
+
+def generate_endpoint_thermodynamic_states(system: openmm.System, topology_proposal: perses.rjmc.TopologyProposal):
+    """
+    Generate endpoint thermodynamic states for the system
+
+    Parameters
+    ----------
+    system : openmm.System
+        System object corresponding to thermodynamic state
+    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+        TopologyProposal representing transformation
+
+    Returns
+    -------
+    nonalchemical_zero_thermodynamic_state : ThermodynamicState
+        Nonalchemical thermodynamic state for lambda zero endpoint
+    nonalchemical_one_thermodynamic_state : ThermodynamicState
+        Nonalchemical thermodynamic state for lambda one endpoint
+    lambda_zero_thermodynamic_state : ThermodynamicState
+        Alchemical (hybrid) thermodynamic state for lambda zero
+    lambda_one_thermodynamic_State : ThermodynamicState
+        Alchemical (hybrid) thermodynamic state for lambda one
+    """
+    #create the thermodynamic state
+    lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(system)
+    lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
+
+    #ensure their states are set appropriately
+    lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
+    lambda_one_alchemical_state.set_alchemical_parameters(0.0)
+
+    #create the base thermodynamic state with the hybrid system
+    thermodynamic_state = ThermodynamicState(system, temperature=temperature)
+
+    #Create thermodynamic states for the nonalchemical endpoints
+    nonalchemical_zero_thermodynamic_state = ThermodynamicState(topology_proposal.old_system, temperature=temperature)
+    nonalchemical_one_thermodynamic_state = ThermodynamicState(topology_proposal.new_system, temperature=temperature)
+
+    #Now create the compound states with different alchemical states
+    lambda_zero_thermodynamic_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
+    lambda_one_thermodynamic_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
+
+    return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state

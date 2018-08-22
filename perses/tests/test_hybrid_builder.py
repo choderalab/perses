@@ -11,6 +11,7 @@ except ImportError:
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, TopologyProposal
+from perses.tests import utils
 import openeye.oechem as oechem
 from openmmtools import alchemy
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
@@ -263,7 +264,7 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
 
     #get the relevant thermodynamic states:
-    nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = generate_thermodynamic_states(
+    nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(
         hybrid_factory.hybrid_system, topology_proposal)
 
     nonalchemical_thermodynamic_states = [nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state]
@@ -351,49 +352,6 @@ def test_difficult_overlap():
             message = "solvated imatinib->nilotinib failed at lambda %d \n" % idx
             message += str(e)
             raise Exception(message)
-
-def generate_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
-    """
-    Generate endpoint thermodynamic states for the system
-
-    Parameters
-    ----------
-    system : openmm.System
-        System object corresponding to thermodynamic state
-    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-        TopologyProposal representing transformation
-
-    Returns
-    -------
-    nonalchemical_zero_thermodynamic_state : ThermodynamicState
-        Nonalchemical thermodynamic state for lambda zero endpoint
-    nonalchemical_one_thermodynamic_state : ThermodynamicState
-        Nonalchemical thermodynamic state for lambda one endpoint
-    lambda_zero_thermodynamic_state : ThermodynamicState
-        Alchemical (hybrid) thermodynamic state for lambda zero
-    lambda_one_thermodynamic_State : ThermodynamicState
-        Alchemical (hybrid) thermodynamic state for lambda one
-    """
-    #create the thermodynamic state
-    lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(system)
-    lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
-
-    #ensure their states are set appropriately
-    lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-    lambda_one_alchemical_state.set_alchemical_parameters(0.0)
-
-    #create the base thermodynamic state with the hybrid system
-    thermodynamic_state = ThermodynamicState(system, temperature=temperature)
-
-    #Create thermodynamic states for the nonalchemical endpoints
-    nonalchemical_zero_thermodynamic_state = ThermodynamicState(topology_proposal.old_system, temperature=temperature)
-    nonalchemical_one_thermodynamic_state = ThermodynamicState(topology_proposal.new_system, temperature=temperature)
-
-    #Now create the compound states with different alchemical states
-    lambda_zero_thermodynamic_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
-    lambda_one_thermodynamic_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
-
-    return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
 def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory, lambda_index=0):
     """
@@ -527,7 +485,6 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         print('Difference in Final potentials:')
         print(final_logP_correction)
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
-
 
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
