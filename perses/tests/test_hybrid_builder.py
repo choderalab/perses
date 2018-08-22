@@ -130,117 +130,6 @@ leu_bonds = [
 
 forcefield = app.ForceField('amber99sbildn.xml')
 
-def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene"):
-    """
-    Generate a test vacuum topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
-
-    Parameters
-    ----------
-    current_mol_name : str, optional
-        name of the first molecule
-    proposed_mol_name : str, optional
-        name of the second molecule
-
-    Returns
-    -------
-    topology_proposal : perses.rjmc.topology_proposal
-        The topology proposal representing the transformation
-    current_positions : np.array, unit-bearing
-        The positions of the initial system
-    new_positions : np.array, unit-bearing
-        The positions of the new system
-    """
-    from openmoltools import forcefield_generators
-
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
-
-    initial_smiles = oechem.OEMolToSmiles(current_mol)
-    final_smiles = oechem.OEMolToSmiles(proposed_mol)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
-    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
-
-    gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
-    geometry_engine = FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
-
-    return topology_proposal, pos_old, new_positions
-
-def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
-    """
-    Generate a test solvated topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
-
-    Parameters
-    ----------
-    current_mol_name : str, optional
-        name of the first molecule
-    proposed_mol_name : str, optional
-        name of the second molecule
-
-    Returns
-    -------
-    topology_proposal : perses.rjmc.topology_proposal
-        The topology proposal representing the transformation
-    current_positions : np.array, unit-bearing
-        The positions of the initial system
-    new_positions : np.array, unit-bearing
-        The positions of the new system
-    """
-    import simtk.openmm.app as app
-    from openmoltools import forcefield_generators
-
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
-
-    initial_smiles = oechem.OEMolToSmiles(current_mol)
-    final_smiles = oechem.OEMolToSmiles(proposed_mol)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
-    modeller = app.Modeller(top_old, pos_old)
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
-    solvated_topology = modeller.getTopology()
-    solvated_positions = modeller.getPositions()
-    solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
-    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
-
-    solvated_system.addForce(barostat)
-
-    gaff_filename = get_data_filename('data/gaff.xml')
-
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
-    geometry_engine = FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
-
-    return topology_proposal, solvated_positions, new_positions
-
 def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions):
     """
     Test that the variance of the perturbation from lambda={0,1} to the corresponding nonalchemical endpoint is not
@@ -312,7 +201,7 @@ def check_result(results, threshold=3.0, neffmin=10):
 
 def test_simple_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal(current_mol_name='imatinib', proposed_mol_name='nilotinib')
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='imatinib', proposed_mol_name='nilotinib')
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -330,7 +219,7 @@ def test_difficult_overlap():
     name2 = 'nilotinib'
 
     print(name1, name2)
-    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(current_mol_name=name1, proposed_mol_name=name2)
+    topology_proposal, solvated_positions, new_positions = utils.generate_solvated_hybrid_test_topology(current_mol_name=name1, proposed_mol_name=name2)
     results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -342,7 +231,7 @@ def test_difficult_overlap():
             raise Exception(message)
 
     print(name2, name1)
-    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(current_mol_name=name2, proposed_mol_name=name1)
+    topology_proposal, solvated_positions, new_positions = utils.generate_solvated_hybrid_test_topology(current_mol_name=name2, proposed_mol_name=name1)
     results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -554,61 +443,6 @@ def test_compare_energies():
     for mol_ref_pair in mols_and_refs:
         compare_energies(mol_name=mol_ref_pair[0], ref_mol_name=mol_ref_pair[1])
 
-def generate_topology_proposal(old_mol_iupac="pentane", new_mol_iupac="butane"):
-    """
-    Utility function to generate a topologyproposal for tests
-
-    Parameters
-    ----------
-    old_mol_iupac : str, optional
-        name of old mol, default pentane
-    new_mol_iupac : str, optional
-        name of new mol, default butane
-
-    Returns
-    -------
-    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-        the topology proposal corresponding to the given transformation
-    old_positions : [n, 3] np.ndarray of float
-        positions of old mol
-    new_positions : [m, 3] np.ndarray of float
-        positions of new mol
-    """
-    from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine, SystemGenerator
-    from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    from perses.tests.utils import createSystemFromIUPAC, get_data_filename
-    import openmoltools.forcefield_generators as forcefield_generators
-    from io import StringIO
-    from openmmtools.constants import kB
-
-
-    temperature = 300.0 * unit.kelvin
-    kT = kB * temperature
-    beta = 1.0/kT
-
-    gaff_filename = get_data_filename("data/gaff.xml")
-    forcefield_files = [gaff_filename, 'amber99sbildn.xml']
-
-    #generate systems and topologies
-    old_mol, old_system, old_positions, old_topology = createSystemFromIUPAC(old_mol_iupac)
-    new_mol, new_system, new_positions, new_topology = createSystemFromIUPAC(new_mol_iupac)
-
-    #set names
-    old_mol.SetTitle("MOL")
-    new_mol.SetTitle("MOL")
-
-    #generate forcefield and ProposalEngine
-    #ffxml=forcefield_generators.generateForceFieldFromMolecules([old_mol, new_mol])
-    system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion' : False})
-    proposal_engine = TwoMoleculeSetProposalEngine(old_mol, new_mol, system_generator, residue_name="pentane")
-    geometry_engine = FFAllAngleGeometryEngine()
-
-    #create a TopologyProposal
-    topology_proposal = proposal_engine.propose(old_system, old_topology)
-    new_positions_geometry, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
-
-    return topology_proposal, old_positions, new_positions_geometry
-
 def test_position_output():
     """
     Test that the hybrid returns the correct positions for the new and old systems after construction
@@ -617,7 +451,7 @@ def test_position_output():
     import numpy as np
 
     #generate topology proposal
-    topology_proposal, old_positions, new_positions = generate_topology_proposal()
+    topology_proposal, old_positions, new_positions = utils.generate_vacuum_topology_proposal()
 
     factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
 
@@ -626,7 +460,6 @@ def test_position_output():
 
     assert np.all(np.isclose(old_positions.in_units_of(unit.nanometers), old_positions_factory.in_units_of(unit.nanometers)))
     assert np.all(np.isclose(new_positions.in_units_of(unit.nanometers), new_positions_factory.in_units_of(unit.nanometers)))
-
 
 
 if __name__ == '__main__':
