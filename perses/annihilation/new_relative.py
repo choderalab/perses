@@ -1173,6 +1173,9 @@ class HybridTopologyFactory(object):
         hybrid_to_old_map = self._hybrid_to_old_map
         hybrid_to_new_map = self._hybrid_to_new_map
 
+        # Define new global parameters for NonbondedForce
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_electrostatics', 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_sterics', 0.0)
 
         #We have to loop through the particles in the system, because nonbonded force does not accept index
         for particle_index in range(self._hybrid_system.getNumParticles()):
