@@ -27,6 +27,7 @@ else:
     from commands import getstatusoutput
 from openmmtools.constants import kB
 from openmmtools import alchemy, states
+from openmmtools.mcmc import NaNException
 
 ################################################################################
 # CONSTANTS
