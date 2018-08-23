@@ -8,7 +8,7 @@ __author__ = 'John D. Chodera'
 ################################################################################
 # IMPORTS
 ################################################################################
-
+import copy
 from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
