@@ -11,6 +11,7 @@ except ImportError:
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, TopologyProposal
+from perses.tests import utils
 import openeye.oechem as oechem
 from openmmtools import alchemy
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
@@ -129,117 +130,6 @@ leu_bonds = [
 
 forcefield = app.ForceField('amber99sbildn.xml')
 
-def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene"):
-    """
-    Generate a test vacuum topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
-
-    Parameters
-    ----------
-    current_mol_name : str, optional
-        name of the first molecule
-    proposed_mol_name : str, optional
-        name of the second molecule
-
-    Returns
-    -------
-    topology_proposal : perses.rjmc.topology_proposal
-        The topology proposal representing the transformation
-    current_positions : np.array, unit-bearing
-        The positions of the initial system
-    new_positions : np.array, unit-bearing
-        The positions of the new system
-    """
-    from openmoltools import forcefield_generators
-
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
-
-    initial_smiles = oechem.OEMolToSmiles(current_mol)
-    final_smiles = oechem.OEMolToSmiles(proposed_mol)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
-    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
-
-    gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
-    geometry_engine = FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
-
-    return topology_proposal, pos_old, new_positions
-
-def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
-    """
-    Generate a test solvated topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
-
-    Parameters
-    ----------
-    current_mol_name : str, optional
-        name of the first molecule
-    proposed_mol_name : str, optional
-        name of the second molecule
-
-    Returns
-    -------
-    topology_proposal : perses.rjmc.topology_proposal
-        The topology proposal representing the transformation
-    current_positions : np.array, unit-bearing
-        The positions of the initial system
-    new_positions : np.array, unit-bearing
-        The positions of the new system
-    """
-    import simtk.openmm.app as app
-    from openmoltools import forcefield_generators
-
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
-
-    initial_smiles = oechem.OEMolToSmiles(current_mol)
-    final_smiles = oechem.OEMolToSmiles(proposed_mol)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
-    modeller = app.Modeller(top_old, pos_old)
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
-    solvated_topology = modeller.getTopology()
-    solvated_positions = modeller.getPositions()
-    solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
-    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
-
-    solvated_system.addForce(barostat)
-
-    gaff_filename = get_data_filename('data/gaff.xml')
-
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
-    geometry_engine = FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
-
-    return topology_proposal, solvated_positions, new_positions
-
 def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions):
     """
     Test that the variance of the perturbation from lambda={0,1} to the corresponding nonalchemical endpoint is not
@@ -263,7 +153,7 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
 
     #get the relevant thermodynamic states:
-    nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = generate_thermodynamic_states(
+    nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(
         hybrid_factory.hybrid_system, topology_proposal)
 
     nonalchemical_thermodynamic_states = [nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state]
@@ -311,7 +201,7 @@ def check_result(results, threshold=3.0, neffmin=10):
 
 def test_simple_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    topology_proposal, current_positions, new_positions = generate_vacuum_topology_proposal(current_mol_name='imatinib', proposed_mol_name='nilotinib')
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='imatinib', proposed_mol_name='nilotinib')
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -329,7 +219,7 @@ def test_difficult_overlap():
     name2 = 'nilotinib'
 
     print(name1, name2)
-    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(current_mol_name=name1, proposed_mol_name=name2)
+    topology_proposal, solvated_positions, new_positions = utils.generate_solvated_hybrid_test_topology(current_mol_name=name1, proposed_mol_name=name2)
     results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -341,7 +231,7 @@ def test_difficult_overlap():
             raise Exception(message)
 
     print(name2, name1)
-    topology_proposal, solvated_positions, new_positions = generate_solvated_hybrid_test_topology(current_mol_name=name2, proposed_mol_name=name1)
+    topology_proposal, solvated_positions, new_positions = utils.generate_solvated_hybrid_test_topology(current_mol_name=name2, proposed_mol_name=name1)
     results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -351,49 +241,6 @@ def test_difficult_overlap():
             message = "solvated imatinib->nilotinib failed at lambda %d \n" % idx
             message += str(e)
             raise Exception(message)
-
-def generate_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
-    """
-    Generate endpoint thermodynamic states for the system
-
-    Parameters
-    ----------
-    system : openmm.System
-        System object corresponding to thermodynamic state
-    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-        TopologyProposal representing transformation
-
-    Returns
-    -------
-    nonalchemical_zero_thermodynamic_state : ThermodynamicState
-        Nonalchemical thermodynamic state for lambda zero endpoint
-    nonalchemical_one_thermodynamic_state : ThermodynamicState
-        Nonalchemical thermodynamic state for lambda one endpoint
-    lambda_zero_thermodynamic_state : ThermodynamicState
-        Alchemical (hybrid) thermodynamic state for lambda zero
-    lambda_one_thermodynamic_State : ThermodynamicState
-        Alchemical (hybrid) thermodynamic state for lambda one
-    """
-    #create the thermodynamic state
-    lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(system)
-    lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
-
-    #ensure their states are set appropriately
-    lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-    lambda_one_alchemical_state.set_alchemical_parameters(0.0)
-
-    #create the base thermodynamic state with the hybrid system
-    thermodynamic_state = ThermodynamicState(system, temperature=temperature)
-
-    #Create thermodynamic states for the nonalchemical endpoints
-    nonalchemical_zero_thermodynamic_state = ThermodynamicState(topology_proposal.old_system, temperature=temperature)
-    nonalchemical_one_thermodynamic_state = ThermodynamicState(topology_proposal.new_system, temperature=temperature)
-
-    #Now create the compound states with different alchemical states
-    lambda_zero_thermodynamic_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_zero_alchemical_state])
-    lambda_one_thermodynamic_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
-
-    return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
 def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory, lambda_index=0):
     """
@@ -476,84 +323,6 @@ def get_available_parameters(system, prefix='lambda'):
                     parameters.append(parameter_name)
     return parameters
 
-def build_two_residues():
-    alanine_topology = app.Topology()
-    alanine_positions = unit.Quantity(np.zeros((22,3)),unit.nanometer)
-    leucine_topology = app.Topology()
-    leucine_positions = unit.Quantity(np.zeros((31,3)),unit.nanometer)
-
-    ala_chain = alanine_topology.addChain(id='A')
-    leu_chain = leucine_topology.addChain(id='A')
-
-    ala_ace = alanine_topology.addResidue('ACE', ala_chain)
-    ala_res = alanine_topology.addResidue('ALA', ala_chain)
-    ala_nme = alanine_topology.addResidue('NME', ala_chain)
-    leu_ace = leucine_topology.addResidue('ACE', leu_chain)
-    leu_res = leucine_topology.addResidue('LEU', leu_chain)
-    leu_nme = leucine_topology.addResidue('NME', leu_chain)
-
-    ala_atoms = dict()
-    leu_atoms = dict()
-    atom_map = dict()
-
-    for core_atom_name, [element, position] in ace.items():
-        position = np.asarray(position)
-        alanine_positions[len(ala_atoms.keys())] = position*unit.angstrom
-        leucine_positions[len(leu_atoms.keys())] = position*unit.angstrom
-
-        ala_atom = alanine_topology.addAtom(core_atom_name, element, ala_ace)
-        leu_atom = leucine_topology.addAtom(core_atom_name, element, leu_ace)
-
-        ala_atoms['ace-'+core_atom_name] = ala_atom
-        leu_atoms['ace-'+core_atom_name] = leu_atom
-        atom_map[ala_atom.index] = leu_atom.index
-
-    for core_atom_name, [element, position] in core.items():
-        position = np.asarray(position)
-        alanine_positions[len(ala_atoms.keys())] = position*unit.angstrom
-        leucine_positions[len(leu_atoms.keys())] = position*unit.angstrom
-
-        ala_atom = alanine_topology.addAtom(core_atom_name, element, ala_res)
-        leu_atom = leucine_topology.addAtom(core_atom_name, element, leu_res)
-
-        ala_atoms[core_atom_name] = ala_atom
-        leu_atoms[core_atom_name] = leu_atom
-        atom_map[ala_atom.index] = leu_atom.index
-
-    for ala_atom_name, [element, position] in ala_unique.items():
-        position = np.asarray(position)
-        alanine_positions[len(ala_atoms.keys())] = position*unit.angstrom
-        ala_atom = alanine_topology.addAtom(ala_atom_name, element, ala_res)
-        ala_atoms[ala_atom_name] = ala_atom
-
-    for leu_atom_name, [element, position] in leu_unique.items():
-        position = np.asarray(position)
-        leucine_positions[len(leu_atoms.keys())] = position*unit.angstrom
-        leu_atom = leucine_topology.addAtom(leu_atom_name, element, leu_res)
-        leu_atoms[leu_atom_name] = leu_atom
-
-    for core_atom_name, [element, position] in nme.items():
-        position = np.asarray(position)
-        alanine_positions[len(ala_atoms.keys())] = position*unit.angstrom
-        leucine_positions[len(leu_atoms.keys())] = position*unit.angstrom
-
-        ala_atom = alanine_topology.addAtom(core_atom_name, element, ala_nme)
-        leu_atom = leucine_topology.addAtom(core_atom_name, element, leu_nme)
-
-        ala_atoms['nme-'+core_atom_name] = ala_atom
-        leu_atoms['nme-'+core_atom_name] = leu_atom
-        atom_map[ala_atom.index] = leu_atom.index
-
-    for bond in core_bonds:
-        alanine_topology.addBond(ala_atoms[bond[0]],ala_atoms[bond[1]])
-        leucine_topology.addBond(leu_atoms[bond[0]],leu_atoms[bond[1]])
-    for bond in ala_bonds:
-        alanine_topology.addBond(ala_atoms[bond[0]],ala_atoms[bond[1]])
-    for bond in leu_bonds:
-        leucine_topology.addBond(leu_atoms[bond[0]],leu_atoms[bond[1]])
-
-    return alanine_topology, alanine_positions, leucine_topology, leucine_positions, atom_map
-
 def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, alchemical_system, initial_positions, alchemical_positions, final_hybrid_positions, final_positions):
 
     def compute_logP(system, positions, parameter=None):
@@ -605,7 +374,6 @@ def compute_alchemical_correction(unmodified_old_system, unmodified_new_system, 
         print('Difference in Final potentials:')
         print(final_logP_correction)
         logP_alchemical_correction = initial_logP_correction + final_logP_correction
-
 
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
@@ -675,61 +443,6 @@ def test_compare_energies():
     for mol_ref_pair in mols_and_refs:
         compare_energies(mol_name=mol_ref_pair[0], ref_mol_name=mol_ref_pair[1])
 
-def generate_topology_proposal(old_mol_iupac="pentane", new_mol_iupac="butane"):
-    """
-    Utility function to generate a topologyproposal for tests
-
-    Parameters
-    ----------
-    old_mol_iupac : str, optional
-        name of old mol, default pentane
-    new_mol_iupac : str, optional
-        name of new mol, default butane
-
-    Returns
-    -------
-    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-        the topology proposal corresponding to the given transformation
-    old_positions : [n, 3] np.ndarray of float
-        positions of old mol
-    new_positions : [m, 3] np.ndarray of float
-        positions of new mol
-    """
-    from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine, SystemGenerator
-    from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    from perses.tests.utils import createSystemFromIUPAC, get_data_filename
-    import openmoltools.forcefield_generators as forcefield_generators
-    from io import StringIO
-    from openmmtools.constants import kB
-
-
-    temperature = 300.0 * unit.kelvin
-    kT = kB * temperature
-    beta = 1.0/kT
-
-    gaff_filename = get_data_filename("data/gaff.xml")
-    forcefield_files = [gaff_filename, 'amber99sbildn.xml']
-
-    #generate systems and topologies
-    old_mol, old_system, old_positions, old_topology = createSystemFromIUPAC(old_mol_iupac)
-    new_mol, new_system, new_positions, new_topology = createSystemFromIUPAC(new_mol_iupac)
-
-    #set names
-    old_mol.SetTitle("MOL")
-    new_mol.SetTitle("MOL")
-
-    #generate forcefield and ProposalEngine
-    #ffxml=forcefield_generators.generateForceFieldFromMolecules([old_mol, new_mol])
-    system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion' : False})
-    proposal_engine = TwoMoleculeSetProposalEngine(old_mol, new_mol, system_generator, residue_name="pentane")
-    geometry_engine = FFAllAngleGeometryEngine()
-
-    #create a TopologyProposal
-    topology_proposal = proposal_engine.propose(old_system, old_topology)
-    new_positions_geometry, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
-
-    return topology_proposal, old_positions, new_positions_geometry
-
 def test_position_output():
     """
     Test that the hybrid returns the correct positions for the new and old systems after construction
@@ -738,7 +451,7 @@ def test_position_output():
     import numpy as np
 
     #generate topology proposal
-    topology_proposal, old_positions, new_positions = generate_topology_proposal()
+    topology_proposal, old_positions, new_positions = utils.generate_vacuum_topology_proposal()
 
     factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
 
@@ -747,7 +460,6 @@ def test_position_output():
 
     assert np.all(np.isclose(old_positions.in_units_of(unit.nanometers), old_positions_factory.in_units_of(unit.nanometers)))
     assert np.all(np.isclose(new_positions.in_units_of(unit.nanometers), new_positions_factory.in_units_of(unit.nanometers)))
-
 
 
 if __name__ == '__main__':
