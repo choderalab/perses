@@ -257,7 +257,9 @@ class NCMCEngine(object):
 
         Returns
         -------
-        final_sampler_state : The sampler state of the new system after NCMC switching
+        final_old_sampler_state : openmmtools.State.SamplerState
+            The final configurational properties of the old system after hybrid alchemical switching
+        final_sampler_state : openmmtools.states.SamplerState
             The final configurational properties after `nsteps` steps of alchemical switching, and reversion to the nonalchemical system
         logP_work : float
             The NCMC work contribution to the log acceptance probability (Eqs. 62 and 63)
@@ -311,5 +313,10 @@ class NCMCEngine(object):
         new_box_vectors = final_hybrid_sampler_state.box_vectors
         final_sampler_state = SamplerState(new_positions, box_vectors=new_box_vectors)
 
+        #compute the output SamplerState for the atoms only in the old system (required for geometry_logP_reverse)
+        old_positions = hybrid_factory.old_positions(final_hybrid_sampler_state.positions)
+        old_box_vectors = copy.deepcopy(new_box_vectors) #these are the same as the new system
+        final_old_sampler_state = SamplerState(old_positions, box_vectors=old_box_vectors)
+
         # Return
-        return [final_sampler_state, logP_work, logP_energy]
+        return [final_old_sampler_state, final_sampler_state, logP_work, logP_energy]
