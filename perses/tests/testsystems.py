@@ -1553,9 +1553,9 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
             for solvent in solvents:
                 environment = solvent + '-' + component
                 if solvent == 'explicit':
-                    thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
+                    thermodynamic_states[environment] = states.ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
                 else:
-                    thermodynamic_states[environment] = ThermodynamicState(system=systems[environment], temperature=temperature)
+                    thermodynamic_states[environment] = states.ThermodynamicState(system=systems[environment], temperature=temperature)
 
         # Create SAMS samplers
         print('Creating SAMS samplers...')
@@ -1573,13 +1573,13 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                     storage = NetCDFStorageView(self.storage, envname=environment)
 
                 if solvent == 'explicit':
-                    thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
-                    sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+                    thermodynamic_state = states.ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
+                    sampler_state = states.SamplerState(positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
                 else:
-                    thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
-                    sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
+                    thermodynamic_state = states.ThermodynamicState(system=systems[environment], temperature=temperature)
+                    sampler_state = states.SamplerState(positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
