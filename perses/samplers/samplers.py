@@ -28,6 +28,7 @@ from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools.mcmc import MCMCSampler
 
 from perses.annihilation import NCMCEngine
+from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
 from perses.tests.utils import quantity_is_finite
@@ -224,7 +225,7 @@ class ExpandedEnsembleSampler(object):
             self.log_weights[state_key] = 0.0
         return self.log_weights[state_key]
 
-    def _geometry_forward(self, topology_proposal, old_positions):
+    def _geometry_forward(self, topology_proposal, old_sampler_state):
         """
         Run geometry engine to propose new positions and compute logP
 
@@ -232,13 +233,13 @@ class ExpandedEnsembleSampler(object):
         ----------
         topology_proposal : TopologyProposal
             Contains old/new Topology and System objects and atom mappings.
-        old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the old system atoms.
+        old_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of the old system atoms.
 
         Returns
         -------
-        new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of new atoms proposed by geometry engine calculation.
+        new_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of new atoms proposed by geometry engine calculation.
         geometry_logp_propose : float
             The log probability of the forward-only proposal
         """
@@ -254,9 +255,11 @@ class ExpandedEnsembleSampler(object):
             PDBFile.writeFile(topology_proposal.new_topology, new_positions, file=self.geometry_pdbfile)
             self.geometry_pdbfile.flush()
 
-        return new_positions, geometry_logp_propose
+        new_sampler_state = SamplerState(new_positions, box_vectors=old_sampler_state.box_vectors)  
 
-    def _geometry_reverse(self, topology_proposal, new_positions, old_positions):
+        return new_sampler_state, geometry_logp_propose
+
+    def _geometry_reverse(self, topology_proposal, new_sampler_state, old_sampler_state):
         """
         Run geometry engine reverse calculation to determine logP
         of proposing the old positions based on the new positions
@@ -265,10 +268,10 @@ class ExpandedEnsembleSampler(object):
         ----------
         topology_proposal : TopologyProposal
             Contains old/new Topology and System objects and atom mappings.
-        new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the new atoms.
-        old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the old atoms.
+        new_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of the new atoms.
+        old_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of the old atoms.
 
         Returns
         -------
@@ -277,7 +280,7 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Geometry engine logP_reverse calculation...")
         initial_time = time.time()
-        geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, self.sampler.thermodynamic_state.beta)
+        geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, new_sampler_state.positions, old_sampler_state.positions, self.beta)
         if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
         return geometry_logp_reverse
 
@@ -314,7 +317,7 @@ class ExpandedEnsembleSampler(object):
             raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
         return old_final_sampler_state, new_final_sampler_state, logP_work, logP_energy
 
-    def _geometry_ncmc_geometry(self, topology_proposal, positions, old_log_weight, new_log_weight):
+    def _geometry_ncmc_geometry(self, topology_proposal, sampler_state, old_log_weight, new_log_weight):
         """
         Use a hybrid NCMC protocol to switch from the old system to new system
         Will calculate new positions for the new system first, then give both
@@ -326,8 +329,8 @@ class ExpandedEnsembleSampler(object):
         ----------
         topology_proposal : TopologyProposal
             Contains old/new Topology and System objects and atom mappings.
-        positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of old atoms at the beginning of the NCMC switching.
+        sampler_state : openmmtools.states.SamplerState
+            Configurational properties of old atoms at the beginning of the NCMC switching.
         old_log_weight : float
             Chemical state weight from SAMSSampler
         new_log_weight : float
@@ -344,28 +347,25 @@ class ExpandedEnsembleSampler(object):
 
         from perses.tests.utils import compute_potential
 
-        logP_chemical = topology_proposal.logp_proposal
+        logP_chemical_proposal = topology_proposal.logp_proposal
 
-        old_positions = positions
-        initial_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.old_system, old_positions, platform=self.ncmc_engine.platform)
+        initial_reduced_potential = feptasks.compute_reduced_potential(topology_proposal.old_thermodynamic_state, sampler_state)
         logP_initial = -initial_reduced_potential + old_log_weight
 
-        geometry_new_positions, logP_forward = self._geometry_forward(topology_proposal, old_positions)
+        new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, old_sampler_state)
 
-        ncmc_new_positions, ncmc_old_positions, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, old_positions, geometry_new_positions)
+        ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
 
-        new_positions = ncmc_new_positions
+        logP_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
 
-        logP_reverse = self._geometry_reverse(topology_proposal, ncmc_new_positions, ncmc_old_positions)
-
-        final_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.new_system, new_positions, platform=self.ncmc_engine.platform)
+        final_reduced_potential = feptasks.compute_reduced_potential(topology_proposal.new_thermodynamic_state, ncmc_new_sampler_state)
         logP_final = -final_reduced_potential + new_log_weight
 
         # Compute total log acceptance probability according to Eq. 46
-        logP_accept = logP_final - logP_initial + logP_chemical + logP_reverse - logP_forward + logP_work + logP_energy
+        logP_accept = logP_final - logP_initial + logP_chemical_proposal + logP_reverse - logP_geometry_forward + logP_work + logP_energy
         if self.verbose:
             print("logP_accept = %+10.4e [logP_final = %+10.4e, -logP_initial = %+10.4e, logP_chemical = %10.4e, logP_reverse = %+10.4e, -logP_forward = %+10.4e, logP_work = %+10.4e, logP_energy = %+10.4e]"
-                % (logP_accept, logP_final, -logP_initial, logP_chemical, logP_reverse, -logP_forward, logP_work, logP_energy))
+                % (logP_accept, logP_final, -logP_initial, logP_chemical_proposal, logP_reverse, -logP_geometry_forward, logP_work, logP_energy))
         # Write to storage.
         if self.storage:
             self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
@@ -373,14 +373,14 @@ class ExpandedEnsembleSampler(object):
             self.storage.write_quantity('logP_ncmc_work', logP_work, iteration=self.iteration)
             self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
             self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
-            self.storage.write_quantity('logP_chemical', logP_chemical, iteration=self.iteration)
+            self.storage.write_quantity('logP_chemical', logP_chemical_proposal, iteration=self.iteration)
             self.storage.write_quantity('logP_reverse', logP_reverse, iteration=self.iteration)
-            self.storage.write_quantity('logP_forward', logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_forward', logP_geometry_forward, iteration=self.iteration)
             self.storage.write_quantity('logP_work', logP_work, iteration=self.iteration)
             self.storage.write_quantity('logP_energy', logP_energy, iteration=self.iteration)
             # Write some aggregate statistics to storage to make contributions to acceptance probability easier to analyze
-            self.storage.write_quantity('logP_groups_chemical', logP_chemical, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_geometry', logP_reverse - logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_chemical', logP_chemical_proposal, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_geometry', logP_reverse - logP_geometry_forward, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_work_and_energy', logP_work + logP_energy, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
 
