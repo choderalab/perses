@@ -163,11 +163,12 @@ class ExpandedEnsembleSampler(object):
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
+        self._pressure = sampler.thermodynamic_state.pressure
+        self._temperature = sampler.thermodynamic_state.temperature
         self.topology = topology
         self.state_key = state_key
         self.proposal_engine = proposal_engine
         self.log_weights = log_weights
-        self.scheme = scheme
         if self.log_weights is None: self.log_weights = dict()
 
         self.storage = None
@@ -224,6 +225,23 @@ class ExpandedEnsembleSampler(object):
         if state_key not in self.log_weights:
             self.log_weights[state_key] = 0.0
         return self.log_weights[state_key]
+
+    def _system_to_thermodynamic_state(self, system):
+        """
+        Given an OpenMM system object, create a corresponding ThermodynamicState that has the same
+        temperature and pressure as the current thermodynamic state.
+
+        Arguments
+        ---------
+        system : openmm.System
+            The OpenMM system for which to create the thermodynamic state
+        
+        Returns
+        -------
+        new_thermodynamic_state : openmmtools.states.ThermodynamicState
+            The thermodynamic state object representing the given system
+        """
+        return ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure)
 
     def _geometry_forward(self, topology_proposal, old_sampler_state):
         """
@@ -340,8 +358,8 @@ class ExpandedEnsembleSampler(object):
         -------
         logP_accept : float
             Log of acceptance probability of entire Expanded Ensemble switch (Eq. 25 or 46)
-        ncmc_new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of new atoms at the end of the NCMC switching.
+        ncmc_new_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of new atoms at the end of the NCMC switching.
         """
         if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
 
@@ -349,16 +367,19 @@ class ExpandedEnsembleSampler(object):
 
         logP_chemical_proposal = topology_proposal.logp_proposal
 
-        initial_reduced_potential = feptasks.compute_reduced_potential(topology_proposal.old_thermodynamic_state, sampler_state)
+        old_thermodynamic_state = self.sampler.thermodynamic_state
+        new_thermodynamic_state = self._system_to_thermodynamic_state(topology_proposal.new_system)
+
+        initial_reduced_potential = feptasks.compute_reduced_potential(old_thermodynamic_state, sampler_state)
         logP_initial = -initial_reduced_potential + old_log_weight
 
-        new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, old_sampler_state)
+        new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, sampler_state)
 
         ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
 
         logP_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
 
-        final_reduced_potential = feptasks.compute_reduced_potential(topology_proposal.new_thermodynamic_state, ncmc_new_sampler_state)
+        final_reduced_potential = feptasks.compute_reduced_potential(new_thermodynamic_state, ncmc_new_sampler_state)
         logP_final = -final_reduced_potential + new_log_weight
 
         # Compute total log acceptance probability according to Eq. 46
@@ -384,13 +405,13 @@ class ExpandedEnsembleSampler(object):
             self.storage.write_quantity('logP_groups_work_and_energy', logP_work + logP_energy, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
 
-        return logP_accept, new_positions
+        return logP_accept, ncmc_new_sampler_state
 
-    def update_positions(self):
+    def update_positions(self, n_iterations=1):
         """
         Sample new positions.
         """
-        self.sampler.update()
+        self.sampler.run(n_iterations=n_iterations)
 
     def update_state(self):
         """
@@ -413,7 +434,7 @@ class ExpandedEnsembleSampler(object):
         old_log_weight = self.get_log_weight(old_state_key)
         new_log_weight = self.get_log_weight(new_state_key)
 
-        logp_accept, ncmc_new_positions = self._geometry_ncmc_geometry(topology_proposal, positions, old_log_weight, new_log_weight)
+        logp_accept, ncmc_new_sampler_state = self._geometry_ncmc_geometry(topology_proposal, positions, old_log_weight, new_log_weight)
 
         # Accept or reject.
         if np.isnan(logp_accept):
@@ -429,7 +450,7 @@ class ExpandedEnsembleSampler(object):
             self.sampler.thermodynamic_state.system = topology_proposal.new_system
             self.sampler.sampler_state.system = topology_proposal.new_system
             self.topology = topology_proposal.new_topology
-            self.sampler.sampler_state.positions = ncmc_new_positions
+            self.sampler.sampler_state = ncmc_new_sampler_state
             self.sampler.topology = self.topology
             self.state_key = topology_proposal.new_chemical_state_key
             self.naccepted += 1
