@@ -374,8 +374,15 @@ class ExpandedEnsembleSampler(object):
         logP_initial = -initial_reduced_potential + old_log_weight
 
         new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, sampler_state)
-
-        ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
+        
+        #if we aren't doing any switching, then skip running the NCMC engine at all.
+        if self._switching_nsteps == 0:
+            ncmc_old_sampler_state = sampler_state
+            ncmc_new_sampler_state = new_geometry_sampler_state
+            logP_work = 0.0
+            logP_energy = 0.0
+        else:
+            ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
 
         logP_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
 
