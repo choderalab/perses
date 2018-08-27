@@ -501,7 +501,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
                 break
 
         from openmoltools import forcefield_generators
-        from utils import extractPositionsFromOEMOL, giveOpenmmPositionsToOEMOL
+        from perses.tests.utils import extractPositionsFromOEMOL, giveOpenmmPositionsToOEMOL
         import perses.rjmc.geometry as geometry
         from perses.rjmc.topology_proposal import TopologyProposal
         # create OEMol version of benzene
@@ -572,9 +572,9 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         
         thermodynamic_states = dict()
         for component in ['receptor', 'complex']:
-            thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
+            thermodynamic_states['explicit' + '-' + component] = states.ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
             #thermodynamic_states['implicit' + '-' + component] = ThermodynamicState(system=systems['implicit' + '-' + component], temperature=temperature)
-            thermodynamic_states['vacuum' + '-' + component]   = ThermodynamicState(system=systems['vacuum' + '-' + component], temperature=temperature)
+            thermodynamic_states['vacuum' + '-' + component]   = states.ThermodynamicState(system=systems['vacuum' + '-' + component], temperature=temperature)
 
         # Create SAMS samplers
         from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
@@ -588,10 +588,10 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
 
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment[0:8] == 'explicit':
-                sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+                sampler_state = states.SamplerState(positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
-                sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
+                sampler_state = states.SamplerState(positions=positions[environment])
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
