@@ -189,10 +189,10 @@ class ExpandedEnsembleSampler(object):
             self._ncmc_splitting = options['splitting']
         else:
             self._ncmc_splitting = "V R O H R V"
-            
+
         if options['nsteps']:
             self._switching_nsteps = options['nsteps']
-            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
+            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], integrator_splitting=self._ncmc_splitting, platform=platform, storage=self.storage)
         else:
             self._switching_nsteps = 0
 
