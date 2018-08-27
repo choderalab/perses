@@ -75,7 +75,7 @@ class PersesTestSystem(object):
         Example MultiTargetDesign sampler
 
     """
-    def __init__(self, storage_filename=None, mode='w'):
+    def __init__(self, storage_filename=None, mode='w', ncmc_nsteps=5, mcmc_nsteps=100):
         """Create a testsystem.
 
         Parameters
@@ -102,6 +102,8 @@ class PersesTestSystem(object):
         self.geometry_engine = FFAllAngleGeometryEngine(metadata={})
         self._splitting = "V R O R V"
         self._timestep = 1.0*unit.femtosecond
+        self._ncmc_nsteps = ncmc_nsteps
+        self._mcmc_nsteps = mcmc_nsteps
         self._move = LangevinSplittingDynamicsMove(timestep=self._timestep, splitting=self._splitting)
 
 
@@ -230,9 +232,9 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             else:
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
-            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
+             # reduce number of steps for testing
             mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
-            mcmc_samplers[environment].verbose = True
+            
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps': 0}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -362,8 +364,8 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
-            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
-            mcmc_samplers[environment].verbose = True
+             # reduce number of steps for testing
+            
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':50}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -593,9 +595,9 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
             else:
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
-            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
-            mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
+             # reduce number of steps for testing
+            
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -764,8 +766,8 @@ class MybTestSystem(PersesTestSystem):
             else:
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
-            mcmc_samplers[environment].nsteps = 500 # reduce number of steps for testing
-            mcmc_samplers[environment].verbose = True
+            00 # reduce number of steps for testing
+            
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':0}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -937,9 +939,9 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                     sampler_state = states.SamplerState(positions=positions[environment])
 
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
-                mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
-                mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, self.geometry_engine, proposal_engines[environment], options={'nsteps':5}, storage=storage)
+                 # reduce number of steps for testing
+                
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, self.geometry_engine, proposal_engines[environment], options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
@@ -1143,9 +1145,9 @@ class AblAffinityTestSystem(PersesTestSystem):
                     sampler_state = states.SamplerState(positions=positions[environment])
 
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
-                mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
-                mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
+                 # reduce number of steps for testing
+                
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
@@ -1360,9 +1362,9 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
                     sampler_state = states.SamplerState(positions=positions[environment])
 
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
-                mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
-                mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
+                 # reduce number of steps for testing
+                
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
@@ -1580,9 +1582,9 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
                     sampler_state = states.SamplerState(positions=positions[environment])
 
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
-                mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
-                mcmc_samplers[environment].verbose = True
-                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5}, storage=storage)
+                 # reduce number of steps for testing
+                
+                exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
                 sams_samplers[environment].verbose = True
@@ -1753,8 +1755,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             else:
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
-            mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
-            mcmc_samplers[environment].verbose = True
+             # reduce number of steps for testing
+            
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':500}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -1946,8 +1948,8 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
             else:
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
-            mcmc_samplers[environment].nsteps = 500 # reduce number of steps for testing
-            mcmc_samplers[environment].verbose = True
+            00 # reduce number of steps for testing
+            
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':0}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -2377,14 +2379,11 @@ def run_t4_inhibitors():
     """
     Run T4 lysozyme inhibitors in solvents test system.
     """
-    testsystem = T4LysozymeInhibitorsTestSystem(storage_filename='output.nc')
+    testsystem = T4LysozymeInhibitorsTestSystem(storage_filename='output.nc', ncmc_nsteps=50, mcmc_nsteps=100)
     for environment in ['explicit', 'vacuum']:
         #testsystem.exen_samplers[environment].pdbfile = open('t4-' + component + '.pdb', 'w')
         #testsystem.exen_samplers[environment].options={'nsteps':50} # instantaneous MC
-        testsystem.mcmc_samplers[environment].verbose = True
-        testsystem.mcmc_samplers[environment].nsteps = 50 # use fewer MD steps to speed things up
         testsystem.exen_samplers[environment].verbose = True
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50 # NCMC switching
         testsystem.sams_samplers[environment].verbose = True
     testsystem.designer.verbose = True
     testsystem.designer.run(niterations=50)
@@ -2399,13 +2398,10 @@ def run_t4():
     """
     Run T4 lysozyme test system.
     """
-    testsystem = T4LysozymeTestSystem()
+    testsystem = T4LysozymeTestSystem(ncmc_nsteps=0)
     solvent = 'explicit'
     for component in ['complex', 'receptor']:
         testsystem.exen_samplers[solvent + '-' + component].pdbfile = open('t4-' + component + '.pdb', 'w')
-        testsystem.exen_samplers[solvent + '-' + component].options={'nsteps':0} # instantaneous MC
-        testsystem.mcmc_samplers[solvent + '-' + component].verbose = True # use fewer MD steps to speed things up
-        testsystem.mcmc_samplers[solvent + '-' + component].nsteps = 50 # use fewer MD steps to speed things up
         testsystem.sams_samplers[solvent + '-' + component].run(niterations=5)
     testsystem.designer.verbose = True
     testsystem.designer.run(niterations=5)
@@ -2420,15 +2416,11 @@ def run_myb():
     """
     Run myb test system.
     """
-    testsystem = MybTestSystem()
+    testsystem = MybTestSystem(ncmc_nsteps=0, mcmc_nsteps100)
     solvent = 'implicit'
 
     testsystem.exen_samplers[solvent + '-peptide'].pdbfile = open('myb-vacuum.pdb', 'w')
     testsystem.exen_samplers[solvent + '-complex'].pdbfile = open('myb-complex.pdb', 'w')
-    testsystem.exen_samplers[solvent + '-complex'].options={'nsteps':0}
-    testsystem.exen_samplers[solvent + '-peptide'].options={'nsteps':0}
-    testsystem.mcmc_samplers[solvent + '-complex'].nsteps = 50
-    testsystem.mcmc_samplers[solvent + '-peptide'].nsteps = 50
     testsystem.sams_samplers[solvent + '-complex'].run(niterations=5)
     #testsystem.designer.verbose = True
     #testsystem.designer.run(niterations=500)
@@ -2439,16 +2431,12 @@ def run_abl_imatinib_resistance():
     """
     Run abl test system.
     """
-    testsystem = AblImatinibResistanceTestSystem()
+    testsystem = AblImatinibResistanceTestSystem(ncmc_nsteps=20000, mcmc_nsteps=20000)
     #for environment in testsystem.environments:
     for environment in ['vacuum-complex']:
         print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].options={'nsteps':20000, 'timestep' : 1.0 * unit.femtoseconds}
-        testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        testsystem.mcmc_samplers[environment].nsteps = 20000
-        testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
         #testsystem.mcmc_samplers[environment].run(niterations=5)
         testsystem.exen_samplers[environment].run(niterations=100)
         #testsystem.sams_samplers[environment].run(niterations=5)
@@ -2462,12 +2450,10 @@ def run_kinase_inhibitors():
     """
     Run kinase inhibitors test system.
     """
-    testsystem = KinaseInhibitorsTestSystem()
+    testsystem = KinaseInhibitorsTestSystem(ncmc_nsteps=0, mcmc_nsteps=100)
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
     testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
-    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
-    testsystem.mcmc_samplers[environment].nsteps = 50
     testsystem.exen_samplers[environment].geometry_engine.write_proposal_pdb = True # write proposal PDBs
     testsystem.sams_samplers[environment].run(niterations=100)
 
@@ -2478,11 +2464,9 @@ def run_valence_system():
     This system only has one environment (vacuum), so SAMS is used.
 
     """
-    testsystem = ValenceSmallMoleculeLibraryTestSystem(storage_filename='output.nc')
+    testsystem = ValenceSmallMoleculeLibraryTestSystem(storage_filename='output.nc', ncmc_nsteps=0, mcmc_nsteps=10)
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
-    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
-    testsystem.mcmc_samplers[environment].nsteps = 1
     testsystem.sams_samplers[environment].run(niterations=50)
 
 def run_alanine_system(sterics=False):
@@ -2494,14 +2478,12 @@ def run_alanine_system(sterics=False):
 
     """
     if sterics:
-        testsystem = AlanineDipeptideTestSystem(storage_filename='output.nc')
+        testsystem = AlanineDipeptideTestSystem(storage_filename='output.nc', ncmc_nsteps=0, mcmc_nsteps=100)
     else:
-        testsystem = AlanineDipeptideValenceTestSystem(storage_filename='output.nc')
+        testsystem = AlanineDipeptideValenceTestSystem(storage_filename='output.nc', ncmc_nsteps=0, mcmc_nsteps=100)
     environment = 'vacuum'
     print(testsystem.__class__.__name__)
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
-    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 0
-    testsystem.mcmc_samplers[environment].nsteps = 500
     testsystem.sams_samplers[environment].update_method = 'two-stage'
     testsystem.sams_samplers[environment].second_stage_start = 100 # iteration to start second stage
     testsystem.sams_samplers[environment].run(niterations=200)
@@ -2510,33 +2492,20 @@ def test_valence_write_pdb_ncmc_switching():
     """
     Run abl test system.
     """
-    testsystem = ValenceSmallMoleculeLibraryTestSystem()
+    testsystem = ValenceSmallMoleculeLibraryTestSystem(ncmc_nsteps=10, mcmc_nsteps=10)
     environment = 'vacuum'
-    testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10
-    testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
-    testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 1 # write PDB files for NCMC switching
-    testsystem.mcmc_samplers[environment].nsteps = 10
-    testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
     testsystem.exen_samplers[environment].run(niterations=1)
 
 def run_abl_affinity_write_pdb_ncmc_switching():
     """
     Run abl test system.
     """
-    testsystem = AblAffinityTestSystem()
+    testsystem = AblAffinityTestSystem(ncmc_nsteps=10000, mcmc_nsteps=10000)
     #for environment in testsystem.environments:
     for environment in ['vacuum-complex']:
         print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 10000
-        testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
-        testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 10000
-        testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
-
-        testsystem.mcmc_samplers[environment].verbose = True
         testsystem.exen_samplers[environment].verbose = True
         testsystem.sams_samplers[environment].verbose = True
         #testsystem.mcmc_samplers[environment].run(niterations=5)
@@ -2553,7 +2522,7 @@ def run_constph_abl():
     """
     Run Abl:imatinib constant-pH test system.
     """
-    testsystem = AblImatinibProtonationStateTestSystem()
+    testsystem = AblImatinibProtonationStateTestSystem(, ncmc_nsteps=50, mcmc_nsteps=2500)
     for environment in testsystem.environments:
     #for environment in ['explicit-inhibitor', 'explicit-complex']:
     #for environment in ['vacuum-inhibitor', 'vacuum-complex']:
@@ -2564,14 +2533,6 @@ def run_constph_abl():
         print(environment)
         testsystem.exen_samplers[environment].pdbfile = open('abl-imatinib-constph-%s.pdb' % environment, 'w')
         testsystem.exen_samplers[environment].geometry_pdbfile = open('abl-imatinib-constph-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 50
-        testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
-        testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        #testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 2500
-        testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
-
-        testsystem.mcmc_samplers[environment].verbose = True
         testsystem.exen_samplers[environment].verbose = True
         testsystem.exen_samplers[environment].proposal_engine.verbose = True
         testsystem.sams_samplers[environment].verbose = True
@@ -2597,7 +2558,7 @@ def run_imidazole():
     """
     Run imidazole constant-pH test system.
     """
-    testsystem = ImidazoleProtonationStateTestSystem(storage_filename='output.nc')
+    testsystem = ImidazoleProtonationStateTestSystem(storage_filename='output.nc', ncmc_nsteps=500, mcmc_nsteps=1000)
     for environment in testsystem.environments:
         if environment not in testsystem.exen_samplers:
             print("Skipping '%s' for now..." % environment)
@@ -2606,14 +2567,6 @@ def run_imidazole():
         print(environment)
         #testsystem.exen_samplers[environment].pdbfile = open('imidazole-constph-%s.pdb' % environment, 'w')
         #testsystem.exen_samplers[environment].geometry_pdbfile = open('imidazole-constph-%s-geometry-proposals.pdb' % environment, 'w')
-        testsystem.exen_samplers[environment].ncmc_engine.nsteps = 500
-        testsystem.exen_samplers[environment].ncmc_engine.timestep = 1.0 * unit.femtoseconds
-        testsystem.exen_samplers[environment].accept_everything = False # accept everything that doesn't lead to NaN for testing
-        #testsystem.exen_samplers[environment].ncmc_engine.write_ncmc_interval = 100 # write PDB files for NCMC switching
-        testsystem.mcmc_samplers[environment].nsteps = 500
-        testsystem.mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
-
-        testsystem.mcmc_samplers[environment].verbose = True
         testsystem.exen_samplers[environment].verbose = True
         testsystem.exen_samplers[environment].proposal_engine.verbose = True
         testsystem.sams_samplers[environment].verbose = True
@@ -2632,12 +2585,8 @@ def run_fused_rings():
     nsteps_to_try = [10, 100, 1000, 10000, 100000] # number of NCMC steps
     for ncmc_steps in nsteps_to_try:
         storage_filename = 'output-%d.nc' % ncmc_steps
-        testsystem = FusedRingsTestSystem(storage_filename=storage_filename)
+        testsystem = FusedRingsTestSystem(storage_filename=storage_filename, ncmc_nsteps=nsteps_to_try, mcmc_nsteps=100)
         for environment in ['explicit', 'vacuum']:
-            testsystem.mcmc_samplers[environment].verbose = True
-            testsystem.mcmc_samplers[environment].nsteps = 500
-            testsystem.exen_samplers[environment].verbose = True
-            testsystem.exen_samplers[environment].ncmc_engine.nsteps = ncmc_steps # NCMC switching steps
             testsystem.exen_samplers[environment].ncmc_engine.verbose = True # verbose output of work
             testsystem.sams_samplers[environment].verbose = True
         testsystem.designer.verbose = True
