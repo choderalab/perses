@@ -27,7 +27,6 @@ else:
     from commands import getstatusoutput
 from openmmtools.constants import kB
 from openmmtools import alchemy, states
-from openmmtools.mcmc import NaNException
 
 ################################################################################
 # CONSTANTS
@@ -42,6 +41,9 @@ beta = 1.0/kT
 ################################################################################]
 
 # TODO: Move some of these utility routines to openmoltools.
+
+class NaNException(Exception):
+    pass
 
 def quantity_is_finite(quantity):
     """
