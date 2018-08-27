@@ -2081,17 +2081,17 @@ class NullTestSystem(PersesTestSystem):
             initial_topology._state_key = proposal_engine._fake_states[0]
 
             temperature = 300*unit.kelvin
-            thermodynamic_state = ThermodynamicState(system=initial_system, temperature=temperature)
+            thermodynamic_state = states.ThermodynamicState(system=initial_system, temperature=temperature)
 
             chemical_state_key = proposal_engine.compute_state_key(initial_topology)
-            sampler_state = SamplerState(system=initial_system, positions=initial_positions)
+            sampler_state = states.SamplerState(positions=initial_positions)
 
-            mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, topology=initial_topology, storage=self.storage)
+            mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
             mcmc_sampler.nsteps = 500
             mcmc_sampler.timestep = 1.0*unit.femtosecond
             mcmc_sampler.verbose = True
 
-            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, scheme=scheme, options=options, storage=self.storage)
+            exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, initial_topology, chemical_state_key, proposal_engine, self.geometry_engine, options=options, storage=self.storage)
             exen_sampler.verbose = True
             if exen_pdb_filename is not None:
                 exen_sampler.pdbfile = open(exen_pdb_filename,'w')
