@@ -1734,8 +1734,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # Define thermodynamic state of interest.
         
         thermodynamic_states = dict()
-        thermodynamic_states['explicit'] = ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
-        thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
+        thermodynamic_states['explicit'] = states.ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
+        thermodynamic_states['vacuum']   = states.ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
         # Create SAMS samplers
         from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
@@ -1749,13 +1749,13 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment == 'explicit':
-                sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+                sampler_state = states.SamplerState(positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
-                sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
+                sampler_state = states.SamplerState(positions=positions[environment])
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].verbose = True
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':500}, storage=storage, scheme='geometry-ncmc-geometry')
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':500}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
