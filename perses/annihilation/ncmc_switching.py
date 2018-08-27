@@ -139,7 +139,10 @@ class NCMCEngine(object):
         self._storage = None
         if storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
-        self._write_ncmc_interval = write_ncmc_interval
+        if write_ncmc_interval is not None:
+            self._write_ncmc_interval = write_ncmc_interval
+        else:
+            self._write_ncmc_interval = self._nsteps
         self._work_save_interval = write_ncmc_interval
         self._save_configuration = save_configuration
 
