@@ -276,7 +276,7 @@ class ExpandedEnsembleSampler(object):
         if self.verbose: print("Geometry engine proposal...")
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
         initial_time = time.time()
-        new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, old_positions, self.sampler.thermodynamic_state.beta)
+        new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, old_sampler_state.positions, self.sampler.thermodynamic_state.beta)
         if self.verbose: print('proposal took %.3f s' % (time.time() - initial_time))
 
         if self.geometry_pdbfile is not None:
