@@ -189,6 +189,11 @@ class ExpandedEnsembleSampler(object):
         else:
             self._switching_nsteps = 0
 
+        if options['nsteps_mcmc']:
+            self._n_iterations_per_update = options['nsteps_mcmc']
+        else:
+            self._n_iterations_per_update = 100
+
         self.geometry_engine = geometry_engine
         self.naccepted = 0
         self.nrejected = 0
@@ -486,7 +491,7 @@ class ExpandedEnsembleSampler(object):
         if self.verbose:
             print("-" * 80)
             print("Expanded Ensemble sampler iteration %8d" % self.iteration)
-        self.update_positions()
+        self.update_positions(n_iterations=self._n_iterations_per_update)
         self.update_state()
         self.iteration += 1
         if self.verbose:
