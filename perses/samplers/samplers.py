@@ -453,7 +453,7 @@ class ExpandedEnsembleSampler(object):
         old_log_weight = self.get_log_weight(old_state_key)
         new_log_weight = self.get_log_weight(new_state_key)
 
-        logp_accept, ncmc_new_sampler_state = self._geometry_ncmc_geometry(topology_proposal, positions, old_log_weight, new_log_weight)
+        logp_accept, ncmc_new_sampler_state = self._geometry_ncmc_geometry(topology_proposal, self.sampler.sampler_state, old_log_weight, new_log_weight)
 
         # Accept or reject.
         if np.isnan(logp_accept):
