@@ -33,6 +33,7 @@ from functools import partial
 from pkg_resources import resource_filename
 from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
+from openmmtools import states, mcmc
 from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.topology_proposal import OESMILES_OPTIONS
@@ -98,6 +99,10 @@ class PersesTestSystem(object):
         self.sams_samplers = dict()
         self.designer = None
         self.geometry_engine = FFAllAngleGeometryEngine(metadata={})
+        self._splitting = "V R O R V"
+        self._timestep = 1.0*unit.femtosecond
+        self._move = mcmc.LangevinSplittingDynamicsMove(timestep=self._timestep, splitting=self._splitting)
+
 
 class AlanineDipeptideTestSystem(PersesTestSystem):
     """
@@ -202,14 +207,14 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
-        thermodynamic_states['explicit'] = ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
-        thermodynamic_states['implicit'] = ThermodynamicState(system=systems['implicit'], temperature=temperature)
-        thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
+        thermodynamic_states['explicit'] = states.ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
+        thermodynamic_states['implicit'] = states.ThermodynamicState(system=systems['implicit'], temperature=temperature)
+        thermodynamic_states['vacuum']   = states.ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
         # Create SAMS samplers
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -220,10 +225,10 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
 
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment == 'explicit':
-                sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+                sampler_state = states.SamplerState(positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
             else:
-                sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
-            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, topology=topologies[environment], storage=storage)
+                sampler_state = states.SamplerState(positions=positions[environment])
+            mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
             mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
             mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
             mcmc_samplers[environment].verbose = True
@@ -337,14 +342,14 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
         thermodynamic_states['vacuum'] = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
         # Create SAMS samplers
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -564,7 +569,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
         for component in ['receptor', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
@@ -572,7 +577,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
             thermodynamic_states['vacuum' + '-' + component]   = ThermodynamicState(system=systems['vacuum' + '-' + component], temperature=temperature)
 
         # Create SAMS samplers
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -735,7 +740,7 @@ class MybTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
         for component in ['peptide', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
@@ -743,7 +748,7 @@ class MybTestSystem(PersesTestSystem):
             thermodynamic_states['vacuum' + '-' + component]   = ThermodynamicState(system=systems['vacuum' + '-' + component], temperature=temperature)
 
         # Create SAMS samplers
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -908,8 +913,8 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Create SAMS samplers
-        from perses.samplers.thermodynamics import ThermodynamicState
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -1105,7 +1110,7 @@ class AblAffinityTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
         for component in components:
             for solvent in solvents:
@@ -1116,7 +1121,7 @@ class AblAffinityTestSystem(PersesTestSystem):
                     thermodynamic_states[environment]   = ThermodynamicState(system=systems[environment], temperature=temperature)
 
         # Create SAMS samplers
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -1321,7 +1326,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
 
         # Define thermodynamic state of interest.
         print('Defining thermodynamic states...')
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
         for component in components:
             for solvent in solvents:
@@ -1333,7 +1338,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
 
         # Create SAMS samplers
         print('Creating SAMS samplers...')
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -1541,7 +1546,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         # Define thermodynamic state of interest.
         print('Defining thermodynamic states...')
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
         for component in components:
             for solvent in solvents:
@@ -1553,7 +1558,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         # Create SAMS samplers
         print('Creating SAMS samplers...')
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -1726,13 +1731,13 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
         thermodynamic_states['explicit'] = ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
         thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
         # Create SAMS samplers
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -1918,14 +1923,14 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        from perses.samplers.thermodynamics import ThermodynamicState
+        
         thermodynamic_states = dict()
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
         thermodynamic_states['vacuum']   = ThermodynamicState(system=systems['vacuum'], temperature=temperature)
 
         # Create SAMS samplers
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
         sams_samplers = dict()
@@ -2048,8 +2053,7 @@ class NullTestSystem(PersesTestSystem):
 
         from perses.rjmc.topology_proposal import SystemGenerator
         from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromIUPAC
-        from perses.samplers.thermodynamics import ThermodynamicState
-        from perses.samplers.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler
+        from perses.samplers.samplers import ExpandedEnsembleSampler
 
         for key in environments:
             gaff_xml_filename = get_data_filename('data/gaff.xml')
