@@ -2416,7 +2416,7 @@ def run_myb():
     """
     Run myb test system.
     """
-    testsystem = MybTestSystem(ncmc_nsteps=0, mcmc_nsteps100)
+    testsystem = MybTestSystem(ncmc_nsteps=0, mcmc_nsteps=100)
     solvent = 'implicit'
 
     testsystem.exen_samplers[solvent + '-peptide'].pdbfile = open('myb-vacuum.pdb', 'w')
@@ -2522,7 +2522,7 @@ def run_constph_abl():
     """
     Run Abl:imatinib constant-pH test system.
     """
-    testsystem = AblImatinibProtonationStateTestSystem(, ncmc_nsteps=50, mcmc_nsteps=2500)
+    testsystem = AblImatinibProtonationStateTestSystem(ncmc_nsteps=50, mcmc_nsteps=2500)
     for environment in testsystem.environments:
     #for environment in ['explicit-inhibitor', 'explicit-complex']:
     #for environment in ['vacuum-inhibitor', 'vacuum-complex']:
