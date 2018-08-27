@@ -299,7 +299,7 @@ class NCMCEngine(object):
 
         #create the nonequilibrium move:
         ne_move = NonequilibriumSwitchingMove(self._functions, self._integrator_splitting, self._temperature, self._nsteps, self._timestep, 
-                                              work_save_interval=self._work_save_interval, top=topology,subset_atoms=None,
+                                              work_save_interval=self._write_ncmc_interval, top=topology,subset_atoms=None,
                                               save_configuration=self._save_configuration, measure_shadow_work=self._measure_shadow_work)
         
         #run the NCMC protocol
