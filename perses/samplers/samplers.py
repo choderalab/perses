@@ -177,12 +177,19 @@ class ExpandedEnsembleSampler(object):
 
         # Initialize
         self.iteration = 0
-        option_names = ['timestep', 'nsteps', 'functions']
+        option_names = ['timestep', 'nsteps', 'functions', 'nsteps_mcmc', 'splitting']
+
         if options is None:
             options = dict()
         for option_name in option_names:
             if option_name not in options:
                 options[option_name] = None
+        
+        if options['splitting']:
+            self._ncmc_splitting = options['splitting']
+        else:
+            self._ncmc_splitting = "V R O H R V"
+            
         if options['nsteps']:
             self._switching_nsteps = options['nsteps']
             self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
