@@ -33,7 +33,8 @@ from functools import partial
 from pkg_resources import resource_filename
 from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
-from openmmtools import states, mcmc
+from openmmtools import states
+from openmmtools.mcmc import MCMCSampler, LangevinSplittingDynamicsMove
 from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.topology_proposal import OESMILES_OPTIONS
@@ -101,7 +102,7 @@ class PersesTestSystem(object):
         self.geometry_engine = FFAllAngleGeometryEngine(metadata={})
         self._splitting = "V R O R V"
         self._timestep = 1.0*unit.femtosecond
-        self._move = mcmc.LangevinSplittingDynamicsMove(timestep=self._timestep, splitting=self._splitting)
+        self._move = LangevinSplittingDynamicsMove(timestep=self._timestep, splitting=self._splitting)
 
 
 class AlanineDipeptideTestSystem(PersesTestSystem):
@@ -929,13 +930,13 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                     storage = NetCDFStorageView(self.storage, envname=environment)
 
                 if solvent == 'explicit':
-                    thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
-                    sampler_state = SamplerState(system=systems[environment], positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
+                    thermodynamic_state = states.ThermodynamicState(system=systems[environment], temperature=temperature, pressure=pressure)
+                    sampler_state = states.SamplerState(positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
                 else:
-                    thermodynamic_state = ThermodynamicState(system=systems[environment], temperature=temperature)
-                    sampler_state = SamplerState(system=systems[environment], positions=positions[environment])
+                    thermodynamic_state = states.ThermodynamicState(system=systems[environment], temperature=temperature)
+                    sampler_state = states.SamplerState(positions=positions[environment])
 
-                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, topology=topologies[environment], storage=storage)
+                mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
                 mcmc_samplers[environment].nsteps = 5 # reduce number of steps for testing
                 mcmc_samplers[environment].verbose = True
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, self.geometry_engine, proposal_engines[environment], options={'nsteps':5}, storage=storage)
