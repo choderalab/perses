@@ -134,7 +134,7 @@ class NetCDFStorage(object):
                 frames_dimension_name = dimension_name(varname, 'frames')
                 ncdim = self._ncfile.createDimension(frames_dimension_name, nframes)
 
-            natoms = sum([ 1 for atom in topology.atoms() ])
+            natoms = topology.n_atoms
             atoms_dimension_name = dimension_name(varname, 'atoms')
             ncdim = self._ncfile.createDimension(atoms_dimension_name, natoms)
 
