@@ -33,6 +33,7 @@ from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
 from perses.tests.utils import quantity_is_finite
+from scipy.misc import logsumexp as log_sum_exp
 
 ################################################################################
 # LOGGER
@@ -40,22 +41,6 @@ from perses.tests.utils import quantity_is_finite
 
 import logging
 logger = logging.getLogger(__name__)
-
-################################################################################
-# UTILITY FUNCTIONS
-################################################################################
-
-def log_sum_exp(a_n):
-    """
-    Compute log(sum(exp(a_n)))
-
-    Parameters
-    ----------
-    a_n : dict of objects : floats
-
-    """
-    a_n = np.array(list(a_n.values()))
-    return np.log( np.sum( np.exp(a_n - a_n.max() ) ) )
 
 
 ################################################################################
