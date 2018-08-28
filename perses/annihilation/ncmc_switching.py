@@ -73,7 +73,7 @@ class NCMCEngine(object):
     def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps,
                  steps_per_propagation=default_steps_per_propagation, timestep=default_timestep,
                  constraint_tolerance=None, platform=None, write_ncmc_interval=None, measure_shadow_work=False,
-                 integrator_splitting='V R O H R V', storage=None, verbose=False, LRUCapacity=10, pressure=None, save_configuration=False):
+                 integrator_splitting='V R O H R V', storage=None, verbose=False, LRUCapacity=10, pressure=None):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -139,12 +139,14 @@ class NCMCEngine(object):
         self._storage = None
         if storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
+            self._save_configuration = True
+        else:
+            self._save_configuration = False
         if write_ncmc_interval is not None:
             self._write_ncmc_interval = write_ncmc_interval
         else:
             self._write_ncmc_interval = self._nsteps
         self._work_save_interval = write_ncmc_interval
-        self._save_configuration = save_configuration
 
     @property
     def beta(self):
@@ -320,6 +322,15 @@ class NCMCEngine(object):
         old_positions = hybrid_factory.old_positions(final_hybrid_sampler_state.positions)
         old_box_vectors = copy.deepcopy(new_box_vectors) #these are the same as the new system
         final_old_sampler_state = SamplerState(old_positions, box_vectors=old_box_vectors)
+
+        if self._save_configuration:
+            trajectory = ne_move.trajectory.xyz
+            topology = ne_move.trajectory.topology.to_openmm()
+            varname = "ncmcpositions"
+            nframes = ne_move.trajectory.n_frames
+
+            for frame in range(nframes):
+                self._storage.write_configuration(varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
 
         # Return
         return [final_old_sampler_state, final_sampler_state, logP_work, logP_energy]
