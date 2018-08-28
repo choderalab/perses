@@ -15,24 +15,6 @@ from openmmtools.alchemy import AlchemicalState
 
 
 default_functions = {
-    'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-    'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-    'lambda_bonds' : '0.9*lambda + 0.1', # don't fully soften bonds
-    'lambda_angles' : '0.9*lambda + 0.1', # don't fully soften angles
-    'lambda_torsions' : 'lambda'
-    }
-
-
-functions_disable_all = {
-    'lambda_sterics' : 'lambda',
-    'lambda_electrostatics' : 'lambda',
-    'lambda_bonds' : 'lambda',
-    'lambda_angles' : 'lambda',
-    'lambda_torsions' : 'lambda'
-    }
-
-# make something hyperbolic or something to go from on to off to on
-default_hybrid_functions = {
     'lambda_sterics' : 'lambda',
     'lambda_electrostatics' : 'lambda',
     'lambda_bonds' : 'lambda',
