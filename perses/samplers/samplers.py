@@ -19,6 +19,7 @@ from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
 import sys, math
+import mdtraj as md
 import numpy as np
 from openmmtools import testsystems
 import copy
@@ -468,7 +469,7 @@ class ExpandedEnsembleSampler(object):
         if accept:
             self.sampler.thermodynamic_state.set_system(topology_proposal.new_system, fix_state=True)
             self.sampler.sampler_state.system = topology_proposal.new_system
-            self.topology = topology_proposal.new_topology
+            self.topology = md.Topology.from_openmm(topology_proposal.new_topology)
             self.sampler.sampler_state = ncmc_new_sampler_state
             self.sampler.topology = self.topology
             self.state_key = topology_proposal.new_chemical_state_key
