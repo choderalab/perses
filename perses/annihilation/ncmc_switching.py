@@ -183,10 +183,7 @@ class NCMCEngine(object):
             The new system (nonalchemical) thermodynamic state
         """
         systems = [topology_proposal.old_system, topology_proposal.new_system]
-        thermostates = []
-        for system in systems:
-            thermodynamic_state = ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure)
-            thermostates.append(thermodynamic_state)
+        thermostates = [ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure) for system in systems]
         
         return thermostates[0], thermostates[1]
 
