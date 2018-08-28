@@ -325,7 +325,7 @@ class NCMCEngine(object):
 
         if self._save_configuration:
             trajectory = ne_move.trajectory.xyz
-            topology = ne_move.trajectory.topology.to_openmm()
+            topology = ne_move.trajectory.topology
             varname = "ncmcpositions"
             nframes = ne_move.trajectory.n_frames
 
