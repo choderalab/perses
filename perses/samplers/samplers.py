@@ -166,7 +166,7 @@ class ExpandedEnsembleSampler(object):
         self.sampler = sampler
         self._pressure = sampler.thermodynamic_state.pressure
         self._temperature = sampler.thermodynamic_state.temperature
-        self.topology = mdtraj.Topology.from_openmm(topology)
+        self.topology = md.Topology.from_openmm(topology)
         self.state_key = state_key
         self.proposal_engine = proposal_engine
         self.log_weights = log_weights
