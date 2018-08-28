@@ -479,7 +479,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("    rejected")
 
         if self.storage:
-            self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
+            self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.topology, iteration=self.iteration)
             self.storage.write_object('state_key', self.state_key, iteration=self.iteration)
             self.storage.write_object('proposed_state_key', topology_proposal.new_chemical_state_key, iteration=self.iteration)
             self.storage.write_quantity('naccepted', self.naccepted, iteration=self.iteration)
