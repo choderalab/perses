@@ -466,7 +466,7 @@ class ExpandedEnsembleSampler(object):
                 accept = True
 
         if accept:
-            self.sampler.thermodynamic_state.system = topology_proposal.new_system
+            self.sampler.thermodynamic_state.set_system(topology_proposal.new_system, fix_state=True)
             self.sampler.sampler_state.system = topology_proposal.new_system
             self.topology = topology_proposal.new_topology
             self.sampler.sampler_state = ncmc_new_sampler_state
