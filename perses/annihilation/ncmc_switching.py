@@ -173,11 +173,11 @@ class NCMCEngine(object):
         logP_energy : float
             The NCMC energy contribution to log probability.
         """
-        initial_state = hybrid_thermodynamic_state.set_alchemical_parameters(0.0)
-        initial_reduced_potential = compute_reduced_potential(initial_state, initial_sampler_state)
+        hybrid_thermodynamic_state.set_alchemical_parameters(0.0)
+        initial_reduced_potential = compute_reduced_potential(hybrid_thermodynamic_state, initial_sampler_state)
 
-        final_state = hybrid_thermodynamic_state.set_alchemical_parameters(1.0)
-        final_reduced_potential = compute_reduced_potential(final_state, final_sampler_state)
+        hybrid_thermodynamic_state.set_alchemical_parameters(1.0)
+        final_reduced_potential = compute_reduced_potential(hybrid_thermodynamic_state, final_sampler_state)
 
         return final_reduced_potential - initial_reduced_potential
 
