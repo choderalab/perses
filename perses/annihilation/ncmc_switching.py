@@ -296,7 +296,7 @@ class NCMCEngine(object):
         initial_hybrid_positions = hybrid_factory.hybrid_positions
         initial_hybrid_box_vectors = initial_sampler_state.box_vectors
 
-        initial_hybrid_sampler_state = SamplerState(initial_hybrid_positions, box_vectors=initial_hybrid_box_vectors)
+        initial_hybrid_sampler_state = SamplerState(initial_hybrid_positions, box_vectors=initial_sampler_state.box_vectors)
         final_hybrid_sampler_state = copy.deepcopy(initial_hybrid_sampler_state)
 
         #create the nonequilibrium move:
