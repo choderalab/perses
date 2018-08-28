@@ -1804,7 +1804,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
                  atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
-                 always_change=True):
+                 always_change=True, atom_map=None):
 
         # Default atom and bond expressions for MCSS
         self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
@@ -1827,9 +1827,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         self._probability_matrix = self._calculate_probability_matrix(self._smiles_list)
 
+        self._atom_map = atom_map
+
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
 
-    def propose(self, current_system, current_topology, current_metadata=None):
+    def propose(self, current_system, current_topology, current_mol=None, proposed_mol=None, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -1841,6 +1843,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             the topology of the current state
         current_metadata : dict
             dict containing current smiles as a key
+        current_mol : OEMol, optional, default=None
+            If specified, use this OEMol instead of converting from topology
+        proposed_mol : OEMol, optional, default=None
+            If specified, use this OEMol instead of converting from topology
 
         Returns
         -------
@@ -1848,7 +1854,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
            topology proposal object
         """
         # Determine SMILES string for current small molecule
-        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+        if current_mol is None:
+            current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+        else:
+            # TODO: Make sure we're using canonical mol to smiles conversion
+            current_mol_smiles = oechem.OEMolToSmiles(current_mol)
 
         # Remove the small molecule from the current Topology object
         current_receptor_topology = self._remove_small_molecule(current_topology)
@@ -1860,7 +1870,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         old_alchemical_atoms = range(old_mol_start_index, len_old_mol)
 
         # Select the next molecule SMILES given proposal probabilities
-        proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
+        if proposed_mol is None:
+            proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
+        else:
+            # TODO: Make sure we're using canonical mol to smiles conversion
+            proposed_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            logp_proposal = 0.0
 
         # Build the new Topology object, including the proposed molecule
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
@@ -1870,7 +1885,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
-        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose, allow_ring_breaking=self._allow_ring_breaking)
+        if not self._atom_map:
+            mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr,
+                                                  bond_expr=self.bond_expr, verbose=self.verbose,
+                                                  allow_ring_breaking=self._allow_ring_breaking)
+        else:
+            mol_atom_map = self._atom_map
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
@@ -2444,13 +2464,13 @@ class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     functionality.
     """
 
-    def __init__(self, old_mol, new_mol, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True):
+    def __init__(self, old_mol, new_mol, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, atom_map=None):
         self._old_mol_smiles = oechem.OECreateSmiString(old_mol, OESMILES_OPTIONS)
         self._new_mol_smiles = oechem.OECreateSmiString(new_mol, OESMILES_OPTIONS)
         self._old_mol = old_mol
         self._new_mol = new_mol
 
-        super(TwoMoleculeSetProposalEngine, self).__init__([self._old_mol_smiles, self._new_mol_smiles], system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr)
+        super(TwoMoleculeSetProposalEngine, self).__init__([self._old_mol_smiles, self._new_mol_smiles], system_generator, residue_name=residue_name, atom_expr=atom_expr, bond_expr=bond_expr, atom_map=atom_map)
 
         self._allow_ring_breaking = False # don't allow ring breaking
 
