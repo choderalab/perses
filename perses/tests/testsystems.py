@@ -1678,7 +1678,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     >>> sams_sampler = testsystem.sams_samplers['explicit']
 
     """
-    def __init__(self, constraints=app.HBonds, **kwargs):
+    def __init__(self, constraints=app.HBonds, premapped_json_dict=None, **kwargs):
         super(SmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
@@ -1722,11 +1722,18 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         positions['explicit'] = modeller.getPositions()
 
         # Set up the proposal engines.
-        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, PremappedSmallMoleculeSetProposalEngine, SmallMoleculeAtomMapper
         proposal_metadata = { }
         proposal_engines = dict()
-        for environment in environments:
-            proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment])
+
+        if not premapped_json_dict:
+            for environment in environments:
+                proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment])
+        
+        else:
+            atom_mapper = SmallMoleculeAtomMapper.from_json(premapped_json_dict)
+            for environment in environments:
+                proposal_engines[environment] = PremappedSmallMoleculeSetProposalEngine(atom_mapper, system_generators[environment])
 
         # Generate systems
         systems = dict()
