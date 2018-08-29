@@ -27,6 +27,7 @@ except ImportError:
 import openmoltools
 import logging
 import time
+import progressbar
 from typing import List, Dict
 try:
     from subprocess import getoutput  # If python 3
@@ -103,13 +104,15 @@ class SmallMoleculeAtomMapper(object):
     proposals is not disconnected.
     """
 
-    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None):
+    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
 
         self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
         self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
         self._unique_smiles_list = list(self._oemol_dictionary.keys())
 
         self._n_molecules = len(self._unique_smiles_list)
+
+        self._prohibit_hydrogen_mapping = prohibit_hydrogen_mapping
 
         if atom_match_expression is None:
             self._atom_expr = DEFAULT_ATOM_EXPRESSION
@@ -139,25 +142,28 @@ class SmallMoleculeAtomMapper(object):
         if self._molecules_mapped:
             _logger.info("The molecules have already been mapped. Returning.")
             return
-        i =0
-        for molecule_smiles_pair in itertools.combinations(self._oemol_dictionary.keys(), 2):
-            molecule_pair = tuple(self._oemol_dictionary[molecule] for molecule in molecule_smiles_pair)
-            
-            if i%100 ==0:
-                print("Completed %d" %i)
 
-            self._molecule_maps[molecule_smiles_pair] = []
-            self._failed_molecule_maps[molecule_smiles_pair] = []
+        with progressbar.ProgressBar(max_value=self._n_molecules*(self._n_molecules-1)/2.0) as bar:
 
-            atom_matches, failed_atom_matches = self._map_atoms(molecule_pair[0], molecule_pair[1])
+            current_index = 0
+
+            for molecule_smiles_pair in itertools.combinations(self._oemol_dictionary.keys(), 2):
+                molecule_pair = tuple(self._oemol_dictionary[molecule] for molecule in molecule_smiles_pair)
+
+                self._molecule_maps[molecule_smiles_pair] = []
+                self._failed_molecule_maps[molecule_smiles_pair] = []
+
+                atom_matches, failed_atom_matches = self._map_atoms(molecule_pair[0], molecule_pair[1])
+
+                for atom_match in atom_matches:
+                    self._molecule_maps[molecule_smiles_pair].append(atom_match)
+
+                for failed_atom_match in failed_atom_matches:
+                    self._failed_molecule_maps[molecule_smiles_pair].append(failed_atom_match)
+
+                current_index += 1
+                bar.update(current_index)
             
-            for atom_match in atom_matches:
-                self._molecule_maps[molecule_smiles_pair].append(atom_match)
-            
-            for failed_atom_match in failed_atom_matches:
-                self._failed_molecule_maps[molecule_smiles_pair].append(failed_atom_match)
-            
-            i+=1
         self._molecules_mapped = True
     
     def get_atom_maps(self, smiles_A: str, smiles_B: str) -> List[Dict]:
@@ -344,6 +350,12 @@ class SmallMoleculeAtomMapper(object):
             for matchpair in match.GetAtoms():
                 a_index = matchpair.pattern.GetIdx()
                 b_index = matchpair.target.GetIdx()
+
+                #if we aren't allowing hydrogen maps, we need to ensure that neither mapped atom is a hydrogen
+                if self._prohibit_hydrogen_mapping:
+                    if matchpair.pattern.GetAtomicNum() == 1 or matchpair.target.GetAtomicNum() == 1:
+                        continue
+
                 a_to_b_atom_map[a_index] = b_index
             
             #Even if there are at least three atoms mapped, it is possible that the geometry proposal still cannot proceed
@@ -414,7 +426,7 @@ class SmallMoleculeAtomMapper(object):
             for other_atom, distance in shortest_paths.items():
                 if distance == 3 and other_atom in mapped_atoms:
                     #find all shortest paths to the other atom. if any of them have all atoms with positions, it can be proposed
-                    shortest_path = nx.shortest_path(source=atom, target=other_atom)
+                    shortest_path = nx.shortest_path(graph, source=atom, target=other_atom)
                     if len(mapped_atoms_set.intersection(shortest_path)) == 3:
                         proposable = True
         
