@@ -183,7 +183,7 @@ class HybridTopologyFactory(object):
         self._hybrid_to_new_map = {value : key for key, value in self._new_to_hybrid_map.items()}
 
         #verify that no constraints are changing over the course of the switching.
-        self._constraint_check_fast()
+        self._constraint_check()
 
         #construct dictionary of exceptions in old and new systems
         self._old_system_exceptions = self._generate_dict_from_exceptions(self._old_system_forces['NonbondedForce'])
