@@ -211,6 +211,7 @@ class ExpandedEnsembleSampler(object):
         self.geometry_pdbfile = None # if not None, write PDB file of geometry proposals
         self.accept_everything = False # if True, will accept anything that doesn't lead to NaNs
         self.logPs = list()
+        self.sampler.minimize(max_iterations=40)
 
     @property
     def state_keys(self):
@@ -510,7 +511,7 @@ class ExpandedEnsembleSampler(object):
         if self.pdbfile is not None:
             print("Writing frame...")
             from simtk.openmm.app import PDBFile
-            PDBFile.writeModel(self.topology, self.sampler.sampler_state.positions, self.pdbfile, self.iteration)
+            PDBFile.writeModel(self.topology.to_openmm(), self.sampler.sampler_state.positions, self.pdbfile, self.iteration)
             self.pdbfile.flush()
 
         if self.storage:
