@@ -25,6 +25,7 @@ try:
 except ImportError:
     from io import StringIO
 import openmoltools
+import base64
 import logging
 import time
 import progressbar
@@ -40,7 +41,7 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCAliphaticONS
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCAliphaticONS
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
 ################################################################################
@@ -96,6 +97,13 @@ def deepcopy_topology(source_topology):
     topology = app.Topology()
     append_topology(topology, source_topology)
     return topology
+
+def has_h_mapped(atommap, mola: oechem.OEMol, molb: oechem.OEMol):
+    for a_atom, b_atom in atommap.items():
+        if mola.GetAtom(oechem.OEHasAtomIdx(a_atom)).GetAtomicNum() == 1 or molb.GetAtom(oechem.OEHasAtomIdx(b_atom)).GetAtomicNum() == 1:
+            return True
+
+    return False
 
 class SmallMoleculeAtomMapper(object):
     """
@@ -355,9 +363,10 @@ class SmallMoleculeAtomMapper(object):
                 if self._prohibit_hydrogen_mapping:
                     if matchpair.pattern.GetAtomicNum() == 1 or matchpair.target.GetAtomicNum() == 1:
                         continue
-
-                a_to_b_atom_map[a_index] = b_index
-            
+                    else:
+                        a_to_b_atom_map[a_index] = b_index
+                else:
+                    a_to_b_atom_map[a_index] = b_index
             #Even if there are at least three atoms mapped, it is possible that the geometry proposal still cannot proceed
             #An example of this would be mapping H-C-H -- There will be no topological torsions to use for the proposal.
             if self._valid_match(moleculeA, moleculeB, a_to_b_atom_map):
@@ -468,13 +477,16 @@ class SmallMoleculeAtomMapper(object):
         dict_of_oemol : dict of oechem.OEmol
             dict of canonical_smiles : oechem.OEMol
         """
-        dict_of_oemol = {}
+        list_of_mols = []
         for smiles in list_of_smiles:
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smiles)
             oechem.OEAddExplicitHydrogens(mol)
-            canonical_smiles = self._canonicalize_smiles(mol)
-            dict_of_oemol[canonical_smiles] = mol
+            list_of_mols.append(mol)
+
+        #now write out all molecules and read them back in:
+        molecule_string = SmallMoleculeAtomMapper.molecule_library_to_string(list_of_mols)
+        dict_of_oemol = SmallMoleculeAtomMapper.molecule_library_from_string(molecule_string)
 
         return dict_of_oemol
 
@@ -511,7 +523,68 @@ class SmallMoleculeAtomMapper(object):
         """
         mol_index = self._unique_smiles_list.index(smiles)
         return mol_index
-        
+
+    @staticmethod
+    def molecule_library_from_string(molecule_string: str) -> Dict[str, oechem.OEMol]:
+        """
+        Given a library of molecules in a mol2-format string, return a dictionary that maps
+        the respective canonical smiles to the oemol object.
+
+        Parameters
+        ----------
+        molecule_string : str
+            The string containing the molecule data
+
+        Returns
+        -------
+        molecule_dictionary : dict of str: oemol
+            Dictionary mapping smiles strings to OEMols
+
+        """
+
+        ifs = oechem.oemolistream()
+        ifs.SetFormat(oechem.OEFormat_OEB)
+        ifs.openstring(molecule_string)
+
+        molecule_dictionary = {}
+        for mol in ifs.GetOEMols():
+            copied_mol = oechem.OEMol(mol)
+            canonical_smiles = SmallMoleculeAtomMapper._canonicalize_smiles(copied_mol)
+            molecule_dictionary[canonical_smiles] = copied_mol
+
+        ifs.close()
+
+        return molecule_dictionary
+
+    @staticmethod
+    def molecule_library_to_string(molecule_library: List[oechem.OEMol]) -> str:
+        """
+        Given a list of oechem.OEMol objects, write all of them in mol2 format to a string
+
+        Parameters
+        ----------
+        molecule_library : list of oechem.OEMol
+            molecules to write to string
+
+        Returns
+        -------
+        molecule_string : str
+            String containing molecules in mol2 format.
+        """
+
+        ofs = oechem.oemolostream()
+        ofs.SetFormat(oechem.OEFormat_OEB)
+        ofs.openstring()
+
+        for mol in molecule_library:
+            oechem.OEWriteMolecule(ofs, mol)
+
+        molecule_string = ofs.GetString()
+
+        ofs.close()
+
+        return molecule_string
+
     def to_json(self) -> str:
         """
         Write out this class to JSON. This saves all information (including built molecules and maps, if present)
@@ -537,18 +610,11 @@ class SmallMoleculeAtomMapper(object):
         #now we have to convert the OEMols to a string format that preserves the atom ordering in order to save them
         #We will use the multi-molecule mol2 scheme, but instead of saving to a file, we will save to a string.
 
-        ofs = oechem.oemolostream()
-        ofs.SetFormat(oechem.OEFormat_MOL2)
-        ofs.openstring()
+        molecule_bytes = SmallMoleculeAtomMapper.molecule_library_to_string(self._oemol_dictionary.values())
 
-        for mol in self._oemol_dictionary.values():
-            oechem.OEWriteMolecule(ofs, mol)
-       
-        molecule_string = str(ofs.GetString())
-        
-        ofs.close()
+        base64_molecule_bytes = base64.b64encode(molecule_bytes)
 
-        json_dict['molecules'] = molecule_string
+        json_dict['molecules'] = base64_molecule_bytes.decode()
 
         return json.dumps(json_dict)
 
@@ -570,32 +636,25 @@ class SmallMoleculeAtomMapper(object):
         json_dict = json.loads(json_string)
 
         #first let's read in all the molecules that were saved as a string:
-        molecule_string = json_dict['molecules']
-
-        ifs = oechem.oemolistream()
-        ifs.SetFormat(oechem.OEFormat_MOL2)
-        ifs.openstring(molecule_string)
-
-        molecule_dictionary = {}
-        for mol in ifs.GetOEMols():
-            copied_mol = oechem.OEMol(mol)
-            canonical_smiles = SmallMoleculeAtomMapper._canonicalize_smiles(copied_mol)
-            molecule_dictionary[canonical_smiles] = copied_mol
-        
-        ifs.close()
+        molecule_bytes = json_dict['molecules'].encode()
+        molecule_string = base64.b64decode(molecule_bytes)
+        molecule_dictionary = SmallMoleculeAtomMapper.molecule_library_from_string(molecule_string)
 
         bond_expr = json_dict['bond_expr']
         atom_expr = json_dict['atom_expr']
         smiles_list = json_dict['unique_smiles_list']
 
+        map_to_ints = lambda maps: [{int(key): int(value) for key, value in map.items()} for map in maps]
+
         mapper = cls(smiles_list, atom_match_expression=atom_expr, bond_match_expression=bond_expr)
 
-        mapper._molecule_maps = {tuple(smiles for smiles in key.split("_")) : maps for key, maps in json_dict['molecule_maps'].items()}
+        mapper._molecule_maps = {tuple(smiles for smiles in key.split("_")) : map_to_ints(maps) for key, maps in json_dict['molecule_maps'].items()}
         mapper._molecules_mapped = json_dict['molecules_mapped']
         mapper._failed_molecule_maps = {tuple(smiles for smiles in key.split("_")) : maps for key, maps in json_dict['failed_molecule_maps'].items()}
         mapper._constraints_checked = json_dict['constraints_checked']
         mapper._proposal_matrix = np.array(json_dict['proposal_matrix'])
         mapper._proposal_matrix_generated = json_dict['proposal_matrix_generated']
+        mapper._oemol_dictionary = molecule_dictionary
 
         return mapper
 
@@ -2411,7 +2470,7 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         current_mol_index = self._atom_mapper.get_smiles_index(current_mol_smiles)
 
         #get probability vector for proposal
-        proposal_probability = self._probability_matrix[current_mol_index, :]
+        proposal_probability = self._proposal_matrix[current_mol_index, :]
 
         #propose next index
         proposed_index = np.random.choice(range(self._n_molecules), p=proposal_probability)

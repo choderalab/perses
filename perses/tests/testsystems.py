@@ -105,6 +105,7 @@ class PersesTestSystem(object):
         self._ncmc_nsteps = ncmc_nsteps
         self._mcmc_nsteps = mcmc_nsteps
         self._move = LangevinSplittingDynamicsMove(timestep=self._timestep, splitting=self._splitting)
+        self._move.n_restart_attempts = 10
 
 
 class AlanineDipeptideTestSystem(PersesTestSystem):
@@ -1764,7 +1765,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
              # reduce number of steps for testing
             
-            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':500}, storage=storage)
+            exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
@@ -2457,11 +2458,14 @@ def run_kinase_inhibitors():
     """
     Run kinase inhibitors test system.
     """
-    testsystem = KinaseInhibitorsTestSystem(ncmc_nsteps=0, mcmc_nsteps=100)
+    with open("mapperkinase3.json", 'r') as jsoninput:
+        json_dict = jsoninput.read()
+    testsystem = KinaseInhibitorsTestSystem(ncmc_nsteps=100, mcmc_nsteps=10, premapped_json_dict=json_dict)
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
     testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
     testsystem.exen_samplers[environment].geometry_engine.write_proposal_pdb = True # write proposal PDBs
+    testsystem.exen_samplers[environment].geometry_engine.verbose = True
     testsystem.sams_samplers[environment].run(niterations=100)
 
 def run_valence_system():
@@ -2611,10 +2615,10 @@ if __name__ == '__main__':
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
-    run_t4_inhibitors()
+    #run_t4_inhibitors()
     #run_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
-    #run_kinase_inhibitors()
+    run_kinase_inhibitors()
     #run_abl_imatinib()
     #run_myb()

@@ -102,21 +102,23 @@ def test_small_molecule_proposals():
         assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
 
-def test_small_molecule_mapper():
+def test_no_h_map():
     """
-    Test that the SmallMoleculeAtomMapper can generate a set of maps for the T4 set
+    Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens
     """
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     from perses.rjmc.topology_proposal import SmallMoleculeAtomMapper
+    from openeye import oechem
     kinase = KinaseInhibitorsTestSystem()
     molecules = kinase.molecules
     mapper = SmallMoleculeAtomMapper(molecules)
     mapper.map_all_molecules()
-    mapper_json = mapper.to_json()
 
-    with open("mapperkinase.json", 'w') as outfile:
-        outfile.write(mapper_json)
+    with open('mapperkinase3.json', 'w') as outfile:
+        json_string = mapper.to_json()
+        outfile.write(json_string)
 
+    mapper.generate_and_check_proposal_matrix()
 
 
 
@@ -667,4 +669,4 @@ if __name__ == "__main__":
 #    test_alanine_dipeptide_map()
 #    test_always_change()
 #    test_molecular_atom_mapping()
-    test_small_molecule_mapper()
+    test_no_h_map()
