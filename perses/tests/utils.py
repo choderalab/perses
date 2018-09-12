@@ -579,12 +579,11 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         atom.SetRxnRole(oechem.OERxnRole_Product)
 
     # Label mapped atoms
-    index = 1
+    index =1
     for (index2, index1) in new_to_old_atom_map.items():
         new_atoms_1[index1].SetMapIdx(index)
         new_atoms_2[index2].SetMapIdx(index)
         index += 1
-
     # Set up image options
     from openeye import oedepict
     itf = oechem.OEInterface()
@@ -613,6 +612,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
+
 
 def canonicalize_SMILES(smiles_list):
     """Ensure all SMILES strings end up in canonical form.
