@@ -41,7 +41,7 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCAliphaticONS
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
 ################################################################################
@@ -669,6 +669,8 @@ class SmallMoleculeAtomMapper(object):
     @property
     def smiles_list(self):
         return self._unique_smiles_list
+
+
 
 from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
@@ -2499,7 +2501,8 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
-        mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr, bond_expr=self.bond_expr, verbose=self.verbose, allow_ring_breaking=self._allow_ring_breaking)
+        mol_atom_maps = self._atom_mapper.get_atom_maps(current_mol_smiles, proposed_mol_smiles)
+        mol_atom_map = np.random.choice(mol_atom_maps)
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
