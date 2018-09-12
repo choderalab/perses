@@ -1793,7 +1793,7 @@ class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
     Library of small alkanes in various solvent environments.
     """
     def __init__(self, **kwargs):
-        self.molecules = ['CC', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC']
+        self.molecules = ['CCC', 'CCCC', 'CCCCC', 'CCCCCC']
         super(AlkanesTestSystem, self).__init__(**kwargs)
 
 class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
@@ -2460,7 +2460,7 @@ def run_kinase_inhibitors():
     """
     with open("mapperkinase3.json", 'r') as jsoninput:
         json_dict = jsoninput.read()
-    testsystem = KinaseInhibitorsTestSystem(ncmc_nsteps=100, mcmc_nsteps=10, premapped_json_dict=json_dict)
+    testsystem = KinaseInhibitorsTestSystem(ncmc_nsteps=100, mcmc_nsteps=10, premapped_json_dict=json_dict, constraints=None)
     environment = 'vacuum'
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
     testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
