@@ -925,11 +925,11 @@ class HybridTopologyFactory(object):
         index_set = {index1, index2}
         #loop through all the bonds:
         for bond_index in range(bond_force.getNumBonds()):
-            [index1_term, index2_term, r0, k] = bond_force.getBondParameters(bond_index)
-            if index_set=={index1_term, index2_term}:
-                return [index1_term, index2_term, r0, k]
+            parms = bond_force.getBondParameters(bond_index)
+            if index_set=={parms[0], parms[1]}:
+                return parms
 
-        raise ValueError("The requested bond was not found.")
+        return []
 
     def handle_harmonic_bonds(self):
         """
@@ -957,7 +957,12 @@ class HybridTopologyFactory(object):
             if index_set.issubset(self._atom_classes['core_atoms']):
                 index1_new = self._topology_proposal.old_to_new_atom_map[index1_old]
                 index2_new = self._topology_proposal.old_to_new_atom_map[index2_old]
-                [index1, index2, r0_new, k_new] = self._find_bond_parameters(new_system_bond_force, index1_new, index2_new)
+                new_bond_parameters = self._find_bond_parameters(new_system_bond_force, index1_new, index2_new)
+                if not new_bond_parameters:
+                    r0_new = r0_old
+                    k_new = 0.0*unit.kilojoule_per_mole/unit.angstrom**2
+                else:
+                    [index1, index2, r0_new, k_new] = self._find_bond_parameters(new_system_bond_force, index1_new, index2_new)
                 self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,[r0_old, k_old, r0_new, k_new])
 
             #otherwise, we just add the same parameters as those in the old system.
@@ -978,6 +983,17 @@ class HybridTopologyFactory(object):
             #all other bonds in the new system have been accounted for already.
             if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
                 self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_new, k_new)
+
+            #if the bond is in the core, it has probably already been added in the above loop. However, there are some circumstances
+            #where it was not (closing a ring). In that case, the bond has not been added and should be added here.
+            if index_set.issubset(self._atom_classes['core_atoms']):
+                 if not self._find_bond_parameters(self._hybrid_system_forces['core_bond_force'], index1_hybrid, index2_hybrid):
+                     r0_old = r0_new
+                     k_old = 0.0*unit.kilojoule_per_mole/unit.angstrom**2
+                     self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                                                                           [r0_old, k_old, r0_new, k_new])
+
+
 
     def _find_angle_parameters(self, angle_force, indices):
         """
@@ -1005,8 +1021,8 @@ class HybridTopologyFactory(object):
 
             if index_set==angle_parameter_indices:
                 return angle_parameters
-
-        raise ValueError("The provided force does not contain the angle of interest.")
+            else:
+                return []
 
     def _find_torsion_parameters(self, torsion_force, indices):
         """
@@ -1038,9 +1054,6 @@ class HybridTopologyFactory(object):
             if index_set==torsion_parameter_indices:
                 torsion_parameters_list.append(torsion_parameters)
 
-        if len(torsion_parameters_list)==0:
-            raise ValueError("No torsion found matching the indices specified")
-
         return torsion_parameters_list
 
     def handle_harmonic_angles(self):
@@ -1070,6 +1083,8 @@ class HybridTopologyFactory(object):
                 #get the new indices so we can get the new angle parameters
                 new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in angle_parameters[:3]]
                 new_angle_parameters = self._find_angle_parameters(new_system_angle_force, new_indices)
+                if not new_angle_parameters:
+                    new_angle_parameters = [0, 0, 0, angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2]
 
                 #add to the hybrid force:
                 #the parameters at indices 3 and 4 represent theta0 and k, respectively.
@@ -1095,6 +1110,13 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], angle_parameters[3],
                                                                             angle_parameters[4])
+
+            if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                if not self._find_angle_parameters(self._hybrid_system_forces['core_angle_force'], hybrid_index_list):
+                    hybrid_force_parameters = [angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2, angle_parameters[3], angle_parameters[4]]
+                    self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2],
+                                                                            hybrid_force_parameters)
 
     def handle_periodic_torsion_force(self):
         """
@@ -1427,8 +1449,18 @@ class HybridTopologyFactory(object):
                 index2_new = hybrid_to_new_map[index2_hybrid]
 
                 #get the exception parameters:
-                [index1_new, index2_new, chargeProd_new, sigma_new, epsilon_new] = self._find_exception(
-                    new_system_nonbonded_force, index1_new, index2_new)
+                new_exception_parms= self._find_exception(new_system_nonbonded_force, index1_new, index2_new)
+
+                #if there's no new exception, then we should just set the exception parameters to be the nonbonded parameters
+                if not new_exception_parms:
+                    [charge1_new, sigma1_new, epsilon1_new] = new_system_nonbonded_force.getParticleParameters(index1_new)
+                    [charge2_new, sigma2_new, epsilon2_new] = new_system_nonbonded_force.getParticleParameters(index2_new)
+
+                    chargeProd_new = charge1_new * charge2_new
+                    sigma_new = 0.5 * (sigma1_new + sigma2_new)
+                    epsilon_new = np.sqrt(epsilon1_new*epsilon2_new)
+                else:
+                    [index1_new, index2_new, chargeProd_new, sigma_new, epsilon_new] = new_exception_parms
 
                 #interpolate between old and new
                 exception_index = self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
@@ -1437,7 +1469,8 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
         #now, loop through the new system to collect remaining interactions. The only that remain here are
-        #uniquenew-uniquenew, uniquenew-core, and uniquenew-environment.
+        #uniquenew-uniquenew, uniquenew-core, and uniquenew-environment. There might also be core-core, since not all
+        #core-core exceptions exist in both
         for exception_pair, exception_parameters in self._new_system_exceptions.items():
             [index1_new, index2_new] = exception_pair
             [chargeProd_new, sigma_new, epsilon_new] = exception_parameters
@@ -1445,6 +1478,11 @@ class HybridTopologyFactory(object):
             #get hybrid indices:
             index1_hybrid = self._new_to_hybrid_map[index1_new]
             index2_hybrid = self._new_to_hybrid_map[index2_new]
+
+            #get the old indices
+            index1_old = self._topology_proposal.new_to_old_atom_map[index1_new]
+            index2_old = self._topology_proposal.new_to_old_atom_map[index2_new]
+
             index_set = {index1_hybrid, index2_hybrid}
 
             #if it's a subset of unique_new_atoms, then this is an intra-unique interaction and should have its exceptions
@@ -1457,6 +1495,12 @@ class HybridTopologyFactory(object):
             elif len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+
+            elif len(index_set.intersection(self._atom_classes['core_atoms'])):
+
+                #see if it's also in the old nonbonded force. if it is, then we don't need to add it.
+                #but if it's not, we need to interpolate
+                if not self._find_exception(old_system_nonbonded_force, index1_old, index2_old):
 
     def _find_exception(self, force, index1, index2):
         """
@@ -1483,8 +1527,7 @@ class HybridTopologyFactory(object):
             exception_parameters = force.getExceptionParameters(exception_idx)
             if index_set==set(exception_parameters[:2]):
                 return exception_parameters
-
-        raise ValueError("The provided force does not have an exception between those particles.")
+        return []
 
     def _compute_hybrid_positions(self):
         """
