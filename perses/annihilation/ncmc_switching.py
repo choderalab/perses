@@ -44,6 +44,7 @@ default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
 default_timestep = 1.0 * unit.femtoseconds
 default_steps_per_propagation = 1
+_logger = logging.getLogger("NCMCEngine")
 
 class NaNException(Exception):
     def __init__(self, *args, **kwargs):
@@ -239,6 +240,8 @@ class NCMCEngine(object):
         except KeyError:
             hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
             self._hybrid_cache[topology_proposal] = hybrid_factory
+            hybrid_factory = None
+
 
         return hybrid_factory
 
@@ -276,6 +279,11 @@ class NCMCEngine(object):
 
         #generate or retrieve the hybrid topology factory:
         hybrid_factory = self.make_alchemical_system(topology_proposal, initial_sampler_state.positions, proposed_sampler_state.positions)
+
+        if hybrid_factory is None:
+            _logger.warning("Unable to construct hybrid system for {} -> {}".format(topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
+            return initial_sampler_state, proposed_sampler_state, -np.inf, -np.inf
+
 
         topology = hybrid_factory.hybrid_topology
 
