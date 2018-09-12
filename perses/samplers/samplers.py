@@ -398,16 +398,23 @@ class ExpandedEnsembleSampler(object):
         else:
             ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
 
-        logP_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
+        if logP_work > -np.inf and logP_energy > -np.inf:
+            logP_geometry_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
 
-        final_reduced_potential = feptasks.compute_reduced_potential(new_thermodynamic_state, ncmc_new_sampler_state)
-        logP_final = -final_reduced_potential + new_log_weight
+            final_reduced_potential = feptasks.compute_reduced_potential(new_thermodynamic_state, ncmc_new_sampler_state)
+            logP_final = -final_reduced_potential + new_log_weight
 
-        # Compute total log acceptance probability according to Eq. 46
-        logP_accept = logP_final - logP_initial + logP_chemical_proposal + logP_reverse - logP_geometry_forward + logP_work + logP_energy
+            # Compute total log acceptance probability according to Eq. 46
+            logP_accept = logP_final - logP_initial + logP_chemical_proposal + logP_geometry_reverse - logP_geometry_forward + logP_work + logP_energy
+        else:
+            logP_geometry_reverse = 0.0
+            logP_final = 0.0
+            logP_accept = logP_final - logP_initial + logP_chemical_proposal + logP_geometry_reverse - logP_geometry_forward + logP_work + logP_energy
+            #TODO: mark failed proposals as unproposable
+
         if self.verbose:
             print("logP_accept = %+10.4e [logP_final = %+10.4e, -logP_initial = %+10.4e, logP_chemical = %10.4e, logP_reverse = %+10.4e, -logP_forward = %+10.4e, logP_work = %+10.4e, logP_energy = %+10.4e]"
-                % (logP_accept, logP_final, -logP_initial, logP_chemical_proposal, logP_reverse, -logP_geometry_forward, logP_work, logP_energy))
+                % (logP_accept, logP_final, -logP_initial, logP_chemical_proposal, logP_geometry_reverse, -logP_geometry_forward, logP_work, logP_energy))
         # Write to storage.
         if self.storage:
             self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
@@ -416,13 +423,13 @@ class ExpandedEnsembleSampler(object):
             self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
             self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
             self.storage.write_quantity('logP_chemical', logP_chemical_proposal, iteration=self.iteration)
-            self.storage.write_quantity('logP_reverse', logP_reverse, iteration=self.iteration)
+            self.storage.write_quantity('logP_reverse', logP_geometry_reverse, iteration=self.iteration)
             self.storage.write_quantity('logP_forward', logP_geometry_forward, iteration=self.iteration)
             self.storage.write_quantity('logP_work', logP_work, iteration=self.iteration)
             self.storage.write_quantity('logP_energy', logP_energy, iteration=self.iteration)
             # Write some aggregate statistics to storage to make contributions to acceptance probability easier to analyze
             self.storage.write_quantity('logP_groups_chemical', logP_chemical_proposal, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_geometry', logP_reverse - logP_geometry_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_geometry', logP_geometry_reverse - logP_geometry_forward, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_work_and_energy', logP_work + logP_energy, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
 
