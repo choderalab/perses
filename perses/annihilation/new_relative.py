@@ -1426,6 +1426,7 @@ class HybridTopologyFactory(object):
             index2_hybrid = self._old_to_hybrid_map[index2_old]
             index_set = {index1_hybrid, index2_hybrid}
 
+
             #in this case, the interaction is only covered by the regular nonbonded force, and as such will be copied to that force
             #in the unique-old case, it is handled elsewhere due to internal peculiarities regarding exceptions
             if index_set.issubset(self._atom_classes['environment_atoms']):
@@ -1458,7 +1459,7 @@ class HybridTopologyFactory(object):
 
                     chargeProd_new = charge1_new * charge2_new
                     sigma_new = 0.5 * (sigma1_new + sigma2_new)
-                    epsilon_new = np.sqrt(epsilon1_new*epsilon2_new)
+                    epsilon_new = unit.sqrt(epsilon1_new*epsilon2_new)
                 else:
                     [index1_new, index2_new, chargeProd_new, sigma_new, epsilon_new] = new_exception_parms
 
@@ -1479,10 +1480,6 @@ class HybridTopologyFactory(object):
             index1_hybrid = self._new_to_hybrid_map[index1_new]
             index2_hybrid = self._new_to_hybrid_map[index2_new]
 
-            #get the old indices
-            index1_old = self._topology_proposal.new_to_old_atom_map[index1_new]
-            index2_old = self._topology_proposal.new_to_old_atom_map[index2_new]
-
             index_set = {index1_hybrid, index2_hybrid}
 
             #if it's a subset of unique_new_atoms, then this is an intra-unique interaction and should have its exceptions
@@ -1496,11 +1493,43 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
-            elif len(index_set.intersection(self._atom_classes['core_atoms'])):
+            #however, there may be a core exception that exists in one system but not the other (ring closure)
+            elif index_set.issubset(self._atom_classes['core_atoms']):
+
+                # get the old indices
+                try:
+                    index1_old = self._topology_proposal.new_to_old_atom_map[index1_new]
+                    index2_old = self._topology_proposal.new_to_old_atom_map[index2_new]
+                except KeyError:
+                    continue
 
                 #see if it's also in the old nonbonded force. if it is, then we don't need to add it.
                 #but if it's not, we need to interpolate
                 if not self._find_exception(old_system_nonbonded_force, index1_old, index2_old):
+
+                    [charge1_old, sigma1_old, epsilon1_old] = old_system_nonbonded_force.getParticleParameters(index1_old)
+                    [charge2_old, sigma2_old, epsilon2_old] = old_system_nonbonded_force.getParticleParameters(index2_old)
+
+                    chargeProd_old = charge1_old*charge2_old
+                    sigma_old = 0.5 * (sigma1_old + sigma2_old)
+                    epsilon_old = unit.sqrt(epsilon1_old*epsilon2_old)
+
+                    exception_index = self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid,
+                                                                                                          index2_hybrid,
+                                                                                                          chargeProd_old,
+                                                                                                          sigma_old,
+                                                                                                          epsilon_old)
+
+                    self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset(
+                        'lambda_electrostatics', exception_index, (chargeProd_new - chargeProd_old), 0, 0)
+
+                    self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_sterics',
+                                                                                                       exception_index,
+                                                                                                       0, (sigma_new - sigma_old),
+                                                                                                       (epsilon_new - epsilon_old))
+
+                    self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
+
 
     def _find_exception(self, force, index1, index2):
         """
