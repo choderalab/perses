@@ -103,7 +103,7 @@ class NetCDFStorage(object):
             The variable name to be stored
         positions : simtk.unit.Quantity of size [natoms,3] with units compatible with angstroms
             The positions to be written
-        topology : simtk.openmm.Topology object
+        topology : md.Topology object
             The corresponding Topology object
         iteration : int, optional, default=None
             The local iteration for the module, or `None` if this is a singleton
@@ -134,7 +134,7 @@ class NetCDFStorage(object):
                 frames_dimension_name = dimension_name(varname, 'frames')
                 ncdim = self._ncfile.createDimension(frames_dimension_name, nframes)
 
-            natoms = sum([ 1 for atom in topology.atoms() ])
+            natoms = topology.n_atoms
             atoms_dimension_name = dimension_name(varname, 'atoms')
             ncdim = self._ncfile.createDimension(atoms_dimension_name, natoms)
 
@@ -152,8 +152,6 @@ class NetCDFStorage(object):
             topology_varname = varname + '_topology'
             if (iteration is not None):
                 topology_varname += '_' + str(iteration)
-            # simtk.openmm.app.Topology is not serializable, but MDTraj Topology is
-            topology = mdtraj.Topology.from_openmm(topology)
             self.write_object(topology_varname, topology, iteration=iteration)
 
         # Write positions

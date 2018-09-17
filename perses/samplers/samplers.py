@@ -19,12 +19,17 @@ from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
 import sys, math
+import mdtraj as md
 import numpy as np
 from openmmtools import testsystems
 import copy
 import time
 from openmmtools.constants import kB
+from openmmtools.states import SamplerState, ThermodynamicState
+from openmmtools.mcmc import MCMCSampler
 
+from perses.annihilation.ncmc_switching import NCMCEngine
+from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
 from perses.tests.utils import quantity_is_finite
@@ -35,12 +40,6 @@ from perses.tests.utils import quantity_is_finite
 
 import logging
 logger = logging.getLogger(__name__)
-
-################################################################################
-# THERMODYNAMIC STATE
-################################################################################
-
-from perses.samplers.thermodynamics import ThermodynamicState
 
 ################################################################################
 # UTILITY FUNCTIONS
@@ -58,639 +57,6 @@ def log_sum_exp(a_n):
     a_n = np.array(list(a_n.values()))
     return np.log( np.sum( np.exp(a_n - a_n.max() ) ) )
 
-################################################################################
-# MCMC sampler state
-################################################################################
-
-class SamplerState(object):
-    """
-    Sampler state for MCMC move representing everything that may be allowed to change during
-    the simulation.
-
-    Parameters
-    ----------
-    system : simtk.openmm.System
-       Current system specifying force calculations.
-    positions : array of simtk.unit.Quantity compatible with nanometers
-       Particle positions.
-    velocities : optional, array of simtk.unit.Quantity compatible with nanometers/picoseconds
-       Particle velocities.
-    box_vectors : optional, 3x3 array of simtk.unit.Quantity compatible with nanometers
-       Current box vectors.
-
-    Fields
-    ------
-    system : simtk.openmm.System
-       Current system specifying force calculations.
-    positions : array of simtk.unit.Quantity compatible with nanometers
-       Particle positions.
-    velocities : optional, array of simtk.unit.Quantity compatible with nanometers/picoseconds
-       Particle velocities.
-    box_vectors : optional, 3x3 array of simtk.unit.Quantity compatible with nanometers
-       Current box vectors.
-    potential_energy : optional, simtk.unit.Quantity compatible with kilocalories_per_mole
-       Current potential energy.
-    kinetic_energy : optional, simtk.unit.Quantity compatible with kilocalories_per_mole
-       Current kinetic energy.
-    total_energy : optional, simtk.unit.Quantity compatible with kilocalories_per_mole
-       Current total energy.
-    platform : optional, simtk.openmm.Platform
-       Platform to use for Context creation to initialize sampler state.
-
-    Examples
-    --------
-
-    Create a sampler state for a system with box vectors.
-
-    >>> # Create a test system
-    >>> test = testsystems.LennardJonesFluid()
-    >>> # Create a sampler state manually.
-    >>> box_vectors = test.system.getDefaultPeriodicBoxVectors()
-    >>> sampler_state = SamplerState(system=test.system, positions=test.positions, box_vectors=box_vectors)
-
-    Create a sampler state for a system without box vectors.
-
-    >>> # Create a test system
-    >>> test = testsystems.LennardJonesCluster()
-    >>> # Create a sampler state manually.
-    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-
-    Notes
-    -----
-    CMMotionRemover forces are automatically removed from the system.
-
-    TODO
-    ----
-    * Can we remove the need to create a Context in initializing the sampler state by using the Reference platform and skipping energy calculations?
-
-    """
-    def __init__(self, system, positions, velocities=None, box_vectors=None, platform=None):
-        assert quantity_is_finite(positions)
-        if velocities is not None:
-            assert quantity_is_finite(self.velocities)
-
-        self.system = copy.deepcopy(system)
-
-        # Remove CMMotionRemover, since it can cause problems with GHMC and NCMC.
-        forces_to_remove = [ force_index for force_index in range(self.system.getNumForces()) if (self.system.getForce(force_index).__class__.__name__ == 'CMMotionRemover') ]
-        for force_index in reversed(forces_to_remove):
-            system.removeForce(force_index)
-
-        self.positions = positions
-        self.velocities = velocities
-        self.box_vectors = box_vectors
-
-        # Create Context.
-        context = self.createContext(platform=platform)
-
-        # Get state.
-        openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True, enforcePeriodicBox=True)
-
-        # Populate context.
-        self.positions = openmm_state.getPositions(asNumpy=True)
-        self.velocities = openmm_state.getVelocities(asNumpy=True)
-        self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=False)
-        self.potential_energy = openmm_state.getPotentialEnergy()
-        self.kinetic_energy = openmm_state.getKineticEnergy()
-        self.total_energy = self.potential_energy + self.kinetic_energy
-        self.volume = thermodynamics.volume(self.box_vectors)
-
-        # Clean up.
-        del context
-
-    @classmethod
-    def createFromContext(cls, context):
-        """
-        Create an SamplerState object from the information in a current OpenMM Context object.
-
-        Parameters
-        ----------
-        context : simtk.openmm.Context
-           The Context object from which to create a sampler state.
-
-        Returns
-        -------
-        sampler_state : SamplerState
-           The sampler state containing positions, velocities, and box vectors.
-
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a Context.
-        >>> import simtk.openmm as mm
-        >>> import simtk.unit as u
-        >>> integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        >>> platform = openmm.Platform.getPlatformByName('Reference')
-        >>> context = openmm.Context(test.system, integrator, platform)
-        >>> # Set positions and velocities.
-        >>> context.setPositions(test.positions)
-        >>> context.setVelocitiesToTemperature(298 * unit.kelvin)
-        >>> # Create a sampler state from the Context.
-        >>> sampler_state = SamplerState.createFromContext(context)
-        >>> # Clean up.
-        >>> del context, integrator
-
-        """
-        # Get state.
-        openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True, enforcePeriodicBox=True)
-
-        # Create new object, bypassing init.
-        self = SamplerState.__new__(cls)
-
-        # Populate context.
-        self.system = copy.deepcopy(context.getSystem())
-        self.positions = openmm_state.getPositions(asNumpy=True)
-        self.velocities = openmm_state.getVelocities(asNumpy=True)
-        self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
-        self.potential_energy = openmm_state.getPotentialEnergy()
-        self.kinetic_energy = openmm_state.getKineticEnergy()
-        self.total_energy = self.potential_energy + self.kinetic_energy
-        self.volume = thermodynamics.volume(self.box_vectors)
-
-        assert quantity_is_finite(self.positions)
-        assert quantity_is_finite(self.velocities)
-
-        return self
-
-    def createContext(self, integrator=None, platform=None, thermodynamic_state=None):
-        """
-        Create an OpenMM Context object from the current sampler state.
-
-        Parameters
-        ----------
-        integrator : simtk.openmm.Integrator, optional, default=None
-           The integrator to use for Context creation.
-           If not specified, a VerletIntegrator with 1 fs timestep is created.
-        platform : simtk.openmm.Platform, optional, default=None
-           If specified, the Platform to use for context creation.
-        thermodynamic_state : ThermodynamicState, optional, default=None
-            If a pressure is specified in the thermodynamic state, a barostat will be added
-            to periodic systems.
-
-        Returns
-        -------
-        context : simtk.openmm.Context
-           The created OpenMM Context object
-
-        Notes
-        -----
-        If the selected or default platform fails, the CPU and Reference platforms will be tried, in that order.
-        If the system is periodic and has a pressure defined, a MonteCarloBarostat is added.
-
-        Examples
-        --------
-
-        Create a context for a system with periodic box vectors.
-
-        >>> # Create a test system
-        >>> test = testsystems.LennardJonesFluid()
-        >>> # Create a sampler state manually.
-        >>> box_vectors = test.system.getDefaultPeriodicBoxVectors()
-        >>> sampler_state = SamplerState(positions=test.positions, box_vectors=box_vectors, system=test.system)
-        >>> # Create a Context.
-        >>> import simtk.openmm as mm
-        >>> import simtk.unit as u
-        >>> integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
-        >>> context = sampler_state.createContext(integrator)
-        >>> # Clean up.
-        >>> del context
-
-        Create a context for a system without periodic box vectors.
-
-        >>> # Create a test system
-        >>> test = testsystems.LennardJonesCluster()
-        >>> # Create a sampler state manually.
-        >>> sampler_state = SamplerState(positions=test.positions, system=test.system)
-        >>> # Create a Context.
-        >>> import simtk.openmm as mm
-        >>> import simtk.unit as u
-        >>> integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
-        >>> context = sampler_state.createContext(integrator)
-        >>> # Clean up.
-        >>> del context
-
-        TODO
-        ----
-        * Generalize fallback platform order to [CUDA, OpenCL, CPU, Reference] ordering.
-
-        """
-
-        if not self.system:
-            raise Exception("SamplerState must have a 'system' object specified to create a Context")
-
-        # Use a Verlet integrator if none is specified.
-        if integrator is None:
-            integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-
-        # Create a copy of the system
-        system = copy.deepcopy(self.system)
-
-        # If thermodynamic state is specified with a pressure, add a barostat.
-        if (thermodynamic_state is not None) and (thermodynamic_state.pressure is not None):
-            if not system.usesPeriodicBoundaryConditions():
-                raise Exception('Specified a pressure but system does not have periodic boundary conditions')
-            barostat = openmm.MonteCarloBarostat(thermodynamic_state.pressure, thermodynamic_state.temperature)
-            system.addForce(barostat)
-
-        # Create a Context.
-        if platform:
-            context = openmm.Context(system, integrator, platform)
-        else:
-            context = openmm.Context(system, integrator)
-
-        # Set box vectors, if specified.
-        if (self.box_vectors is not None):
-            try:
-                # try tuple of box vectors
-                context.setPeriodicBoxVectors(self.box_vectors[0], self.box_vectors[1], self.box_vectors[2])
-            except:
-                # try numpy 3x3 matrix of box vectors
-                context.setPeriodicBoxVectors(self.box_vectors[0,:], self.box_vectors[1,:], self.box_vectors[2,:])
-
-        # Set positions.
-        try:
-            context.setPositions(self.positions)
-        except Exception as e:
-            msg = str(e) + '\n'
-            msg += "System has %d particles\n" % self.system.getNumParticles()
-            msg += "Positions has %d particles\n" % len(self.positions)
-            raise Exception(msg)
-
-        # Set velocities, if specified.
-        if (self.velocities is not None):
-            context.setVelocities(self.velocities)
-
-        return context
-
-    def minimize(self, tolerance=None, maxIterations=None, platform=None):
-        """
-        Minimize the current configuration.
-
-        Parameters
-        ----------
-        tolerance : simtk.unit.Quantity compatible with kilocalories_per_mole/anstroms, optional, default = 1*kilocalories_per_mole/anstrom
-           Tolerance to use for minimization termination criterion.
-
-        maxIterations : int, optional, default = 100
-           Maximum number of iterations to use for minimization.
-
-        platform : simtk.openmm.Platform, optional
-           Platform to use for minimization.
-
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> # Minimize
-        >>> sampler_state.minimize()
-
-        """
-
-        if (tolerance is None):
-            tolerance = 1.0 * unit.kilocalories_per_mole / unit.angstroms
-
-        if (maxIterations is None):
-            maxIterations = 100
-
-        # Use LocalEnergyMinimizer
-        from simtk.openmm import LocalEnergyMinimizer
-        context = self.createContext(platform=platform)
-        logger.debug("LocalEnergyMinimizer: platform is %s" % context.getPlatform().getName())
-        logger.debug("Minimizing with tolerance %s and %d max. iterations." % (tolerance, maxIterations))
-        LocalEnergyMinimizer.minimize(context, tolerance, maxIterations)
-
-        # Retrieve data.
-        sampler_state = SamplerState.createFromContext(context)
-        sampler_state.velocities = None # erase velocities since we may change dimensionality
-        self.positions = sampler_state.positions
-        self.potential_energy = sampler_state.potential_energy
-        self.total_energy = sampler_state.total_energy
-
-        del context
-
-        return
-
-    def has_nan(self):
-        """Return True if any of the generalized coordinates are nan.
-
-        Notes
-        -----
-
-        Currently checks only the positions.
-        """
-        x = self.positions / unit.nanometers
-
-        if np.any(np.isnan(x)):
-            return True
-        else:
-            return False
-
-################################################################################
-# GHMC INTEGRATOR (TEMPORARY UNTIL MOVED TO OPENMMTOOLS)
-################################################################################
-
-class GHMCIntegrator(openmm.CustomIntegrator):
-
-    """
-    Generalized hybrid Monte Carlo (GHMC) integrator.
-
-    """
-
-    def __init__(self, temperature=298.0 * unit.kelvin, collision_rate=91.0 / unit.picoseconds, timestep=1.0 * unit.femtoseconds):
-        """
-        Create a generalized hybrid Monte Carlo (GHMC) integrator.
-
-        Parameters
-        ----------
-        temperature : np.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
-           The temperature.
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
-           The collision rate.
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
-           The integration timestep.
-
-        Notes
-        -----
-        This integrator is equivalent to a Langevin integrator in the velocity Verlet discretization with a
-        Metrpolization step to ensure sampling from the appropriate distribution.
-
-        Additional global variables 'ntrials' and  'naccept' keep track of how many trials have been attempted and
-        accepted, respectively.
-
-        TODO
-        ----
-        * Move initialization of 'sigma' to setting the per-particle variables.
-        * Generalize to use MTS inner integrator.
-
-        Examples
-        --------
-
-        Create a GHMC integrator.
-
-        >>> temperature = 298.0 * unit.kelvin
-        >>> collision_rate = 91.0 / unit.picoseconds
-        >>> timestep = 1.0 * unit.femtoseconds
-        >>> integrator = GHMCIntegrator(temperature, collision_rate, timestep)
-
-        References
-        ----------
-        Lelievre T, Stoltz G, and Rousset M. Free Energy Computations: A Mathematical Perspective
-        http://www.amazon.com/Free-Energy-Computations-Mathematical-Perspective/dp/1848162472
-
-        """
-
-        # Initialize constants.
-        kT = kB * temperature
-        gamma = collision_rate
-
-        # Create a new custom integrator.
-        super(GHMCIntegrator, self).__init__(timestep)
-
-        #
-        # Integrator initialization.
-        #
-        self.addGlobalVariable("Eold", 0)  # old energy
-        self.addGlobalVariable("Enew", 0)  # new energy
-        self.addGlobalVariable('kinetic', 0.0) # kinetic energy
-        self.addGlobalVariable("kT", kT.value_in_unit_system(unit.md_unit_system))  # thermal energy
-        self.addGlobalVariable('step', 0) # current NCMC step number
-        self.addPerDofVariable("x1", 0) # for velocity Verlet with constraints
-        self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
-        self.addPerDofVariable("sigma", 0)
-        self.addGlobalVariable("ke", 0)  # kinetic energy
-        self.addPerDofVariable("vold", 0)  # old velocities
-        self.addPerDofVariable("xold", 0)  # old positions
-        self.addGlobalVariable("accept", 0)  # accept or reject
-        self.addGlobalVariable("naccept", 0)  # number accepted
-        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
-
-        # Initial step only
-        self.beginIfBlock('step = 0')
-        self.addComputePerDof("sigma", "sqrt(kT/m)")
-        self.addConstrainPositions()
-        self.addConstrainVelocities()
-        self.endBlock()
-
-        # Allow context state to be updated
-        self.addUpdateContextState()
-
-        #
-        # Velocity perturbation
-        #
-        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities()
-
-        #
-        # Metropolized symplectic step.
-        #
-        self.addComputeSum("kinetic", "0.5*m*v*v")
-        self.addComputeGlobal("Eold", "kinetic + energy")
-        self.addComputePerDof("xold", "x")
-        self.addComputePerDof("vold", "v")
-        self.addComputePerDof("v", "v + 0.5*dt*f/m")
-        self.addComputePerDof("x", "x + v*dt")
-        self.addComputePerDof("x1", "x")
-        self.addConstrainPositions()
-        self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
-        self.addConstrainVelocities()
-        self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Enew", "kinetic + energy")
-        # Compute acceptance probability
-        self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
-        self.beginIfBlock("accept != 1")
-        # Reject sample, inverting velcoity
-        self.addComputePerDof("x", "xold")
-        self.addComputePerDof("v", "-vold")
-        self.endBlock()
-
-        #
-        # Velocity perturbation
-        #
-        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities()
-
-        #
-        # Accumulate statistics.
-        #
-        self.addComputeGlobal("naccept", "naccept + accept")
-        self.addComputeGlobal("ntrials", "ntrials + 1")
-
-################################################################################
-# MCMC SAMPLER
-################################################################################
-
-class MCMCSampler(object):
-    """
-    Markov chain Monte Carlo (MCMC) sampler.
-
-    This is a minimal functional implementation placeholder until we can replace this with MCMCSampler from `openmmmcmc`.
-
-    Properties
-    ----------
-    positions : simtk.unit.Quantity of size [nparticles,3] with units compatible with nanometers
-        The current positions.
-    iteration : int
-        Iterations completed.
-    verbose : bool
-        If True, verbose output is printed
-
-    References
-    ----------
-    [1]
-
-    Examples
-    --------
-    >>> # Create a test system
-    >>> test = testsystems.AlanineDipeptideVacuum()
-    >>> # Create a sampler state.
-    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-    >>> # Create a thermodynamic state.
-    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298.0*unit.kelvin)
-    >>> # Create an MCMC sampler
-    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state)
-    >>> # Turn off verbosity
-    >>> sampler.verbose = False
-    >>> # Run the sampler
-    >>> sampler.run()
-
-    """
-    def __init__(self, thermodynamic_state, sampler_state, topology=None, storage=None, integrator_name='GHMC'):
-        """
-        Create an MCMC sampler.
-
-        Parameters
-        ----------
-        thermodynamic_state : ThermodynamicState
-            The thermodynamic state to simulate
-        sampler_state : SamplerState
-            The initial sampler state to simulate from.
-        topology : simtk.openmm.app.Topology, optional, default=None
-            Topology object corresponding to system being simulated (for writing)
-        storage : NetCDFStorage, optional, default=None
-            Storage layer to use for writing.
-        integrator_name : str, optional, default='GHMC'
-            Name of the integrator to use for propagation.
-
-        """
-        # Keep copies of initializing arguments.
-        # TODO: Make deep copies?
-        self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
-        self.sampler_state = copy.deepcopy(sampler_state)
-        self.topology = topology
-        self.integrator_name = integrator_name
-
-        self.storage = None
-        if storage is not None:
-            self.storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
-
-        # Initialize
-        self.iteration = 0
-        # For GHMC integrator
-        self.collision_rate = 5.0 / unit.picoseconds
-        self.timestep = 1.0 * unit.femtoseconds
-        self.nsteps = 500 # number of steps per update
-        self.verbose = True
-
-    def update(self):
-        """
-        Update the sampler with one step of sampling.
-        """
-        if self.verbose:
-            print("." * 80)
-            print("MCMC sampler iteration %d" % self.iteration)
-
-        # Create an integrator
-        if self.integrator_name == 'GHMC':
-            # TODO: Migrate GHMCIntegrator back to openmmtools
-            #from openmmtools.integrators import GHMCIntegrator
-            integrator = GHMCIntegrator(temperature=self.thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
-            if self.verbose: print("Taking %d steps of GHMC..." % self.nsteps)
-        elif self.integrator_name == 'Langevin':
-            from simtk.openmm import LangevinIntegrator
-            integrator = LangevinIntegrator(self.thermodynamic_state.temperature, self.collision_rate, self.timestep)
-            if self.verbose: print("Taking %d steps of Langevin dynamics..." % self.nsteps)
-        else:
-            raise Exception("integrator_name '%s' not valid." % (self.integrator_name))
-
-        start_time = time.time()
-
-        # Create a Context
-        context = self.sampler_state.createContext(integrator=integrator, thermodynamic_state=self.thermodynamic_state)
-        context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
-
-        if self.verbose:
-            # Print platform
-            print("Using platform '%s'" % context.getPlatform().getName())
-
-            # DEBUG ENERGIES
-            state = context.getState(getEnergy=True,getForces=True)
-            kT = kB * self.thermodynamic_state.temperature
-            print("potential  = %.3f kT" % (state.getPotentialEnergy() / kT))
-            print("kinetic    = %.3f kT" % (state.getKineticEnergy() / kT))
-            force_unit = (kT / unit.angstrom)
-            force_norm = np.sqrt(np.mean( (state.getForces(asNumpy=True) / force_unit)**2 ))
-            print("force norm = %.3f kT/A/dof" % force_norm)
-
-        # Integrate to update sample
-        integrator.step(self.nsteps)
-
-        # Recover sampler state from Context
-        self.sampler_state = SamplerState.createFromContext(context)
-        self.sampler_state.velocities = None # erase velocities since we may change dimensionality next
-
-        # Write positions and box vectors
-        if self.storage:
-            kT = kB * self.thermodynamic_state.temperature
-            self.storage.write_configuration('positions', self.sampler_state.positions, self.topology, iteration=self.iteration)
-            self.storage.write_quantity('kinetic_energy', self.sampler_state.kinetic_energy / kT, iteration=self.iteration)
-            self.storage.write_quantity('potential_energy', self.sampler_state.potential_energy / kT, iteration=self.iteration)
-            self.storage.write_quantity('volume', self.sampler_state.volume / unit.angstroms**3, iteration=self.iteration)
-
-        # Report statistics.
-        if self.integrator_name == 'GHMC':
-            naccept = integrator.getGlobalVariableByName('naccept')
-            fraction_accepted = float(naccept) / float(self.nsteps)
-            if self.verbose: print("Accepted %d / %d GHMC steps (%.2f%%)." % (naccept, self.nsteps, fraction_accepted * 100))
-            if self.storage: self.storage.write_quantity('fraction_accepted', fraction_accepted, iteration=self.iteration)
-
-        if self.verbose:
-            print('Finished integration in %.3f s' % (time.time() - start_time))
-            final_energy = context.getState(getEnergy=True).getPotentialEnergy() * self.thermodynamic_state.beta
-            print('Final energy is %12.3f kT' % (final_energy))
-
-        del context, integrator
-
-        # TODO: We currently are forced to update the default box vectors in System because we don't propagate them elsewhere in the code
-        # so if they change during simulation, we're in trouble.  We should instead have the code use SamplerState throughout, and likely
-        # should generalize SamplerState to include additional dynamical variables (like chemical state key?)
-        if self.sampler_state.box_vectors is not None:
-            self.thermodynamic_state.system.setDefaultPeriodicBoxVectors(*self.sampler_state.box_vectors)
-            self.sampler_state.system.setDefaultPeriodicBoxVectors(*self.sampler_state.box_vectors)
-
-        if self.verbose:
-            print("." * 80)
-
-        if self.storage: self.storage.sync()
-
-        # Increment iteration count
-        self.iteration += 1
-
-    def run(self, niterations=1):
-        """
-        Run the sampler for the specified number of iterations
-
-        Parameters
-        ----------
-        niterations : int, optional, default=1
-            Number of iterations to run the sampler for.
-        """
-        for iteration in range(niterations):
-            self.update()
 
 ################################################################################
 # EXPANDED ENSEMBLE SAMPLER
@@ -700,7 +66,14 @@ class ExpandedEnsembleSampler(object):
     """
     Method of expanded ensembles sampling engine.
 
-    The acceptance criteria is given in the reference document.
+    The acceptance criteria is given in the reference document. Roughly, the proposal scheme is:
+
+    * Draw a proposed chemical state k', and calculate reverse proposal probability
+    * Conditioned on k' and the current positions x, generate new positions with the GeometryEngine
+    * With new positions, jump to a hybrid system at lambda=0
+    * Anneal from lambda=0 to lambda=1, accumulating work
+    * Jump from the hybrid system at lambda=1 to the k' system, and compute reverse GeometryEngine proposal
+    * Add weight of chemical states k and k' to acceptance probabilities
 
     Properties
     ----------
@@ -758,7 +131,7 @@ class ExpandedEnsembleSampler(object):
     >>> exen_sampler.run()
 
     """
-    def __init__(self, sampler, topology, state_key, proposal_engine, geometry_engine, log_weights=None, scheme='ncmc-geometry-ncmc', options=None, platform=None, envname=None, storage=None):
+    def __init__(self, sampler, topology, state_key, proposal_engine, geometry_engine, log_weights=None, options=None, platform=None, envname=None, storage=None):
         """
         Create an expanded ensemble sampler.
 
@@ -780,8 +153,6 @@ class ExpandedEnsembleSampler(object):
             GeometryEngine to use for dimension matching
         log_weights : dict of object : float
             Log weights to use for expanded ensemble biases.
-        scheme : str, optional, default='ncmc-geometry-ncmc'
-            Update scheme. One of ['ncmc-geometry-ncmc', 'geometry-ncmc-geometry']
         options : dict, optional, default=dict()
             Options for initializing switching scheme, such as 'timestep', 'nsteps', 'functions' for NCMC
         platform : simtk.openmm.Platform, optional, default=None
@@ -793,11 +164,12 @@ class ExpandedEnsembleSampler(object):
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
-        self.topology = topology
+        self._pressure = sampler.thermodynamic_state.pressure
+        self._temperature = sampler.thermodynamic_state.temperature
+        self.topology = md.Topology.from_openmm(topology)
         self.state_key = state_key
         self.proposal_engine = proposal_engine
         self.log_weights = log_weights
-        self.scheme = scheme
         if self.log_weights is None: self.log_weights = dict()
 
         self.storage = None
@@ -806,24 +178,30 @@ class ExpandedEnsembleSampler(object):
 
         # Initialize
         self.iteration = 0
-        option_names = ['timestep', 'nsteps', 'functions']
+        option_names = ['timestep', 'nsteps', 'functions', 'nsteps_mcmc', 'splitting']
+
         if options is None:
             options = dict()
         for option_name in option_names:
             if option_name not in options:
                 options[option_name] = None
+        
+        if options['splitting']:
+            self._ncmc_splitting = options['splitting']
+        else:
+            self._ncmc_splitting = "V R O H R V"
+
         if options['nsteps']:
             self._switching_nsteps = options['nsteps']
+            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], integrator_splitting=self._ncmc_splitting, platform=platform, storage=self.storage)
         else:
             self._switching_nsteps = 0
-        if scheme in ['ncmc-geometry-ncmc']:
-            from perses.annihilation.ncmc_switching import NCMCEngine
-            self.ncmc_engine = NCMCEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
-        elif scheme=='geometry-ncmc-geometry':
-            from perses.annihilation.ncmc_switching import NCMCHybridEngine
-            self.ncmc_engine = NCMCHybridEngine(temperature=self.sampler.thermodynamic_state.temperature, timestep=options['timestep'], nsteps=options['nsteps'], functions=options['functions'], platform=platform, storage=self.storage)
+
+        if options['nsteps_mcmc']:
+            self._n_iterations_per_update = options['nsteps_mcmc']
         else:
-            raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
+            self._n_iterations_per_update = 100
+
         self.geometry_engine = geometry_engine
         self.naccepted = 0
         self.nrejected = 0
@@ -833,6 +211,7 @@ class ExpandedEnsembleSampler(object):
         self.geometry_pdbfile = None # if not None, write PDB file of geometry proposals
         self.accept_everything = False # if True, will accept anything that doesn't lead to NaNs
         self.logPs = list()
+        self.sampler.minimize(max_iterations=40)
 
     @property
     def state_keys(self):
@@ -861,7 +240,24 @@ class ExpandedEnsembleSampler(object):
             self.log_weights[state_key] = 0.0
         return self.log_weights[state_key]
 
-    def _geometry_forward(self, topology_proposal, old_positions):
+    def _system_to_thermodynamic_state(self, system):
+        """
+        Given an OpenMM system object, create a corresponding ThermodynamicState that has the same
+        temperature and pressure as the current thermodynamic state.
+
+        Arguments
+        ---------
+        system : openmm.System
+            The OpenMM system for which to create the thermodynamic state
+        
+        Returns
+        -------
+        new_thermodynamic_state : openmmtools.states.ThermodynamicState
+            The thermodynamic state object representing the given system
+        """
+        return ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure)
+
+    def _geometry_forward(self, topology_proposal, old_sampler_state):
         """
         Run geometry engine to propose new positions and compute logP
 
@@ -869,20 +265,20 @@ class ExpandedEnsembleSampler(object):
         ----------
         topology_proposal : TopologyProposal
             Contains old/new Topology and System objects and atom mappings.
-        old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the old system atoms.
+        old_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of the old system atoms.
 
         Returns
         -------
-        new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of new atoms proposed by geometry engine calculation.
+        new_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of new atoms proposed by geometry engine calculation.
         geometry_logp_propose : float
             The log probability of the forward-only proposal
         """
         if self.verbose: print("Geometry engine proposal...")
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
         initial_time = time.time()
-        new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, old_positions, self.sampler.thermodynamic_state.beta)
+        new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, old_sampler_state.positions, self.sampler.thermodynamic_state.beta)
         if self.verbose: print('proposal took %.3f s' % (time.time() - initial_time))
 
         if self.geometry_pdbfile is not None:
@@ -891,9 +287,11 @@ class ExpandedEnsembleSampler(object):
             PDBFile.writeFile(topology_proposal.new_topology, new_positions, file=self.geometry_pdbfile)
             self.geometry_pdbfile.flush()
 
-        return new_positions, geometry_logp_propose
+        new_sampler_state = SamplerState(new_positions, box_vectors=old_sampler_state.box_vectors)  
 
-    def _geometry_reverse(self, topology_proposal, new_positions, old_positions):
+        return new_sampler_state, geometry_logp_propose
+
+    def _geometry_reverse(self, topology_proposal, new_sampler_state, old_sampler_state):
         """
         Run geometry engine reverse calculation to determine logP
         of proposing the old positions based on the new positions
@@ -902,10 +300,10 @@ class ExpandedEnsembleSampler(object):
         ----------
         topology_proposal : TopologyProposal
             Contains old/new Topology and System objects and atom mappings.
-        new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the new atoms.
-        old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the old atoms.
+        new_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of the new atoms.
+        old_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of the old atoms.
 
         Returns
         -------
@@ -914,69 +312,11 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Geometry engine logP_reverse calculation...")
         initial_time = time.time()
-        geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, self.sampler.thermodynamic_state.beta)
+        geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, new_sampler_state.positions, old_sampler_state.positions, self.sampler.thermodynamic_state.beta)
         if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
         return geometry_logp_reverse
 
-    def _ncmc_insert(self, topology_proposal, ncmc_old_positions):
-        """
-        Run an NCMC protocol from lambda = 0 to lambda = 1
-
-        Parameters
-        ----------
-        topology_proposal : TopologyProposal
-            Contains old/new Topology and System objects and atom mappings.
-        ncmc_old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the atoms at the beginning of the NCMC switching.
-
-        Returns
-        -------
-        ncmc_new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the atoms at the end of the NCMC switching.
-        logP_work : float
-            The NCMC work contribution to the log acceptance probability (Eqs. 63)
-        logP_energy : float
-            The NCMC energy contribution to the log acceptance probability (Eqs. 63)
-        """
-        if self.verbose: print("Performing NCMC insertion")
-        # Alchemically introduce new atoms.
-        initial_time = time.time()
-        [ncmc_new_positions, logP_work, logP_energy] = self.ncmc_engine.integrate(topology_proposal, ncmc_old_positions, direction='insert', iteration=self.iteration)
-        if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
-        # Check that positions are not NaN
-        if np.any(np.isnan(ncmc_new_positions)):
-            raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
-        return ncmc_new_positions, logP_work, logP_energy
-
-    def _ncmc_delete(self, topology_proposal, ncmc_old_positions):
-        """
-        Run an NCMC protocol from lambda = 1 to lambda = 0
-
-        Parameters
-        ----------
-        topology_proposal : TopologyProposal
-            Contains old/new Topology and System objects and atom mappings.
-        ncmc_old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of the atoms at the beginning of the NCMC switching.
-
-        Returns
-        -------
-        ncmc_old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of old atoms at the end of the NCMC switching.
-        logP_work : float
-            The NCMC work contribution to the log acceptance probability (Eqs. 62)
-        logP_energy : float
-            The NCMC energy contribution to the log acceptance probability (Eqs. 62)
-        """
-        if self.verbose: print("Performing NCMC annihilation")
-        # Alchemically eliminate atoms being removed.
-        [ncmc_old_positions, logP_work, logP_energy] = self.ncmc_engine.integrate(topology_proposal, ncmc_old_positions, direction='delete', iteration=self.iteration)
-        # Check that positions are not NaN
-        if np.any(np.isnan(ncmc_old_positions)):
-            raise Exception("Positions are NaN after NCMC delete with %d steps" % self._switching_nsteps)
-        return ncmc_old_positions, logP_work, logP_energy
-
-    def _ncmc_hybrid(self, topology_proposal, old_positions, new_positions):
+    def _ncmc_hybrid(self, topology_proposal, old_sampler_state, new_sampler_state):
         """
         Run a hybrid NCMC protocol from lambda = 0 to lambda = 1
 
@@ -984,32 +324,32 @@ class ExpandedEnsembleSampler(object):
         ----------
         topology_proposal : TopologyProposal
             Contains old/new Topology and System objects and atom mappings.
-        old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of old atoms at the beginning of the NCMC switching.
-        new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of new atoms at the beginning of the NCMC switching.
+        old_sampler_State : openmmtools.states.SamplerState
+            SamplerState of old system at the beginning of NCMCSwitching
+        new_sampler_state : openmmtools.states.SamplerState
+            SamplerState of new system at the beginning of NCMCSwitching
 
         Returns
         -------
-        ncmc_new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of new atoms at the end of the NCMC switching.
-        ncmc_old_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of old atoms at the end of the NCMC switching.
+        old_final_sampler_state : openmmtools.states.SamplerState
+            SamplerState of old system at the end of switching
+        new_final_sampler_state : openmmtools.states.SamplerState
+            SamplerState of new system at the end of switching
         logP_work : float
             The NCMC work contribution to the log acceptance probability (Eq. 44)
         logP_energy : float
-            The NCMC energy contribution to the log acceptance probability (Eq. 45)
+            The contribution of switching to and from the hybrid system to the acceptance probability (Eq. 45)
         """
         if self.verbose: print("Performing NCMC switching")
         initial_time = time.time()
-        [ncmc_new_positions, ncmc_old_positions, logP_work, logP_energy] = self.ncmc_engine.integrate(topology_proposal, old_positions, new_positions, iteration=self.iteration)
+        [old_final_sampler_state, new_final_sampler_state, logP_work, logP_energy] = self.ncmc_engine.integrate(topology_proposal, old_sampler_state, new_sampler_state, iteration=self.iteration)
         if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
         # Check that positions are not NaN
-        if np.any(np.isnan(ncmc_new_positions)):
+        if new_sampler_state.has_nan():
             raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
-        return ncmc_new_positions, ncmc_old_positions, logP_work, logP_energy
+        return old_final_sampler_state, new_final_sampler_state, logP_work, logP_energy
 
-    def _geometry_ncmc_geometry(self, topology_proposal, positions, old_log_weight, new_log_weight):
+    def _geometry_ncmc_geometry(self, topology_proposal, sampler_state, old_log_weight, new_log_weight):
         """
         Use a hybrid NCMC protocol to switch from the old system to new system
         Will calculate new positions for the new system first, then give both
@@ -1021,8 +361,8 @@ class ExpandedEnsembleSampler(object):
         ----------
         topology_proposal : TopologyProposal
             Contains old/new Topology and System objects and atom mappings.
-        positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of old atoms at the beginning of the NCMC switching.
+        sampler_state : openmmtools.states.SamplerState
+            Configurational properties of old atoms at the beginning of the NCMC switching.
         old_log_weight : float
             Chemical state weight from SAMSSampler
         new_log_weight : float
@@ -1032,35 +372,49 @@ class ExpandedEnsembleSampler(object):
         -------
         logP_accept : float
             Log of acceptance probability of entire Expanded Ensemble switch (Eq. 25 or 46)
-        ncmc_new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of new atoms at the end of the NCMC switching.
+        ncmc_new_sampler_state : openmmtools.states.SamplerState
+            Configurational properties of new atoms at the end of the NCMC switching.
         """
         if self.verbose: print("Updating chemical state with geometry-ncmc-geometry scheme...")
 
         from perses.tests.utils import compute_potential
 
-        logP_chemical = topology_proposal.logp_proposal
+        logP_chemical_proposal = topology_proposal.logp_proposal
 
-        old_positions = positions
-        initial_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.old_system, old_positions, platform=self.ncmc_engine.platform)
+        old_thermodynamic_state = self.sampler.thermodynamic_state
+        new_thermodynamic_state = self._system_to_thermodynamic_state(topology_proposal.new_system)
+
+        initial_reduced_potential = feptasks.compute_reduced_potential(old_thermodynamic_state, sampler_state)
         logP_initial = -initial_reduced_potential + old_log_weight
 
-        geometry_new_positions, logP_forward = self._geometry_forward(topology_proposal, old_positions)
+        new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, sampler_state)
+        
+        #if we aren't doing any switching, then skip running the NCMC engine at all.
+        if self._switching_nsteps == 0:
+            ncmc_old_sampler_state = sampler_state
+            ncmc_new_sampler_state = new_geometry_sampler_state
+            logP_work = 0.0
+            logP_energy = 0.0
+        else:
+            ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
 
-        ncmc_new_positions, ncmc_old_positions, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, old_positions, geometry_new_positions)
+        if logP_work > -np.inf and logP_energy > -np.inf:
+            logP_geometry_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
 
-        new_positions = ncmc_new_positions
+            final_reduced_potential = feptasks.compute_reduced_potential(new_thermodynamic_state, ncmc_new_sampler_state)
+            logP_final = -final_reduced_potential + new_log_weight
 
-        logP_reverse = self._geometry_reverse(topology_proposal, ncmc_new_positions, ncmc_old_positions)
+            # Compute total log acceptance probability according to Eq. 46
+            logP_accept = logP_final - logP_initial + logP_chemical_proposal + logP_geometry_reverse - logP_geometry_forward + logP_work + logP_energy
+        else:
+            logP_geometry_reverse = 0.0
+            logP_final = 0.0
+            logP_accept = logP_final - logP_initial + logP_chemical_proposal + logP_geometry_reverse - logP_geometry_forward + logP_work + logP_energy
+            #TODO: mark failed proposals as unproposable
 
-        final_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.new_system, new_positions, platform=self.ncmc_engine.platform)
-        logP_final = -final_reduced_potential + new_log_weight
-
-        # Compute total log acceptance probability according to Eq. 46
-        logP_accept = logP_final - logP_initial + logP_chemical + logP_reverse - logP_forward + logP_work + logP_energy
         if self.verbose:
             print("logP_accept = %+10.4e [logP_final = %+10.4e, -logP_initial = %+10.4e, logP_chemical = %10.4e, logP_reverse = %+10.4e, -logP_forward = %+10.4e, logP_work = %+10.4e, logP_energy = %+10.4e]"
-                % (logP_accept, logP_final, -logP_initial, logP_chemical, logP_reverse, -logP_forward, logP_work, logP_energy))
+                % (logP_accept, logP_final, -logP_initial, logP_chemical_proposal, logP_geometry_reverse, -logP_geometry_forward, logP_work, logP_energy))
         # Write to storage.
         if self.storage:
             self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
@@ -1068,102 +422,24 @@ class ExpandedEnsembleSampler(object):
             self.storage.write_quantity('logP_ncmc_work', logP_work, iteration=self.iteration)
             self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
             self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
-            self.storage.write_quantity('logP_chemical', logP_chemical, iteration=self.iteration)
-            self.storage.write_quantity('logP_reverse', logP_reverse, iteration=self.iteration)
-            self.storage.write_quantity('logP_forward', logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_chemical', logP_chemical_proposal, iteration=self.iteration)
+            self.storage.write_quantity('logP_reverse', logP_geometry_reverse, iteration=self.iteration)
+            self.storage.write_quantity('logP_forward', logP_geometry_forward, iteration=self.iteration)
             self.storage.write_quantity('logP_work', logP_work, iteration=self.iteration)
             self.storage.write_quantity('logP_energy', logP_energy, iteration=self.iteration)
             # Write some aggregate statistics to storage to make contributions to acceptance probability easier to analyze
-            self.storage.write_quantity('logP_groups_chemical', logP_chemical, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_geometry', logP_reverse - logP_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_chemical', logP_chemical_proposal, iteration=self.iteration)
+            self.storage.write_quantity('logP_groups_geometry', logP_geometry_reverse - logP_geometry_forward, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_work_and_energy', logP_work + logP_energy, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
 
-        return logP_accept, new_positions
+        return logP_accept, ncmc_new_sampler_state
 
-    def _ncmc_geometry_ncmc(self, topology_proposal, positions, old_log_weight, new_log_weight):
-        """
-        Use separate NCMC protocols for deletion and insertion of unique atoms
-        from the old system and new system
-        Will delete old unique atoms first, then calculate positions for new
-        atoms as well as the reverse geometry probability, and finally
-        insert unique new atoms
-
-        Parameters
-        ----------
-        topology_proposal : TopologyProposal
-            Contains old/new Topology and System objects and atom mappings.
-        positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of old atoms at the beginning of the NCMC switching.
-        old_log_weight : float
-            Chemical state weight from SAMSSampler
-        new_log_weight : float
-            Chemical state weight from SAMSSampler
-
-        Returns
-        -------
-        logp_accept : float
-            Log of acceptance probability of entire Expanded Ensemble switch
-        ncmc_new_positions : simtk.unit.Quantity with dimension [natoms, 3] with units of distance.
-            Positions of new atoms at the end of the NCMC switching.
-        """
-        if self.verbose: print("Updating chemical state with ncmc-geometry-ncmc scheme...")
-
-        logP_chemical = topology_proposal.logp_proposal
-
-        initial_time = time.time()
-        old_positions = positions
-
-        from perses.tests.utils import compute_potential
-        initial_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.old_system, old_positions, platform=self.ncmc_engine.platform)
-        logP_initial = -initial_reduced_potential + old_log_weight
-
-        ncmc_old_positions, logP_delete_work, logP_delete_energy = self._ncmc_delete(topology_proposal, old_positions)
-
-        geometry_old_positions = ncmc_old_positions
-        geometry_new_positions, logP_forward = self._geometry_forward(topology_proposal, geometry_old_positions)
-
-        logP_reverse = self._geometry_reverse(topology_proposal, geometry_new_positions, geometry_old_positions)
-
-        ncmc_new_positions, logP_insert_work, logP_insert_energy = self._ncmc_insert(topology_proposal, geometry_new_positions)
-        new_positions = ncmc_new_positions
-
-        final_reduced_potential = self.sampler.thermodynamic_state.beta * compute_potential(topology_proposal.new_system, new_positions, platform=self.ncmc_engine.platform)
-        logP_final = -final_reduced_potential + new_log_weight
-
-        elapsed_time = time.time() - initial_time
-
-        # Compute total log acceptance probability according to Eq. 64
-        logP_accept = logP_final - logP_initial + logP_chemical + logP_delete_work + logP_delete_energy + logP_reverse - logP_forward + logP_insert_work + logP_insert_energy
-        if self.verbose:
-            print("logP_accept = %+10.4e [logP_final = %+10.4e, -logP_initial = %+10.4e, logP_chemical = %10.4e, logP_delete_work = %+10.4e, logP_delete_energy = %+10.4e, logP_reverse = %+10.4e, -logP_forward = %+10.4e, logP_insert_work = %+10.4e, logP_insert_energy = %+10.4e]"
-                % (logP_accept, logP_final, -logP_initial, logP_chemical, logP_delete_work, logP_delete_energy, logP_reverse, -logP_forward, logP_insert_work, logP_insert_energy))
-        # Write to storage.
-        if self.storage:
-            self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
-            # Write components
-            self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
-            self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
-            self.storage.write_quantity('logP_chemical', logP_chemical, iteration=self.iteration)
-            self.storage.write_quantity('logP_delete_work', logP_delete_work, iteration=self.iteration)
-            self.storage.write_quantity('logP_delete_energy', logP_delete_energy, iteration=self.iteration)
-            self.storage.write_quantity('logP_reverse', logP_reverse, iteration=self.iteration)
-            self.storage.write_quantity('logP_forward', logP_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_insert_work', logP_delete_work, iteration=self.iteration)
-            self.storage.write_quantity('logP_insert_energy', logP_delete_energy, iteration=self.iteration)
-            # Write groups for easier analysis
-            self.storage.write_quantity('logP_groups_geometry', logP_reverse - logP_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_chemical', logP_chemical, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_ncmc', logP_delete_work + logP_insert_work + logP_delete_energy + logP_insert_energy, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
-
-        return logP_accept, new_positions
-
-    def update_positions(self):
+    def update_positions(self, n_iterations=1):
         """
         Sample new positions.
         """
-        self.sampler.update()
+        self.sampler.run(n_iterations=n_iterations)
 
     def update_state(self):
         """
@@ -1174,8 +450,10 @@ class ExpandedEnsembleSampler(object):
 
         # Propose new chemical state.
         if self.verbose: print("Proposing new topology...")
-        [system, topology, positions] = [self.sampler.thermodynamic_state.system, self.topology, self.sampler.sampler_state.positions]
-        topology_proposal = self.proposal_engine.propose(system, topology)
+        [system, topology, positions] = [self.sampler.thermodynamic_state.get_system(remove_thermostat=True), self.topology, self.sampler.sampler_state.positions]
+        omm_topology = topology.to_openmm() #convert to OpenMM topology for proposal engine
+        omm_topology.setPeriodicBoxVectors(self.sampler.sampler_state.box_vectors) #set the box vectors because in OpenMM topology has these...
+        topology_proposal = self.proposal_engine.propose(system, omm_topology)
         if self.verbose: print("Proposed transformation: %s => %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
 
         # Determine state keys
@@ -1186,12 +464,7 @@ class ExpandedEnsembleSampler(object):
         old_log_weight = self.get_log_weight(old_state_key)
         new_log_weight = self.get_log_weight(new_state_key)
 
-        if self.scheme == 'ncmc-geometry-ncmc':
-            logp_accept, ncmc_new_positions = self._ncmc_geometry_ncmc(topology_proposal, positions, old_log_weight, new_log_weight)
-        elif self.scheme == 'geometry-ncmc-geometry':
-            logp_accept, ncmc_new_positions = self._geometry_ncmc_geometry(topology_proposal, positions, old_log_weight, new_log_weight)
-        else:
-            raise Exception("Expanded ensemble state proposal scheme '%s' unsupported" % self.scheme)
+        logp_accept, ncmc_new_sampler_state = self._geometry_ncmc_geometry(topology_proposal, self.sampler.sampler_state, old_log_weight, new_log_weight)
 
         # Accept or reject.
         if np.isnan(logp_accept):
@@ -1204,10 +477,10 @@ class ExpandedEnsembleSampler(object):
                 accept = True
 
         if accept:
-            self.sampler.thermodynamic_state.system = topology_proposal.new_system
+            self.sampler.thermodynamic_state.set_system(topology_proposal.new_system, fix_state=True)
             self.sampler.sampler_state.system = topology_proposal.new_system
-            self.topology = topology_proposal.new_topology
-            self.sampler.sampler_state.positions = ncmc_new_positions
+            self.topology = md.Topology.from_openmm(topology_proposal.new_topology)
+            self.sampler.sampler_state = ncmc_new_sampler_state
             self.sampler.topology = self.topology
             self.state_key = topology_proposal.new_chemical_state_key
             self.naccepted += 1
@@ -1217,7 +490,7 @@ class ExpandedEnsembleSampler(object):
             if self.verbose: print("    rejected")
 
         if self.storage:
-            self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.sampler.topology, iteration=self.iteration)
+            self.storage.write_configuration('positions', self.sampler.sampler_state.positions, self.topology, iteration=self.iteration)
             self.storage.write_object('state_key', self.state_key, iteration=self.iteration)
             self.storage.write_object('proposed_state_key', topology_proposal.new_chemical_state_key, iteration=self.iteration)
             self.storage.write_quantity('naccepted', self.naccepted, iteration=self.iteration)
@@ -1236,7 +509,7 @@ class ExpandedEnsembleSampler(object):
         if self.verbose:
             print("-" * 80)
             print("Expanded Ensemble sampler iteration %8d" % self.iteration)
-        self.update_positions()
+        self.update_positions(n_iterations=self._n_iterations_per_update)
         self.update_state()
         self.iteration += 1
         if self.verbose:
@@ -1245,7 +518,7 @@ class ExpandedEnsembleSampler(object):
         if self.pdbfile is not None:
             print("Writing frame...")
             from simtk.openmm.app import PDBFile
-            PDBFile.writeModel(self.topology, self.sampler.sampler_state.positions, self.pdbfile, self.iteration)
+            PDBFile.writeModel(self.topology.to_openmm(), self.sampler.sampler_state.positions, self.pdbfile, self.iteration)
             self.pdbfile.flush()
 
         if self.storage:

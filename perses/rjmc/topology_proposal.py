@@ -8,11 +8,14 @@ from collections import namedtuple
 import copy
 import warnings
 import logging
+import itertools
+import json
 import os
 import openeye.oechem as oechem
 import numpy as np
 import openeye.oeomega as oeomega
 import tempfile
+import networkx as nx
 from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -22,8 +25,11 @@ try:
 except ImportError:
     from io import StringIO
 import openmoltools
+import base64
 import logging
 import time
+import progressbar
+from typing import List, Dict
 try:
     from subprocess import getoutput  # If python 3
 except ImportError:
@@ -35,7 +41,7 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_EqCAliphaticONS
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
 ################################################################################
@@ -91,6 +97,580 @@ def deepcopy_topology(source_topology):
     topology = app.Topology()
     append_topology(topology, source_topology)
     return topology
+
+def has_h_mapped(atommap, mola: oechem.OEMol, molb: oechem.OEMol):
+    for a_atom, b_atom in atommap.items():
+        if mola.GetAtom(oechem.OEHasAtomIdx(a_atom)).GetAtomicNum() == 1 or molb.GetAtom(oechem.OEHasAtomIdx(b_atom)).GetAtomicNum() == 1:
+            return True
+
+    return False
+
+class SmallMoleculeAtomMapper(object):
+    """
+    This is a utility class for generating and retrieving sets of atom maps between molecules using OpenEye.
+    It additionally verifies that all atom maps lead to valid proposals, as well as checking that the graph of
+    proposals is not disconnected.
+    """
+
+    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
+
+        self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
+        self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
+        self._unique_smiles_list = list(self._oemol_dictionary.keys())
+
+        self._n_molecules = len(self._unique_smiles_list)
+
+        self._prohibit_hydrogen_mapping = prohibit_hydrogen_mapping
+
+        if atom_match_expression is None:
+            self._atom_expr = DEFAULT_ATOM_EXPRESSION
+        else:
+            self._atom_expr = atom_match_expression
+        
+        if bond_match_expression is None:
+            self._bond_expr = DEFAULT_BOND_EXPRESSION
+        else:
+            self._bond_expr = bond_match_expression
+        
+        self._molecules_mapped = False
+        self._molecule_maps = {}
+        self._failed_molecule_maps = {}
+
+        self._proposal_matrix = np.zeros([self._n_molecules, self._n_molecules])
+        self._proposal_matrix_generated = False
+        self._constraints_checked = False
+
+    def map_all_molecules(self):
+        """
+        Run the atom mapping routines to get all atom maps. This automatically preserves only maps that contain enough torsions to propose.
+        It does not ensure that constraints do not change--use verify_constraints to check that property. This method is idempotent--running it a second
+        time will have no effect.
+        """
+        
+        if self._molecules_mapped:
+            _logger.info("The molecules have already been mapped. Returning.")
+            return
+
+        with progressbar.ProgressBar(max_value=self._n_molecules*(self._n_molecules-1)/2.0) as bar:
+
+            current_index = 0
+
+            for molecule_smiles_pair in itertools.combinations(self._oemol_dictionary.keys(), 2):
+                molecule_pair = tuple(self._oemol_dictionary[molecule] for molecule in molecule_smiles_pair)
+
+                self._molecule_maps[molecule_smiles_pair] = []
+                self._failed_molecule_maps[molecule_smiles_pair] = []
+
+                atom_matches, failed_atom_matches = self._map_atoms(molecule_pair[0], molecule_pair[1])
+
+                for atom_match in atom_matches:
+                    self._molecule_maps[molecule_smiles_pair].append(atom_match)
+
+                for failed_atom_match in failed_atom_matches:
+                    self._failed_molecule_maps[molecule_smiles_pair].append(failed_atom_match)
+
+                current_index += 1
+                bar.update(current_index)
+            
+        self._molecules_mapped = True
+    
+    def get_atom_maps(self, smiles_A: str, smiles_B: str) -> List[Dict]:
+        """
+        Given two canonical smiles strings, get the atom maps.
+
+        Arguments
+        ---------
+        smiles_A : str
+            Canonical smiles for the first molecule (keys)
+        smiles_B : str
+            Canonical smiles for the second molecule (values)
+
+        Returns
+        -------
+        atom_maps : list of dict
+            List of map of molecule_A_atom : molecule_B_atom
+        """
+        try:
+            atom_maps = self._molecule_maps[(smiles_A, smiles_B)]
+            return atom_maps
+        except KeyError:
+            try:
+                atom_maps = self._molecule_maps[(smiles_B, smiles_A)]
+                output_atom_maps = []
+                for atom_map in atom_maps:
+                    reversed_map = {value: key for key, value in atom_map.items()}
+                    output_atom_maps.append(reversed_map)
+                return output_atom_maps
+            except KeyError as e:
+                print("The requested pair was not found. Ensure you are using canonicalized smiles.")
+                raise e
+
+    def generate_and_check_proposal_matrix(self):
+        """
+        Generate a proposal matrix and check it for connectivity. Note that if constraints have not been checked, this may produce
+        a proposal matrix that makes proposals changing constraint lengths.
+        """
+
+        if not self._constraints_checked:
+            _logger.warn("Constraints have not been checked. Building proposal matrix, but it might result in error.")
+            _logger.warn("Call constraint_check() with an appropriate system generator to ensure this does not happen.")
+
+        proposal_matrix = self._create_proposal_matrix()
+        adjacency_matrix = proposal_matrix > 0.0
+        graph = nx.from_numpy_array(adjacency_matrix)
+        
+        if not nx.is_connected(graph):
+            _logger.warn("The graph of proposals is not connected! Some molecules will be unreachable.")
+        
+        self._proposal_matrix = proposal_matrix
+
+    def _create_proposal_matrix(self) -> np.array:
+        """
+        In RJ calculations, we propose based on how many atoms are in common between molecules. This routine checks that the graph of proposals cannot
+        be separated. In calculating the proposal matrix, we use the min(n_atom_mapped) when there are multiple maps.
+
+        Returns
+        -------
+        normalized_proposal_matrix : np.array of float
+            The proposal matrix
+        """
+        proposal_matrix = np.zeros([self._n_molecules, self._n_molecules])
+        
+        for smiles_pair, atom_maps in self._molecule_maps.items():
+
+            #retrieve the smiles strings of these molecules
+            molecule_A = smiles_pair[0]
+            molecule_B = smiles_pair[1]
+            
+            #retrieve the indices of these molecules from the list of smiles
+            molecule_A_idx = self._unique_smiles_list.index(molecule_A)
+            molecule_B_idx = self._unique_smiles_list.index(molecule_B)
+            
+            #if there are no maps, we can't propose
+            if len(atom_maps) == 0:
+                proposal_matrix[molecule_A_idx, molecule_B_idx] = 0.0
+                proposal_matrix[molecule_B_idx, molecule_A_idx] = 0.0
+                continue
+
+            #get a list of the number of atoms mapped for each map
+            number_of_atoms_in_maps = [len(atom_map.keys()) for atom_map in atom_maps]
+
+            unnormalized_proposal_probability = float(min(number_of_atoms_in_maps))
+
+
+            proposal_matrix[molecule_A_idx, molecule_B_idx] = unnormalized_proposal_probability
+            proposal_matrix[molecule_B_idx, molecule_A_idx] = unnormalized_proposal_probability
+
+        #normalize the proposal_matrix:
+
+        #First compute the normalizing constants by summing the rows
+        normalizing_constants = np.sum(proposal_matrix, axis=1)
+
+        #If any normalizing constants are zero, that means that the molecule is completely unproposable:
+        if np.any(normalizing_constants==0.0):
+            where_zero = np.where(normalizing_constants==0.0)[0]
+            failed_molecules = []
+            for zero_idx in where_zero:
+                failed_molecules.append(self._unique_smiles_list[zero_idx])
+
+            print("The following molecules are unproposable:\n")
+            print(failed_molecules)
+            raise ValueError("Some molecules could not be proposed. Make sure the atom mapping criteria do not completely exclude a molecule.")
+        
+        normalized_proposal_matrix = proposal_matrix / normalizing_constants[:, np.newaxis]
+
+        return normalized_proposal_matrix
+    
+    @staticmethod
+    def _canonicalize_smiles(mol: oechem.OEMol) -> str:
+        """
+        Convert an oemol into canonical isomeric smiles
+
+        Parameters
+        ----------
+        mol : oechem.OEmol
+            OEMol for molecule
+        Returns
+        -------
+        iso_can_smiles : str
+            OpenEye isomeric canonical smiles corresponding to the input
+        """
+        iso_can_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
+        return iso_can_smiles
+    
+    def _map_atoms(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, exhaustive: bool=True) -> List[Dict]:
+        """
+        Run the mapping on the two input molecules. This will return a list of atom maps. 
+        This is an internal method that is only intended to be used by other methods of this class.
+
+        Arguments
+        ---------
+        moleculeA : oechem.OEMol
+            The first oemol of the pair
+        moleculeB : oechem.OEMol
+            The second oemol of the pair
+        exhaustive: bool, default True
+            Whether to use an exhaustive procedure for enumerating MCS matches. Default True, but for large molecules,
+            may be prohibitively slow. 
+
+        Returns
+        -------
+        atom_matches: list of dict
+            This returns a list of dictionaries, where each dictionary is a map of the form {molA_atom: molB_atom}.
+            Atom maps with less than 3 mapped atoms, or where the map is not sufficient to begin a geometry proposal
+            will be returned separately.
+        failed_atom_matches : list of dict
+            This is a list of atom maps that cannot be used for geometry proposals. It is returned for debugging purposes.
+        """    
+
+        oegraphmol_current = oechem.OEGraphMol(moleculeA) # pattern molecule
+        oegraphmol_proposed = oechem.OEGraphMol(moleculeB) # target molecule
+        
+        if exhaustive:
+            mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
+        else:
+            mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
+           
+        mcs.Init(oegraphmol_current, self._atom_expr, self._bond_expr)
+
+        mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
+
+        #only use unique matches
+        unique = True
+
+        matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+
+        #if there are no matches at all, we return two empty lists.
+        if not matches:
+            return [], []
+
+        atom_matches = []
+        failed_atom_matches = []
+
+        for match in matches:
+            #if there are less than 3 mapped atoms, it can't be used for geometry proposals.
+            #Continue without recording it.
+            if match.NumAtoms() < 3:
+                continue
+
+            #extract the match as a dictionary.
+            a_to_b_atom_map = {}
+            for matchpair in match.GetAtoms():
+                a_index = matchpair.pattern.GetIdx()
+                b_index = matchpair.target.GetIdx()
+
+                #if we aren't allowing hydrogen maps, we need to ensure that neither mapped atom is a hydrogen
+                if self._prohibit_hydrogen_mapping:
+                    if matchpair.pattern.GetAtomicNum() == 1 or matchpair.target.GetAtomicNum() == 1:
+                        continue
+                    else:
+                        a_to_b_atom_map[a_index] = b_index
+                else:
+                    a_to_b_atom_map[a_index] = b_index
+            #Even if there are at least three atoms mapped, it is possible that the geometry proposal still cannot proceed
+            #An example of this would be mapping H-C-H -- There will be no topological torsions to use for the proposal.
+            if self._valid_match(moleculeA, moleculeB, a_to_b_atom_map):
+                atom_matches.append(a_to_b_atom_map)
+            else:
+                failed_atom_matches.append(a_to_b_atom_map)
+        
+        return atom_matches, failed_atom_matches
+
+    def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, a_to_b_mapping: Dict[int, int]) -> bool:
+        """
+        Check that the map can allow for a geometry proposal. Essentially, this amounts to ensuring that there exists
+        a starting topological torsion. Examples of cases where this would not exist would include:
+        H-C-H, Cl-C-Cl, CH3, etc.
+
+        Arguments
+        ---------
+        moleculeA : oechem.OEMol
+            The first molecule in the mapping
+        moleculeB: oechem.OEMol
+            The second molecule used in the mapping
+        b_to_a_mapping : dict
+            The mapping from molecule B to molecule A
+
+        Returns
+        -------
+        is_valid : bool
+            Whether the mapping can be used to generate a geometry proposal
+        """
+        graphA = self._mol_to_graph(moleculeA)
+        graphB = self._mol_to_graph(moleculeB)
+
+        #if both of these are good to make a map, we can make the map
+        return self._can_make_proposal(graphA, a_to_b_mapping.keys()) and self._can_make_proposal(graphB, a_to_b_mapping.values())
+
+    def _can_make_proposal(self, graph: nx.Graph, mapped_atoms: List) -> bool:
+        """
+        Check whether a given setup (molecule graph along with mapped atoms) can be proposed.
+        
+        Arguments
+        ---------
+        graph: nx.Graph
+            The molecule represented as a NetworkX graph
+        mapped_atoms : list
+            The list of atoms that have been mapped
+        
+        Returns
+        -------
+        can_make_proposal : bool
+            Whether this map permits the GeometryEngine to make a proposal
+        """
+
+        proposable = False
+        total_atoms = set(range(graph.number_of_nodes()))
+        unmapped_atoms = total_atoms - set(mapped_atoms)
+        mapped_atoms_set = set(mapped_atoms)
+         
+        #find the set of atoms that are unmapped, but on the boundary with those that are mapped
+        boundary_atoms = nx.algorithms.node_boundary(graph, unmapped_atoms, mapped_atoms)
+
+        #now check if there is atom 3 hops away and has a position. Since we are starting with boundary
+        #atoms, there will never be a case where there is an atom with positions 3 hops away but no torsion
+        #A ring might cause this artifact, but there would be a torsion in that case.
+        for atom in boundary_atoms:
+            shortest_paths = nx.algorithms.shortest_path_length(graph, source=atom)
+            for other_atom, distance in shortest_paths.items():
+                if distance == 3 and other_atom in mapped_atoms:
+                    #find all shortest paths to the other atom. if any of them have all atoms with positions, it can be proposed
+                    shortest_path = nx.shortest_path(graph, source=atom, target=other_atom)
+                    if len(mapped_atoms_set.intersection(shortest_path)) == 3:
+                        proposable = True
+        
+        return proposable
+
+    def _mol_to_graph(self, molecule: oechem.OEMol) -> nx.Graph:
+        """
+        Convert an OEMol to a networkx graph for analysis
+
+        Arguments
+        ---------
+        molecule : oechem.OEMol
+            Molecule to convert to a graph
+        
+        Returns
+        -------
+        g : nx.Graph
+            NetworkX graph representing the molecule
+        """
+        g = nx.Graph()
+        for atom in molecule.GetAtoms():
+            g.add_node(atom.GetIdx())
+        for bond in molecule.GetBonds():
+            g.add_edge(bond.GetBgnIdx(), bond.GetEndIdx(), bond=bond)
+        
+        return g
+
+    def _initialize_oemols(self, list_of_smiles: List[str]) -> Dict[str, oechem.OEMol]:
+        """
+        Initialize the set of OEMols that we will use to construct the atom map
+
+        Arguments
+        ---------
+        list_of_smiles : list of str
+            list of smiles strings to use
+        
+        Returns
+        -------
+        dict_of_oemol : dict of oechem.OEmol
+            dict of canonical_smiles : oechem.OEMol
+        """
+        list_of_mols = []
+        for smiles in list_of_smiles:
+            mol = oechem.OEMol()
+            oechem.OESmilesToMol(mol, smiles)
+            oechem.OEAddExplicitHydrogens(mol)
+            list_of_mols.append(mol)
+
+        #now write out all molecules and read them back in:
+        molecule_string = SmallMoleculeAtomMapper.molecule_library_to_string(list_of_mols)
+        dict_of_oemol = SmallMoleculeAtomMapper.molecule_library_from_string(molecule_string)
+
+        return dict_of_oemol
+
+    def get_oemol_from_smiles(self, smiles_string: str) -> oechem.OEMol:
+        """
+        Get the OEMol corresponding to the smiles string requested. This method exists
+        to avoid having atom order rearranged by regeneration from smiles.
+
+        Arguments
+        ---------
+        smiles_string : str
+            The smiles string for which to retrieve the OEMol. Only pre-existing OEMols are allowed
+        
+        Returns
+        -------
+        mol : oechem.OEMol
+            The OEMol corresponding to the requested smiles string.
+        """
+        return self._oemol_dictionary[smiles_string]
+
+    def get_smiles_index(self, smiles: str) -> int:
+        """
+        Get the index of the smiles in question
+
+        Arguments
+        ---------
+        smiles : str
+            Canonicalized smiles string to retrieve molecule
+        
+        Returns
+        -------
+        mol_index : int
+            Index of molecule in list
+        """
+        mol_index = self._unique_smiles_list.index(smiles)
+        return mol_index
+
+    @staticmethod
+    def molecule_library_from_string(molecule_string: str) -> Dict[str, oechem.OEMol]:
+        """
+        Given a library of molecules in a mol2-format string, return a dictionary that maps
+        the respective canonical smiles to the oemol object.
+
+        Parameters
+        ----------
+        molecule_string : str
+            The string containing the molecule data
+
+        Returns
+        -------
+        molecule_dictionary : dict of str: oemol
+            Dictionary mapping smiles strings to OEMols
+
+        """
+
+        ifs = oechem.oemolistream()
+        ifs.SetFormat(oechem.OEFormat_OEB)
+        ifs.openstring(molecule_string)
+
+        molecule_dictionary = {}
+        for mol in ifs.GetOEMols():
+            copied_mol = oechem.OEMol(mol)
+            canonical_smiles = SmallMoleculeAtomMapper._canonicalize_smiles(copied_mol)
+            molecule_dictionary[canonical_smiles] = copied_mol
+
+        ifs.close()
+
+        return molecule_dictionary
+
+    @staticmethod
+    def molecule_library_to_string(molecule_library: List[oechem.OEMol]) -> str:
+        """
+        Given a list of oechem.OEMol objects, write all of them in mol2 format to a string
+
+        Parameters
+        ----------
+        molecule_library : list of oechem.OEMol
+            molecules to write to string
+
+        Returns
+        -------
+        molecule_string : str
+            String containing molecules in mol2 format.
+        """
+
+        ofs = oechem.oemolostream()
+        ofs.SetFormat(oechem.OEFormat_OEB)
+        ofs.openstring()
+
+        for mol in molecule_library:
+            oechem.OEWriteMolecule(ofs, mol)
+
+        molecule_string = ofs.GetString()
+
+        ofs.close()
+
+        return molecule_string
+
+    def to_json(self) -> str:
+        """
+        Write out this class to JSON. This saves all information (including built molecules and maps, if present)
+
+        Returns
+        -------
+        json_str : str
+            JSON string representing this class
+        """
+        json_dict = {}
+        
+        #first, save all the things that are not too difficult to put into JSON
+        json_dict['molecule_maps'] = {"_".join(smiles_names): maps for smiles_names, maps in self._molecule_maps.items()}
+        json_dict['molecules_mapped'] = self._molecules_mapped
+        json_dict['failed_molecule_maps'] = {"_".join(smiles_names): maps for smiles_names, maps in self._failed_molecule_maps.items()}
+        json_dict['constraints_checked'] = self._constraints_checked
+        json_dict['bond_expr'] = self._bond_expr
+        json_dict['atom_expr'] = self._atom_expr
+        json_dict['proposal_matrix'] = self._proposal_matrix.tolist()
+        json_dict['proposal_matrix_generated'] = self._proposal_matrix_generated
+        json_dict['unique_smiles_list'] = self._unique_smiles_list
+
+        #now we have to convert the OEMols to a string format that preserves the atom ordering in order to save them
+        #We will use the multi-molecule mol2 scheme, but instead of saving to a file, we will save to a string.
+
+        molecule_bytes = SmallMoleculeAtomMapper.molecule_library_to_string(self._oemol_dictionary.values())
+
+        base64_molecule_bytes = base64.b64encode(molecule_bytes)
+
+        json_dict['molecules'] = base64_molecule_bytes.decode()
+
+        return json.dumps(json_dict)
+
+    @classmethod
+    def from_json(cls, json_string: str):
+        """
+        Restore this class from a saved JSON file.
+
+        Arguments
+        ---------
+        json_string : str
+            The JSON string representing the serialized class
+        
+        Returns
+        -------
+        atom_mapper : SmallMoleculeAtomMapper
+            An instance of the SmallMoleculeAtomMapper
+        """
+        json_dict = json.loads(json_string)
+
+        #first let's read in all the molecules that were saved as a string:
+        molecule_bytes = json_dict['molecules'].encode()
+        molecule_string = base64.b64decode(molecule_bytes)
+        molecule_dictionary = SmallMoleculeAtomMapper.molecule_library_from_string(molecule_string)
+
+        bond_expr = json_dict['bond_expr']
+        atom_expr = json_dict['atom_expr']
+        smiles_list = json_dict['unique_smiles_list']
+
+        map_to_ints = lambda maps: [{int(key): int(value) for key, value in map.items()} for map in maps]
+
+        mapper = cls(smiles_list, atom_match_expression=atom_expr, bond_match_expression=bond_expr)
+
+        mapper._molecule_maps = {tuple(smiles for smiles in key.split("_")) : map_to_ints(maps) for key, maps in json_dict['molecule_maps'].items()}
+        mapper._molecules_mapped = json_dict['molecules_mapped']
+        mapper._failed_molecule_maps = {tuple(smiles for smiles in key.split("_")) : maps for key, maps in json_dict['failed_molecule_maps'].items()}
+        mapper._constraints_checked = json_dict['constraints_checked']
+        mapper._proposal_matrix = np.array(json_dict['proposal_matrix'])
+        mapper._proposal_matrix_generated = json_dict['proposal_matrix_generated']
+        mapper._oemol_dictionary = molecule_dictionary
+
+        return mapper
+
+    @property
+    def proposal_matrix(self):
+        return self._proposal_matrix
+    
+    @property
+    def n_molecules(self):
+        return self._n_molecules
+    
+    @property
+    def smiles_list(self):
+        return self._unique_smiles_list
+
+
 
 from perses.rjmc.geometry import NoTorsionError
 class TopologyProposal(object):
@@ -1839,6 +2419,118 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 pass
         removed_smiles = smiles_set.difference(safe_smiles)
         return safe_smiles, removed_smiles
+
+class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
+    """
+    This proposal engine uses the SmallMoleculeAtomMapper to have all atoms premapped and the proposal distribution pre-formed and checked.
+    It is intended to be substantially faster, as well as more robust (having excluded mappings that would not lead to a valid geometry proposal)
+    """
+
+    def __init__(self, atom_mapper: SmallMoleculeAtomMapper, system_generator: SystemGenerator, residue_name: str="MOL", storage: NetCDFStorageView=None):
+        self._atom_mapper = atom_mapper
+        self._atom_mapper.map_all_molecules()
+        self._atom_mapper.generate_and_check_proposal_matrix()
+        self._proposal_matrix = self._atom_mapper.proposal_matrix
+
+        self._n_molecules = self._atom_mapper.n_molecules
+        
+        super(PremappedSmallMoleculeSetProposalEngine, self).__init__(self._atom_mapper.smiles_list, system_generator, residue_name=residue_name,
+                 proposal_metadata=None, storage=storage,
+                 always_change=True)
+
+    def propose(self, current_system, current_topology, current_metadata=None):
+        """
+        Propose the next state, given the current state
+
+        Parameters
+        ----------
+        current_system : openmm.System object
+            the system of the current state
+        current_topology : app.Topology object
+            the topology of the current state
+        current_metadata : dict
+            dict containing current smiles as a key
+
+        Returns
+        -------
+        proposal : TopologyProposal object
+           topology proposal object
+        """
+        # Determine SMILES string for current small molecule
+        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+
+        # Remove the small molecule from the current Topology object
+        current_receptor_topology = self._remove_small_molecule(current_topology)
+
+        # Find the initial atom index of the small molecule in the current topology
+        old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
+
+        # Determine atom indices of the small molecule in the current topology
+        old_alchemical_atoms = range(old_mol_start_index, len_old_mol)
+
+        # Select the next molecule SMILES given proposal probabilities
+        current_mol_index = self._atom_mapper.get_smiles_index(current_mol_smiles)
+
+        #get probability vector for proposal
+        proposal_probability = self._proposal_matrix[current_mol_index, :]
+
+        #propose next index
+        proposed_index = np.random.choice(range(self._n_molecules), p=proposal_probability)
+        
+        #proposal logp
+        proposed_logp = np.log(proposal_probability[proposed_index])
+        
+        #reverse proposal logp
+        reverse_logp = np.log(self._proposal_matrix[proposed_index, current_mol_index])
+
+        #logp overall of proposal
+        logp_proposal = reverse_logp - proposed_logp
+
+        #get the oemol corresponding to the proposed molecule:
+        proposed_mol_smiles = self._atom_mapper.smiles_list[proposed_index]
+        proposed_mol = self._atom_mapper.get_oemol_from_smiles(proposed_mol_smiles)
+        
+        #You will get a weird error if you don't assign atom names.
+        oechem.OETriposAtomNames(proposed_mol)
+
+        # Build the new Topology object, including the proposed molecule
+        new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
+        new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
+
+        # Generate an OpenMM System from the proposed Topology
+        new_system = self._system_generator.build_system(new_topology)
+
+        # Determine atom mapping between old and new molecules
+        mol_atom_maps = self._atom_mapper.get_atom_maps(current_mol_smiles, proposed_mol_smiles)
+        mol_atom_map = np.random.choice(mol_atom_maps)
+
+        # Adjust atom mapping indices for the presence of the receptor
+        adjusted_atom_map = {}
+        for (key, value) in mol_atom_map.items():
+            adjusted_atom_map[key+new_mol_start_index] = value + old_mol_start_index
+
+        # Incorporate atom mapping of all environment atoms
+        old_mol_offset = len_old_mol
+        for i in range(new_mol_start_index):
+            if i >= old_mol_start_index:
+                old_idx = i + old_mol_offset
+            else:
+                old_idx = i
+            adjusted_atom_map[i] = old_idx
+
+        # Create the TopologyProposal onbject
+        proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
+            old_topology=current_topology, new_topology=new_topology,
+            old_system=current_system, new_system=new_system,
+            old_alchemical_atoms=old_alchemical_atoms,
+            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
+
+        ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
+        ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
+        _logger.info('Proposed transformation would delete %d atoms and create %d atoms.' % (ndelete, ncreate))
+
+        return proposal
+
 
 class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     """
