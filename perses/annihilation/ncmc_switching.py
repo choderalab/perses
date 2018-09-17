@@ -15,24 +15,6 @@ from openmmtools.alchemy import AlchemicalState
 
 
 default_functions = {
-    'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-    'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-    'lambda_bonds' : '0.9*lambda + 0.1', # don't fully soften bonds
-    'lambda_angles' : '0.9*lambda + 0.1', # don't fully soften angles
-    'lambda_torsions' : 'lambda'
-    }
-
-
-functions_disable_all = {
-    'lambda_sterics' : 'lambda',
-    'lambda_electrostatics' : 'lambda',
-    'lambda_bonds' : 'lambda',
-    'lambda_angles' : 'lambda',
-    'lambda_torsions' : 'lambda'
-    }
-
-# make something hyperbolic or something to go from on to off to on
-default_hybrid_functions = {
     'lambda_sterics' : 'lambda',
     'lambda_electrostatics' : 'lambda',
     'lambda_bonds' : 'lambda',
@@ -202,10 +184,7 @@ class NCMCEngine(object):
             The new system (nonalchemical) thermodynamic state
         """
         systems = [topology_proposal.old_system, topology_proposal.new_system]
-        thermostates = []
-        for system in systems:
-            thermodynamic_state = ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure)
-            thermostates.append(thermodynamic_state)
+        thermostates = [ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure) for system in systems]
         
         return thermostates[0], thermostates[1]
 
@@ -306,7 +285,7 @@ class NCMCEngine(object):
         initial_hybrid_positions = hybrid_factory.hybrid_positions
         initial_hybrid_box_vectors = initial_sampler_state.box_vectors
 
-        initial_hybrid_sampler_state = SamplerState(initial_hybrid_positions, box_vectors=initial_hybrid_box_vectors)
+        initial_hybrid_sampler_state = SamplerState(initial_hybrid_positions, box_vectors=initial_sampler_state.box_vectors)
         final_hybrid_sampler_state = copy.deepcopy(initial_hybrid_sampler_state)
 
         #create the nonequilibrium move:

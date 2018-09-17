@@ -33,6 +33,7 @@ from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
 from perses.tests.utils import quantity_is_finite
+from scipy.misc import logsumexp as log_sum_exp
 
 ################################################################################
 # LOGGER
@@ -40,22 +41,6 @@ from perses.tests.utils import quantity_is_finite
 
 import logging
 logger = logging.getLogger(__name__)
-
-################################################################################
-# UTILITY FUNCTIONS
-################################################################################
-
-def log_sum_exp(a_n):
-    """
-    Compute log(sum(exp(a_n)))
-
-    Parameters
-    ----------
-    a_n : dict of objects : floats
-
-    """
-    a_n = np.array(list(a_n.values()))
-    return np.log( np.sum( np.exp(a_n - a_n.max() ) ) )
 
 
 ################################################################################
@@ -240,23 +225,6 @@ class ExpandedEnsembleSampler(object):
             self.log_weights[state_key] = 0.0
         return self.log_weights[state_key]
 
-    def _system_to_thermodynamic_state(self, system):
-        """
-        Given an OpenMM system object, create a corresponding ThermodynamicState that has the same
-        temperature and pressure as the current thermodynamic state.
-
-        Arguments
-        ---------
-        system : openmm.System
-            The OpenMM system for which to create the thermodynamic state
-        
-        Returns
-        -------
-        new_thermodynamic_state : openmmtools.states.ThermodynamicState
-            The thermodynamic state object representing the given system
-        """
-        return ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure)
-
     def _geometry_forward(self, topology_proposal, old_sampler_state):
         """
         Run geometry engine to propose new positions and compute logP
@@ -382,7 +350,7 @@ class ExpandedEnsembleSampler(object):
         logP_chemical_proposal = topology_proposal.logp_proposal
 
         old_thermodynamic_state = self.sampler.thermodynamic_state
-        new_thermodynamic_state = self._system_to_thermodynamic_state(topology_proposal.new_system)
+        new_thermodynamic_state = ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure)
 
         initial_reduced_potential = feptasks.compute_reduced_potential(old_thermodynamic_state, sampler_state)
         logP_initial = -initial_reduced_potential + old_log_weight
