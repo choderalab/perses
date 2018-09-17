@@ -28,7 +28,7 @@ from openmmtools.constants import kB
 from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools.mcmc import MCMCSampler
 
-from perses.annihilation import NCMCEngine
+from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
