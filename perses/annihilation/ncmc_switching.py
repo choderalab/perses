@@ -315,7 +315,12 @@ class NCMCEngine(object):
                                               save_configuration=self._save_configuration, measure_shadow_work=self._measure_shadow_work)
         
         #run the NCMC protocol
-        ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
+        try:
+            ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
+        except:
+            logP_work = -np.inf
+            logP_energy = -np.inf
+            return [initial_sampler_state, proposed_sampler_state, logP_work, logP_energy]
 
         #get the total work:
         logP_work = - ne_move.current_total_work
