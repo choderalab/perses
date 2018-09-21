@@ -8,6 +8,7 @@ import logging
 import numpy as np
 import copy
 #from perses.rjmc import coordinate_numba
+from openmmtools import states
 import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
@@ -96,7 +97,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.verbose = verbose
         self.use_sterics = use_sterics
 
-    def propose(self, top_proposal, current_positions, beta):
+    def propose(self, top_proposal, current_sampler_state, beta):
         """
         Make a geometry proposal for the appropriate atoms.
 
@@ -104,28 +105,31 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
+        current_sampler_state : openmmtools.states.SamplerState
+            The current positions and box vectors of the proposal
         beta : float
             The inverse temperature
 
         Returns
         -------
-        new_positions : [n, 3] ndarray
+        new_sampler_state : openmmtools.states.SamplerState
             The new positions of the system
         logp_proposal : float
             The log probability of the forward-only proposal
         """
+        current_positions = current_sampler_state.positions
         current_positions = current_positions.in_units_of(units.nanometers)
         if not top_proposal.unique_new_atoms:
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, current_positions)
             return new_positions, 0.0
-        logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
+        logp_proposal, new_positions = self._logp_propose(top_proposal, current_sampler_state, beta, direction='forward')
         self.nproposed += 1
-        return new_positions, logp_proposal
+        return states.SamplerState(new_positions, box_vectors=current_sampler_state.box_vectors), logp_proposal
 
 
-    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
+    def logp_reverse(self, top_proposal, new_sampler_state, old_sampler_state, beta):
         """
         Calculate the logp for the given geometry proposal
 
@@ -133,9 +137,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
-        new_coordinates : [n, 3] np.ndarray
+        new_sampler_state : openmmtools.states.SamplerState
             The coordinates of the system after the proposal
-        old_coordiantes : [n, 3] np.ndarray
+        old_sampler_state : openmmtools.states.SamplerState
             The coordinates of the system before the proposal
         beta : float
             The inverse temperature
@@ -147,9 +151,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         if not top_proposal.unique_old_atoms:
             return 0.0
-        new_coordinates = new_coordinates.in_units_of(units.nanometers)
-        old_coordinates = old_coordinates.in_units_of(units.nanometers)
-        logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
+        logp_proposal, _ = self._logp_propose(top_proposal, old_sampler_state, beta, new_sampler_state=new_sampler_state, direction='reverse')
         return logp_proposal
 
     def _write_partial_pdb(self, pdbfile, topology, positions, atoms_with_positions, model_index):
@@ -169,7 +171,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         pdbfile.flush()
         pdbfile.write('ENDMDL\n')
 
-    def _logp_propose(self, top_proposal, old_positions, beta, new_positions=None, direction='forward'):
+    def _logp_propose(self, top_proposal, old_sampler_state, beta, new_sampler_state=None, direction='forward'):
         """
         This is an INTERNAL function that handles both the proposal and the logp calculation,
         to reduce code duplication. Whether it proposes or just calculates a logp is based on
@@ -181,11 +183,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         top_proposal : topology_proposal.TopologyProposal object
             topology proposal containing the relevant information
-        old_positions : np.ndarray [n,3] in nm
+        old_sampler_state : openmmtools.states.SamplerState
             The old coordinates.
         beta : float
             Inverse temperature
-        new_positions : np.ndarray [n,3] in nm, optional for forward
+        new_sampler_state : openmmtools.states.SamplerState
             The new coordinates, if any. For proposal this is none
         direction : str
             Whether to make a proposal (forward) or just calculate logp (reverse)
@@ -209,19 +211,21 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #find and copy known positions
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
-            new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
+            new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_sampler_state.positions)
+            new_sampler_state = states.SamplerState(new_positions, box_vectors=old_sampler_state.box_vectors)
             system_init = time.time()
             growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
         elif direction=='reverse':
-            if new_positions is None:
+            if new_sampler_state is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
             growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
+            old_positions = old_sampler_state.positions
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -238,16 +242,16 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             if direction == 'forward':
                 pdbfile = open('%s-initial.pdb' % prefix, 'w')
-                PDBFile.writeFile(top_proposal.old_topology, old_positions, file=pdbfile)
+                PDBFile.writeFile(top_proposal.old_topology, old_sampler_state.positions, file=pdbfile)
                 pdbfile.close()
                 pdbfile = open("%s-stages.pdb" % prefix, 'w')
-                self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, 0)
+                self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_sampler_state.positions, atoms_with_positions, 0)
             else:
                 pdbfile = open('%s-initial.pdb' % prefix, 'w')
-                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
+                PDBFile.writeFile(top_proposal.new_topology, new_sampler_state.positions, file=pdbfile)
                 pdbfile.close()
                 pdbfile = open("%s-stages.pdb" % prefix, 'w')
-                self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
+                self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_sampler_state.positions, atoms_with_positions, 0)
 
         if self.use_sterics:
             platform_name = 'CPU'
@@ -257,6 +261,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
+        if direction == "forward":
+            new_sampler_state.apply_to_context(context)
+        else:
+            old_sampler_state.apply_to_context(context)
+        new_positions = new_sampler_state.positions
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys())+1, context)
         debug = False
         if debug:
@@ -279,10 +288,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #get internal coordinates if direction is reverse
             if direction=='reverse':
-                atom_coords = old_positions[atom.idx]
-                bond_coords = old_positions[bond_atom.idx]
-                angle_coords = old_positions[angle_atom.idx]
-                torsion_coords = old_positions[torsion_atom.idx]
+                atom_coords = old_sampler_state.positions[atom.idx]
+                bond_coords = old_sampler_state.positions[bond_atom.idx]
+                angle_coords = old_sampler_state.positions[angle_atom.idx]
+                torsion_coords = old_sampler_state.positions[torsion_atom.idx]
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
                 r = internal_coordinates[0]*atom_coords.unit
                 theta = internal_coordinates[1]*units.radian
@@ -319,7 +328,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
-                old_positions_for_torsion = copy.deepcopy(old_positions)
+                old_positions_for_torsion = copy.deepcopy(old_sampler_state.positions)
                 logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=360)
 
             #accumulate logp

@@ -278,16 +278,15 @@ class ExpandedEnsembleSampler(object):
         if self.verbose: print("Geometry engine proposal...")
         # Generate coordinates for new atoms and compute probability ratio of old and new probabilities.
         initial_time = time.time()
-        new_positions, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, old_sampler_state.positions, self.sampler.thermodynamic_state.beta)
+        new_sampler_state, geometry_logp_propose = self.geometry_engine.propose(topology_proposal, old_sampler_state, self.sampler.thermodynamic_state.beta)
         if self.verbose: print('proposal took %.3f s' % (time.time() - initial_time))
 
         if self.geometry_pdbfile is not None:
             print("Writing proposed geometry...")
             from simtk.openmm.app import PDBFile
-            PDBFile.writeFile(topology_proposal.new_topology, new_positions, file=self.geometry_pdbfile)
+            PDBFile.writeFile(topology_proposal.new_topology, new_sampler_state.positions, file=self.geometry_pdbfile)
             self.geometry_pdbfile.flush()
 
-        new_sampler_state = SamplerState(new_positions, box_vectors=old_sampler_state.box_vectors)  
 
         return new_sampler_state, geometry_logp_propose
 
@@ -312,7 +311,7 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Geometry engine logP_reverse calculation...")
         initial_time = time.time()
-        geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, new_sampler_state.positions, old_sampler_state.positions, self.sampler.thermodynamic_state.beta)
+        geometry_logp_reverse = self.geometry_engine.logp_reverse(topology_proposal, new_sampler_state, old_sampler_state, self.sampler.thermodynamic_state.beta)
         if self.verbose: print('calculation took %.3f s' % (time.time() - initial_time))
         return geometry_logp_reverse
 
