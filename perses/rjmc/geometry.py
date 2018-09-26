@@ -354,6 +354,48 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._position_set_time = 0.0
         return logp_proposal, new_positions
 
+    ## IVY : note that i copied this from yank, modified return values (false --> 1 or 2), edit method definition
+    # def _is_openeye_installed(self, oetools=('oechem', 'oequacpac', 'oeiupac', 'oeomega')):
+    #     """
+    #     Check if a given OpenEye tool is installed and Licensed.
+    #     If the OpenEye toolkit is not installed, returns False.
+    #     Parameters
+    #     ----------
+    #     oetools : str or iterable of strings, Optional, Default: ('oechem', 'oequacpac', 'oeiupac', 'oeomega')
+    #         Set of tools to check by their string name. Defaults to the
+    #         complete set that YANK *could* use, depending on feature requested.
+    #         Only checks the subset of tools if passed. Also accepts a single
+    #         tool to check as a string instead of an iterable of length 1.
+    #     Returns
+    #     -------
+    #     all_installed : bool
+    #         True if all tools in ``oetools`` are installed and licensed, False otherwise.
+    #     """
+    #     # Complete list of module: License function name.
+    #     tools_license = {'oechem': 'OEChemIsLicensed',
+    #                      'oequacpac': 'OEQuacPacIsLicensed',
+    #                      'oeiupac': 'OEIUPACIsLicensed',
+    #                      'oeomega': 'OEOmegaIsLicensed'}
+    #
+    #     # Cast oetools to tuple if its a single string.
+    #     if type(oetools) is str:
+    #         oetools = (oetools,)
+    #     # Check if the input oetools are known.
+    #     if not set(oetools).issubset(set(tools_license)):
+    #         raise ValueError("Expected an OpenEye tools subset of {}, but instead "
+    #                          "got {}".format(tuple(tools_license), oetools))
+    #
+    #     # Try loading the module.
+    #     for tool in oetools:
+    #         try:
+    #             module = importlib.import_module('openeye.' + tool)
+    #         except ImportError:
+    #             return 1
+    #         # Check that we have the license.
+    #         if not getattr(module, tools_license[tool])():
+    #             return 2
+    #     return True
+
     @staticmethod
     def _oemol_from_residue(res, verbose=True):
         """
@@ -374,50 +416,126 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             an oemol representation of the residue with topology indices
         """
         # TODO: This seems to be broken. Can we fix it?
+        print("IN oemol from residue function...") ## IVY
+        print() ## IVY
+
+        ## IVY should i be checking to see if oechem is installed and has license?
+        # if _is_openeye_installed() == 1:
+        #     raise ImportError("openeye.oechem is not installed")
+        # elif _is_openeye_installed() == 2:
+        #     raise RuntimeError("No valid license available for openeye.oechem")
+
         from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
         external_bonds = list(res.external_bonds())
         for bond in external_bonds:
-            if verbose: print(bond)
+            if verbose: print("external bond: ", bond)
         new_atoms = {}
-        highest_index = 0
         if external_bonds:
             new_topology = app.Topology()
             new_chain = new_topology.addChain(0)
-            new_res = new_topology.addResidue("new_res", new_chain)
+            new_res = new_topology.addResidue(res.name, new_chain)
             for atom in res.atoms():
-                new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
-                new_atom.index = atom.index
+                new_atom = new_topology.addAtom(atom.name, atom.element, new_res)
                 new_atoms[atom] = new_atom
-                highest_index = max(highest_index, atom.index)
             for bond in res.internal_bonds():
                 new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
             for bond in res.external_bonds():
-                internal_atom = [atom for atom in bond if atom.residue==res][0]
-                if verbose:
-                    print('internal atom')
-                    print(internal_atom)
-                highest_index += 1
+                internal_atom = bond[0] if bond[0].residue == res else bond[1]
+                if verbose: print('internal atom: ', internal_atom)
                 if internal_atom.name=='N':
                     if verbose: print('Adding H to N')
-                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_atom.index = -1
+                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res)
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                 if internal_atom.name=='C':
                     if verbose: print('Adding OH to C')
-                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, -1)
-                    new_atom.index = -1
+                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res)
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
-                    highest_index += 1
-                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_hydrogen.index = -1
+                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res)
                     new_topology.addBond(new_hydrogen, new_atom)
             res_to_use = new_res
-            external_bonds = list(res_to_use.external_bonds())
         else:
             res_to_use = res
-        oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
-        oechem.OEAddExplicitHydrogens(oemol)
-        return oemol
+
+        ## IVY -- show topology after delete and after add
+        # print()
+        # print("geometry topology")
+        # for chain in new_topology.chains():
+        #     print("chain: ", chain)
+        #     for residue in chain.residues():
+        #         print("residue: ", residue)
+        #         for atom in residue.atoms():
+        #             print("atom: ", atom)
+        # new_bonds = 0
+        # for bond in new_topology.bonds():
+        #     print(bond)
+        #     new_bonds += 1
+        # print(new_bonds)
+
+        from openeye import oechem
+        # Create OEMol where all atoms have bond order 1.
+        molecule = oechem.OEMol()
+        molecule.SetTitle(res_to_use.name)  # name molecule after first residue
+        for atom in res_to_use.atoms():
+            oeatom = molecule.NewAtom(atom.element.atomic_number)
+            oeatom.SetName(atom.name)
+            oeatom.AddData("topology_index", atom.index)
+        oeatoms = {oeatom.GetName(): oeatom for oeatom in molecule.GetAtoms()}
+        for (atom1, atom2) in res_to_use.bonds():
+            order = 1
+            molecule.NewBond(oeatoms[atom1.name], oeatoms[atom2.name], order)
+
+        # Write out a mol2 file without altering molecule.
+        import tempfile
+        import os
+        tmpdir = tempfile.mkdtemp()
+        mol2_input_filename = os.path.join(tmpdir, 'molecule-before-bond-perception.mol2')
+        ac_output_filename = os.path.join(tmpdir, 'molecule-after-bond-perception.ac')
+        ofs = oechem.oemolostream(mol2_input_filename)
+        m2h = True
+        substruct = False
+        oechem.OEWriteMol2File(ofs, molecule, m2h, substruct)
+        ofs.close()
+        # Run Antechamber bondtype
+        # import subprocess
+        command = 'bondtype -i %s -o %s -f mol2 -j full' % (mol2_input_filename, ac_output_filename)
+        # command = 'antechamber -i %s -fi mol2 -o %s -fo ac -j 4' % (mol2_input_filename, ac_output_filename)
+        from subprocess import getstatusoutput, call
+        def run_command(command):
+            call(command.split())
+        run_command(command)
+
+        # Define mapping from GAFF bond orders to OpenEye bond orders.
+        order_map = {1: 1, 2: 2, 3: 3, 7: 1, 8: 2, 9: 5, 10: 5}
+        # Read bonds.
+        infile = open(ac_output_filename)
+        lines = infile.readlines()
+        infile.close()
+        antechamber_bond_types = list()
+        for line in lines:
+            elements = line.split()
+            if elements[0] == 'BOND':
+                antechamber_bond_types.append(int(elements[4]))
+        oechem.OEClearAromaticFlags(molecule)
+        for (bond, antechamber_bond_type) in zip(molecule.GetBonds(), antechamber_bond_types):
+            # bond.SetOrder(order_map[antechamber_bond_type])
+            bond.SetIntType(order_map[antechamber_bond_type])
+        oechem.OEFindRingAtomsAndBonds(molecule)
+        oechem.OEKekulize(molecule)
+        oechem.OEAssignFormalCharges(molecule)
+        oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+
+        # Clean up.
+        os.unlink(mol2_input_filename)
+        os.unlink(ac_output_filename)
+        os.rmdir(tmpdir)
+        oechem.OEAddExplicitHydrogens(molecule)
+        return molecule
+
+        # oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False) ## IVY modify this so that it checks that license is valid
+        # print("generated mol")
+        # oechem.OEAddExplicitHydrogens(oemol)
+        # print("added h's")
+        # return oemol
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
         """
