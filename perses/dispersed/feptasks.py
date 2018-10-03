@@ -197,7 +197,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
                 self._trajectory_box_lengths[iteration, :] = [a, b, c]
                 self._trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
         
-        if self._trajectory:
+        if self._save_configuration:
             self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
         
         self._current_total_work = self._current_protocol_work
