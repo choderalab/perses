@@ -315,6 +315,8 @@ class PolymerProposalEngine(ProposalEngine):
     def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True):
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._chain_id = chain_id
+        self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
+                  'SER', 'THR', 'TRP', 'TYR', 'VAL']
 
     def propose(self, current_system, current_topology, current_metadata=None):
         """
@@ -822,6 +824,18 @@ class PolymerProposalEngine(ProposalEngine):
             print("added: ", bond) ## IVY delete this
 
         ## IVY -- show topology after delete and after add
+        residues = [res for res in topology.residues()]
+        print("residues in old topology: ", residues)
+        if residues[1].name == 'ALA':
+            print("yes, alanine")
+        else:
+            print()
+            print()
+            print()
+            print("NOT ALANINE!!!!")
+            print()
+            print()
+            print()
         print()
         print("topology with atoms deleted structure and added missing atoms...")
         print(missing_atoms)
@@ -1148,6 +1162,7 @@ class PointMutationEngine(PolymerProposalEngine):
         default = None
     residues_allowed_to_mutate : list(str) -- OPTIONAL
         default = None
+        Contains residue ids
     allowed_mutations : list(list(tuple)) -- OPTIONAL
         default = None
         ('residue id to mutate','desired mutant residue name (3-letter code)')
@@ -1235,6 +1250,12 @@ class PointMutationEngine(PolymerProposalEngine):
         allowed_mutations : list(list(tuple))
             list of allowed mutant states; each entry in the list is a list because multiple mutations may be desired
             tuple : (str, str) -- residue id and three-letter amino acid code of desired mutant
+        index_to_new_residues : dict
+            key : int (index, zero-indexed in chain)
+            value : str (three letter residue name)
+            contains information to mutate back to WT as starting point for new mutants
+        old_key : str
+            chemical_state_key for old topology
 
         Returns
         -------
@@ -1244,7 +1265,7 @@ class PointMutationEngine(PolymerProposalEngine):
         """
 
         print("in choose mutation from allowed") ## IVY
-        # Set chain
+        # Set chain and create id-index mapping for residues in chain
         chain_found = False
         for anychain in topology.chains():
             if anychain.id == chain_id:
@@ -1257,51 +1278,67 @@ class PointMutationEngine(PolymerProposalEngine):
             raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
         residue_id_to_index = {residue.id : residue.index for residue in chain.residues()}
 
-        # Define location probabilities
+        # Define location probabilities and propose a location/mutant state
         if self._always_change:
-            # location_prob : np.array, probability value for each residue location (uniform)
+            # location_prob : np.array, probability value for each mutant state at their respective locations in allowed_mutations (uniform). Last element will correspond to the WT state.
             # location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations)+1)]) ## IVY this seems wrong
-
-            location_prob = [1.0/len(allowed_mutations)]*len(allowed_mutations)
-            print("location prob: ", location_prob)
-            print("allowed mutations: ", allowed_mutations)
             if old_key == 'WT':
-                location_prob[len(allowed_mutations)] = 0.0
-            else:
+                location_prob = [1.0 / len(allowed_mutations)] * len(allowed_mutations)
+            else: ## IVY haven't tested if these cases of old key == mutant are handled correctly
                 current_mutation = list()
                 for mutant in old_key.split('-'):
                     residue_id = mutant[3:-3]
                     new_res = mutant[-3:]
                     current_mutation.append((residue_id, new_res))
                 current_mutation.sort()
+                location_prob = [1.0 / (len(allowed_mutations)-1)] * len(allowed_mutations)
                 location_prob[allowed_mutations.index(current_mutation)] = 0.0
+
         else:
-            location_prob = np.array([1.0/(len(allowed_mutations)+1.0) for i in range(len(allowed_mutations)+1)])
-        proposed_location = np.random.choice(range(len(allowed_mutations)+1), p=location_prob)
+            location_prob = [1.0 / (len(allowed_mutations)+1.0)] * (len(allowed_mutations)+1)
+        proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
+        print("location prob: ", location_prob)
+        print("allowed mutations: ", allowed_mutations)
+        print("proposed location: ", proposed_location)
 
-
+        # Create index_to_new_residues from the proposed state
+        # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         if proposed_location == len(allowed_mutations):
-            # choose WT
+            # Choose WT
             pass
         else:
             for residue_id, residue_name in allowed_mutations[proposed_location]:
+                # Verify residue with mutation exists in old topology
                 # original_residue : simtk.openmm.app.topology.Residue
-                original_residue = chain._residues[residue_id_to_index[residue_id]] ## IVY Private method change this
-                if original_residue.name in ['HID','HIE']:
+                original_residue = ''
+                for res in chain.residues():
+                    if res.index == residue_id_to_index[residue_id]:
+                        original_residue = res
+                        break
+                if not original_residue:
+                    raise Exception("User-specified an allowed mutation at residue %s , but that residue does not exist" % residue_id)
+
+                # Check if mutated residue's name is same as residue's name in old topology
+                if original_residue.name in ['HID', 'HIE']:
                     original_residue.name = 'HIS'
                 if original_residue.name == residue_name:
                     continue
+
+                # Save proposed mutation to index_to_new_residues
                 # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
                 index_to_new_residues[residue_id_to_index[residue_id]] = residue_name
+
+                # Randomly choose HIS template ('HIS' does not exist as a template)
                 if residue_name == 'HIS':
                     his_state = ['HIE','HID']
-                    his_prob = np.array([0.5 for i in range(len(his_state))])
-                    his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                    his_prob = [1/len(his_state)] * len(his_state)
+                    his_choice = np.random.choice(range(len(his_state)), p=his_prob)
                     index_to_new_residues[residue_id_to_index[residue_id]] = his_state[his_choice]
-                # DEBUG
-                if self.verbose: print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
 
-        # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+                # # DEBUG # IVY delete
+                # if self.verbose: print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
+        print(index_to_new_residues) ## IVY
+        print("end of choose mutation from alllowed") ## IVY
         return index_to_new_residues
 
     def _propose_mutations(self, topology, chain_id, index_to_new_residues, old_key):
@@ -1311,6 +1348,8 @@ class PointMutationEngine(PolymerProposalEngine):
         topology : simtk.openmm.app.Topology
         chain_id : str
         index_to_new_residues : dict
+            key : int (index, zero-indexed in chain)
+            value : str (three letter residue name)
             contains information to mutate back to WT as starting point for new mutants
         old_key : str
             chemical_state_key for old topology
@@ -1321,65 +1360,90 @@ class PointMutationEngine(PolymerProposalEngine):
             key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
         """
-        # this shouldn't be here
-        aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
+
+        print("in propose mutations") # IVY
+
+        # Set chain and create id-index mapping for residues in chain
         # chain : simtk.openmm.app.topology.Chain
         chain_found = False
         for anychain in topology.chains():
             if anychain.id == chain_id:
                 chain = anychain
-                if self._residues_allowed_to_mutate is None: ## IVY private method change this
-                    # num_residues : int
-                    num_residues = len(chain._residues) ## IVY private method
-                    chain_residues = chain._residues ## IVY private method
                 chain_found = True
-                residue_id_to_index = {residue.id : residue.index for residue in chain._residues} # IVY private method
+                residue_id_to_index = {residue.id: residue.index for residue in chain.residues()}
+                if self._residues_allowed_to_mutate is None:
+                    chain_residues = [res for res in chain.residues() if res.name != 'ACE' and res.name != 'NME']
+                    # num_residues : int
+                    num_residues = len(chain_residues)
+                else:
+                    for res_id in self._residues_allowed_to_mutate:
+                        if res_id not in residue_id_to_index.keys():
+                            raise Exception(
+                                "Residue id '%s' not found in Topology. Residue ids present are: %s. "
+                                "\n\t Note: The type of the residue id must be 'str'" % (res_id, str(residue_id_to_index.keys())))
+                    num_residues = len(self._residues_allowed_to_mutate)
+                    chain_residues = self._mutable_residues(chain)
+                    print("in residues allowed to mutate 1")  ## IVY
+                print("residue id to index: ", residue_id_to_index) ##IVY
                 break
         if not chain_found:
-            chains = [ chain.id for chain in topology.chains() ]
+            chains = [chain.id for chain in topology.chains()]
             raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
-        if self._residues_allowed_to_mutate is not None: ## IVY private method??
-            num_residues = len(self._residues_allowed_to_mutate)
-            chain_residues = self._mutable_residues(chain) ## IVY ?? private method??
-        # location_prob : np.array, probability value for each residue location (uniform)
-        location_prob = np.array([1.0/num_residues for i in range(num_residues)])
-        if self._always_change:
-            residue_id_to_index = {residue.id : residue.index for residue in chain._residues} ## IVY private method
-            current_mutation = dict()
-            if old_key != 'WT':
-                for mutant in old_key.split('-'):
-                    residue_id = mutant[3:-3]
-                    new_res = mutant[-3:]
-                    current_mutation[residue_id] = new_res
 
-        for i in range(self._max_point_mutants): ## IVY ?? private method??
+        # Define location probabilities
+        # location_prob : np.array, probability value for each residue location (uniform)
+        location_prob = [1.0/num_residues] * num_residues
+        print("location probs: ", location_prob) ## IVY
+        for i in range(self._max_point_mutants):
+            # Propose a location at which to mutate the residue
             # proposed_location : int, index of chosen entry in location_prob
             proposed_location = np.random.choice(range(num_residues), p=location_prob)
+            print("num residues: ", num_residues) ## IVY
+            print("proposed location: ", proposed_location)  ## IVY
+
+            # Rename residue to HIS if it uses one of the HIS-derived templates
             # original_residue : simtk.openmm.app.topology.Residue
             original_residue = chain_residues[proposed_location]
-            if original_residue.name in ['HIE','HID']:
+            if original_residue.name in ['HIE', 'HID']:
                 original_residue.name = 'HIS'
+
+            if self._residues_allowed_to_mutate is None:
+                proposed_location = original_residue.index
+            else:
+                proposed_location = residue_id_to_index[self._residues_allowed_to_mutate[proposed_location]]
+                print("in residues allowed to mutate 2")  ## IVY
+            print("proposed location: ", proposed_location) ## IVY
+
+
+            # Define probabilities for amino acid options and choose one
             # amino_prob : np.array, probability value for each amino acid option (uniform)
+            aminos = self._aminos
             if self._always_change:
-                amino_prob = np.array([1.0/(len(aminos)-1) for l in range(len(aminos))])
+                amino_prob = [1.0/(len(aminos)-1)] * len(aminos)
                 amino_prob[aminos.index(original_residue.name)] = 0.0
             else:
-                amino_prob = np.array([1.0/(len(aminos)) for k in range(len(aminos))])
+                amino_prob = [1.0/len(aminos)] * len(aminos)
             # proposed_amino_index : int, index of three letter residue name in aminos list
             proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
+            print("amino prob: ", amino_prob) ## IVY
+            print("proposed amino index: ", proposed_amino_index) ## IVY
+
+            # Save proposed mutation to index_to_new_residues
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
-            if self._residues_allowed_to_mutate is not None:
-                proposed_location = residue_id_to_index[self._residues_allowed_to_mutate[proposed_location]]
             index_to_new_residues[proposed_location] = aminos[proposed_amino_index]
+
+            # Randomly choose HIS template ('HIS' does not exist as a template)
             if aminos[proposed_amino_index] == 'HIS':
                 his_state = ['HIE','HID']
-                his_prob = np.array([0.5 for j in range(len(his_state))])
-                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                his_prob = [1 / len(his_state)] * len(his_state)
+                his_choice = np.random.choice(range(len(his_state)), p=his_prob)
                 index_to_new_residues[proposed_location] = his_state[his_choice]
+            print("index to new residues: ", index_to_new_residues) ## IVY
+        print("end propose mutations") ## IVY
         return index_to_new_residues
 
     def _mutable_residues(self, chain):
-        chain_residues = [residue for residue in chain._residues if residue.id in self._residues_allowed_to_mutate] ## IVY private method
+        chain_residues = [residue for residue in chain.residues() if residue.id in self._residues_allowed_to_mutate]
         return chain_residues
 
     def _save_mutations(self, topology, index_to_new_residues):
@@ -1415,7 +1479,7 @@ class PointMutationEngine(PolymerProposalEngine):
             if wt_res.name != res.name:
                 if chemical_state_key:
                     chemical_state_key+='-'
-                chemical_state_key+= str(wt_res.name)+str(res.id)+str(res.name)
+                chemical_state_key += str(wt_res.name)+str(res.id)+str(res.name)
         if not chemical_state_key:
             chemical_state_key = 'WT'
         return chemical_state_key
