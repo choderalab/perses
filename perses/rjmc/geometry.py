@@ -442,11 +442,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             for bond in res.external_bonds():
                 internal_atom = bond[0] if bond[0].residue == res else bond[1]
                 if verbose: print('internal atom: ', internal_atom)
-                if internal_atom.name=='N':
+                if internal_atom.name == 'N':
                     if verbose: print('Adding H to N')
                     new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res)
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
-                if internal_atom.name=='C':
+                if internal_atom.name == 'C':
                     if verbose: print('Adding OH to C')
                     new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res)
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
@@ -456,20 +456,20 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         else:
             res_to_use = res
 
-        ## IVY -- show topology after delete and after add
-        # print()
-        # print("geometry topology")
-        # for chain in new_topology.chains():
-        #     print("chain: ", chain)
-        #     for residue in chain.residues():
-        #         print("residue: ", residue)
-        #         for atom in residue.atoms():
-        #             print("atom: ", atom)
-        # new_bonds = 0
-        # for bond in new_topology.bonds():
-        #     print(bond)
-        #     new_bonds += 1
-        # print(new_bonds)
+        # IVY -- show topology after delete and after add
+        print()
+        print("geometry topology")
+        for chain in new_topology.chains():
+            print("chain: ", chain)
+            for residue in chain.residues():
+                print("residue: ", residue)
+                for atom in residue.atoms():
+                    print("atom: ", atom)
+        new_bonds = 0
+        for bond in new_topology.bonds():
+            print(bond)
+            new_bonds += 1
+        print(new_bonds)
 
         from openeye import oechem
         # Create OEMol where all atoms have bond order 1.
@@ -1652,6 +1652,7 @@ class GeometrySystemGenerator(object):
         growth_indices = list(growth_indices)
         #get residue from first atom
         residue = atoms[growth_indices[0].idx].residue
+        print("IN EXTRA TORSIONS, generate oemol from residue: ", residue) ## IVY
         try:
             oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
         except Exception as e:
@@ -1761,6 +1762,7 @@ class GeometrySystemGenerator(object):
         growth_indices = list(growth_indices)
         #get residue from first atom
         residue = atoms[growth_indices[0].idx].residue
+        print("IN EXTRA ANGLES, generate oemol from residue: ", residue)  ## IVY
         try:
             oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
         except Exception as e:
