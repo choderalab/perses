@@ -34,7 +34,8 @@ script:
   - source activate test
   # Add omnia
   - conda config --add channels omnia --add channels conda-forge
-  # Add omnia dev channels
+  # Add omnia beta and dev channels
+  - conda config --add channels omnia/label/beta
   - conda config --add channels omnia/label/dev
   # Add OpenEye channel
   - conda config --add channels openeye
