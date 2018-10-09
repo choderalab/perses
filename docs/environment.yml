@@ -3,6 +3,7 @@ channels:
     - omnia
     - omnia/label/dev
     - omnia/label/beta
+    - openeye
 dependencies:
     - python
     - setuptools
@@ -29,3 +30,4 @@ dependencies:
     - networkx >=2.0
     - yank
     - numpydoc
+    - openeye-toolkits
