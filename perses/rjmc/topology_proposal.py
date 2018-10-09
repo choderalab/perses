@@ -972,6 +972,10 @@ class PolymerProposalEngine(ProposalEngine):
             topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
             return topology_proposal
 
+        # Add modified property to residues in old topology
+        for res in old_topology.residues():
+            res.modified = True if res.index in index_to_new_residues.keys() else False
+
         ## IVY
         # old_positions : list(simtk.openmm.app.topology.Atom.index)
         # old_positions = [atom.index for atom in new_topology.atoms()]
