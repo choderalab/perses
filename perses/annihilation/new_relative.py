@@ -761,11 +761,11 @@ class HybridTopologyFactory(object):
 
         if self._softcore_method == "default":
             sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics + (1 - dummyA*dummyB)*4*lambda_sterics*(1-lambda_sterics);"
-            sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB)"
+            sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "amber":
             sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics;"
-            sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB)"
+            sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "classic":
             sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
@@ -790,11 +790,11 @@ class HybridTopologyFactory(object):
 
         if self._softcore_method =="default":
             electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics) + (1- dummyA*dummyB)*4*lambda_electrostatics*(1-lambda_electrostatics);"
-            electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB)"
+            electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "amber":
             electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics);"
-            electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB)"
+            electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "classic":
             electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
