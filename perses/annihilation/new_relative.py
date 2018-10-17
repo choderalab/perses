@@ -721,6 +721,8 @@ class HybridTopologyFactory(object):
             sterics_custom_nonbonded_force.addEnergyParameterDerivative('lambda')
         else:
             sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_insert", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_delete", 0.0)
 
 
         sterics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
@@ -1194,6 +1196,8 @@ class HybridTopologyFactory(object):
         # Define new global parameters for NonbondedForce
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_electrostatics', 0.0)
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_sterics', 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_delete", 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_insert", 0.0)
 
         #We have to loop through the particles in the system, because nonbonded force does not accept index
         for particle_index in range(self._hybrid_system.getNumParticles()):
