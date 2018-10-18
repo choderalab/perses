@@ -6,7 +6,7 @@ import parmed
 import simtk.unit as units
 import numpy as np
 import copy
-#from perses.rjmc import coordinate_numba
+from perses.rjmc import coordinate_numba
 import simtk.openmm as openmm
 import collections
 import openeye.oechem as oechem
@@ -17,19 +17,26 @@ import itertools
 
 # Import packages necessary for _generateOEMolFromTopologyResidue
 import sys
+
 if sys.version_info >= (3, 0):
     from subprocess import getstatusoutput, call
+
+
     def run_command(command):
         call(command.split())
 else:
     from commands import getstatusoutput
+
+
     def run_command(command):
         getstatusoutput(command)
 
 import os
 import time
 import logging
+
 _logger = logging.getLogger("geometry")
+
 
 class GeometryEngine(object):
     """
@@ -61,7 +68,7 @@ class GeometryEngine(object):
         new_positions : [n, 3] ndarray
             The new positions of the system
         """
-        return np.array([0.0,0.0,0.0])
+        return np.array([0.0, 0.0, 0.0])
 
     def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
         """
@@ -99,11 +106,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
+
     def __init__(self, metadata=None, use_sterics=False, verbose=True):
         self._metadata = metadata
-        self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
-        self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
-        self.nproposed = 0 # number of times self.propose() has been called
+        self.write_proposal_pdb = False  # if True, will write PDB for sequential atom placements
+        self.pdb_filename_prefix = 'geometry-proposal'  # PDB file prefix for writing sequential atom placements
+        self.nproposed = 0  # number of times self.propose() has been called
         self._energy_time = 0.0
         self._torsion_coordinate_time = 0.0
         self._position_set_time = 0.0
@@ -138,7 +146,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.nproposed += 1
         return new_positions, logp_proposal
 
-
     def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
         """
         Calculate the logp for the given geometry proposal
@@ -163,7 +170,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             return 0.0
         new_coordinates = new_coordinates.in_units_of(units.nanometers)
         old_coordinates = old_coordinates.in_units_of(units.nanometers)
-        logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
+        logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates,
+                                              direction='reverse')
         return logp_proposal
 
     def _write_partial_pdb(self, pdbfile, topology, positions, atoms_with_positions, model_index):
@@ -173,8 +181,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         from simtk.openmm.app import Modeller
         modeller = Modeller(topology, positions)
-        atom_indices_with_positions = [ atom.idx for atom in atoms_with_positions ]
-        atoms_to_delete = [ atom for atom in modeller.topology.atoms() if (atom.index not in atom_indices_with_positions) ]
+        atom_indices_with_positions = [atom.idx for atom in atoms_with_positions]
+        atoms_to_delete = [atom for atom in modeller.topology.atoms() if
+                           (atom.index not in atom_indices_with_positions)]
         modeller.delete(atoms_to_delete)
 
         pdbfile.write('MODEL %5d\n' % model_index)
@@ -215,26 +224,32 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         proposal_order_tool = ProposalOrderTools(top_proposal)
         proposal_order_time = time.time() - initial_time
         growth_parameter_name = 'growth_stage'
-        if direction=="forward":
+        if direction == "forward":
             forward_init = time.time()
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
             proposal_order_forward = time.time() - forward_init
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
 
-            #find and copy known positions
+            # find and copy known positions
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(),
+                                                              growth_parameter_name,
+                                                              reference_topology=top_proposal.new_topology,
+                                                              use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
-        elif direction=='reverse':
+        elif direction == 'reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(),
+                                                              growth_parameter_name,
+                                                              reference_topology=top_proposal.old_topology,
+                                                              use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -245,7 +260,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # DEBUG: Write growth stages
             from simtk.openmm.app import PDBFile
             prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
-            self._proposal_pdbfile = open("%s-proposal.pdb" % prefix, 'w') # PDB file for proposal probabilities
+            self._proposal_pdbfile = open("%s-proposal.pdb" % prefix, 'w')  # PDB file for proposal probabilities
             self._proposal_pdbfile.write('MODEL\n')
             self._proposal_pdbfile.write('TER\n')
             self._proposal_pdbfile.write('ENDMDL\n')
@@ -269,9 +284,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             platform_name = 'Reference'
 
         platform = openmm.Platform.getPlatformByName(platform_name)
-        integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+        integrator = openmm.VerletIntegrator(1 * units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys())+1, context)
+        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys()) + 1, context)
         debug = False
         if debug:
             context.setPositions(self._metadata['reference_positions'])
@@ -279,76 +294,85 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             state = context.getState(getEnergy=True)
             _logger.debug("The potential of the valence terms is %s" % str(state.getPotentialEnergy()))
         growth_parameter_value = 1
-        #now for the main loop:
+        # now for the main loop:
         logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
         for atom, torsion in atom_proposal_order.items():
             growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
             torsion_atom = torsion.atom4
-            if self.verbose: _logger.info("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
+            if self.verbose: _logger.info("Proposing atom %s from torsion %s" % (str(atom), str(torsion)))
 
             if atom != torsion.atom1:
                 raise Exception('atom != torsion.atom1')
 
-            #get internal coordinates if direction is reverse
-            if direction=='reverse':
+            # get internal coordinates if direction is reverse
+            if direction == 'reverse':
                 atom_coords = old_positions[atom.idx]
                 bond_coords = old_positions[bond_atom.idx]
                 angle_coords = old_positions[angle_atom.idx]
                 torsion_coords = old_positions[torsion_atom.idx]
-                internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
-                r = internal_coordinates[0]*atom_coords.unit
-                theta = internal_coordinates[1]*units.radian
-                phi = internal_coordinates[2]*units.radian
+                internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords,
+                                                                         torsion_coords)
+                r = internal_coordinates[0] * atom_coords.unit
+                theta = internal_coordinates[1] * units.radian
+                phi = internal_coordinates[2] * units.radian
 
             bond = self._get_relevant_bond(atom, bond_atom)
             if bond is not None:
-                if direction=='forward':
+                if direction == 'forward':
                     r = self._propose_bond(bond, beta)
                 bond_k = bond.type.k
-                sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
+                sigma_r = units.sqrt(1 / (beta * bond_k))
+                logZ_r = np.log((np.sqrt(2 * np.pi) * (sigma_r.value_in_unit(units.angstrom))))
                 logp_r = self._bond_logq(r, bond, beta) - logZ_r
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
                     if constraint is None:
-                        raise ValueError("Structure contains a topological bond [%s - %s] with no constraint or bond information." % (str(atom), str(bond_atom)))
-                    r = constraint #set bond length to exactly constraint
+                        raise ValueError(
+                            "Structure contains a topological bond [%s - %s] with no constraint or bond information." % (
+                            str(atom), str(bond_atom)))
+                    r = constraint  # set bond length to exactly constraint
                 logp_r = 0.0
 
-            #propose an angle and calculate its probability
+            # propose an angle and calculate its probability
             angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-            if direction=='forward':
+            if direction == 'forward':
                 theta = self._propose_angle(angle, beta)
             angle_k = angle.type.k
-            sigma_theta = units.sqrt(1/(beta*angle_k))
-            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
+            sigma_theta = units.sqrt(1 / (beta * angle_k))
+            logZ_theta = np.log((np.sqrt(2 * np.pi) * (sigma_theta.value_in_unit(units.radians))))
             logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
 
-            #propose a torsion angle and calcualate its probability
-            if direction=='forward':
+            # propose a torsion angle and calcualate its probability
+            if direction == 'forward':
                 phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=360)
-                xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
+                xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx],
+                                                        new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=360)
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta,
+                                              n_divisions=360)
 
-            #accumulate logp
+            # accumulate logp
             if direction == 'reverse':
-                if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
+                if self.verbose: _logger.info(
+                    '%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (
+                    atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
             # DEBUG: Write PDB file for placed atoms
             atoms_with_positions.append(atom)
             if self.write_proposal_pdb:
-                if direction=='forward':
-                    self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, growth_parameter_value)
+                if direction == 'forward':
+                    self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions,
+                                            growth_parameter_value)
                 else:
-                    self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, growth_parameter_value)
+                    self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions,
+                                            growth_parameter_value)
 
         if self.write_proposal_pdb:
             pdbfile.close()
@@ -361,8 +385,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
                 pdbfile.close()
         total_time = time.time() - initial_time
-        if direction=='forward':
-            logging.log(logging.DEBUG, "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
+        if direction == 'forward':
+            logging.log(logging.DEBUG,
+                        "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (
+                        proposal_order_time, growth_system_time, self._torsion_coordinate_time, self._energy_time,
+                        self._position_set_time, total_time))
         self._torsion_coordinate_time = 0.0
         self._energy_time = 0.0
         self._position_set_time = 0.0
@@ -429,16 +456,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         oemol : openeye.oechem.OEMol
             an oemol representation of the residue with topology indices
         """
-        # TODO: This seems to be broken. Can we fix it?
-        print("IN oemol from residue function...") ## IVY
-        print() ## IVY
+        print("IN oemol from residue function...")  ## IVY
+        print()  ## IVY
 
-        ## IVY should i be checking to see if oechem is installed and has license?
-        # if _is_openeye_installed() == 1:
-        #     raise ImportError("openeye.oechem is not installed")
-        # elif _is_openeye_installed() == 2:
-        #     raise RuntimeError("No valid license available for openeye.oechem")
-
+        # IVY add comments for this function
         def _generateOEMolFromTopologyResidue(res, antechamber=False, geometry=False, tripos_atom_names=False):
             # Create OEMol where all atoms have bond order 1.
             molecule = oechem.OEMol()
@@ -446,7 +467,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             for atom in res.atoms():
                 oeatom = molecule.NewAtom(atom.element.atomic_number)
                 oeatom.SetName(atom.name)
-                oeatom.AddData("topology_index", atom.index)
+                try:
+                    oeatom.AddData("topology_index", atom.topology_index)
+                except AttributeError:
+                    pass
+                try:
+                    oeatom.AddData("stereo", atom.stereo)
+                except AttributeError:
+                    pass
             oeatoms = {oeatom.GetName(): oeatom for oeatom in molecule.GetAtoms()}
             for (atom1, atom2) in res.bonds():
                 order = 1
@@ -519,6 +547,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             new_res = new_topology.addResidue(res.name, new_chain)
             for atom in res.atoms():
                 new_atom = new_topology.addAtom(atom.name, atom.element, new_res)
+                new_atom.topology_index = atom.index  # Save the atom index from the input topology
+
+                try:
+                    new_atom.stereo = atom.stereo
+                except AttributeError:
+                    pass
+
                 new_atoms[atom] = new_atom
             for bond in res.internal_bonds():
                 new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
@@ -582,7 +617,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         new_positions = units.Quantity(np.random.random([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
 
         current_positions = current_positions.in_units_of(units.nanometers)
-        #copy positions
+        # copy positions
         for atom in atoms_with_positions:
             old_index = top_proposal.new_to_old_atom_map[atom.idx]
             new_positions[atom.idx] = current_positions[old_index]
@@ -641,7 +676,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         for i in range(n_constraints):
             constraint_parameters = system.getConstraintParameters(i)
             constraint_atoms = set(constraint_parameters[:2])
-            if len(constraint_atoms.intersection(atom_indices))==2:
+            if len(constraint_atoms.intersection(atom_indices)) == 2:
                 constraint = constraint_parameters[2]
         return constraint
 
@@ -684,10 +719,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         -------
 
         """
-        if type(bond.type.k)==units.Quantity:
+        if type(bond.type.k) == units.Quantity:
             return bond
         bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
-        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        bond.type.k = units.Quantity(2.0 * bond.type.k, unit=units.kilocalorie_per_mole / units.angstrom ** 2)
         return bond
 
     def _add_angle_units(self, angle):
@@ -704,10 +739,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         angle_with_units : parmed angle
             The angle, but with units on its parameters
         """
-        if type(angle.type.k)==units.Quantity:
+        if type(angle.type.k) == units.Quantity:
             return angle
         angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
-        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        angle.type.k = units.Quantity(2.0 * angle.type.k, unit=units.kilocalorie_per_mole / units.radian ** 2)
         return angle
 
     def _add_torsion_units(self, torsion):
@@ -734,21 +769,21 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         This method produces a rotation matrix given an axis and an angle.
         """
-        axis = axis/np.linalg.norm(axis)
+        axis = axis / np.linalg.norm(axis)
         axis_squared = np.square(axis)
         cos_angle = np.cos(angle)
         sin_angle = np.sin(angle)
-        rot_matrix_row_one = np.array([cos_angle+axis_squared[0]*(1-cos_angle),
-                                       axis[0]*axis[1]*(1-cos_angle) - axis[2]*sin_angle,
-                                       axis[0]*axis[2]*(1-cos_angle)+axis[1]*sin_angle])
+        rot_matrix_row_one = np.array([cos_angle + axis_squared[0] * (1 - cos_angle),
+                                       axis[0] * axis[1] * (1 - cos_angle) - axis[2] * sin_angle,
+                                       axis[0] * axis[2] * (1 - cos_angle) + axis[1] * sin_angle])
 
-        rot_matrix_row_two = np.array([axis[1]*axis[0]*(1-cos_angle)+axis[2]*sin_angle,
-                                      cos_angle+axis_squared[1]*(1-cos_angle),
-                                      axis[1]*axis[2]*(1-cos_angle) - axis[0]*sin_angle])
+        rot_matrix_row_two = np.array([axis[1] * axis[0] * (1 - cos_angle) + axis[2] * sin_angle,
+                                       cos_angle + axis_squared[1] * (1 - cos_angle),
+                                       axis[1] * axis[2] * (1 - cos_angle) - axis[0] * sin_angle])
 
-        rot_matrix_row_three = np.array([axis[2]*axis[0]*(1-cos_angle)-axis[1]*sin_angle,
-                                        axis[2]*axis[1]*(1-cos_angle)+axis[0]*sin_angle,
-                                        cos_angle+axis_squared[2]*(1-cos_angle)])
+        rot_matrix_row_three = np.array([axis[2] * axis[0] * (1 - cos_angle) - axis[1] * sin_angle,
+                                         axis[2] * axis[1] * (1 - cos_angle) + axis[0] * sin_angle,
+                                         cos_angle + axis_squared[2] * (1 - cos_angle)])
 
         rotation_matrix = np.array([rot_matrix_row_one, rot_matrix_row_two, rot_matrix_row_three])
         return rotation_matrix
@@ -758,16 +793,16 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         Cartesian to internal function
         """
         from perses.rjmc import coordinate_numba
-        #ensure we have the correct units, then remove them
+        # ensure we have the correct units, then remove them
         atom_position = atom_position.value_in_unit(units.nanometers).astype(np.float64)
         bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
         angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
         torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
 
-        internal_coords = coordinate_numba.cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
+        internal_coords = coordinate_numba.cartesian_to_internal(atom_position, bond_position, angle_position,
+                                                                 torsion_position)
 
-
-        return internal_coords, np.abs(internal_coords[0]**2*np.sin(internal_coords[1]))
+        return internal_coords, np.abs(internal_coords[0] ** 2 * np.sin(internal_coords[1]))
 
     def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
         """
@@ -780,10 +815,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
         angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
         torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
-        xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
+        xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position,
+                                                     np.array([r, theta, phi], dtype=np.float64))
         xyz = units.Quantity(xyz, unit=units.nanometers)
 
-        return xyz, np.abs(r**2*np.sin(theta))
+        return xyz, np.abs(r ** 2 * np.sin(theta))
 
     def _bond_logq(self, r, bond, beta):
         """
@@ -802,7 +838,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         k_eq = bond.type.k
         r0 = bond.type.req
-        logq = -beta*0.5*k_eq*(r-r0)**2
+        logq = -beta * 0.5 * k_eq * (r - r0) ** 2
         return logq
 
     def _angle_logq(self, theta, angle, beta):
@@ -820,7 +856,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         k_eq = angle.type.k
         theta0 = angle.type.theteq
-        logq = -beta*k_eq*0.5*(theta-theta0)**2
+        logq = -beta * k_eq * 0.5 * (theta - theta0) ** 2
         return logq
 
     def _propose_bond(self, bond, beta):
@@ -829,8 +865,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         r0 = bond.type.req
         k = bond.type.k
-        sigma_r = units.sqrt(1.0/(beta*k))
-        r = sigma_r*np.random.randn() + r0
+        sigma_r = units.sqrt(1.0 / (beta * k))
+        r = sigma_r * np.random.randn() + r0
         return r
 
     def _propose_angle(self, angle, beta):
@@ -839,8 +875,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         theta0 = angle.type.theteq
         k = angle.type.k
-        sigma_theta = units.sqrt(1.0/(beta*k))
-        theta = sigma_theta*np.random.randn() + theta0
+        sigma_theta = units.sqrt(1.0 / (beta * k))
+        theta = sigma_theta * np.random.randn() + theta0
         return theta
 
     def _torsion_scan(self, torsion, positions, r, theta, n_divisions=360):
@@ -874,15 +910,17 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         bond_atom = torsion.atom2
         angle_atom = torsion.atom3
         torsion_atom = torsion.atom4
-        phis = np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions) # Can't use units here.
-        xyzs = coordinate_numba.torsion_scan(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], np.array([r, theta, 0.0]), phis)
-        xyzs_quantity = units.Quantity(xyzs, unit=units.nanometers) #have to put the units back now
+        phis = np.arange(-np.pi, +np.pi, (2.0 * np.pi) / n_divisions)  # Can't use units here.
+        xyzs = coordinate_numba.torsion_scan(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx],
+                                             positions_copy[torsion_atom.idx], np.array([r, theta, 0.0]), phis)
+        xyzs_quantity = units.Quantity(xyzs, unit=units.nanometers)  # have to put the units back now
         phis = units.Quantity(phis, unit=units.radians)
         torsion_scan_time = time.time() - torsion_scan_init
         self._torsion_coordinate_time += torsion_scan_time
         return xyzs_quantity, phis
 
-    def _torsion_log_probability_mass_function(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+    def _torsion_log_probability_mass_function(self, growth_context, torsion, positions, r, theta, beta,
+                                               n_divisions=360):
         """
         Calculate the torsion logp pmf using OpenMM
 
@@ -916,7 +954,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         xyzs = xyzs.value_in_unit_system(units.md_unit_system)
         positions = positions.value_in_unit_system(units.md_unit_system)
         for i, xyz in enumerate(xyzs):
-            positions[atom_idx,:] = xyz
+            positions[atom_idx, :] = xyz
             position_set = time.time()
             growth_context.setPositions(positions)
             position_time = time.time() - position_set
@@ -926,7 +964,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             potential_energy = state.getPotentialEnergy()
             energy_computation_time = time.time() - energy_computation_init
             self._energy_time += energy_computation_time
-            logq_i = -beta*potential_energy
+            logq_i = -beta * potential_energy
             logq[i] = logq_i
 
         if np.sum(np.isnan(logq)) == n_divisions:
@@ -940,11 +978,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if hasattr(self, '_proposal_pdbfile'):
             # Write proposal probabilities to PDB file as B-factors for inert atoms
             f_i = -logp_torsions
-            f_i -= f_i.min() # minimum free energy is zero
+            f_i -= f_i.min()  # minimum free energy is zero
             f_i[f_i > 999.99] = 999.99
             self._proposal_pdbfile.write('MODEL\n')
             for i, xyz in enumerate(xyzs):
-                self._proposal_pdbfile.write('ATOM  %5d %4s %3s %c%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n' % (i+1, ' Ar ', 'Ar ', ' ', atom_idx+1, 10*xyz[0], 10*xyz[1], 10*xyz[2], np.exp(logp_torsions[i]), f_i[i]))
+                self._proposal_pdbfile.write('ATOM  %5d %4s %3s %c%4d    %8.3f%8.3f%8.3f%6.2f%6.2f\n' % (
+                i + 1, ' Ar ', 'Ar ', ' ', atom_idx + 1, 10 * xyz[0], 10 * xyz[1], 10 * xyz[2],
+                np.exp(logp_torsions[i]), f_i[i]))
             self._proposal_pdbfile.write('TER\n')
             self._proposal_pdbfile.write('ENDMDL\n')
             # TODO: Write proposal PMFs to storage
@@ -953,7 +993,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # torsion_pmf[order, division_index]
 
         return logp_torsions, phis
-
 
     def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
@@ -983,13 +1022,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp : float
             The log probability of the proposal.
         """
-        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
-        division = units.Quantity(2*np.pi/n_divisions, unit=units.radian)
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta,
+                                                                          beta, n_divisions=n_divisions)
+        division = units.Quantity(2 * np.pi / n_divisions, unit=units.radian)
         phi_median_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
-        phi_min = phis[phi_median_idx] - division/2.0
-        phi_max = phis[phi_median_idx] + division/2.0
+        phi_min = phis[phi_median_idx] - division / 2.0
+        phi_max = phis[phi_median_idx] + division / 2.0
         phi = np.random.uniform(phi_min.value_in_unit(units.radian), phi_max.value_in_unit(units.radian))
-        logp = logp_torsions[phi_median_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions
+        logp = logp_torsions[phi_median_idx] - np.log(
+            2 * np.pi / n_divisions)  # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions
         return units.Quantity(phi, unit=units.radian), logp
 
     def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
@@ -1020,10 +1061,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         torsion_logp : float
             the logp of this torsion
         """
-        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
-        phi_idx = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
-        torsion_logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
+        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta,
+                                                                          beta, n_divisions=n_divisions)
+        phi_idx = np.argmin(np.abs(phi - phis))  # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
+        torsion_logp = logp_torsions[phi_idx] - np.log(
+            2 * np.pi / n_divisions)  # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
         return torsion_logp
+
 
 class PredAtomTopologyIndex(oechem.OEUnaryAtomPred):
 
@@ -1079,10 +1123,10 @@ class BootstrapParticleFilter(object):
         self._n_new_atoms = len(self._atom_torsions)
         self._initial_positions = initial_positions
         self._new_indices = [atom.idx for atom in self._atom_torsions.keys()]
-        #create a matrix for log weights (n_particles, n_stages)
+        # create a matrix for log weights (n_particles, n_stages)
         self._Wij = np.zeros([self._n_particles, self._n_new_atoms])
-        #create an array for positions--only store new positions to avoid
-        #consuming way too much memory
+        # create an array for positions--only store new positions to avoid
+        # consuming way too much memory
         self._new_positions = np.zeros([self._n_particles, self._n_new_atoms, 3])
         self._generate_configurations()
 
@@ -1097,8 +1141,9 @@ class BootstrapParticleFilter(object):
         bond_position = bond_position.astype(np.float64)
         angle_position = angle_position.astype(np.float64)
         torsion_position = torsion_position.astype(np.float64)
-        xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
-        return xyz, r**2*np.sin(theta)
+        xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position,
+                                                     np.array([r, theta, phi], dtype=np.float64))
+        return xyz, r ** 2 * np.sin(theta)
 
     def _get_bond_constraint(self, atom1, atom2, system):
         """
@@ -1125,7 +1170,7 @@ class BootstrapParticleFilter(object):
         for i in range(n_constraints):
             constraint_parameters = system.getConstraintParameters(i)
             constraint_atoms = set(constraint_parameters[:2])
-            if len(constraint_atoms.intersection(atom_indices))==2:
+            if len(constraint_atoms.intersection(atom_indices)) == 2:
                 constraint = constraint_parameters[2]
         return constraint
 
@@ -1149,7 +1194,7 @@ class BootstrapParticleFilter(object):
         self._growth_context.setParameter('growth_stage', self._growth_stage)
         self._growth_context.setPositions(positions)
         energy = self._growth_context.getState(getEnergy=True).getPotentialEnergy()
-        return -self._beta*energy
+        return -self._beta * energy
 
     def _get_relevant_angle(self, atom1, atom2, atom3):
         """
@@ -1179,10 +1224,10 @@ class BootstrapParticleFilter(object):
         -------
 
         """
-        if type(bond.type.k)==units.Quantity:
+        if type(bond.type.k) == units.Quantity:
             return bond
         bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
-        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        bond.type.k = units.Quantity(2.0 * bond.type.k, unit=units.kilocalorie_per_mole / units.angstrom ** 2)
         return bond
 
     def _add_angle_units(self, angle):
@@ -1199,10 +1244,10 @@ class BootstrapParticleFilter(object):
         angle_with_units : parmed angle
             The angle, but with units on its parameters
         """
-        if type(angle.type.k)==units.Quantity:
+        if type(angle.type.k) == units.Quantity:
             return angle
         angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
-        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        angle.type.k = units.Quantity(2.0 * angle.type.k, unit=units.kilocalorie_per_mole / units.radian ** 2)
         return angle
 
     def _get_relevant_bond(self, atom1, atom2):
@@ -1250,7 +1295,7 @@ class BootstrapParticleFilter(object):
         """
         k_eq = bond.type.k
         r0 = bond.type.req
-        logq = -self._beta*0.5*k_eq*(r-r0)**2
+        logq = -self._beta * 0.5 * k_eq * (r - r0) ** 2
         return logq
 
     def _angle_logq(self, theta, angle):
@@ -1268,7 +1313,7 @@ class BootstrapParticleFilter(object):
         """
         k_eq = angle.type.k
         theta0 = angle.type.theteq
-        logq = -self._beta*k_eq*0.5*(theta-theta0)**2
+        logq = -self._beta * k_eq * 0.5 * (theta - theta0) ** 2
         return logq
 
     def _propose_bond(self, bond):
@@ -1277,8 +1322,8 @@ class BootstrapParticleFilter(object):
         """
         r0 = bond.type.req
         k = bond.type.k
-        sigma_r = units.sqrt(1.0/(self._beta*k))
-        r = sigma_r*np.random.randn() + r0
+        sigma_r = units.sqrt(1.0 / (self._beta * k))
+        r = sigma_r * np.random.randn() + r0
         return r
 
     def _propose_angle(self, angle):
@@ -1287,8 +1332,8 @@ class BootstrapParticleFilter(object):
         """
         theta0 = angle.type.theteq
         k = angle.type.k
-        sigma_theta = units.sqrt(1.0/(self._beta*k))
-        theta = sigma_theta*np.random.randn() + theta0
+        sigma_theta = units.sqrt(1.0 / (self._beta * k))
+        theta = sigma_theta * np.random.randn() + theta0
         return theta
 
     def _propose_atom(self, atom, torsion, new_positions):
@@ -1327,29 +1372,30 @@ class BootstrapParticleFilter(object):
         if bond is not None:
             r = self._propose_bond(bond)
             bond_k = bond.type.k
-            sigma_r = units.sqrt(1/(self._beta*bond_k))
-            logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
+            sigma_r = units.sqrt(1 / (self._beta * bond_k))
+            logZ_r = np.log((np.sqrt(2 * np.pi) * (sigma_r / units.angstroms)))  # CHECK DOMAIN AND UNITS
             logp_r = self._bond_logq(r, bond) - logZ_r
         else:
             constraint = self._get_bond_constraint(atom, bond_atom, self._system)
-            r = constraint #set bond length to exactly constraint
+            r = constraint  # set bond length to exactly constraint
             logp_r = 0.0
 
-        #propose an angle and calculate its probability
+        # propose an angle and calculate its probability
         angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
         theta = self._propose_angle(angle)
         angle_k = angle.type.k
-        sigma_theta = units.sqrt(1/(self._beta*angle_k))
-        logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta/units.radians))) # CHECK DOMAIN AND UNITS
+        sigma_theta = units.sqrt(1 / (self._beta * angle_k))
+        logZ_theta = np.log((np.sqrt(2 * np.pi) * (sigma_theta / units.radians)))  # CHECK DOMAIN AND UNITS
         logp_theta = self._angle_logq(theta, angle) - logZ_theta
 
-        #propose a torsion angle uniformly (this can be dramatically improved)
+        # propose a torsion angle uniformly (this can be dramatically improved)
         phi = np.random.uniform(-np.pi, np.pi)
-        logp_phi = -np.log(2*np.pi)
+        logp_phi = -np.log(2 * np.pi)
 
-        #get the new cartesian coordinates and detJ:
-        new_xyz, detJ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, theta, phi)
-        #accumulate logp
+        # get the new cartesian coordinates and detJ:
+        new_xyz, detJ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx],
+                                                    positions[torsion_atom.idx], r, theta, phi)
+        # accumulate logp
         logp_proposal = logp_r + logp_theta + logp_phi + np.log(np.abs(detJ))
 
         return new_xyz, logp_proposal
@@ -1359,10 +1405,10 @@ class BootstrapParticleFilter(object):
         Resample from the current set of weights and positions.
         """
         particle_indices = range(self._n_particles)
-        new_indices = np.random.choice(particle_indices, size=self._n_particles, p=self._Wij[:, self._growth_stage-1])
+        new_indices = np.random.choice(particle_indices, size=self._n_particles, p=self._Wij[:, self._growth_stage - 1])
         for particle_index in particle_indices:
             self._new_positions[particle_index, :, :] = self._new_positions[new_indices[particle_index], :, :]
-        self._Wij[:, self._growth_stage-1] = -np.log(self._n_particles) #set particle weights to be equal
+        self._Wij[:, self._growth_stage - 1] = -np.log(self._n_particles)  # set particle weights to be equal
 
     def _generate_configurations(self):
         """
@@ -1370,16 +1416,17 @@ class BootstrapParticleFilter(object):
         from p(x_new | x_common).
         """
         for i, atom_torsion in enumerate(self._atom_torsions.items()):
-            self._growth_stage = i+1
+            self._growth_stage = i + 1
             for particle_index in range(self._n_particles):
                 proposed_xyz, logp_proposal = self._propose_atom(atom_torsion[0], atom_torsion[1])
                 self._new_positions[particle_index, i, :] = proposed_xyz
-                unnormalized_log_target = self._log_unnormalized_target(self._new_positions[particle_index, :,:])
+                unnormalized_log_target = self._log_unnormalized_target(self._new_positions[particle_index, :, :])
                 if i > 0:
-                    self._Wij = [particle_index, i] = (unnormalized_log_target - logp_proposal) + self._Wij[particle_index, i-1]
+                    self._Wij = [particle_index, i] = (unnormalized_log_target - logp_proposal) + self._Wij[
+                        particle_index, i - 1]
                 else:
                     self._Wij = [particle_index, i] = unnormalized_log_target - logp_proposal
-            sum_log_weights = np.sum(np.exp(self._Wij[:,i]))
+            sum_log_weights = np.sum(np.exp(self._Wij[:, i]))
             self._Wij -= np.log(sum_log_weights)
             if i % self._resample_frequency == 0 and i != 0:
                 self._resample()
@@ -1446,8 +1493,10 @@ class GeometrySystemGenerator(object):
     _HarmonicBondForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(r-r0)^2, 0);"
     _HarmonicAngleForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
     _PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
+    _VonMisesTorsionForceEnergy = "select(step({}+0.1 - growth_idx), (1/(sigma^2))*(cos(theta-phase)), 0);"
 
-    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
+    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True,
+                 reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
         ----------
@@ -1467,10 +1516,10 @@ class GeometrySystemGenerator(object):
             If True, will print verbose output.
 
         """
-        ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
-                                  # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
+        ONE_4PI_EPS0 = 138.935456  # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
+        # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
-        default_growth_index = len(growth_indices) # default value of growth index to use in System that is returned
+        default_growth_index = len(growth_indices)  # default value of growth index to use in System that is returned
         self.current_growth_index = default_growth_index
 
         # Nonbonded sterics and electrostatics.
@@ -1489,17 +1538,44 @@ class GeometrySystemGenerator(object):
         self._nonbondedExceptionEnergy += "U_exception = ONE_4PI_EPS0*chargeprod/r + 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._nonbondedExceptionEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
 
-        self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
+        self.sterics_cutoff_distance = 9.0 * units.angstroms  # cutoff for sterics
 
         self.verbose = verbose
 
-        # Get list of particle indices for new and old atoms.
-        new_particle_indices = [ atom.idx for atom in growth_indices ]
-        old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in new_particle_indices]
+        ## IVY Delete
+        # self._amino_smiles = {'ALA': "N[C@@H](C)C(=O)O" ,
+        #                       'ARG': "C(C[C@@H](C(=O)O)N)CN=C(N)N", # https://pubchem.ncbi.nlm.nih.gov/compound/L-arginine#section=InChI-Key
+        #                       'ASN': "N[C@@H](CC(N)=O)C(=O)O", # https://opsin.ch.cam.ac.uk/
+        #                      'ASP': "C([C@@H](C(=O)O)N)C(=O)O",
+        #                     'CYS': "C([C@@H](C(=O)O)N)S",
+        #                     'GLN': "N[C@@H](CCC(N)=O)C(=O)O", # https://opsin.ch.cam.ac.uk/
+        #                     'GLU': "C(CC(=O)O)[C@@H](C(=O)O)N",
+        #                     'GLY': "C(C(=O)O)",
+        #                     'HIS': "c1c(nc[nH]1)C[C@@H](C(=O)O)N",
+        #                     'ILE': "CC[C@H](C)[C@@H](C(=O)O)N",
+        #                     'LEU': "CC(C)C[C@@H](C(=O)O)N",
+        #                     'LYS': "C(CCN)C[C@@H](C(=O)O)N",
+        #                     'MET': "CSCC[C@@H](C(=O)O)N",
+        #                     'PHE': "N[C@@H](CC1=CC=CC=C1)C(=O)O", # https://opsin.ch.cam.ac.uk/
+        #                     'PRO': "C1C[C@H](NC1)C(=O)O",
+        #                     'SER': "N[C@@H](CO)C(=O)O", # https://opsin.ch.cam.ac.uk/
+        #                     'THR': "C[C@H]([C@@H](C(=O)O)N)O",
+        #                     'TRP': "c1ccc2c(c1)c(c[nH]2)C[C@@H](C(=O)O)N",
+        #                     'TYR': "c1cc(ccc1C[C@@H](C(=O)O)N)O",
+        #                     'VAL': "CC(C)[C@@H](C(=O)O)N"}
 
-        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
+        self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET',
+                        'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL']
+
+        # Get list of particle indices for new and old atoms.
+        new_particle_indices = [atom.idx for atom in growth_indices]
+        old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if
+                                idx not in new_particle_indices]
+
+        reference_forces = {reference_system.getForce(index).__class__.__name__: reference_system.getForce(index) for
+                            index in range(reference_system.getNumForces())}
         growth_system = openmm.System()
-        #create the forces:
+        # create the forces:
         modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(parameter_name))
         modified_bond_force.addPerBondParameter("r0")
         modified_bond_force.addPerBondParameter("K")
@@ -1519,40 +1595,52 @@ class GeometrySystemGenerator(object):
         modified_torsion_force.addPerTorsionParameter("growth_idx")
         modified_torsion_force.addGlobalParameter(parameter_name, default_growth_index)
 
+        modified_stereochemistry_force = openmm.CustomTorsionForce(self._VonMisesTorsionForceEnergy.format(parameter_name))
+        modified_stereochemistry_force.addPerTorsionParameter("phase")
+        modified_stereochemistry_force.addPerTorsionParameter("sigma")
+        modified_stereochemistry_force.addPerTorsionParameter("growth_idx")
+        modified_stereochemistry_force.addGlobalParameter(parameter_name, default_growth_index)
+
         growth_system.addForce(modified_bond_force)
         growth_system.addForce(modified_angle_force)
         growth_system.addForce(modified_torsion_force)
+        growth_system.addForce(modified_stereochemistry_force)
 
-        #copy the particles over
+        # copy the particles over
         for i in range(reference_system.getNumParticles()):
             growth_system.addParticle(reference_system.getParticleMass(i))
 
-        #copy each bond, adding the per-particle parameter as well
+        # copy each bond, adding the per-particle parameter as well
         reference_bond_force = reference_forces['HarmonicBondForce']
         for bond in range(reference_bond_force.getNumBonds()):
             bond_parameters = reference_bond_force.getBondParameters(bond)
             growth_idx = self._calculate_growth_idx(bond_parameters[:2], growth_indices)
-            if growth_idx==0:
+            if growth_idx == 0:
                 continue
-            modified_bond_force.addBond(bond_parameters[0], bond_parameters[1], [bond_parameters[2], bond_parameters[3], growth_idx])
+            modified_bond_force.addBond(bond_parameters[0], bond_parameters[1],
+                                        [bond_parameters[2], bond_parameters[3], growth_idx])
 
-        #copy each angle, adding the per particle parameter as well
+        # copy each angle, adding the per particle parameter as well
         reference_angle_force = reference_forces['HarmonicAngleForce']
         for angle in range(reference_angle_force.getNumAngles()):
             angle_parameters = reference_angle_force.getAngleParameters(angle)
             growth_idx = self._calculate_growth_idx(angle_parameters[:3], growth_indices)
-            if growth_idx==0:
+            if growth_idx == 0:
                 continue
-            modified_angle_force.addAngle(angle_parameters[0], angle_parameters[1], angle_parameters[2], [angle_parameters[3], angle_parameters[4], growth_idx])
+            modified_angle_force.addAngle(angle_parameters[0], angle_parameters[1], angle_parameters[2],
+                                          [angle_parameters[3], angle_parameters[4], growth_idx])
 
-        #copy each torsion, adding the per particle parameter as well
+        # copy each torsion, adding the per particle parameter as well
         reference_torsion_force = reference_forces['PeriodicTorsionForce']
         for torsion in range(reference_torsion_force.getNumTorsions()):
             torsion_parameters = reference_torsion_force.getTorsionParameters(torsion)
             growth_idx = self._calculate_growth_idx(torsion_parameters[:4], growth_indices)
-            if growth_idx==0:
+            if growth_idx == 0:
                 continue
-            modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
+            modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2],
+                                              torsion_parameters[3],
+                                              [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6],
+                                               growth_idx])
 
         # Add (1,4) exceptions, regardless of whether 'use_sterics' is specified, because these are part of the valence forces.
         if 'NonbondedForce' in reference_forces.keys():
@@ -1565,19 +1653,27 @@ class GeometrySystemGenerator(object):
             growth_system.addForce(custom_bond_force)
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
-            #print('growth_indices:', growth_indices)
+            # print('growth_indices:', growth_indices)
             reference_nonbonded_force = reference_forces['NonbondedForce']
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
-                [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
-                growth_idx_1 = new_particle_indices.index(particle_index_1) + 1 if particle_index_1 in new_particle_indices else 0
-                growth_idx_2 = new_particle_indices.index(particle_index_2) + 1 if particle_index_2 in new_particle_indices else 0
+                [particle_index_1, particle_index_2, chargeprod, sigma,
+                 epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
+                growth_idx_1 = new_particle_indices.index(
+                    particle_index_1) + 1 if particle_index_1 in new_particle_indices else 0
+                growth_idx_2 = new_particle_indices.index(
+                    particle_index_2) + 1 if particle_index_2 in new_particle_indices else 0
                 growth_idx = max(growth_idx_1, growth_idx_2)
                 # Only need to add terms that are nonzero and involve newly added atoms.
-                if (growth_idx > 0) and ((chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0)):
-                    if self.verbose: _logger.info('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index_1, particle_index_2, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
-                    custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
+                if (growth_idx > 0) and ((chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (
+                        epsilon.value_in_unit_system(units.md_unit_system) != 0.0)):
+                    if self.verbose: _logger.info(
+                        'Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (
+                        particle_index_1, particle_index_2, chargeprod / units.elementary_charge ** 2,
+                        sigma / units.angstrom, epsilon / units.kilocalorie_per_mole, growth_idx))
+                    custom_bond_force.addBond(particle_index_1, particle_index_2,
+                                              [chargeprod, sigma, epsilon, growth_idx])
 
-        #copy parameters for sterics parameters in nonbonded force
+        # copy parameters for sterics parameters in nonbonded force
         if 'NonbondedForce' in reference_forces.keys() and use_sterics:
             modified_sterics_force = openmm.CustomNonbondedForce(self._nonbondedEnergy.format(parameter_name))
             modified_sterics_force.addPerParticleParameter("charge")
@@ -1590,20 +1686,26 @@ class GeometrySystemGenerator(object):
             reference_nonbonded_force = reference_forces['NonbondedForce']
             if reference_nonbonded_force in [openmm.NonbondedForce.NoCutoff, openmm.NonbondedForce.CutoffNonPeriodic]:
                 modified_sterics_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffNonPeriodic)
-            elif reference_nonbonded_force in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            elif reference_nonbonded_force in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.PME,
+                                               openmm.NonbondedForce.Ewald]:
                 modified_sterics_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
             modified_sterics_force.setCutoffDistance(self.sterics_cutoff_distance)
             # Add particle parameters.
             for particle_index in range(reference_nonbonded_force.getNumParticles()):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
-                growth_idx = new_particle_indices.index(particle_index) + 1 if particle_index in new_particle_indices else 0
+                growth_idx = new_particle_indices.index(
+                    particle_index) + 1 if particle_index in new_particle_indices else 0
                 modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
                 if self.verbose and (growth_idx > 0):
-                    _logger.info('Adding NonbondedForce particle %5d : charge %8.3f |e|, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index, charge/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
+                    _logger.info(
+                        'Adding NonbondedForce particle %5d : charge %8.3f |e|, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (
+                        particle_index, charge / units.elementary_charge, sigma / units.angstrom,
+                        epsilon / units.kilocalorie_per_mole, growth_idx))
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
-                [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
+                [particle_index_1, particle_index_2, chargeprod, sigma,
+                 epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
                 modified_sterics_force.addExclusion(particle_index_1, particle_index_2)
             # Only compute interactions of new particles with all other particles
             # TODO: Allow inteactions to be resticted to only the residue being grown.
@@ -1612,11 +1714,11 @@ class GeometrySystemGenerator(object):
 
         # Add extra ring-closing torsions, if requested.
         if add_extra_torsions:
-            if reference_topology==None:
+            if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
-            self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
+        self._determine_extra_torsions(modified_torsion_force, modified_stereochemistry_force, reference_topology, growth_indices)
         if add_extra_angles:
-            if reference_topology==None:
+            if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra angles")
             self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
 
@@ -1645,12 +1747,12 @@ class GeometrySystemGenerator(object):
         """
         return self._growth_system
 
-    def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
+    def _determine_extra_torsions(self, torsion_force, stereochemistry_force, reference_topology, growth_indices):
         """
         Determine which atoms need an extra torsion. First figure out which residue is
         covered by the new atoms, then determine the rotatable bonds. Finally, construct
         the residue in omega and measure the appropriate torsions, and generate relevant parameters.
-        ONLY ONE RESIDUE SHOULD BE CHANGING! (unless there is more than one modified residue)
+        ONLY ONE RESIDUE SHOULD BE CHANGING!
 
         Parameters
         ----------
@@ -1670,120 +1772,197 @@ class GeometrySystemGenerator(object):
         if len(growth_indices) == 0:
             return torsion_force
 
-        # Identify modified residue(s)
+        # Identify modified residue and type of reference_topology (small molecule or polymer)
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
         try:
             residues = [res for res in reference_topology.residues() if res.modified]
         except AttributeError:
             residues = [atoms[growth_indices[0].idx].residue]
+        if len(residues) > 1:
+            raise Exception("Please only modify one residue at a time. The residues you tried to modify are: ",
+                            residues)
 
-        for residue in residues:
-            print("IN EXTRA TORSIONS, generate oemol from residue: ", residue) ## IVY
-            print(growth_indices) ## IVY
-            try:
-                oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
-            except Exception as e:
-                print("Could not generate an oemol from the residue.")
-                print(e)
-
-            # DEBUG: Write mol2 file.
-            debug = True
-            if debug:
-                if not hasattr(self, 'omega_index'):
-                    self.omega_index = 0
-                filename = 'omega-%05d.mol2' % self.omega_index
-                print("Writing %s" % filename)
-                self.omega_index += 1
-                oemol_copy = oechem.OEMol(oemol)
-                ofs = oechem.oemolostream(filename)
-                oechem.OETriposAtomTypeNames(oemol_copy)
-                oechem.OEWriteMol2File(ofs, oemol_copy)  # Preserve atom naming
-                ofs.close()
-
-            # Get the omega geometry of the molecule:
+        # Generate oemol using reference topology residue. Also get the omega geometry of the molecule.
+        try:
+            oemol = FFAllAngleGeometryEngine._oemol_from_residue(residues[0])
             omega = oeomega.OEOmega()
             omega.SetMaxConfs(1)
-            omega.SetStrictStereo(False) #TODO: fix stereochem
+            omega.SetStrictStereo(False)
             omega(oemol)
+        except Exception as e:
+            print("Could not generate an oemol from the residue.")
+            print(e)
 
-            print("printing stereo")
-            # Get stereocenters
-            stereocenters = []
-            for atom in oemol.GetAtoms():
-                chiral = atom.IsChiral()
-                stereo = oechem.OEAtomStereo_Undefined
-                if atom.HasStereoSpecified(oechem.OEAtomStereo_Tetrahedral):
-                    v = []
-                    for nbr in atom.GetAtoms():
-                        v.append(nbr)
-                    stereo = atom.GetStereo(v, oechem.OEAtomStereo_Tetrahedral)
+        print("IN EXTRA TORSIONS, generate oemol from residue: ", residues)  ## IVY delete
 
-                if chiral or stereo != oechem.OEAtomStereo_Undefined:
-                    print("Atom:", atom.GetIdx(), " ", atom.GetName(), " chiral=", chiral, "stereo=", end=" ")
-                    stereocenters.append(atom)
-                    if stereo == oechem.OEAtomStereo_RightHanded: ## IVY delete
-                        print("right handed") ## IVY delete
-                    elif stereo == oechem.OEAtomStereo_LeftHanded: ## IVY delete
-                        print("left handed") ## IVY delete
-                    else: ## IVY delete
-                        print("undefined") ## IVY delete
+        # Specify stereochemistry
+        print("specifying stereochemistry...") ## IVY delete
+        res_name = residues[0].name
+        for atom in oemol.GetAtoms():
+            if atom.IsChiral():
+                print("got chiral atom: ", atom.GetName()) ## IVY delete
+                print("coords before: ", oemol.GetCoords()[atom.GetIdx()]) ## IVY
+                if res_name in self._aminos:
+                    neighbors = [nbr.GetName() for nbr in atom.GetAtoms()]
+                    print("neighbors: ", neighbors) ## IVY Delete
+                    calpha_neighbors = ['C', 'CB', 'HA', 'N']
+                    if set(neighbors) == set(calpha_neighbors):
+                        if res_name == 'CYS':
+                            oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_R)
+                            print("specified cysteine's stereochemistry!") ## IVY delete
+                        else:
+                            oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_S)
+                    else:
+                        if res_name == 'THR':
+                            oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_R)
+                            print("specified non alpha carbon stereochem in threonine!") ## IVY
+                        elif res_name == 'ILE':
+                            oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_S)
+                            print("specified non alpha carbon stereochem in isoleucine!") ## IVY
+                    print("stereo of ", atom.GetName(), " at index: ", atom.GetIdx(), " is ", oechem.OEPerceiveCIPStereo(oemol, atom)) ## IVY
+                else:  # For small molecule, use stereo property from topology that was transferred to oemol
+                    try:
+                        stereo = oechem.OECIPAtomStereo_R if atom.GetData("stereo") == 'R' else oechem.OECIPAtomStereo_S
+                    except:
+                        print("Unable to get stereochemistry from topology for chiral atom at index ", atom.GetIdx())
+                    print("got small molecule stereochem: ", atom.GetData("stereo"), "for atom: ", atom.GetName(), " at: ", atom.GetIdx(), " element: ", atom.GetAtomicNum()) ## IVY delete
+                    oechem.OESetCIPStereo(oemol, atom, stereo)
+                    print("stereo of ", atom.GetName(), " at index: ", atom.GetIdx(), " is ",
+                          oechem.OEPerceiveCIPStereo(oemol, atom))  ## IVY
+                print("coords after: ", oemol.GetCoords()[atom.GetIdx()]) ## IVY
 
-                # cip = oechem.OEPerceiveCIPStereo(oemol, atom)
-                # if atom.HasStereoSpecified():
-                #     print("atom %d %s is" % (atom.GetIdx(), atom.GetName()), end=" ")
-                #     if cip == oechem.OECIPAtomStereo_S:
-                #         print('S')
-                #     if cip == oechem.OECIPAtomStereo_R:
-                #         print('R')
-                #     if cip == oechem.OECIPAtomStereo_NotStereo:
-                #         print('not a CIP stereo center')
-                # if cip == oechem.OECIPAtomStereo_UnspecStereo:
-                #     print("atom %d %s is" % (atom.GetIdx(), atom.GetName()), end=" ")
-                #     print('a CIP stereo center without specified stereochemistry')
+        # DEBUG: Write mol2 file.
+        debug = True
+        if debug:
+            if not hasattr(self, 'omega_index'):
+                self.omega_index = 0
+            filename = 'omega-%05d.mol2' % self.omega_index
+            print("Writing %s" % filename)
+            self.omega_index += 1
+            oemol_copy = oechem.OEMol(oemol)
+            ofs = oechem.oemolostream(filename)
+            oechem.OETriposAtomTypeNames(oemol_copy)
+            oechem.OEWriteMol2File(ofs, oemol_copy)  # Preserve atom naming
+            ofs.close()
 
-            # Get all torsions and filter torsions for those containing stereocenters
-            torsions = list(oechem.OEGetTorsions(oemol))
-            for torsion in torsions:
-                print("torsion info: ", torsion.a, torsion.b, torsion.c, torsion.d)
-                # for sc in stereocenters:
-                #     if torsion.a.GetName() ==
+        # Get the list of torsions in the molecule that are not about a rotatable bond
+        # Note that only torsions involving heavy atoms are enumerated here.
+        rotor = oechem.OEIsRotor()
+        torsion_predicate = oechem.OENotBond(rotor)
+        non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
+        relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
 
-            # Get the list of torsions in the molecule that are not about a rotatable bond
-            # Note that only torsions involving heavy atoms are enumerated here.
-            rotor = oechem.OEIsRotor()
-            torsion_predicate = oechem.OENotBond(rotor)
-            non_rotor_torsions = list(oechem.OEGetTorsions(oemol, torsion_predicate))
-            relevant_torsion_list = self._select_torsions_without_h(non_rotor_torsions)
+        periodicity = 1
+        k = 120.0 * units.kilocalories_per_mole  # stddev of 12 degrees
+        sigma = 15
+        # Now, for each proper torsion, extract the set of indices and the angle. Then, add it to torsion_force
+        for torsion in relevant_torsion_list:
+            # Make sure to get the atom index that corresponds to the topology
+            atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"),
+                            torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
+            #  Determine phase in [-pi,+pi) interval
+            #  phase = (np.pi)*units.radians+angle
+            phase = torsion.radians + np.pi  # TODO: Check that this is the correct convention?
+            while (phase >= np.pi):
+                phase -= 2 * np.pi
+            while (phase < -np.pi):
+                phase += 2 * np.pi
+            phase *= units.radian
+            growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
+            # If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
+            #  If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
+            if isinstance(torsion_force, openmm.CustomTorsionForce):
+                torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3],
+                                         [periodicity, phase, k, growth_idx])
+            elif isinstance(torsion_force, openmm.PeriodicTorsionForce):
+                torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3],
+                                         periodicity,
+                                         phase, k)
+            else:
+                raise ValueError(
+                    "The force supplied to this method must be either a CustomTorsionForce or a PeriodicTorsionForce")
 
-            # Now, for each torsion, extract the set of indices and the angle
-            periodicity = 1
-            k = 120.0 * units.kilocalories_per_mole  # stddev of 12 degrees
-            for torsion in relevant_torsion_list:
-                # Make sure to get the atom index that corresponds to the topology
-                atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
-                # Determine phase in [-pi,+pi) interval
-                # phase = (np.pi)*units.radians+angle
-                phase = torsion.radians + np.pi  # TODO: Check that this is the correct convention?
+
+        # Now, add improper torsions
+        print("adding improper torsions..") ## IVY
+        # coords : dict, key : index of atom in oemol (int), value : (x, y, z) coordinates of atom (3-element tuple)
+        coords = oemol.GetCoords()
+        for atom in oemol.GetAtoms():
+            if atom.IsChiral():
+                print("atom: ", atom.GetAtomicNum())  ## IVY delete
+                # Get neighbors
+                neighbors_top = [] ## IVY specify what this data structure does
+                neighbors_oemol = []
+                neighbors = []
+                for nbr in atom.GetAtoms():
+                    print("neighbor: ", nbr.GetAtomicNum())  ## IVY delete
+                    # if 'H' in nbr.GetName() and 'C' not in nbr.GetName():  # Don't use H atom in definition of angle ## IVY Delete
+                    #     continue
+                    # neighbors[nbr.GetName()] = (nbr.GetData("topology_index"), nbr.GetIdx()) ## IVY delete
+                    neighbors_top.append(nbr.GetData("topology_index"))
+                    neighbors_oemol.append(nbr.GetIdx())
+                    neighbors.append(nbr)
+                print("neighbors top: ", neighbors_top) ## IVY Delete
+                print("neighbors oemol: ", neighbors_oemol) ## IVY Delete
+                # atom_indices_oemol = [atom.GetIdx(), neighbors['N'][1], neighbors['C'][1], ## IVY delete
+                #                       neighbors['CB'][1]]  # Specify order of atom (oemol) indices for calculation of improper torsion angle
+                # print("atom indices oemol", atom_indices_oemol) ## IVY delete
+
+                # Specify atom order for calculating angle
+                contains_H = False
+                for i, nbr in enumerate(neighbors):  # Replace H (if it exists in neighbors) with chiral center
+                    if nbr.GetAtomicNum() == oechem.OEElemNo_H:
+                        print("H found!") ## IVY delete
+                        neighbors_top[i] = atom.GetData("topology_index")
+                        neighbors_oemol[i] = atom.GetIdx()
+                        contains_H = True
+                        break
+                if not contains_H:  # Replace first neighbor with chiral center if H doesn't exist
+                    print("no H found!") ## IVY delete
+                    neighbors_top[0] = atom.GetData("topology_index")
+                    neighbors_oemol[0] = atom.GetIdx()
+
+                # Calculate improper angles
+                phase = coordinate_numba.cartesian_to_internal(np.array(coords[neighbors_oemol[0]], dtype='float64'),
+                                                               np.array(coords[neighbors_oemol[1]], dtype='float64'),
+                                                               np.array(coords[neighbors_oemol[2]], dtype='float64'),
+                                                               np.array(coords[neighbors_oemol[3]],
+                                                                        dtype='float64'))[2]
+                print("phase: ", phase) ## IVY delete
+                # # [H, neighbor 1, neighbor 2, neighbor 3] ## IVY delete this
+                # phase_h = coordinate_numba.cartesian_to_internal(np.array(coords[neighbors_oemol[0]], dtype='float64'),
+                #                                        np.array(coords[neighbors_oemol[1]], dtype='float64'),
+                #                                        np.array(coords[neighbors_oemol[2]], dtype='float64'),
+                #                                        np.array(coords[neighbors_oemol[3]],
+                #                                                 dtype='float64'))[2]
+                # print("phase h: ", phase_h)  ## IVY delete
+
+                #  Determine phase in [-pi,+pi) interval
+                #  phase = (np.pi)*units.radians+angle
+                phase = phase + np.pi  # TODO: Check that this is the correct convention?
                 while (phase >= np.pi):
                     phase -= 2 * np.pi
                 while (phase < -np.pi):
                     phase += 2 * np.pi
                 phase *= units.radian
-                # print('PHASE>>>> ' + str(phase)) # DEBUG
-                growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
-                atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
-                # print("Adding torsion with atoms %s and growth index %d" %(str(atom_names), growth_idx))
-                # If this is a CustomTorsionForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
-                # If it's a regular PeriodicTorsionForce, there is no growth_index and the parameters are passed separately.
-                if isinstance(torsion_force, openmm.CustomTorsionForce):
-                    torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], [periodicity, phase, k, growth_idx])
-                elif isinstance(torsion_force, openmm.PeriodicTorsionForce):
-                    torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], periodicity, phase, k)
-                else:
-                    raise ValueError("The force supplied to this method must be either a CustomTorsionForce or a PeriodicTorsionForce")
 
-        return torsion_force
+                print("atom indices: ", [neighbors_top[0], neighbors_top[1], neighbors_top[2], neighbors_top[3]]) ## IVY delete
+                print("growth indices: ", growth_indices)  ## IVY delete
+                growth_idx = self._calculate_growth_idx(neighbors_top, growth_indices)
+                print("growth index: ", growth_idx)  ## IVY delete
+                stereochemistry_force.addTorsion(neighbors_top[0], neighbors_top[1], neighbors_top[2], neighbors_top[3],
+                                         [phase, sigma, growth_idx])
+
+
+                # print("atom indices with h: ", neighbors_top)  ## IVY delete
+                # print("growth indices: ", growth_indices)  ## IVY delete
+                # growth_idx = self._calculate_growth_idx(neighbors_top, growth_indices)
+                # print("growth index: ", growth_idx)  ## IVY delete
+                # # torsion_force = self._add_torsion(torsion_force, atom_indices_top_h, growth_indices, phase_h) ## IVY delete
+                # stereochemistry_force.addTorsion(neighbors_top[0], neighbors_top[1], neighbors_top[2], neighbors_top[3],
+                #                                  [phase_h, sigma, growth_idx])
+        return torsion_force, stereochemistry_force
 
     def _select_torsions_without_h(self, torsion_list):
         """
@@ -1808,8 +1987,7 @@ class GeometrySystemGenerator(object):
         """
         Determine extra angles to be placed on aromatic ring members. Sometimes,
         the native angle force is too weak to efficiently close the ring. As with the
-        torsion force, this method assumes that only one residue is changing at a time (unless there is more than one
-        modified residue).
+        torsion force, this method assumes that only one residue is changing at a time.
 
         Parameters
         ----------
@@ -1838,7 +2016,7 @@ class GeometrySystemGenerator(object):
 
         for residue in residues:
             print("IN EXTRA ANGLES, generate oemol from residue: ", residue)  ## IVY
-            print(growth_indices) ## IVY
+            print(growth_indices)  ## IVY
             try:
                 oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
             except Exception as e:
@@ -1865,20 +2043,22 @@ class GeometrySystemGenerator(object):
                 # bonded_atoms = [bonded_atom for bonded_atom in list(atom.GetAtoms()) if bonded_atom in heavy_aromatics]
                 bonded_atoms = list(atom.GetAtoms())
                 for angle_atoms in itertools.combinations(bonded_atoms, 2):
-                        angle = oechem.OEGetAngle(oemol, angle_atoms[0], atom, angle_atoms[1])
-                        atom_indices = [angle_atoms[0].GetData("topology_index"), atom.GetData("topology_index"), angle_atoms[1].GetData("topology_index")]
-                        angle_radians = angle*units.radian
-                        growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
-                        # If this is a CustomAngleForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
-                        # If it's a regular HarmonicAngleForce, there is no growth_index and the parameters are passed separately.
-                        if isinstance(angle_force, openmm.CustomAngleForce):
-                            angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], [angle_radians, angle_force_constant, growth_idx])
-                        elif isinstance(angle_force, openmm.HarmonicAngleForce):
-                            angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], angle_radians, angle_force_constant)
-                        else:
-                            raise ValueError("Angle force must be either CustomAngleForce or HarmonicAngleForce")
+                    angle = oechem.OEGetAngle(oemol, angle_atoms[0], atom, angle_atoms[1])
+                    atom_indices = [angle_atoms[0].GetData("topology_index"), atom.GetData("topology_index"),
+                                    angle_atoms[1].GetData("topology_index")]
+                    angle_radians = angle * units.radian
+                    growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
+                    # If this is a CustomAngleForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
+                    # If it's a regular HarmonicAngleForce, there is no growth_index and the parameters are passed separately.
+                    if isinstance(angle_force, openmm.CustomAngleForce):
+                        angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2],
+                                             [angle_radians, angle_force_constant, growth_idx])
+                    elif isinstance(angle_force, openmm.HarmonicAngleForce):
+                        angle_force.addAngle(atom_indices[0], atom_indices[1], atom_indices[2], angle_radians,
+                                             angle_force_constant)
+                    else:
+                        raise ValueError("Angle force must be either CustomAngleForce or HarmonicAngleForce")
         return angle_force
-
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
         """
@@ -1903,15 +2083,17 @@ class GeometrySystemGenerator(object):
         new_atoms_in_force = particle_indices_set.intersection(growth_indices_set)
         if len(new_atoms_in_force) == 0:
             return 0
-        new_atom_growth_order = [growth_indices_list.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
+        new_atom_growth_order = [growth_indices_list.index(atom_idx) + 1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
+
 
 class GeometrySystemGeneratorFast(GeometrySystemGenerator):
     """
     Use updateParametersInContext to make energy evaluation fast.
     """
 
-    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=True):
+    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True,
+                 reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
         ----------
@@ -1933,13 +2115,14 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         NB: We assume `reference_system` remains unmodified
 
         """
-        self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
+        self.sterics_cutoff_distance = 9.0 * units.angstroms  # cutoff for sterics
 
         self.verbose = verbose
 
         # Get list of particle indices for new and old atoms.
-        self._new_particle_indices = [ atom.idx for atom in growth_indices ]
-        self._old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in self._new_particle_indices]
+        self._new_particle_indices = [atom.idx for atom in growth_indices]
+        self._old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if
+                                      idx not in self._new_particle_indices]
         self._growth_indices = growth_indices
 
         # Determine forces to keep
@@ -1961,8 +2144,9 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         # Create new system, copying forces we will keep.
         self._growth_system = copy.deepcopy(self._reference_system)
 
-        #Extract the forces from the system to use for adding auxiliary angles and torsions
-        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
+        # Extract the forces from the system to use for adding auxiliary angles and torsions
+        reference_forces = {reference_system.getForce(index).__class__.__name__: reference_system.getForce(index) for
+                            index in range(reference_system.getNumForces())}
 
         # Ensure 'canonical form' of System has all parameters turned on, or else we'll run into nonbonded exceptions
         self.current_growth_index = -1
@@ -1970,11 +2154,11 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
 
         # Add extra ring-closing torsions, if requested.
         if add_extra_torsions:
-            if reference_topology==None:
+            if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
             self._determine_extra_torsions(reference_forces['PeriodicTorsionForce'], reference_topology, growth_indices)
         if add_extra_angles:
-            if reference_topology==None:
+            if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra angles")
             self._determine_extra_angles(reference_forces['HarmonicAngleForce'], reference_topology, growth_indices)
         # TODO: Precompute growth indices for force terms for speed
@@ -2019,19 +2203,21 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
                     parameters = reference_force.getExceptionParameters(exception_index)
                     this_growth_index = self._calculate_growth_idx(parameters[:2], self._growth_indices)
                     if (growth_index < this_growth_index):
-                        parameters[2] *= 1.0e-6 # WORKAROUND // TODO: Change to zero when OpenMM issue is fixed
-                        parameters[4] *= 1.0e-6 # WORKAROUND // TODO: Change to zero when OpenMM issue is fixed
+                        parameters[2] *= 1.0e-6  # WORKAROUND // TODO: Change to zero when OpenMM issue is fixed
+                        parameters[4] *= 1.0e-6  # WORKAROUND // TODO: Change to zero when OpenMM issue is fixed
                     growth_force.setExceptionParameters(exception_index, *parameters)
 
             # Update parameters in context
             if context is not None:
                 growth_force.updateParametersInContext(context)
 
+
 class PredHBond(oechem.OEUnaryBondPred):
     """
     Example elaborating usage on:
     https://docs.eyesopen.com/toolkits/python/oechemtk/predicates.html#section-predicates-match
     """
+
     def __call__(self, bond):
         atom1 = bond.GetBgn()
         atom2 = bond.GetEnd()
@@ -2057,7 +2243,7 @@ class ProposalOrderTools(object):
 
     def __init__(self, topology_proposal, verbose=True):
         self._topology_proposal = topology_proposal
-        self.verbose = True # DEBUG
+        self.verbose = True  # DEBUG
 
     def determine_proposal_order(self, direction='forward'):
         """
@@ -2076,34 +2262,38 @@ class ProposalOrderTools(object):
         logp_torsion_choice : float
             log probability of the chosen torsions
         """
-        if direction=='forward':
+        if direction == 'forward':
             topology = self._topology_proposal.new_topology
             system = self._topology_proposal.new_system
-            structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
+            structure = parmed.openmm.load_topology(self._topology_proposal.new_topology,
+                                                    self._topology_proposal.new_system)
             unique_atoms = self._topology_proposal.unique_new_atoms
-            #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
-        elif direction=='reverse':
+            # atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
+                                    self._topology_proposal.new_to_old_atom_map.keys()]
+        elif direction == 'reverse':
             topology = self._topology_proposal.old_topology
             system = self._topology_proposal.old_system
-            structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
+            structure = parmed.openmm.load_topology(self._topology_proposal.old_topology,
+                                                    self._topology_proposal.old_system)
             unique_atoms = self._topology_proposal.unique_old_atoms
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
+            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
+                                    self._topology_proposal.old_to_new_atom_map.keys()]
         else:
             raise ValueError("direction parameter must be either forward or reverse.")
 
         # Determine list of atoms to be added.
         new_hydrogen_atoms = [structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number == 1]
-        new_heavy_atoms    = [structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number != 1]
-        print("check if hydrogen atoms are new: ", new_hydrogen_atoms) ## IVY
-        print("check if these atoms are really 'new'", new_heavy_atoms) ##IVY
+        new_heavy_atoms = [structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number != 1]
+        print("check if hydrogen atoms are new: ", new_hydrogen_atoms)  ## IVY
+        print("check if these atoms are really 'new'", new_heavy_atoms)  ##IVY
 
         # DEBUG
-        #print('STRUCTURE')
-        #print(structure)
-        #for atom in structure.atoms:
+        # print('STRUCTURE')
+        # print(structure)
+        # for atom in structure.atoms:
         #    print(atom, atom.bonds, atom.angles, atom.dihedrals)
-        #print('')
+        # print('')
 
         def add_atoms(new_atoms, atoms_torsions):
             """
@@ -2124,22 +2314,23 @@ class ProposalOrderTools(object):
             """
             from scipy import special
             logp_torsion_choice = 0.0
-            while(len(new_atoms))>0:
+            while (len(new_atoms)) > 0:
                 eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-                print("eligible atoms: ", eligible_atoms) ## IVY
+                print("eligible atoms: ", eligible_atoms)  ## IVY
 
-                #randomize positions
+                # randomize positions
                 eligible_atoms_in_order = np.random.choice(eligible_atoms, size=len(eligible_atoms), replace=False)
-                print("eligible_atoms in order", eligible_atoms_in_order) ## IVY
+                print("eligible_atoms in order", eligible_atoms_in_order)  ## IVY
 
-                #the logp of this choice is log(1/n!)
-                #gamma is (n-1)!, log-gamma is more numerically stable.
-                logp_torsion_choice += -special.gammaln(len(eligible_atoms)+1)
+                # the logp of this choice is log(1/n!)
+                # gamma is (n-1)!, log-gamma is more numerically stable.
+                logp_torsion_choice += -special.gammaln(len(eligible_atoms) + 1)
 
                 if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
-                    raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
+                    raise Exception(
+                        'new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
 
-                #choose the torsions
+                # choose the torsions
                 for atom in eligible_atoms_in_order:
                     chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
                     atoms_torsions[atom] = chosen_torsion
@@ -2157,7 +2348,6 @@ class ProposalOrderTools(object):
 
         return atoms_torsions, logp_torsion_choice
 
-
     def _atoms_eligible_for_proposal(self, new_atoms, atoms_with_positions):
         """
         Get the set of atoms currently eligible for proposal
@@ -2171,11 +2361,11 @@ class ProposalOrderTools(object):
         """
         eligible_atoms = []
         for atom in new_atoms:
-            #get all topological torsions for the appropriate atom
+            # get all topological torsions for the appropriate atom
             torsions = self._get_topological_torsions(atoms_with_positions, atom)
 
-            #go through the topological torsions (atom1 is always the new atom), and if one of them has
-            #atoms 2, 3, 4 in atoms_with_positions, the atom is eligible.
+            # go through the topological torsions (atom1 is always the new atom), and if one of them has
+            # atoms 2, 3, 4 in atoms_with_positions, the atom is eligible.
             for torsion in torsions:
                 if torsion.atom2 in atoms_with_positions and torsion.atom3 in atoms_with_positions and torsion.atom4 in atoms_with_positions:
                     eligible_atoms.append(atom)
@@ -2204,7 +2394,7 @@ class ProposalOrderTools(object):
             raise NoTorsionError("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
         torsion_idx = np.random.randint(0, len(eligible_torsions))
         torsion_selected = eligible_torsions[torsion_idx]
-        return torsion_selected, np.log(1.0/len(eligible_torsions))
+        return torsion_selected, np.log(1.0 / len(eligible_torsions))
 
     def _get_topological_torsions(self, atoms_with_positions, new_atom):
         """
@@ -2226,15 +2416,15 @@ class ProposalOrderTools(object):
         topological_torsions = list()
         atom1 = new_atom
         for bond12 in atom1.bonds:
-            atom2 = bond12.atom2 if bond12.atom1==atom1 else bond12.atom1
+            atom2 = bond12.atom2 if bond12.atom1 == atom1 else bond12.atom1
             if atom2 not in atoms_with_positions:
                 continue
             for bond23 in atom2.bonds:
-                atom3 = bond23.atom2 if bond23.atom1==atom2 else bond23.atom1
+                atom3 = bond23.atom2 if bond23.atom1 == atom2 else bond23.atom1
                 if (atom3 not in atoms_with_positions) or (atom3 in set([atom1, atom2])):
                     continue
                 for bond34 in atom3.bonds:
-                    atom4 = bond34.atom2 if bond34.atom1==atom3 else bond34.atom1
+                    atom4 = bond34.atom2 if bond34.atom1 == atom3 else bond34.atom1
                     if (atom4 not in atoms_with_positions) or (atom4 in set([atom1, atom2, atom3])):
                         continue
                     topological_torsions.append((atom1, atom2, atom3, atom4))
@@ -2252,7 +2442,8 @@ class ProposalOrderTools(object):
             _logger.debug(new_atom.dihedrals)
 
         # Recode topological torsions as parmed Dihedral objects
-        topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
+        topological_torsions = [parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in
+                                topological_torsions]
         return topological_torsions
 
 

@@ -893,11 +893,12 @@ class ProposalEngine(object):
         raise NotImplementedError("This ProposalEngine does not expose a list of possible chemical states.")
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True):
+    def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True, aggregate=False):
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._chain_id = chain_id
         self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
-                  'SER', 'THR', 'TRP', 'TYR', 'VAL']
+                  'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL']
+        self._aggregate = aggregate
 
     def propose(self, current_system, current_topology, current_metadata=None):
         """
@@ -1754,7 +1755,7 @@ class PolymerProposalEngine(ProposalEngine):
             raise Exception(msg)
 
         # Select match and generate atom map
-        match = np.random.choice(matches) ## IVY is it ok that this is random?
+        match = np.random.choice(matches)
         new_to_old_atom_map = {}
         for match_pair in match.GetAtoms():
             if match_pair.pattern.GetAtomicNum() == 1 and match_pair.target.GetAtomicNum() == 1:  # Do not map hydrogens
@@ -1765,8 +1766,6 @@ class PolymerProposalEngine(ProposalEngine):
                 continue
             old_index = match_pair.pattern.GetData("topology_index")
             new_index = match_pair.target.GetData("topology_index")
-            # if old_index < 0 or new_index < 0: ## IVY delete if the new _oemol_from_residue function works
-            #     continue ## IVY delete
             new_to_old_atom_map[new_index + first_atom_index_new] = old_index + first_atom_index_old  # Correct index mapping to match the original old and new residues
 
         print("get mol atom matches done") ## IVY
@@ -1795,21 +1794,19 @@ class PointMutationEngine(PolymerProposalEngine):
         (using the first chain with the id, if there are multiple)
     proposal_metadata : dict -- OPTIONAL
         Contains information necessary to initialize proposal engine
-    max_point_mutants : int -- OPTIONAL
-        default = None
     residues_allowed_to_mutate : list(str) -- OPTIONAL
         default = None
         Contains residue ids
-    allowed_mutations : list(list(tuple)) -- OPTIONAL
+    allowed_mutations : list(tuple) -- OPTIONAL
         default = None
         ('residue id to mutate','desired mutant residue name (3-letter code)')
         Example:
             Desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q
             allowed_mutations = [
-                [('99','ALA')],
-                [('99','ALA'),('102','GLN')]
+                ('99','ALA'),
+                ('102','GLN')
             ]
-    always_change : Boolean -- OPTIONAL, default True
+    always_change : Boolean -- OPTIONAL, default True ## IVY change the definition of this
         Have the proposal engine always propose another mutation
         If allowed_mutations is not specified, always_change will require ALL
         point mutations to be different
@@ -1818,10 +1815,17 @@ class PointMutationEngine(PolymerProposalEngine):
         eg: if old topology included L99A and M102Q, the new proposal cannot
             include L99A OR M102Q
         (This is only relevant in cases where max_point_mutants > 1)
+    aggregate : Boolean -- OPTIONAL
+        default = False
+        Have the proposal engine aggregate mutations.
+        If aggregate is set to False, the engine will undo mutants in the current topology such that the next proposal
+        if the WT state
+        If aggregate is set to True, the engine will not undo the mutants from the current topology, thereby allowing
+        each proposal to contain multiple mutations.
     """
 
-    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True):
-        super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
+    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True, aggregate=False):
+        super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change, aggregate=aggregate)
 
         # Convert wildtype_topology to openmm
         wildtype_topology = md.Topology.from_openmm(wildtype_topology)
@@ -1835,38 +1839,41 @@ class PointMutationEngine(PolymerProposalEngine):
             raise Exception("Specified chain_id '%s' not found in provided wildtype_topology. Choices are: %s" % (chain_id, str(chain_ids_in_topology)))
 
         self._wildtype = wildtype_topology
-        self._max_point_mutants = max_point_mutants
+        # self._max_point_mutants = max_point_mutants ## remove this
         self._ff = system_generator.forcefield
         self._templates = self._ff._templates
         self._residues_allowed_to_mutate = residues_allowed_to_mutate
-        if allowed_mutations is not None:
-            for mutation in allowed_mutations:
-                mutation.sort()
+        # if allowed_mutations is not None: ## IVY delete
+            # for mutation in allowed_mutations:
+            #     mutation.sort()
         self._allowed_mutations = allowed_mutations
         if proposal_metadata is None:
             proposal_metadata = dict()
         self._metadata = proposal_metadata
-        if max_point_mutants is None and allowed_mutations is None:
-            raise Exception("Must specify either max_point_mutants or allowed_mutations.")
-        if max_point_mutants is not None and allowed_mutations is not None:
-            warnings.warn("PointMutationEngine: max_point_mutants and allowed_mutations were both specified -- max_point_mutants will be ignored")
+        # if max_point_mutants is None and allowed_mutations is None: ## IVY Remove this
+        #     raise Exception("Must specify either max_point_mutants or allowed_mutations.")
+        # if max_point_mutants is not None and allowed_mutations is not None:
+        #     warnings.warn("PointMutationEngine: max_point_mutants and allowed_mutations were both specified -- max_point_mutants will be ignored")
 
     def _choose_mutant(self, topology, metadata):
         chain_id = self._chain_id
         old_key = self._compute_mutant_key(topology, chain_id)
         index_to_new_residues = self._undo_old_mutants(topology, chain_id, old_key)
-        if self._allowed_mutations is not None:
-            allowed_mutations = self._allowed_mutations
-            index_to_new_residues = self._choose_mutation_from_allowed(topology, chain_id, allowed_mutations, index_to_new_residues, old_key)
-        else:
-            # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
-            index_to_new_residues = self._propose_mutations(topology, chain_id, index_to_new_residues, old_key)
+        if index_to_new_residues and not self._aggregate:  # Starting state is mutant and mutations should not be aggregated
+            pass
+        else:  # Starting state is WT or starting state is mutant and mutations should be aggregated
+            index_to_new_residues = dict()
+            if self._allowed_mutations is not None:
+                allowed_mutations = self._allowed_mutations
+                index_to_new_residues = self._choose_mutation_from_allowed(topology, chain_id, allowed_mutations, index_to_new_residues, old_key)
+            else:
+                # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
+                index_to_new_residues = self._propose_mutation(topology, chain_id, index_to_new_residues, old_key)
         # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
         metadata['mutations'] = self._save_mutations(topology, index_to_new_residues)
-
         return index_to_new_residues, metadata
 
-    def _undo_old_mutants(self, topology, chain_id, old_key):
+    def _undo_old_mutants(self, topology, chain_id, old_key): # IVY delete this?
         print("in undo old mutants") # IVY
         index_to_new_residues = dict()
         if old_key == 'WT':
@@ -1890,9 +1897,10 @@ class PointMutationEngine(PolymerProposalEngine):
         ---------
         topology : simtk.openmm.app.Topology
         chain_id : str
-        allowed_mutations : list(list(tuple))
-            list of allowed mutant states; each entry in the list is a list because multiple mutations may be desired
-            tuple : (str, str) -- residue id and three-letter amino acid code of desired mutant
+        allowed_mutations : list(tuple)
+            list of allowed mutations -- each mutation is a tuple of the residue id and three-letter amino acid code of desired mutant
+            # list of allowed mutant states; each entry in the list is a list because multiple mutations may be desired ## IVY delete
+            # tuple : (str, str) -- residue id and three-letter amino acid code of desired mutant ## IVY delete
         index_to_new_residues : dict
             key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
@@ -1923,70 +1931,84 @@ class PointMutationEngine(PolymerProposalEngine):
 
         # Define location probabilities and propose a location/mutant state
         if self._always_change:
-            # location_prob : np.array, probability value for each mutant state at their respective locations in allowed_mutations (uniform). Last element will correspond to the WT state.
-            # location_prob = np.array([1.0/len(allowed_mutations) for i in range(len(allowed_mutations)+1)]) ## IVY this seems wrong
+            # location_prob : np.array, probability value for each mutant state at their respective locations in allowed_mutations (uniform).
             if old_key == 'WT':
                 location_prob = [1.0 / len(allowed_mutations)] * len(allowed_mutations)
+                proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
             else: ## IVY haven't tested if these cases of old key == mutant are handled correctly
-                current_mutation = list()
+                current_mutations = []
                 for mutant in old_key.split('-'):
                     residue_id = mutant[3:-3]
                     new_res = mutant[-3:]
-                    current_mutation.append((residue_id, new_res))
-                current_mutation.sort()
-                if len(allowed_mutations) == 1 and allowed_mutations[0] == current_mutation:
-                    raise Exception("The old topology state is already in the specified allowed mutation state (%s). Please specify additional states." % allowed_mutations[0])
-                location_prob = [1.0 / (len(allowed_mutations)-1)] * len(allowed_mutations)
-                location_prob[allowed_mutations.index(current_mutation)] = 0.0
+                    current_mutations.append((residue_id, new_res))
+
+                new_mutations = []
+                for mutation in allowed_mutations:
+                    if mutation not in current_mutations:
+                        new_mutations.append(mutation)
+                if not new_mutations:
+                    raise Exception("The old topology state contains all allowed mutations (%s). Please specify additional mutations." % allowed_mutations[0])
+
+                location_prob = [1.0 / (len(new_mutations))] * len(new_mutations)
+                proposed_location = np.random.choice(range(len(new_mutations)), p=location_prob)
 
         else:
-            location_prob = [1.0 / (len(allowed_mutations)+1.0)] * (len(allowed_mutations)+1)
-        proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
+            if old_key == 'WT':
+                location_prob = [1.0 / (len(allowed_mutations)+1.0)] * (len(allowed_mutations)+1)
+                proposed_location = np.random.choice(range(len(allowed_mutations) + 1), p=location_prob)
+            else:
+                location_prob = [1.0 / len(allowed_mutations)] * len(allowed_mutations)
+                proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
+
         print("location prob: ", location_prob)
         print("allowed mutations: ", allowed_mutations)
         print("proposed location: ", proposed_location)
 
         # Create index_to_new_residues from the proposed state
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
-        if proposed_location == len(allowed_mutations):
+        if old_key == 'WT' and proposed_location == len(allowed_mutations):
             # Choose WT
-            pass
-        else:
-            for residue_id, residue_name in allowed_mutations[proposed_location]:
-                # Verify residue with mutation exists in old topology
-                # original_residue : simtk.openmm.app.topology.Residue
-                original_residue = ''
-                for res in chain.residues():
-                    if res.index == residue_id_to_index[residue_id]:
-                        original_residue = res
-                        break
-                if not original_residue:
-                    raise Exception("User-specified an allowed mutation at residue %s , but that residue does not exist" % residue_id)
+            return index_to_new_residues
+        elif old_key != 'WT':
+            for mutant in old_key.split('-'):
+                residue_id = mutant[3:-3]
+                new_res = mutant[-3:]
+                if allowed_mutations.index((residue_id, new_res)) == proposed_location:
+                    return index_to_new_residues
 
-                # Check if mutated residue's name is same as residue's name in old topology
-                if original_residue.name in ['HID', 'HIE']:
-                    original_residue.name = 'HIS'
-                if original_residue.name == residue_name:
-                    continue
+        residue_id = allowed_mutations[proposed_location][0]
+        residue_name = allowed_mutations[proposed_location][1]
+        # Verify residue with mutation exists in old topology
+        # original_residue : simtk.openmm.app.topology.Residue
+        original_residue = ''
+        for res in chain.residues():
+            if res.index == residue_id_to_index[residue_id]:
+                original_residue = res
+                break
+        if not original_residue:
+            raise Exception("User-specified an allowed mutation at residue %s , but that residue does not exist" % residue_id)
 
-                # Save proposed mutation to index_to_new_residues
-                # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
-                index_to_new_residues[residue_id_to_index[residue_id]] = residue_name
+        # Check if mutated residue's name is same as residue's name in old topology
+        if original_residue.name in ['HID', 'HIE']:
+            original_residue.name = 'HIS'
+        if original_residue.name == residue_name:
+            return index_to_new_residues
 
-                # Randomly choose HIS template ('HIS' does not exist as a template)
-                if residue_name == 'HIS':
-                    his_state = ['HIE','HID']
-                    his_prob = [1/len(his_state)] * len(his_state)
-                    his_choice = np.random.choice(range(len(his_state)), p=his_prob)
-                    index_to_new_residues[residue_id_to_index[residue_id]] = his_state[his_choice]
+        # Save proposed mutation to index_to_new_residues
+        # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+        index_to_new_residues[residue_id_to_index[residue_id]] = residue_name
 
-                # # DEBUG # IVY delete
-                # if self.verbose: print('Proposed mutation: %s %s %s' % (original_residue.name, residue_id, residue_name))
+        # Randomly choose HIS template ('HIS' does not exist as a template)
+        if residue_name == 'HIS':
+            his_state = ['HIE','HID']
+            his_prob = [1/len(his_state)] * len(his_state)
+            his_choice = np.random.choice(range(len(his_state)), p=his_prob)
+            index_to_new_residues[residue_id_to_index[residue_id]] = his_state[his_choice]
         print(index_to_new_residues) ## IVY
-        print("end of choose mutation from alllowed") ## IVY
+        print("end of choose mutation from allowed") ## IVY
         return index_to_new_residues
 
-    def _propose_mutations(self, topology, chain_id, index_to_new_residues, old_key): ## IVY remove old key -- check original version to see if this is necessary
+    def _propose_mutation(self, topology, chain_id, index_to_new_residues, old_key): ## IVY remove old key -- check original version to see if this is necessary
         """
         Arguments
         ---------
@@ -2039,51 +2061,50 @@ class PointMutationEngine(PolymerProposalEngine):
         # location_prob : np.array, probability value for each residue location (uniform)
         location_prob = [1.0/num_residues] * num_residues
         print("location probs: ", location_prob) ## IVY
-        for i in range(self._max_point_mutants):
-            # Propose a location at which to mutate the residue
-            # proposed_location : int, index of chosen entry in location_prob
-            proposed_location = np.random.choice(range(num_residues), p=location_prob)
-            print("num residues: ", num_residues) ## IVY
-            print("proposed location: ", proposed_location)  ## IVY
 
-            # Rename residue to HIS if it uses one of the HIS-derived templates
-            # original_residue : simtk.openmm.app.topology.Residue
-            original_residue = chain_residues[proposed_location]
-            if original_residue.name in ['HIE', 'HID']:
-                original_residue.name = 'HIS'
+        # Propose a location at which to mutate the residue
+        # proposed_location : int, index of chosen entry in location_prob
+        proposed_location = np.random.choice(range(num_residues), p=location_prob)
+        print("num residues: ", num_residues) ## IVY
+        print("proposed location: ", proposed_location)  ## IVY
 
-            if self._residues_allowed_to_mutate is None:
-                proposed_location = original_residue.index
-            else:
-                proposed_location = residue_id_to_index[self._residues_allowed_to_mutate[proposed_location]]
-                print("in residues allowed to mutate 2")  ## IVY
-            print("proposed location: ", proposed_location) ## IVY
+        # Rename residue to HIS if it uses one of the HIS-derived templates
+        # original_residue : simtk.openmm.app.topology.Residue
+        original_residue = chain_residues[proposed_location]
+        if original_residue.name in ['HIE', 'HID']:
+            original_residue.name = 'HIS'
 
+        if self._residues_allowed_to_mutate is None:
+            proposed_location = original_residue.index
+        else:
+            proposed_location = residue_id_to_index[self._residues_allowed_to_mutate[proposed_location]]
+            print("in residues allowed to mutate 2")  ## IVY
+        print("proposed location: ", proposed_location) ## IVY
 
-            # Define probabilities for amino acid options and choose one
-            # amino_prob : np.array, probability value for each amino acid option (uniform)
-            aminos = self._aminos
-            if self._always_change:
-                amino_prob = [1.0/(len(aminos)-1)] * len(aminos)
-                amino_prob[aminos.index(original_residue.name)] = 0.0
-            else:
-                amino_prob = [1.0/len(aminos)] * len(aminos)
-            # proposed_amino_index : int, index of three letter residue name in aminos list
-            proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
-            print("amino prob: ", amino_prob) ## IVY
-            print("proposed amino index: ", proposed_amino_index) ## IVY
+        # Define probabilities for amino acid options and choose one
+        # amino_prob : np.array, probability value for each amino acid option (uniform)
+        aminos = self._aminos
+        if self._always_change:
+            amino_prob = [1.0/(len(aminos)-1)] * len(aminos)
+            amino_prob[aminos.index(original_residue.name)] = 0.0
+        else:
+            amino_prob = [1.0/len(aminos)] * len(aminos)
+        # proposed_amino_index : int, index of three letter residue name in aminos list
+        proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
+        print("amino prob: ", amino_prob, len(amino_prob)) ## IVY
+        print("proposed amino index: ", proposed_amino_index) ## IVY
 
-            # Save proposed mutation to index_to_new_residues
-            # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
-            index_to_new_residues[proposed_location] = aminos[proposed_amino_index]
+        # Save proposed mutation to index_to_new_residues
+        # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
+        index_to_new_residues[proposed_location] = aminos[proposed_amino_index]
 
-            # Randomly choose HIS template ('HIS' does not exist as a template)
-            if aminos[proposed_amino_index] == 'HIS':
-                his_state = ['HIE','HID']
-                his_prob = [1 / len(his_state)] * len(his_state)
-                his_choice = np.random.choice(range(len(his_state)), p=his_prob)
-                index_to_new_residues[proposed_location] = his_state[his_choice]
-            print("index to new residues: ", index_to_new_residues) ## IVY
+        # Randomly choose HIS template ('HIS' does not exist as a template)
+        if aminos[proposed_amino_index] == 'HIS':
+            his_state = ['HIE','HID']
+            his_prob = [1 / len(his_state)] * len(his_state)
+            his_choice = np.random.choice(range(len(his_state)), p=his_prob)
+            index_to_new_residues[proposed_location] = his_state[his_choice]
+        print("index to new residues: ", index_to_new_residues) ## IVY
         print("end propose mutations") ## IVY
         return index_to_new_residues
 
@@ -2591,7 +2612,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         timer_start = time.time()
 
         oemol_proposed.SetTitle(self._residue_name)
-        mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
+        mol_topology = self._generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
         append_topology(new_topology, current_receptor_topology)
         append_topology(new_topology, mol_topology)
@@ -2602,6 +2623,48 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info('Topology generation took %.3f s' % (time.time() - timer_start))
 
         return new_topology
+
+    def _generateTopologyFromOEMol(self, molecule):
+        """
+           Generate an OpenMM Topology object from an OEMol molecule.
+           Parameters
+           ----------
+           molecule : openeye.oechem.OEMol
+               The molecule from which a Topology object is to be generated.
+           Returns
+           -------
+           topology : simtk.openmm.app.Topology
+               The Topology object generated from `molecule`.
+           """
+        # Create a Topology object with one Chain and one Residue.
+        topology = app.Topology()
+        chain = topology.addChain()
+        resname = molecule.GetTitle()
+        residue = topology.addResidue(resname, chain)
+
+        # Create atoms in the residue.
+        for atom in molecule.GetAtoms():
+            name = atom.GetName()
+            element = app.Element.getByAtomicNumber(atom.GetAtomicNum())
+            new_atom = topology.addAtom(name, element, residue)
+            cip = oechem.OEPerceiveCIPStereo(molecule, atom)
+            if atom.HasStereoSpecified():
+                print("atom %d is" % atom.GetIdx(), end=" ") ## IVY Delete
+                if cip == oechem.OECIPAtomStereo_S:
+                    print('S') ## IVY delete
+                    new_atom.stereo = 'S'
+                if cip == oechem.OECIPAtomStereo_R:
+                    print('R') ## IVY delete
+                    new_atom.stereo = 'R'
+                if cip == oechem.OECIPAtomStereo_NotStereo:
+                    print('not a CIP stereo center') ## IVY delete
+
+        # Create bonds.
+        atoms = {atom.name: atom for atom in topology.atoms()}
+        for bond in molecule.GetBonds():
+            topology.addBond(atoms[bond.GetBgn().GetName()], atoms[bond.GetEnd().GetName()])
+
+        return topology
 
     def _remove_small_molecule(self, topology):
         """
