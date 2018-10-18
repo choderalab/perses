@@ -775,6 +775,8 @@ class HybridTopologyFactory(object):
         else:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
 
+        sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_insert + dummyB*lambda_delete;"
+
         return sterics_addition
 
     def _nonbonded_custom_electrostatics_common(self):
