@@ -599,7 +599,7 @@ class SAMSSampler(object):
     >>> sams_sampler.run() # doctest: +ELLIPSIS
     ...
     """
-    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='two-stage', storage=None, second_stage_start=None):
+    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='two-stage', storage=None, second_stage_start=1000):
         """
         Create a SAMS Sampler.
 
