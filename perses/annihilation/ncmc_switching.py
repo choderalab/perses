@@ -16,8 +16,12 @@ from openmmtools.alchemy import AlchemicalState
 
 # make something hyperbolic or something to go from on to off to on
 default_hybrid_functions = {
-    'lambda_sterics' : 'lambda',
+    'lambda_sterics_core' : 'lambda',
     'lambda_electrostatics' : 'lambda',
+    'lambda_sterics_insert' : 'select(step(0.5-lambda), 1.0, 2*lambda)',
+    'lambda_sterics_delete' : 'select(step(0.5-lambda), 2.0*lambda, 1.0)',
+    'lambda_electrostatics_insert' : 'select(step(0.5-lambda),2.0*lambda,0.0)',
+    'lambda_electrostatics_delete' : 'select(step(0.5-lambda), 0.0, 2.0*lambda)',
     'lambda_bonds' : 'lambda',
     'lambda_angles' : 'lambda',
     'lambda_torsions' : 'lambda'
