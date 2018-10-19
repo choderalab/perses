@@ -309,10 +309,10 @@ class NCMCEngine(object):
 
         # Compute contribution of transforming to and from the hybrid system:
         compound_thermodynamic_state.set_alchemical_parameters(0.0)
-        initial_reduced_potential = compute_reduced_potential(hybrid_thermodynamic_state, initial_sampler_state)
+        initial_reduced_potential = compute_reduced_potential(compound_thermodynamic_state, initial_hybrid_sampler_state)
 
         compound_thermodynamic_state.set_alchemical_parameters(1.0)
-        final_reduced_potential = compute_reduced_potential(hybrid_thermodynamic_state, final_hybrid_sampler_state)
+        final_reduced_potential = compute_reduced_potential(compound_thermodynamic_state, final_hybrid_sampler_state)
 
         #compute the output SamplerState, which has the atoms only for the new system post-NCMC:
         new_positions = hybrid_factory.new_positions(final_hybrid_sampler_state.positions)
