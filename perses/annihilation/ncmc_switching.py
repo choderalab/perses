@@ -18,10 +18,10 @@ from openmmtools.alchemy import AlchemicalState
 default_hybrid_functions = {
     'lambda_sterics_core' : 'lambda',
     'lambda_electrostatics' : 'lambda',
-    'lambda_sterics_insert' : 'select(step(0.5-lambda), 1.0, 2*lambda)',
-    'lambda_sterics_delete' : 'select(step(0.5-lambda), 1.0, 1 - 2.0*(lambda - 0.5))',
-    'lambda_electrostatics_insert' : 'select(step(0.5-lambda),2.0*(lambda-0.5),0.0)',
-    'lambda_electrostatics_delete' : 'select(step(0.5-lambda), 0.0, 1 - 2.0*lambda)',
+    'lambda_sterics_insert' : 'select(step(lambda-0.5), 1.0, 2*lambda)',
+    'lambda_sterics_delete' : 'select(step(lambda-0.5), 1.0, 1 - 2.0*(lambda - 0.5))',
+    'lambda_electrostatics_insert' : 'select(step(lambda-0.5),2.0*(lambda-0.5),0.0)',
+    'lambda_electrostatics_delete' : 'select(step(lambda-0.5), 0.0, 1 - 2.0*lambda)',
     'lambda_bonds' : 'lambda',
     'lambda_angles' : 'lambda',
     'lambda_torsions' : 'lambda'
@@ -133,7 +133,7 @@ class NCMCEngine(object):
         if write_ncmc_interval is not None:
             self._write_ncmc_interval = write_ncmc_interval
         else:
-            self._write_ncmc_interval = self._nsteps
+            self._write_ncmc_interval = 1
         self._work_save_interval = write_ncmc_interval
 
     @property
