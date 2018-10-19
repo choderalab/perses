@@ -385,7 +385,6 @@ class ExpandedEnsembleSampler(object):
         new_thermodynamic_state = self._system_to_thermodynamic_state(topology_proposal.new_system)
 
         initial_reduced_potential = feptasks.compute_reduced_potential(old_thermodynamic_state, sampler_state)
-        logP_initial = -initial_reduced_potential + old_log_weight
 
         new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, sampler_state)
         
@@ -406,8 +405,6 @@ class ExpandedEnsembleSampler(object):
             final_reduced_potential = feptasks.compute_reduced_potential(new_thermodynamic_state, ncmc_new_sampler_state)
             logP_from_hybrid = -final_reduced_potential - logP_final_hybrid
             logP_sams_weight = new_log_weight - old_log_weight
-
-            logP_final = -final_reduced_potential + new_log_weight
 
             # Compute total log acceptance probability according to Eq. 46
             logP_accept = logP_to_hybrid - logP_geometry_forward + logP_work + logP_from_hybrid + logP_geometry_reverse + logP_sams_weight
@@ -436,7 +433,6 @@ class ExpandedEnsembleSampler(object):
             # Write some aggregate statistics to storage to make contributions to acceptance probability easier to analyze
             self.storage.write_quantity('logP_groups_chemical', logP_chemical_proposal, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_geometry', logP_geometry_reverse - logP_geometry_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
 
         return logP_accept, ncmc_new_sampler_state
 
