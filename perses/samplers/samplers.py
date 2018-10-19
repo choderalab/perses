@@ -342,12 +342,12 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Performing NCMC switching")
         initial_time = time.time()
-        [old_final_sampler_state, new_final_sampler_state, logP_work, logP_energy] = self.ncmc_engine.integrate(topology_proposal, old_sampler_state, new_sampler_state, iteration=self.iteration)
+        [ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_initial_hybrid, logP_final_hybrid] = self.ncmc_engine.integrate(topology_proposal, old_sampler_state, new_sampler_state, iteration=self.iteration)
         if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
         # Check that positions are not NaN
         if new_sampler_state.has_nan():
             raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
-        return old_final_sampler_state, new_final_sampler_state, logP_work, logP_energy
+        return ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_initial_hybrid, logP_final_hybri
 
     def _geometry_ncmc_geometry(self, topology_proposal, sampler_state, old_log_weight, new_log_weight):
         """
