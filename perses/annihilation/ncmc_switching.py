@@ -308,7 +308,11 @@ class NCMCEngine(object):
         logP_work = - ne_move.current_total_work
 
         # Compute contribution of transforming to and from the hybrid system:
-        logP_energy = self._compute_energy_contribution(compound_thermodynamic_state, initial_hybrid_sampler_state, final_hybrid_sampler_state)
+        hybrid_thermodynamic_state.set_alchemical_parameters(0.0)
+        initial_reduced_potential = compute_reduced_potential(hybrid_thermodynamic_state, initial_sampler_state)
+
+        hybrid_thermodynamic_state.set_alchemical_parameters(1.0)
+        final_reduced_potential = compute_reduced_potential(hybrid_thermodynamic_state, final_hybrid_sampler_state)
 
         #compute the output SamplerState, which has the atoms only for the new system post-NCMC:
         new_positions = hybrid_factory.new_positions(final_hybrid_sampler_state.positions)
@@ -330,4 +334,4 @@ class NCMCEngine(object):
                 self._storage.write_configuration(varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
 
         # Return
-        return [final_old_sampler_state, final_sampler_state, logP_work, logP_energy]
+        return [final_old_sampler_state, final_sampler_state, logP_work, initial_reduced_potential, final_reduced_potential]
