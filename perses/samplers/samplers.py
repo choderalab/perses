@@ -347,7 +347,7 @@ class ExpandedEnsembleSampler(object):
         # Check that positions are not NaN
         if new_sampler_state.has_nan():
             raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
-        return ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_initial_hybrid, logP_final_hybri
+        return ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_initial_hybrid, logP_final_hybrid
 
     def _geometry_ncmc_geometry(self, topology_proposal, sampler_state, old_log_weight, new_log_weight):
         """
