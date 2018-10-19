@@ -19,7 +19,7 @@ default_hybrid_functions = {
     'lambda_sterics_core' : 'lambda',
     'lambda_electrostatics' : 'lambda',
     'lambda_sterics_insert' : 'select(step(lambda-0.5), 1.0, 2*lambda)',
-    'lambda_sterics_delete' : 'select(step(lambda-0.5), 1.0, 1 - 2.0*(lambda - 0.5))',
+    'lambda_sterics_delete' : 'select(step(lambda-0.5), 1 - 2.0*(lambda - 0.5), 1.0)',
     'lambda_electrostatics_insert' : 'select(step(lambda-0.5),2.0*(lambda-0.5),0.0)',
     'lambda_electrostatics_delete' : 'select(step(lambda-0.5), 0.0, 1 - 2.0*lambda)',
     'lambda_bonds' : 'lambda',
