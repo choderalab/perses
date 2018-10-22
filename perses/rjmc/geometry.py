@@ -286,6 +286,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1 * units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
+
+
+        ## IVY run utils
+        from perses.tests.utils import compute_potential_components
+        print(compute_potential_components(context))
+
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys()) + 1, context)
         debug = False
         if debug:
@@ -373,6 +379,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 else:
                     self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions,
                                             growth_parameter_value)
+            ## IVY run utils
+            print("growth at atom: ", atom)
+            print("potential components: ", compute_potential_components(context))
+            print("logp propsal: ", logp_proposal)
+
+        ## IVY run utils
+        from perses.tests.utils import compute_potential_components
+        print("after growth")
+        print(compute_potential_components(context))
 
         if self.write_proposal_pdb:
             pdbfile.close()

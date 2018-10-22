@@ -512,6 +512,11 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
         unitless reduced potential (kT)
     """
     context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
+
+    ## IVY run utils
+    from perses.tests.utils import compute_potential_components
+    print(compute_potential_components(context))
+
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 

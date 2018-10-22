@@ -1001,6 +1001,10 @@ class PolymerProposalEngine(ProposalEngine):
         for bond in old_topology.bonds():
             print(bond)
 
+        pdbfile = open('test-old_topology.pdb', 'w')
+        PDBFile.writeFile(old_topology, old_positions, file=pdbfile)
+        pdbfile.close()
+
         excess_atoms_bonds = excess_atoms + excess_bonds
         new_topology = self._delete_atoms(old_topology, excess_atoms_bonds)
 
@@ -1027,6 +1031,10 @@ class PolymerProposalEngine(ProposalEngine):
 
         new_topology = self._add_new_atoms(new_topology, missing_atoms, missing_bonds, residue_map)
         print("end call") ## IVY
+
+        pdbfile = open('test-new_topology.pdb', 'w')
+        PDBFile.writeFile(new_topology, old_positions, file=pdbfile)
+        pdbfile.close()
 
         # Add in missing hydrogens
         ## IVY

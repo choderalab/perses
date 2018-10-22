@@ -182,6 +182,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         topologies = dict()
         positions = dict()
         pdbfile = PDBFile(pdb_filename)
+
         topologies['vacuum'] = pdbfile.getTopology()
         positions['vacuum'] = pdbfile.getPositions(asNumpy=True)
         topologies['implicit'] = pdbfile.getTopology()
@@ -200,8 +201,10 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             'always_change' : True # don't propose self-transitions
             }
         proposal_engines = dict()
-        chain_id = ' '
-        allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','ILE')]]
+        chain_id = '1'
+        # allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','ILE')]]
+        allowed_mutations = [('2','ILE')]
+
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
 

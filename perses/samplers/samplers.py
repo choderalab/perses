@@ -384,6 +384,7 @@ class ExpandedEnsembleSampler(object):
         old_thermodynamic_state = self.sampler.thermodynamic_state
         new_thermodynamic_state = self._system_to_thermodynamic_state(topology_proposal.new_system)
 
+        print("before geometry forward and reverse") ##IVY
         initial_reduced_potential = feptasks.compute_reduced_potential(old_thermodynamic_state, sampler_state)
         logP_initial = -initial_reduced_potential + old_log_weight
 
@@ -399,6 +400,7 @@ class ExpandedEnsembleSampler(object):
             ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
 
         if logP_work > -np.inf and logP_energy > -np.inf:
+            print("after gemoetry forward, before reverse")
             logP_geometry_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
 
             final_reduced_potential = feptasks.compute_reduced_potential(new_thermodynamic_state, ncmc_new_sampler_state)
