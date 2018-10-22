@@ -385,6 +385,7 @@ class ExpandedEnsembleSampler(object):
         new_thermodynamic_state = self._system_to_thermodynamic_state(topology_proposal.new_system)
 
         initial_reduced_potential = feptasks.compute_reduced_potential(old_thermodynamic_state, sampler_state)
+        logP_initial_nonalchemical = - initial_reduced_potential
 
         new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, sampler_state)
         
@@ -400,10 +401,11 @@ class ExpandedEnsembleSampler(object):
 
         if logP_work > -np.inf and logP_initial_hybrid > -np.inf and logP_final_hybrid > -np.inf:
             logP_geometry_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
-            logP_to_hybrid = logP_initial_hybrid + initial_reduced_potential
+            logP_to_hybrid = logP_initial_hybrid - logP_initial_nonalchemical
 
             final_reduced_potential = feptasks.compute_reduced_potential(new_thermodynamic_state, ncmc_new_sampler_state)
-            logP_from_hybrid = -final_reduced_potential - logP_final_hybrid
+            logP_final_nonalchemical = -final_reduced_potential
+            logP_from_hybrid = logP_final_nonalchemical - logP_final_hybrid
             logP_sams_weight = new_log_weight - old_log_weight
 
             # Compute total log acceptance probability according to Eq. 46
