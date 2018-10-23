@@ -587,26 +587,26 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     new_topology.addBond(new_hydrogen, new_atom)
             res_to_use = new_res
             oemol = _generateOEMolFromTopologyResidue(res_to_use)
+
+            # IVY -- show topology after delete and after add
+            print()
+            print("geometry topology")
+            for chain in new_topology.chains():
+                print("chain: ", chain)
+                for residue in chain.residues():
+                    print("residue: ", residue)
+                    for atom in residue.atoms():
+                        print("atom: ", atom)
+            new_bonds = 0
+            for bond in new_topology.bonds():
+                print(bond)
+                new_bonds += 1
+            print(new_bonds)
         else:
             res_to_use = res
             oemol = _generateOEMolFromTopologyResidue(res_to_use, antechamber=True)
 
         # oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False) ## IVY
-
-        # IVY -- show topology after delete and after add
-        print()
-        print("geometry topology")
-        for chain in new_topology.chains():
-            print("chain: ", chain)
-            for residue in chain.residues():
-                print("residue: ", residue)
-                for atom in residue.atoms():
-                    print("atom: ", atom)
-        new_bonds = 0
-        for bond in new_topology.bonds():
-            print(bond)
-            new_bonds += 1
-        print(new_bonds)
 
         return oemol
 
