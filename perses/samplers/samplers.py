@@ -432,6 +432,7 @@ class ExpandedEnsembleSampler(object):
             self.storage.write_quantity('logP_chemical_proposal', logP_chemical_proposal, iteration=self.iteration)
             self.storage.write_quantity('logP_reverse', logP_geometry_reverse, iteration=self.iteration)
             self.storage.write_quantity('logP_forward', logP_geometry_forward, iteration=self.iteration)
+            self.storage.write_quantity('logP_sams_weight', logP_sams_weight, iteration=self.iteration)
             # Write some aggregate statistics to storage to make contributions to acceptance probability easier to analyze
             self.storage.write_quantity('logP_groups_chemical', logP_chemical_proposal, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_geometry', logP_geometry_reverse - logP_geometry_forward, iteration=self.iteration)
