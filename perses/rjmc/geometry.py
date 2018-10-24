@@ -477,6 +477,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # IVY add comments for this function
         def _generateOEMolFromTopologyResidue(res, antechamber=False, geometry=False, tripos_atom_names=False):
             # Create OEMol where all atoms have bond order 1.
+            print("getting into generate oemol from topology residue fn")  ## IVY delete
             molecule = oechem.OEMol()
             molecule.SetTitle(res.name)  # name molecule after first residue
             for atom in res.atoms():
@@ -484,7 +485,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 oeatom.SetName(atom.name)
                 try:
                     oeatom.AddData("topology_index", atom.topology_index)
+                    print("adding topology index")  ## IVY
                 except AttributeError:
+                    print("unable to add topology index")  ## IVY
                     pass
                 try:
                     oeatom.AddData("stereo", atom.stereo)
@@ -504,12 +507,19 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             substruct = False
             oechem.OEWriteMol2File(ofs, molecule, m2h, substruct)
             ofs.close()
-            # Run Antechamber bondtype
+            # Run Antechamber for small molecules, Bondtype for proteins
             if antechamber:
                 command = 'antechamber -i %s -fi mol2 -o %s -fo ac -j 4' % (mol2_input_filename, ac_output_filename)
             else:
                 command = 'bondtype -i %s -o %s -f mol2 -j full' % (mol2_input_filename, ac_output_filename)
-            run_command(command)
+            # command = 'bondtype -i %s -o %s -f mol2 -j full' % (mol2_input_filename, ac_output_filename)
+            # command = 'antechamber -i %s -fi mol2 -o %s -fo ac -j 4' % (mol2_input_filename, ac_output_filename)
+
+            from subprocess import getstatusoutput
+            [status, output] = getstatusoutput(command)
+            # print("status: ", status)
+            # print("output: ", output)
+            # run_command(command)
 
             # Define mapping from GAFF bond orders to OpenEye bond orders.
             order_map = {1: 1, 2: 2, 3: 3, 7: 1, 8: 2, 9: 5, 10: 5}
@@ -535,7 +545,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             os.unlink(mol2_input_filename)
             os.unlink(ac_output_filename)
             os.rmdir(tmpdir)
-            oechem.OEAddExplicitHydrogens(molecule)
 
             # Generate Tripos atom names if requested.
             if tripos_atom_names:
@@ -551,7 +560,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             return molecule
 
-        # from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue ## IVY
         external_bonds = list(res.external_bonds())
         for bond in external_bonds:
             if verbose: print("external bond: ", bond)
@@ -586,28 +594,32 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res)
                     new_topology.addBond(new_hydrogen, new_atom)
             res_to_use = new_res
+            print("calling generate oemol with antechamber== false") ## IVY
             oemol = _generateOEMolFromTopologyResidue(res_to_use)
 
-            # IVY -- show topology after delete and after add
-            print()
-            print("geometry topology")
-            for chain in new_topology.chains():
-                print("chain: ", chain)
-                for residue in chain.residues():
-                    print("residue: ", residue)
-                    for atom in residue.atoms():
-                        print("atom: ", atom)
-            new_bonds = 0
-            for bond in new_topology.bonds():
-                print(bond)
-                new_bonds += 1
-            print(new_bonds)
+
+            # # IVY -- show topology after delete and after add
+            # print()
+            # print("geometry topology")
+            # for chain in new_topology.chains():
+            #     print("chain: ", chain)
+            #     for residue in chain.residues():
+            #         print("residue: ", residue)
+            #         for atom in residue.atoms():
+            #             print("atom: ", atom)
+            # new_bonds = 0
+            # for bond in new_topology.bonds():
+            #     print(bond)
+            #     new_bonds += 1
+            # print(new_bonds)
         else:
             res_to_use = res
             oemol = _generateOEMolFromTopologyResidue(res_to_use, antechamber=True)
 
-        # oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False) ## IVY
 
+
+        # # oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False) ## IVY
+        oechem.OEAddExplicitHydrogens(oemol)
         return oemol
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
