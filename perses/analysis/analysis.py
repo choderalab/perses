@@ -21,6 +21,8 @@ import time
 import netCDF4 as netcdf
 import pickle
 import json
+import itertools
+from perses import storage
 
 import matplotlib as mpl
 mpl.use('Agg')
@@ -49,8 +51,16 @@ class Analysis(object):
 
         """
         # TODO: Replace this with calls to storage API
-        self._ncfile = netcdf.Dataset(storage_filename, 'r')
+        self._storage = storage.NetCDFStorage(storage_filename, mode='r')
+        self._ncfile = self._storage._ncfile
         self.storage_filename = storage_filename
+        self._environments = self.get_environments()
+        self._n_exen_iterations = {}
+        for environment in self._environments:
+            self._n_exen_iterations[environment] = len(self._ncfile.groups[environment]['ExpandedEnsembleSampler']['logP_accept'])
+        self._state_transitions, self._visited_states = self._get_state_transitions()
+
+
 
     def get_environments(self):
         """Return a list of environments in storage file.
@@ -66,6 +76,44 @@ class Analysis(object):
             environments.append( str(group) )
         return environments
 
+    def _get_state_transitions(self):
+        """
+        Find the set of unique state transitions in each environment. This will be useful to retrieve various
+        logP quantities.
+
+        Returns
+        -------
+        state_transitions_dict : dict of str: set of (str, str) tuple
+            The set of state transitions that were attempted in each environment. This counts (s1, s2) and (s2, s1) as separate.
+        visited_states_dict : dict of str: set of str
+            The set of states that were actually visited in each environment.
+        """
+        state_transitions_dict = {}
+        visited_states_dict = {}
+        for environment in self._environments:
+            # first, find the set of unique state transitions:
+            state_transition_list = []
+            visited_states = []
+            n_iterations = self._n_exen_iterations[environment]
+            for iteration in range(n_iterations):
+                state_key = self._storage.get_object(environment, "ExpandedEnsembleSampler", "state_key", iteration)
+                proposed_state_key = self._storage.get_object(environment, "ExpandedEnsembleSampler",
+                                                              "proposed_state_key", iteration)
+
+                visited_states.append(state_key)
+                # if they are the same (a self-proposal) just continue
+                if state_key == proposed_state_key:
+                    continue
+
+                state_transition_list.append((state_key, proposed_state_key))
+
+            # get the unique transitions:
+            state_transition_set = set(state_transition_list)
+            state_transitions_dict[environment] = state_transition_set
+            visited_states_dict[environment] = set(visited_states)
+
+        return state_transitions_dict, visited_states_dict
+
     def write_trajectory(self, environmnent, pdb_filename):
         """Write the trajectory of sampled configurations and chemical states.
 
@@ -80,12 +128,140 @@ class Analysis(object):
         # TODO
         pass
 
-    def plot_exen_logp_components(self, filename_prefix=None, logP_range=20, nbins=20):
+    def extract_logP_values(self, environment, logP_accept_component):
+        """
+        Extract the requested logP_accept component from the ExpandedEnsembleSampler
+        in the requested environment
+
+        Parameters
+        ----------
+        environment : str
+            The name of the environment
+        logP_accept_component : str
+            The name of the component of the acceptance probability that we want
+
+        Returns
+        -------
+        logP_values : dict of (str, str) : list of float
+             A dictionary for each state transition, with a list of the requested logP_accept component
+        """
+        n_iterations = self._n_exen_iterations[environment]
+
+        logP_values = {state_transition: [] for state_transition in self._state_transitions[environment]}
+
+        #loop through the iterations and
+        for iteration in range(n_iterations):
+            state_key = self._storage.get_object(environment, "ExpandedEnsembleSampler", "state_key", iteration)
+            proposed_state_key = self._storage.get_object(environment, "ExpandedEnsembleSampler", "proposed_state_key", iteration)
+
+            #if they are the same (a self-proposal) just continue
+            if state_key == proposed_state_key:
+                continue
+            #retreive the work value (negative logP_work) and add it to the list of work values for that transition
+            logP = self._ncfile.groups[environment]['ExpandedEnsembleSampler'][logP_accept_component][iteration]
+            logP_values[(state_key, proposed_state_key)].append(logP)
+
+        return logP_values
+
+    def _prepare_logP_accept(self, environment):
+        """
+        Organize and retrieve the log acceptance probabilities for each of the transitions in the environment.
+
+        Parameters
+        ----------
+        environment : str
+            The name of the environment
+
+        Returns
+        -------
+        logP_accept_dict : dict of (str, str) : list of 2 np.array
+            A dictionary with a list of 2 np.arrays, one for s1->s2 logP_accept, another for s2->s1
+            logP_accepts have had their SAMS weights subtracted if relevant
+        """
+        logP_accept_values = self.extract_logP_values(environment, "logP_accept")
+
+        logP_accept_dict = {}
+        for state_pair in itertools.combinations(self._visited_states, 2):
+            try:
+                forward_logP = np.array(logP_accept_values[(state_pair[0], state_pair[1])])
+                reverse_logP = np.array(logP_accept_values[(state_pair[1], state_pair[0])])
+            except KeyError:
+                continue
+            logP_accept_dict[state_pair] = [forward_logP, reverse_logP]
+
+
+    def extract_state_trajectory(self, environment):
+        """
+        Extract the trajectory in chemical state space
+
+        Parameters
+        ----------
+        environment : str
+            The environment for which the chemical state is desired
+        chemical_state_trajectory : list of str
+            The trajectory in chemical space for the given environment
+
+        Returns
+        -------
+        chemical_state_traj : list of str
+            List of chemical states that were visited
+         """
+        n_iterations = self._n_exen_iterations[environment]
+        chemical_state_traj = []
+        for iteration in range(n_iterations):
+            chemical_state = self._storage.get_object(environment, "ExpandedEnsembleSampler", "state_key", iteration)
+            chemical_state_traj.append(chemical_state)
+
+        return chemical_state_traj
+
+
+    def plot_ncmc_work_distributions(self, environment, output_filename):
+        """
+        Plot the forward and reverse work distributions for NCMC switching in the given environment
+
+        Parameters
+        ----------
+        environment : str
+            The name of the environment for which NCMC work should be plotted
+        output_filename : str
+            The name of the PDF file to output
+        """
+
+        #get the unique transitions:
+        state_transition_set = self._state_transitions[environment]
+        visited_states_set = self._visited_states[environment]
+
+        logP_values = self.extract_logP_values(environment, "logP_ncmc_work")
+
+        #now loop through all the state pairs to plot each
+        with PdfPages(output_filename) as pdf:
+            for state_pair in itertools.combinations(visited_states_set, 2):
+
+                try:
+                    #use the negative for the forward work because the logP contribution of the work is -work
+                    forward_work = -np.array(logP_values[(state_pair[0], state_pair[1])])
+                    reverse_work = np.array(logP_values[(state_pair[1], state_pair[0])])
+                except KeyError:
+                    continue
+
+                fig = plt.figure(figsize=(28, 12))
+                ax1 = sns.distplot(forward_work, kde=True, color="Blue")
+                ax2 = sns.distplot(-reverse_work, color='Red', kde=True)
+                plt.title("{} => {} transition {} work".format(state_pair[0], state_pair[1], "NCMC"))
+                plt.xlabel("Work / kT")
+                plt.tight_layout()
+                pdf.savefig(fig)
+                plt.close()
+
+
+    def plot_exen_logp_components(self, environment, filename_prefix=None, logP_range=20, nbins=20):
         """
         Generate histograms of each component of Expanded Ensemble log acceptance probability
 
         Arguments:
         ----------
+        environment : str
+            The environment to use
         filename_prefix : str, OPTIONAL, default = None
             if specified, each plot is saved as '{0}-{1}'.format(filename_prefix, component)
         logP__range : float, optional, default=None
@@ -99,8 +275,7 @@ class Analysis(object):
             environments)
 
         """
-
-        ee_sam = self._ncfile.groups['ExpandedEnsembleSampler']
+        ee_sam = self._ncfile.groups[environment]['ExpandedEnsembleSampler']
 
         # Build a list of all logP components to plot:
         components = list()
@@ -153,7 +328,7 @@ class Analysis(object):
             pdf.savefig()
             plt.close()
 
-    def plot_ncmc_work(self, filename):
+    def plot_ncmc_work_old(self, filename):
         """Generate plots of NCMC work.
 
         Parameters
