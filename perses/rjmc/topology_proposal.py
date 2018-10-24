@@ -1879,6 +1879,7 @@ class PointMutationEngine(PolymerProposalEngine):
                 index_to_new_residues = self._propose_mutation(topology, chain_id, index_to_new_residues, old_key)
         # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
         metadata['mutations'] = self._save_mutations(topology, index_to_new_residues)
+        print("in choose mutant, here are the index to new res: ", index_to_new_residues)
         return index_to_new_residues, metadata
 
     def _undo_old_mutants(self, topology, chain_id, old_key): # IVY delete this?
