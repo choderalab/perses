@@ -22,6 +22,7 @@ import netCDF4 as netcdf
 import pickle
 import json
 import itertools
+import pymbar
 from perses import storage
 
 import matplotlib as mpl
@@ -59,7 +60,7 @@ class Analysis(object):
         for environment in self._environments:
             self._n_exen_iterations[environment] = len(self._ncfile.groups[environment]['ExpandedEnsembleSampler']['logP_accept'])
         self._state_transitions, self._visited_states = self._get_state_transitions()
-
+        self._logP_accepts = {}
 
 
     def get_environments(self):
@@ -75,6 +76,43 @@ class Analysis(object):
         for group in self._ncfile.groups:
             environments.append( str(group) )
         return environments
+
+    def get_free_energies(self, environment):
+        """
+        Estimate the free energies between all pairs with bidirectional transitions of chemical states in the
+        given environment
+
+        Parameters
+        ----------
+        environment : str
+            The name of the environment for which free energies are desired
+
+        Returns
+        -------
+        free_energies : dict of (str, str): [float, float]
+            Dictionary of pairwaise free energies and their uncertainty, computed with bootstrapping
+        """
+        logP_without_sams = self.extract_logP_values(environment, "logP_accept", subtract_sams=True)
+        free_energies = {}
+        n_bootstrap_iterations = 10000000
+
+        for state_pair, logP_accepts in logP_without_sams.items():
+            w_F = logP_accepts[0]
+            w_R = -logP_accepts[1]
+            bootstrapped_bar = np.zeros(n_bootstrap_iterations)
+            for i in range(n_bootstrap_iterations):
+                resampled_w_F = np.random.choice(w_F, len(w_F), replace=True)
+                resampled_w_R = np.random.choice(w_R, len(w_R), replace=True)
+
+                [df, ddf] = pymbar.BAR(resampled_w_F, resampled_w_R)
+                bootstrapped_bar[i] = df
+
+            free_energies[state_pair] = [np.mean(bootstrapped_bar), np.std(bootstrapped_bar)]
+
+        return free_energies
+
+
+
 
     def _get_state_transitions(self):
         """
@@ -128,7 +166,7 @@ class Analysis(object):
         # TODO
         pass
 
-    def extract_logP_values(self, environment, logP_accept_component):
+    def extract_logP_values(self, environment, logP_accept_component, subtract_sams=False):
         """
         Extract the requested logP_accept component from the ExpandedEnsembleSampler
         in the requested environment
@@ -139,6 +177,8 @@ class Analysis(object):
             The name of the environment
         logP_accept_component : str
             The name of the component of the acceptance probability that we want
+        subtract_sams : bool, optional, default False
+            Whether to subtract the SAMS weights corresponding to the same iteration. Useful for logP_accept.
 
         Returns
         -------
@@ -159,6 +199,11 @@ class Analysis(object):
                 continue
             #retreive the work value (negative logP_work) and add it to the list of work values for that transition
             logP = self._ncfile.groups[environment]['ExpandedEnsembleSampler'][logP_accept_component][iteration]
+
+            if subtract_sams:
+                sams_weight = self._ncfile.groups[environment]['ExpandedEnsembleSampler']['logP_sams_weight'][iteration]
+                logP = logP - sams_weight
+
             logP_values[(state_key, proposed_state_key)].append(logP)
 
         return logP_values
@@ -178,9 +223,10 @@ class Analysis(object):
             A dictionary with a list of 2 np.arrays, one for s1->s2 logP_accept, another for s2->s1
             logP_accepts have had their SAMS weights subtracted if relevant
         """
-        logP_accept_values = self.extract_logP_values(environment, "logP_accept")
+        logP_accept_values = self.extract_logP_values(environment, "logP_accept", subtract_sams=True)
 
         logP_accept_dict = {}
+
         for state_pair in itertools.combinations(self._visited_states, 2):
             try:
                 forward_logP = np.array(logP_accept_values[(state_pair[0], state_pair[1])])
@@ -188,6 +234,8 @@ class Analysis(object):
             except KeyError:
                 continue
             logP_accept_dict[state_pair] = [forward_logP, reverse_logP]
+
+        return logP_accept_dict
 
 
     def extract_state_trajectory(self, environment):
