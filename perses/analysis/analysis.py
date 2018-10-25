@@ -19,6 +19,7 @@ import numpy as np
 import copy
 import time
 import netCDF4 as netcdf
+from openeye import oeiupac, oechem
 import pickle
 import json
 import itertools
@@ -74,9 +75,80 @@ class Analysis(object):
         """
         environments = list()
         for group in self._ncfile.groups:
-            environments.append( str(group) )
+            environments.append(str(group))
         return environments
 
+    def _state_transition_to_iupac(self, state_transition):
+        """
+        Convenience function to convert SMILES to IUPAC names
+
+        Parameters
+        ----------
+        state_transition : (str, str)
+            Pair of smiles strings for the state transition
+
+        Returns
+        -------
+        state_transition_iupac : [str, str]
+            The pair of molecules in IUPAC names
+        """
+        state_transition_iupac = []
+        for state in state_transition:
+            mol = oechem.OEMol()
+            oechem.OESmilesToMol(mol, state)
+            iupac = oeiupac.OECreateIUPACName(mol)
+            state_transition_iupac.append(iupac)
+
+        return state_transition_iupac
+
+    def plot_work_trajectories(self, environment, filename):
+        """
+        Plot the NCMC work trajectories for the given environment and each attempted transition
+
+        Parameters
+        ----------
+        environment : str
+            Name of environment
+        filename : str
+            Name of output file
+        """
+        w_t = {state_transition : [] for state_transition in self._state_transitions[environment]}
+
+        for iteration in range(self._n_exen_iterations[environment]):
+            logP_ncmc_trajectory = self._ncfile.groups[environment]['NCMCEngine']['protocolwork'][iteration, :]
+            state_key = self._storage.get_object(environment, "ExpandedEnsembleSampler", "state_key", iteration)
+            proposed_state_key = self._storage.get_object(environment, "ExpandedEnsembleSampler", "proposed_state_key", iteration)
+            if state_key == proposed_state_key:
+                continue
+            w_t[(state_key, proposed_state_key)].append(-logP_ncmc_trajectory)
+
+        w_t_stacked = {state_transition: np.stack(work_trajectories) for state_transition, work_trajectories in w_t.items()}
+
+        with PdfPages(filename) as pdf:
+            sns.set(font_scale=2)
+            for state_transition, work_array in w_t_stacked.items():
+
+                fig = plt.figure(figsize=(28, 12))
+                ax1 = sns.tsplot(work_array, color="Blue")
+
+                iupac_transition = self._state_transition_to_iupac(state_transition)
+
+                plt.title("{} => {} transition {} work trajectory".format(iupac_transition[0], iupac_transition[1], "NCMC"))
+                plt.xlabel("step (1fs)")
+                plt.ylabel("Work / kT")
+                plt.tight_layout()
+                pdf.savefig(fig)
+                plt.close()
+
+    def plot_sams_weights(self, environment):
+        """
+        Plot the trajectory of SAMS weights
+        :param environment:
+        :return:
+        """
+        pass
+
+    def plot_
     def get_free_energies(self, environment):
         """
         Estimate the free energies between all pairs with bidirectional transitions of chemical states in the
@@ -110,8 +182,6 @@ class Analysis(object):
             free_energies[state_pair] = [np.mean(bootstrapped_bar), np.std(bootstrapped_bar)]
 
         return free_energies
-
-
 
 
     def _get_state_transitions(self):
@@ -283,7 +353,10 @@ class Analysis(object):
 
         #now loop through all the state pairs to plot each
         with PdfPages(output_filename) as pdf:
+            sns.set(font_scale=2)
             for state_pair in itertools.combinations(visited_states_set, 2):
+
+                iupac_pair = self._state_transition_to_iupac(state_pair)
 
                 try:
                     #use the negative for the forward work because the logP contribution of the work is -work
@@ -295,7 +368,7 @@ class Analysis(object):
                 fig = plt.figure(figsize=(28, 12))
                 ax1 = sns.distplot(forward_work, kde=True, color="Blue")
                 ax2 = sns.distplot(-reverse_work, color='Red', kde=True)
-                plt.title("{} => {} transition {} work".format(state_pair[0], state_pair[1], "NCMC"))
+                plt.title("{} => {} transition {} work".format(iupac_pair[0], iupac_pair[1], "NCMC"))
                 plt.xlabel("Work / kT")
                 plt.tight_layout()
                 pdf.savefig(fig)
