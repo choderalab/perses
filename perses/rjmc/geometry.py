@@ -483,18 +483,18 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             for atom in res.atoms():
                 oeatom = molecule.NewAtom(atom.element.atomic_number)
                 oeatom.SetName(atom.name)
-                oeatom.AddData("topology_index", atom.index)
-                print("DEBUG atom index: ", atom.index, " atom.name: ", atom.name) ## IVY delete
-                # try:
-                #     oeatom.AddData("topology_index", atom.topology_index)
-                #     print("adding topology index")  ## IVY
-                # except AttributeError:
-                #     print("unable to add topology index")  ## IVY
-                #     oeatom.AddData("topology_index", -1)
+                # oeatom.AddData("topology_index", atom.index)
+                # print("DEBUG atom index: ", atom.index, " atom.name: ", atom.name) ## IVY delete
+                try:
+                    oeatom.AddData("topology_index", atom.topology_index)
+                    print("adding topology index")  ## IVY
+                except AttributeError:
+                    print("unable to add topology index atom name: ", atom.name, " atom index: ", atom.index)  ## IVY
+                    oeatom.AddData("topology_index", atom.index + 10)
                 try:
                     oeatom.AddData("stereo", atom.stereo)
                 except AttributeError:
-                    oeatom.AddData("stereo", "A")
+                    pass
             oeatoms = {oeatom.GetName(): oeatom for oeatom in molecule.GetAtoms()}
             for (atom1, atom2) in res.bonds():
                 order = 1
@@ -2109,6 +2109,7 @@ class GeometrySystemGenerator(object):
             periodicity = 1
             k = 120.0 * units.kilocalories_per_mole  # stddev of 12 degrees
             for torsion in relevant_torsion_list:
+                print("adding proper torsions!!!!") ## IVY
                 # Make sure to get the atom index that corresponds to the topology
                 atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
                 # Determine phase in [-pi,+pi) interval
@@ -2131,7 +2132,7 @@ class GeometrySystemGenerator(object):
                     torsion_force.addTorsion(atom_indices[0], atom_indices[1], atom_indices[2], atom_indices[3], periodicity, phase, k)
                 else:
                     raise ValueError("The force supplied to this method must be either a CustomTorsionForce or a PeriodicTorsionForce")
-
+            print("end determine extra torsions") ##IVY
         return torsion_force
 
     def _select_torsions_without_h(self, torsion_list):
@@ -2210,6 +2211,7 @@ class GeometrySystemGenerator(object):
             # TODO: do this more efficiently
             heavy_aromatics = list(oemol.GetAtoms(angle_criteria))
             for atom in heavy_aromatics:
+                print("adding extra atoms!!!!") ## IVY 
                 # bonded_atoms = [bonded_atom for bonded_atom in list(atom.GetAtoms()) if bonded_atom in heavy_aromatics]
                 bonded_atoms = list(atom.GetAtoms())
                 for angle_atoms in itertools.combinations(bonded_atoms, 2):
@@ -2228,6 +2230,7 @@ class GeometrySystemGenerator(object):
                                              angle_force_constant)
                     else:
                         raise ValueError("Angle force must be either CustomAngleForce or HarmonicAngleForce")
+            print("end determine extra angles") ## IVY
         return angle_force
 
     def _calculate_growth_idx(self, particle_indices, growth_indices):
