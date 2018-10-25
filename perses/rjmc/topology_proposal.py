@@ -1774,7 +1774,9 @@ class PolymerProposalEngine(ProposalEngine):
                 continue
             old_index = match_pair.pattern.GetData("topology_index")
             new_index = match_pair.target.GetData("topology_index")
-            new_to_old_atom_map[new_index + first_atom_index_new] = old_index + first_atom_index_old  # Correct index mapping to match the original old and new residues
+            new_to_old_atom_map[new_index] = old_index
+
+            # new_to_old_atom_map[new_index + first_atom_index_new] = old_index + first_atom_index_old  # Correct index mapping to match the original old and new residues
 
         print("get mol atom matches done") ## IVY
         return new_to_old_atom_map ### IVY also returns map .. do we ever use the matches list in a call to this function, if so add "matches" back (and in comment block)
