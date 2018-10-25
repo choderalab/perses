@@ -1697,8 +1697,10 @@ class GeometrySystemGenerator(object):
         growth_indices = list(growth_indices)
         try:
             residues = [res for res in reference_topology.residues() if res.modified]
+            print("got residue from modified: ", residues) ## IVY
         except AttributeError:
             residues = [atoms[growth_indices[0].idx].residue]
+            print("got residue from small molecule way") ## IVY
         if len(residues) > 1:
             raise Exception("Please only modify one residue at a time. The residues you tried to modify are: ",
                             residues)
@@ -1732,6 +1734,7 @@ class GeometrySystemGenerator(object):
                         elif res_name == 'ILE':
                             oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_S)
                 else:  # For small molecule, use stereo property from topology that was transferred to oemol
+                    print("getting stereochemistry for small molecule") ## IVY delete
                     try:
                         stereo = oechem.OECIPAtomStereo_R if atom.GetData("stereo") == 'R' else oechem.OECIPAtomStereo_S
                         oechem.OESetCIPStereo(oemol, atom, stereo)
