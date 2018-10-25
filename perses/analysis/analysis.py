@@ -148,7 +148,41 @@ class Analysis(object):
         """
         pass
 
-    def plot_
+    def plot_chemical_trajectory(self, environment, filename):
+        """
+        Plot the trajectory through chemical space.
+
+        Parameters
+        ----------
+        environment : str
+            the name of the environment for which the chemical space trajectory is desired
+        """
+        chemical_state_trajectory = self.extract_state_trajectory(environment)
+
+        visited_states = list(set(chemical_state_trajectory))
+
+        state_trajectory = np.zeros(len(chemical_state_trajectory))
+        for idx, chemical_state in enumerate(chemical_state_trajectory):
+            state_trajectory[idx] = visited_states.index(chemical_state)
+
+        with PdfPages(filename) as pdf:
+            sns.set(font_scale=2)
+            fig = plt.figure(figsize=(28, 12))
+            plt.subplot2grid((1,2), (0,0))
+            ax = sns.scatterplot(np.arange(len(state_trajectory)), state_trajectory)
+            plt.yticks(np.arange(len(visited_states)), visited_states)
+
+            plt.title("Trajectory through chemical space in {}".format(environment))
+            plt.xlabel("iteration")
+            plt.ylabel("chemical state")
+            plt.tight_layout()
+
+            plt.subplot2grid((1,2), (0,1))
+            ax = sns.countplot(y=state_trajectory)
+
+            pdf.savefig(fig)
+            plt.close()
+
     def get_free_energies(self, environment):
         """
         Estimate the free energies between all pairs with bidirectional transitions of chemical states in the
