@@ -720,7 +720,9 @@ class HybridTopologyFactory(object):
             sterics_custom_nonbonded_force.addGlobalParameter('lambda', 0.0)
             sterics_custom_nonbonded_force.addEnergyParameterDerivative('lambda')
         else:
-            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_core", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_insert", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_delete", 0.0)
 
 
         sterics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
@@ -761,17 +763,23 @@ class HybridTopologyFactory(object):
 
         if self._softcore_method == "default":
             sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics + (1 - dummyA*dummyB)*4*lambda_sterics*(1-lambda_sterics);"
+            sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*lambda_sterics_delete;"
             sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "amber":
             sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics;"
+            sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*lambda_sterics_delete;"
             sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "classic":
+            sterics_addition += "lambda_sterics = lambda_core"
             sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+
 
         else:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
+
+
 
         return sterics_addition
 
@@ -1194,6 +1202,8 @@ class HybridTopologyFactory(object):
         # Define new global parameters for NonbondedForce
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_electrostatics', 0.0)
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_sterics', 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_delete", 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_insert", 0.0)
 
         #We have to loop through the particles in the system, because nonbonded force does not accept index
         for particle_index in range(self._hybrid_system.getNumParticles()):
@@ -1208,8 +1218,8 @@ class HybridTopologyFactory(object):
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
                 particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, 0.0)
-                # Charge will be turned on at lambda_electrostatics = 0, off at lambda_electrostatics = 1
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, -charge, 0, 0)
+                # Charge will be turned on at lambda_electrostatics_delete = 0, off at lambda_electrostatics_delete = 1
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_delete', particle_index, -charge, 0, 0)
 
             elif particle_index in self._atom_classes['unique_new_atoms']:
                 #get the parameters in the new system
@@ -1221,8 +1231,8 @@ class HybridTopologyFactory(object):
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
                 particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, sigma, 0.0)
-                # Charge will be turned off at lambda_electrostatics = 0, on at lambda_electrostatics = 1
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, +charge, 0, 0)
+                # Charge will be turned off at lambda_electrostatics_insert = 0, on at lambda_electrostatics_insert = 1
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_insert', particle_index, +charge, 0, 0)
 
             elif particle_index in self._atom_classes['core_atoms']:
                 #get the parameters in the new and old systems:

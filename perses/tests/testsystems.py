@@ -104,7 +104,7 @@ class PersesTestSystem(object):
         self._timestep = 1.0*unit.femtosecond
         self._ncmc_nsteps = ncmc_nsteps
         self._mcmc_nsteps = mcmc_nsteps
-        self._move = LangevinSplittingDynamicsMove(timestep=self._timestep, splitting=self._splitting)
+        self._move = LangevinSplittingDynamicsMove(timestep=self._timestep, splitting=self._splitting, n_restart_attempts=10)
         self._move.n_restart_attempts = 10
 
 
@@ -2387,20 +2387,34 @@ def run_t4_inhibitors():
     """
     Run T4 lysozyme inhibitors in solvents test system.
     """
-    testsystem = T4LysozymeInhibitorsTestSystem(storage_filename='output.nc', ncmc_nsteps=50, mcmc_nsteps=100)
+    testsystem = T4LysozymeInhibitorsTestSystem(storage_filename='output.nc', ncmc_nsteps=5000, mcmc_nsteps=100)
     for environment in ['explicit', 'vacuum']:
         #testsystem.exen_samplers[environment].pdbfile = open('t4-' + component + '.pdb', 'w')
         #testsystem.exen_samplers[environment].options={'nsteps':50} # instantaneous MC
         testsystem.exen_samplers[environment].verbose = True
         testsystem.sams_samplers[environment].verbose = True
     testsystem.designer.verbose = True
-    testsystem.designer.run(niterations=50)
+    testsystem.sams_samplers['explicit'].run(niterations=50)
 
     # Analyze data.
     #from perses.analysis import Analysis
     #analysis = Analysis(storage_filename='output.nc')
     #analysis.plot_sams_weights('sams.pdf')
     #analysis.plot_ncmc_work('ncmc.pdf')
+
+def run_alkanes():
+    """
+    Run alkanes in solvents test system.
+    """
+    testsystem = AlkanesTestSystem(storage_filename='output.nc', ncmc_nsteps=5000, mcmc_nsteps=100)
+    for environment in ['explicit', 'vacuum']:
+        #testsystem.exen_samplers[environment].pdbfile = open('t4-' + component + '.pdb', 'w')
+        #testsystem.exen_samplers[environment].options={'nsteps':50} # instantaneous MC
+        testsystem.exen_samplers[environment].verbose = True
+        testsystem.sams_samplers[environment].verbose = True
+    testsystem.designer.verbose = True
+    testsystem.sams_samplers['explicit'].run(niterations=50)
+
 
 def run_t4():
     """
@@ -2615,10 +2629,11 @@ if __name__ == '__main__':
     #run_alanine_system(sterics=False)
     #run_fused_rings()
     #run_valence_system()
-    #run_t4_inhibitors()
+    run_alkanes()
     #run_imidazole()
     #run_constph_abl()
     #run_abl_affinity_write_pdb_ncmc_switching()
-    run_kinase_inhibitors()
+
+    #run_kinase_inhibitors()
     #run_abl_imatinib()
     #run_myb()
