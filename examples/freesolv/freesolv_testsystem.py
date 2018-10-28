@@ -122,7 +122,7 @@ class HydrationPersesRun(object):
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment],
                                                                  chemical_state_key, proposal_engines[environment],
                                                                  geometry_engine,
-                                                                 options={'nsteps': self._ncmc_switching_times[environment]}, storage=storage)
+                                                                 options={'nsteps': self._ncmc_switching_times[environment]}, storage=storage, ncmc_write_interval=self._ncmc_switching_times[environment])
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
