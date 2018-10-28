@@ -33,6 +33,7 @@ from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
 from perses.tests.utils import quantity_is_finite
+from perses.tests.utils import createOEMolFromSMILES
 
 ################################################################################
 # LOGGER
@@ -623,6 +624,7 @@ class SAMSSampler(object):
 
         """
         from scipy.misc import logsumexp
+        from perses.tests.utils import createOEMolFromSMILES
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
@@ -637,8 +639,9 @@ class SAMSSampler(object):
             #Select a reference state that will always be subtracted (ensure that dict ordering does not change)
             self._reference_state = self.chemical_states[0]
 
-            #initialize the logZ dictionary with zeroes for each chemical state
-            self.logZ = {chemical_state : 0.0 for chemical_state in self.chemical_states}
+
+            #initialize the logZ dictionary with scores based on the number of atoms
+            self.logZ = {chemical_state: -1.0* self._num_dof_compensation(chemical_state) for chemical_state in self.chemical_states}
 
             #Initialize log target probabilities with log(1/n_states)
             self.log_target_probabilities = {chemical_state : np.log(len(self.chemical_states)) for chemical_state in self.chemical_states}
@@ -674,6 +677,7 @@ class SAMSSampler(object):
         # Initialize.
         self.iteration = 0
         self.verbose = False
+        self.sampler.log_weights = {state_key: - self.logZ[state_key] for state_key in self.logZ.keys()}
 
         self.second_stage_start = 0
         if second_stage_start is not None:
@@ -682,6 +686,41 @@ class SAMSSampler(object):
     @property
     def state_keys(self):
         return self.logZ.keys()
+
+    def _num_dof_compensation(self, smiles):
+        """
+        Compute an approximate compensating factor for a chemical state based on the number of degrees of freedom that it has.
+
+        The formula is:
+        (num_heavy*heavy_factor) + (num_hydrogen*h_factor) where
+        heavy_factor = 4.5 and
+        light_factor = 3.8
+
+        Parameters
+        ----------
+        smiles : str
+            The SMILES string of the molecule
+
+        Returns
+        -------
+        correction_factor : float
+        """
+        mol = createOEMolFromSMILES(smiles)
+        num_heavy = 0
+        num_light = 0
+
+        heavy_factor = 4.5
+        light_factor = 3.8
+
+        for atom in mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                num_light += 1
+            else:
+                num_heavy += 1
+
+        correction_factor = num_heavy*heavy_factor + num_light*light_factor
+
+        return correction_factor
 
     def update_sampler(self):
         """

@@ -323,7 +323,12 @@ class NCMCEngine(object):
 
 
         #run the NCMC protocol
-        ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
+        try:
+            ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
+        except:
+            logP_work = -np.inf
+            logP_energy = -np.inf
+            return [initial_sampler_state, proposed_sampler_state, logP_work, logP_energy]
 
         #get the total work:
         logP_work = - ne_move.cumulative_work[-1]

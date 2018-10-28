@@ -323,8 +323,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=360)
 
             #accumulate logp
-            if direction == 'reverse':
-                if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
+            #if direction == 'reverse':
+            if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
