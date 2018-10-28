@@ -3,8 +3,12 @@ from perses.rjmc import geometry
 from openmmtools import states, mcmc
 from simtk import openmm, unit
 from simtk.openmm import app
+from openmmtools import cache
 from perses.storage import NetCDFStorageView, NetCDFStorage
 from typing import List, Dict
+
+cache.global_context_cache.platform = openmm.Platform.getPlatformByName("CUDA")
+cache.global_context_cache.capacity = 30
 
 
 class HydrationPersesRun(object):
