@@ -86,7 +86,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
-    def __init__(self, metadata=None, use_sterics=False, verbose=True, storage=None):
+    def __init__(self, metadata=None, use_sterics=False, n_torsion_divisions=180, verbose=True, storage=None):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
@@ -96,6 +96,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._position_set_time = 0.0
         self.verbose = verbose
         self.use_sterics = use_sterics
+        self._n_torsion_divisions = n_torsion_divisions
         self._storage = NetCDFStorageView(modname="GeometryEngine", storage=storage)
 
     def propose(self, top_proposal, current_positions, beta):
@@ -294,12 +295,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=360)
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=self._n_torsion_divisions)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=360)
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=self._n_torsion_divisions)
 
             #accumulate logp
             #if direction == 'reverse':

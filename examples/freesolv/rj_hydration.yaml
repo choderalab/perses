@@ -16,3 +16,12 @@ ncmc_switching_times:
 equilibrium_steps:
   vacuum: 500
   explicit: 1000
+
+#add some geometry options:
+use_sterics:
+  vacuum: False
+  explicit: False
+
+geometry_divisions:
+  vacuum: 180
+  explicit: 180

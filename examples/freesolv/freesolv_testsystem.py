@@ -12,7 +12,7 @@ class HydrationPersesRun(object):
     This class encapsulates the necessary objects to run RJ calculations for relative hydration free energies
     """
 
-    def __init__(self, molecules: List[str], output_filename: str, ncmc_switching_times: Dict[str, int], equilibrium_steps: Dict[str, int], timestep: unit.Quantity, initial_molecule: str=None):
+    def __init__(self, molecules: List[str], output_filename: str, ncmc_switching_times: Dict[str, int], equilibrium_steps: Dict[str, int], timestep: unit.Quantity, initial_molecule: str=None, geometry_options: Dict=None):
         self._molecules = molecules
         environments = ['explicit', 'vacuum']
         temperature = 300 * unit.kelvin
@@ -21,6 +21,7 @@ class HydrationPersesRun(object):
         self._storage = NetCDFStorage(output_filename)
         self._ncmc_switching_times = ncmc_switching_times
         self._n_equilibrium_steps = equilibrium_steps
+        self._geometry_options = geometry_options
 
         # Create a system generator for our desired forcefields.
         from perses.rjmc.topology_proposal import SystemGenerator
@@ -94,7 +95,15 @@ class HydrationPersesRun(object):
         for environment in environments:
             storage = NetCDFStorageView(self._storage, envname=environment)
 
-            geometry_engine = geometry.FFAllAngleGeometryEngine(storage=storage)
+            if self._geometry_options:
+                n_torsion_divisions = self._geometry_options['n_torsion_divsions'][environment]
+                use_sterics = self._geometry_options['use_sterics'][environment]
+
+            else:
+                n_torsion_divisions = 180
+                use_sterics = False
+
+            geometry_engine = geometry.FFAllAngleGeometryEngine(storage=storage, n_torsion_divisions=n_torsion_divisions, use_sterics=use_sterics)
             move = mcmc.LangevinSplittingDynamicsMove(timestep=timestep, splitting="V R O R V",
                                                        n_restart_attempts=10)
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
