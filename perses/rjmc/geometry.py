@@ -306,7 +306,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             #if direction == 'reverse':
             if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
 
-            atom_placement_array = np.array([atom.idx, r, theta, phi, logp_r, logp_theta, logp_phi, np.log(detJ)])
+            atom_placement_array = np.array([atom.idx, r.value_in_unit_system(units.md_unit_system),
+                                             theta.value_in_unit_system(units.md_unit_system),
+                                             phi.value_in_unit_system(units.md_unit_system),
+                                             logp_r, logp_theta, logp_phi, np.log(detJ)])
             atom_placements.append(atom_placement_array)
 
 
