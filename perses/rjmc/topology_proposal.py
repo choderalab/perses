@@ -2263,6 +2263,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for matchpair in match.GetAtoms():
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
+
+            if current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index)).GetElement() == 1 or proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index)) == 1:
+                continue
+
             new_to_old_atom_map[new_index] = old_index
 
         _logger.info('Atom map took %.3f s' % (time.time() - timer_start))
