@@ -73,7 +73,7 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         self._nsteps_neq = nsteps_neq
         if nsteps_neq % work_configuration_save_interval != 0:
             raise ValueError("Please use a saving interval that is a divisor of the total number of steps")
-        self._number_of_step_moves = self._nsteps_neq // self._work_configuration_save_interval
+        #self._number_of_step_moves = self._nsteps_neq // self._work_configuration_save_interval
         self._cumulative_work = np.zeros([self._number_of_step_moves +1])
         self._current_protocol_work = 0.0
 
@@ -126,9 +126,9 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         #get the number of atoms:
         n_atoms = thermodynamic_state.n_particles
 
-        trajectory_positions = np.zeros([self._number_of_step_moves, n_atoms, 3])
-        box_lengths = np.zeros([self._number_of_step_moves, 3])
-        box_angles = np.zeros([self._number_of_step_moves, 3])
+        trajectory_positions = np.zeros([self._nsteps_neq, n_atoms, 3])
+        box_lengths = np.zeros([self._nsteps_neq, 3])
+        box_angles = np.zeros([self._nsteps_neq, 3])
 
         # Create integrator.
         integrator = self._get_integrator(thermodynamic_state)
@@ -154,7 +154,7 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         lambda_increment = self._nsteps_neq / self._number_of_step_moves
 
         # loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
-        for iteration in range(self._number_of_step_moves):
+        for iteration in range(self._nsteps_neq):
 
             #update all relevant context parameters
             for parameter, parameter_function in self._alchemical_functions.items():
