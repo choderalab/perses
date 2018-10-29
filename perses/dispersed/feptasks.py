@@ -160,7 +160,7 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             for parameter, parameter_function in self._alchemical_functions.items():
                 context.setParameter(parameter, parameter_function(master_lambda/self._nsteps_neq))
 
-            integrator.step(self._work_configuration_save_interval)
+            integrator.step(1)
 
             #increment the master lambda variable
             master_lambda += lambda_increment
