@@ -74,7 +74,7 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         if nsteps_neq % work_configuration_save_interval != 0:
             raise ValueError("Please use a saving interval that is a divisor of the total number of steps")
         #self._number_of_step_moves = self._nsteps_neq // self._work_configuration_save_interval
-        self._cumulative_work = np.zeros([self._number_of_step_moves +1])
+        self._cumulative_work = np.zeros([self._nsteps_neq + 1])
         self._current_protocol_work = 0.0
 
     def _get_integrator(self, thermodynamic_state):
