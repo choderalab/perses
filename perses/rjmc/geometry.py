@@ -320,7 +320,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions.append(atom)
 
         total_time = time.time() - initial_time
-        self._storage.write_array("atom_placement_logp_{}".format(direction), np.stack(atom_placements), iteration=self.nproposed)
+
+        #use a new array for each placement, since the variable size will be different.
+        self._storage.write_array("atom_placement_logp_{}_{}".format(direction, self.nproposed), np.stack(atom_placements))
 
         if direction=='forward':
             logging.log(logging.DEBUG, "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
