@@ -351,15 +351,15 @@ class NCMCEngine(object):
         final_old_sampler_state = SamplerState(old_positions, box_vectors=old_box_vectors)
 
         #extract the trajectory and box vectors from the move:
-        trajectory = ne_move.trajectory
+        trajectory = ne_move.trajectory[::self._write_ncmc_interval, :, :]
         topology = hybrid_factory.hybrid_topology
         position_varname = "ncmcpositions"
-        nframes = ne_move.n_frames
+        nframes = np.shape(trajectory)[0]
 
         #extract box vectors:
         box_vec_varname = "ncmcboxvectors"
-        box_lengths = ne_move.box_lengths
-        box_angles = ne_move.box_angles
+        box_lengths = ne_move.box_lengths[::self._write_ncmc_interval, :, :]
+        box_angles = ne_move.box_angles[::self._write_ncmc_interval, :, :]
         box_lengths_and_angles = np.stack([box_lengths, box_angles])
 
         #write out the positions of the topology
