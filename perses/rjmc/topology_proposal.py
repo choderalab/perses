@@ -2264,7 +2264,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
 
-            if current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index)).GetElement() == 1 or proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index)) == 1:
+            if current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index)).GetAtomicNum() == 1 or proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index)).GetAtomicNum() == 1:
                 continue
 
             new_to_old_atom_map[new_index] = old_index
