@@ -325,10 +325,10 @@ class NCMCEngine(object):
         #run the NCMC protocol
         try:
             ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
-        except:
+        except Exception as e:
+            _logger.warn("NCMC failed because {}; rejecting.".format(str(e)))
             logP_work = -np.inf
-            logP_energy = -np.inf
-            return [initial_sampler_state, proposed_sampler_state, logP_work, logP_energy]
+            return [initial_sampler_state, proposed_sampler_state, -np.inf, 0.0, 0.0]
 
         #get the total work:
         logP_work = - ne_move.cumulative_work[-1]
