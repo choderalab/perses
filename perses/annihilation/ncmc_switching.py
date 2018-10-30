@@ -9,7 +9,7 @@ from perses.storage import NetCDFStorageView
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
-from openmmtools.cache import LRUCache, ContextCache
+from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
 from openmmtools.alchemy import AlchemicalState
 
@@ -334,11 +334,25 @@ class NCMCEngine(object):
         logP_work = - ne_move.cumulative_work[-1]
 
         # Compute contribution of transforming to and from the hybrid system:
-        compound_thermodynamic_state.set_alchemical_parameters(0.0)
-        initial_reduced_potential = compute_reduced_potential(compound_thermodynamic_state, initial_hybrid_sampler_state)
+        context, integrator = global_context_cache.global_context_cache.get_context(hybrid_thermodynamic_state)
 
-        compound_thermodynamic_state.set_alchemical_parameters(1.0)
-        final_reduced_potential = compute_reduced_potential(compound_thermodynamic_state, final_hybrid_sampler_state)
+        #set all alchemical parameters to zero:
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 0.0)
+
+        initial_hybrid_sampler_state.apply_to_context(context, ignore_velocities=True)
+        initial_reduced_potential = hybrid_thermodynamic_state.reduced_potential(context)
+
+        #set all alchemical parameters to one:
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 1.0)
+
+        final_hybrid_sampler_state.apply_to_context(context, ignore_velocities=True)
+        final_reduced_potential = hybrid_thermodynamic_state.reduced_potential(context)
+
+        #reset the parameters back to zero just in case
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 0.0)
 
         #compute the output SamplerState, which has the atoms only for the new system post-NCMC:
         new_positions = hybrid_factory.new_positions(final_hybrid_sampler_state.positions)
