@@ -135,7 +135,7 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
 
-        self.reset()
+        integrator.reset()
 
         sampler_state.apply_to_context(context, ignore_velocities=False)
 
