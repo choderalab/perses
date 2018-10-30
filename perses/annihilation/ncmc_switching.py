@@ -334,7 +334,7 @@ class NCMCEngine(object):
         logP_work = - ne_move.cumulative_work[-1]
 
         # Compute contribution of transforming to and from the hybrid system:
-        context, integrator = global_context_cache.global_context_cache.get_context(hybrid_thermodynamic_state)
+        context, integrator = global_context_cache.get_context(hybrid_thermodynamic_state)
 
         #set all alchemical parameters to zero:
         for parameter in self._functions.keys():
