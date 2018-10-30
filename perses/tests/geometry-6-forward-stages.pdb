@@ -1,0 +1,645 @@
+MODEL     0
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     10  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     11  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+HETATM   12  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   13  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   14  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   15  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   16  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   17  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      18      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   10   12
+CONECT   12   10   14   13
+CONECT   13   12
+CONECT   14   15   16   17   12
+CONECT   15   14
+CONECT   16   14
+CONECT   17   14
+END
+ENDMDL
+MODEL     2
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     10  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     11  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     12  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+HETATM   13  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   14  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   15  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   16  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   17  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   18  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      19      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   10   13
+CONECT   13   10   15   14
+CONECT   14   13
+CONECT   15   16   17   18   13
+CONECT   16   15
+CONECT   17   15
+CONECT   18   15
+END
+ENDMDL
+MODEL     3
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     10  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     11  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     12  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     13  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+HETATM   14  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   15  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   16  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   17  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   18  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   19  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      20      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   10   14
+CONECT   14   10   16   15
+CONECT   15   14
+CONECT   16   17   18   19   14
+CONECT   17   16
+CONECT   18   16
+CONECT   19   16
+END
+ENDMDL
+MODEL     4
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     10  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     11  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     12  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     13  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     14  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+HETATM   15  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   16  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   17  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   18  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   19  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   20  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      21      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   10   15
+CONECT   15   10   17   16
+CONECT   16   15
+CONECT   17   18   19   20   15
+CONECT   18   17
+CONECT   19   17
+CONECT   20   17
+END
+ENDMDL
+MODEL     5
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     10  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     11  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     12  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     13  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     14 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     15  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+HETATM   16  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   17  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   18  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   19  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   20  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   21  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      22      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   10   16
+CONECT   16   10   18   17
+CONECT   17   16
+CONECT   18   19   20   21   16
+CONECT   19   18
+CONECT   20   18
+CONECT   21   18
+END
+ENDMDL
+MODEL     6
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     10  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     11  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     12  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     13  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     14 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     15  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     16 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+HETATM   17  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   18  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   19  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   20  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   21  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   22  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      23      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   10   17
+CONECT   17   10   19   18
+CONECT   18   17
+CONECT   19   20   21   22   17
+CONECT   20   19
+CONECT   21   19
+CONECT   22   19
+END
+ENDMDL
+MODEL     7
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     10  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     11  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     12  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     13  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     14  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     15 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     16  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     17 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+HETATM   18  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   19  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   20  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   21  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   22  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   23  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      24      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   11   18
+CONECT   18   11   20   19
+CONECT   19   18
+CONECT   20   21   22   23   18
+CONECT   21   20
+CONECT   22   20
+CONECT   23   20
+END
+ENDMDL
+MODEL     8
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     10  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     11  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     12  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     13  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     14  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     15 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     16  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     17 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     18 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   19  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   20  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   21  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   22  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   23  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   24  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      25      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   11   19
+CONECT   19   11   21   20
+CONECT   20   19
+CONECT   21   22   23   24   19
+CONECT   22   21
+CONECT   23   21
+CONECT   24   21
+END
+ENDMDL
+MODEL     9
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     10  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     11  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     12  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     13  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     14  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     15 HD11 LEU A   2     -14.917  18.708  30.773  1.00  0.00           H  
+ATOM     16 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     17  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     18 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     19 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   20  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   21  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   22  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   23  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   24  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   25  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      26      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   11   20
+CONECT   20   11   22   21
+CONECT   21   20
+CONECT   22   23   24   25   20
+CONECT   23   22
+CONECT   24   22
+CONECT   25   22
+END
+ENDMDL
+MODEL    10
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM      9  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     10  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     11  HB2 LEU A   2     -13.293  20.247  29.437  1.00  0.00           H  
+ATOM     12  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     13  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     14  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     15  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     16 HD11 LEU A   2     -14.917  18.708  30.773  1.00  0.00           H  
+ATOM     17 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     18  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     19 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     20 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   21  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   22  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   23  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   24  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   25  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   26  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      27      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   12   21
+CONECT   21   12   23   22
+CONECT   22   21
+CONECT   23   24   25   26   21
+CONECT   24   23
+CONECT   25   23
+CONECT   26   23
+END
+ENDMDL
+MODEL    11
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  H   LEU A   2     -12.108  17.145  29.182  1.00  0.00           H  
+ATOM      9  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM     10  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     11  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     12  HB2 LEU A   2     -13.293  20.247  29.437  1.00  0.00           H  
+ATOM     13  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     14  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     15  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     16  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     17 HD11 LEU A   2     -14.917  18.708  30.773  1.00  0.00           H  
+ATOM     18 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     19  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     20 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     21 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   22  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   23  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   24  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   25  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   26  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   27  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      28      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   13   22
+CONECT   22   13   24   23
+CONECT   23   22
+CONECT   24   25   26   27   22
+CONECT   25   24
+CONECT   26   24
+CONECT   27   24
+END
+ENDMDL
+MODEL    12
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  H   LEU A   2     -12.108  17.145  29.182  1.00  0.00           H  
+ATOM      9  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM     10  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     11  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     12  HB2 LEU A   2     -13.293  20.247  29.437  1.00  0.00           H  
+ATOM     13  HB3 LEU A   2     -11.580  20.477  30.182  1.00  0.00           H  
+ATOM     14  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     15  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     16  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     17  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     18 HD11 LEU A   2     -14.917  18.708  30.773  1.00  0.00           H  
+ATOM     19 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     20  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     21 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     22 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   23  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   24  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   25  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   26  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   27  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   28  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      29      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   14   23
+CONECT   23   14   25   24
+CONECT   24   23
+CONECT   25   26   27   28   23
+CONECT   26   25
+CONECT   27   25
+CONECT   28   25
+END
+ENDMDL
+MODEL    13
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  H   LEU A   2     -12.108  17.145  29.182  1.00  0.00           H  
+ATOM      9  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM     10  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     11  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     12  HB2 LEU A   2     -13.293  20.247  29.437  1.00  0.00           H  
+ATOM     13  HB3 LEU A   2     -11.580  20.477  30.182  1.00  0.00           H  
+ATOM     14  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     15  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     16  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     17  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     18 HD11 LEU A   2     -14.917  18.708  30.773  1.00  0.00           H  
+ATOM     19 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     20 HD13 LEU A   2     -14.123  17.562  29.737  1.00  0.00           H  
+ATOM     21  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     22 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     23 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   24  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   25  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   26  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   27  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   28  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   29  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      30      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   14   24
+CONECT   24   14   26   25
+CONECT   25   24
+CONECT   26   27   28   29   24
+CONECT   27   26
+CONECT   28   26
+CONECT   29   26
+END
+ENDMDL
+MODEL    14
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  H   LEU A   2     -12.108  17.145  29.182  1.00  0.00           H  
+ATOM      9  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM     10  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     11  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     12  HB2 LEU A   2     -13.293  20.247  29.437  1.00  0.00           H  
+ATOM     13  HB3 LEU A   2     -11.580  20.477  30.182  1.00  0.00           H  
+ATOM     14  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     15  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     16  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     17  HG  LEU A   2     -11.912  18.043  31.282  1.00  0.00           H  
+ATOM     18  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     19 HD11 LEU A   2     -14.917  18.708  30.773  1.00  0.00           H  
+ATOM     20 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     21 HD13 LEU A   2     -14.123  17.562  29.737  1.00  0.00           H  
+ATOM     22  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     23 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     24 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   25  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   26  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   27  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   28  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   29  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   30  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      31      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   14   25
+CONECT   25   14   27   26
+CONECT   26   25
+CONECT   27   28   29   30   25
+CONECT   28   27
+CONECT   29   27
+CONECT   30   27
+END
+ENDMDL
+MODEL    15
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  H   LEU A   2     -12.108  17.145  29.182  1.00  0.00           H  
+ATOM      9  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM     10  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     11  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     12  HB2 LEU A   2     -13.293  20.247  29.437  1.00  0.00           H  
+ATOM     13  HB3 LEU A   2     -11.580  20.477  30.182  1.00  0.00           H  
+ATOM     14  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     15  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     16  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     17  HG  LEU A   2     -11.912  18.043  31.282  1.00  0.00           H  
+ATOM     18  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     19 HD11 LEU A   2     -14.917  18.708  30.773  1.00  0.00           H  
+ATOM     20 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     21 HD13 LEU A   2     -14.123  17.562  29.737  1.00  0.00           H  
+ATOM     22  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     23 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     24 HD22 LEU A   2     -13.889  20.165  31.813  1.00  0.00           H  
+ATOM     25 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   26  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   27  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   28  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   29  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   30  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   31  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      32      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   14   26
+CONECT   26   14   28   27
+CONECT   27   26
+CONECT   28   29   30   31   26
+CONECT   29   28
+CONECT   30   28
+CONECT   31   28
+END
+ENDMDL

@@ -1474,6 +1474,7 @@ class PointMutationEngine(PolymerProposalEngine):
     residues_allowed_to_mutate : list(str) -- OPTIONAL
         default = None
         Contains residue ids
+        If not specified, engine assumes all residues (except ACE and NME caps) may be mutated.
     allowed_mutations : list(tuple) -- OPTIONAL
         default = None
         ('residue id to mutate','desired mutant residue name (3-letter code)')
@@ -1483,15 +1484,11 @@ class PointMutationEngine(PolymerProposalEngine):
                 ('99','ALA'),
                 ('102','GLN')
             ]
-    always_change : Boolean -- OPTIONAL, default True ## IVY change the definition of this
-        Have the proposal engine always propose another mutation
-        If allowed_mutations is not specified, always_change will require ALL
-        point mutations to be different
-        The proposal engine will choose number of locations specified by
-        max_point_mutants, and will require all of those residues to change
-        eg: if old topology included L99A and M102Q, the new proposal cannot
-            include L99A OR M102Q
-        (This is only relevant in cases where max_point_mutants > 1)
+        If this is not specified, the engine will propose a random amino acid at a random location.
+    always_change : Boolean -- OPTIONAL, default True
+        Have the proposal engine always propose a state different from the current state.
+        If the current state is WT, always propose a mutation.
+        If the current state is mutant, always propose a different mutant or WT.
     aggregate : Boolean -- OPTIONAL
         default = False
         Have the proposal engine aggregate mutations.

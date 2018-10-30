@@ -1,0 +1,48 @@
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -16.964  19.740  22.380  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -16.674  20.707  21.970  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -17.614  21.254  21.910  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -16.355  20.534  20.942  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -15.703  21.493  22.722  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -15.988  21.974  23.820  1.00  0.00           O  
+ATOM      7  N   ILE A   2     -14.510  21.662  22.159  1.00  0.00           N  
+ATOM      8  H   ILE A   2     -14.274  20.998  21.435  1.00  0.00           H  
+ATOM      9  CA  ILE A   2     -13.469  22.581  22.615  1.00  0.00           C  
+ATOM     10  HA  ILE A   2     -13.471  22.603  23.705  1.00  0.00           H  
+ATOM     11  CB  ILE A   2     -12.112  22.148  22.007  1.00  0.00           C  
+ATOM     12  C   ILE A   2     -13.734  24.013  22.192  1.00  0.00           C  
+ATOM     13  O   ILE A   2     -12.848  24.586  21.571  1.00  0.00           O  
+ATOM     14  HB  ILE A   2     -11.220  22.494  22.530  1.00  0.00           H  
+ATOM     15  CG2 ILE A   2     -11.127  21.732  23.196  1.00  0.00           C  
+ATOM     16 HG21 ILE A   2     -10.138  21.614  22.752  1.00  0.00           H  
+ATOM     17 HG22 ILE A   2     -11.196  22.474  23.990  1.00  0.00           H  
+ATOM     18 HG23 ILE A   2     -11.499  22.183  24.116  1.00  0.00           H  
+ATOM     19  CG1 ILE A   2     -11.697  20.836  22.616  1.00  0.00           C  
+ATOM     20 HG12 ILE A   2     -12.492  20.327  23.162  1.00  0.00           H  
+ATOM     21 HG13 ILE A   2     -12.433  20.666  23.402  1.00  0.00           H  
+ATOM     22  CD1 ILE A   2     -11.990  19.783  21.573  1.00  0.00           C  
+ATOM     23 HD11 ILE A   2     -12.515  18.926  21.995  1.00  0.00           H  
+ATOM     24 HD12 ILE A   2     -12.834  20.215  21.034  1.00  0.00           H  
+ATOM     25 HD13 ILE A   2     -11.097  19.396  21.083  1.00  0.00           H  
+HETATM   26  N   NME A   3     -12.196  22.355  20.940  1.00  0.00           N  
+HETATM   27  H   NME A   3     -13.734  24.013  22.192  1.00  0.00           H  
+HETATM   28  C   NME A   3     -12.848  24.586  21.571  1.00  0.00           C  
+HETATM   29  H1  NME A   3     -14.876  24.628  22.542  1.00  0.00           H  
+HETATM   30  H2  NME A   3     -15.392  24.081  23.216  1.00  0.00           H  
+HETATM   31  H3  NME A   3     -15.326  26.020  22.280  1.00  0.00           H  
+TER      32      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   12   26
+CONECT   26   12   28   27
+CONECT   27   26
+CONECT   28   29   30   31   26
+CONECT   29   28
+CONECT   30   28
+CONECT   31   28
+END

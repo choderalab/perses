@@ -1,0 +1,14 @@
+openmm>=7.2.0
+numpy
+scipy
+numexpr
+openmoltools
+openmmtools
+numexpr
+netcdf4
+seaborn
+mdtraj
+numba
+parmed
+pdbfixer
+networkx

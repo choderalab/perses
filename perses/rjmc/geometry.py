@@ -1764,7 +1764,6 @@ class GeometrySystemGenerator(object):
 
         periodicity = 1
         k = 120.0 * units.kilocalories_per_mole  # stddev of 12 degrees
-        sigma = 15
         # Now, for each proper torsion, extract the set of indices and the angle. Then, add it to torsion_force
         for torsion in relevant_torsion_list:
             # Make sure to get the atom index that corresponds to the topology
@@ -1796,6 +1795,7 @@ class GeometrySystemGenerator(object):
         # Now, add improper torsions
         # coords : dict, key : index of atom in oemol (int), value : (x, y, z) coordinates of atom (3-element tuple)
         coords = oemol.GetCoords()
+        sigma = 15
         for atom in oemol.GetAtoms():
             if atom.IsChiral():
                 # Get neighbors

@@ -1,0 +1,48 @@
+REMARK   1 CREATED WITH OPENMM 7.2.2, 2018-10-04
+HETATM    1  H1  ACE A   1     -14.183  15.928  26.326  1.00  0.00           H  
+HETATM    2  CH3 ACE A   1     -13.924  16.276  27.326  1.00  0.00           C  
+HETATM    3  H2  ACE A   1     -13.508  15.484  27.949  1.00  0.00           H  
+HETATM    4  H3  ACE A   1     -14.749  16.695  27.903  1.00  0.00           H  
+HETATM    5  C   ACE A   1     -12.969  17.462  27.278  1.00  0.00           C  
+HETATM    6  O   ACE A   1     -13.012  18.197  26.293  1.00  0.00           O  
+ATOM      7  N   LEU A   2     -12.283  17.779  28.416  1.00  0.00           N  
+ATOM      8  H   LEU A   2     -12.108  17.145  29.182  1.00  0.00           H  
+ATOM      9  CA  LEU A   2     -11.691  19.130  28.666  1.00  0.00           C  
+ATOM     10  HA  LEU A   2     -11.674  19.730  27.756  1.00  0.00           H  
+ATOM     11  CB  LEU A   2     -12.380  19.816  29.849  1.00  0.00           C  
+ATOM     12  HB2 LEU A   2     -13.293  20.247  29.437  1.00  0.00           H  
+ATOM     13  HB3 LEU A   2     -11.580  20.477  30.182  1.00  0.00           H  
+ATOM     14  C   LEU A   2     -10.220  18.786  29.044  1.00  0.00           C  
+ATOM     15  O   LEU A   2     -10.011  17.837  29.804  1.00  0.00           O  
+ATOM     16  CG  LEU A   2     -12.673  18.742  30.934  1.00  0.00           C  
+ATOM     17  HG  LEU A   2     -11.912  18.043  31.282  1.00  0.00           H  
+ATOM     18  CD1 LEU A   2     -14.025  18.089  30.686  1.00  0.00           C  
+ATOM     19 HD11 LEU A   2     -14.917  18.708  30.773  1.00  0.00           H  
+ATOM     20 HD12 LEU A   2     -14.147  17.149  31.225  1.00  0.00           H  
+ATOM     21 HD13 LEU A   2     -14.123  17.562  29.737  1.00  0.00           H  
+ATOM     22  CD2 LEU A   2     -13.128  19.473  32.174  1.00  0.00           C  
+ATOM     23 HD21 LEU A   2     -13.584  18.876  32.964  1.00  0.00           H  
+ATOM     24 HD22 LEU A   2     -13.889  20.165  31.813  1.00  0.00           H  
+ATOM     25 HD23 LEU A   2     -12.272  20.067  32.494  1.00  0.00           H  
+HETATM   26  N   NME A   3     -10.011  17.837  29.804  1.00  0.00           N  
+HETATM   27  H   NME A   3      -9.243  19.573  28.633  1.00  0.00           H  
+HETATM   28  C   NME A   3      -9.415  20.269  27.921  1.00  0.00           C  
+HETATM   29  H1  NME A   3      -7.805  19.424  29.039  1.00  0.00           H  
+HETATM   30  H2  NME A   3      -7.384  18.894  28.185  1.00  0.00           H  
+HETATM   31  H3  NME A   3      -7.326  20.386  29.222  1.00  0.00           H  
+TER      32      NME A   3
+CONECT    1    2
+CONECT    2    5    1    3    4
+CONECT    3    2
+CONECT    4    2
+CONECT    5    2    6    7
+CONECT    6    5
+CONECT    7    5
+CONECT   14   26
+CONECT   26   14   28   27
+CONECT   27   26
+CONECT   28   29   30   31   26
+CONECT   29   28
+CONECT   30   28
+CONECT   31   28
+END

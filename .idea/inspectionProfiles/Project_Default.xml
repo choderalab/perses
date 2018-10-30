@@ -1,0 +1,26 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="13">
+            <item index="0" class="java.lang.String" itemvalue="parmed" />
+            <item index="1" class="java.lang.String" itemvalue="scipy" />
+            <item index="2" class="java.lang.String" itemvalue="numba" />
+            <item index="3" class="java.lang.String" itemvalue="networkx" />
+            <item index="4" class="java.lang.String" itemvalue="pdbfixer" />
+            <item index="5" class="java.lang.String" itemvalue="openmm" />
+            <item index="6" class="java.lang.String" itemvalue="mdtraj" />
+            <item index="7" class="java.lang.String" itemvalue="numpy" />
+            <item index="8" class="java.lang.String" itemvalue="seaborn" />
+            <item index="9" class="java.lang.String" itemvalue="netcdf4" />
+            <item index="10" class="java.lang.String" itemvalue="openmoltools" />
+            <item index="11" class="java.lang.String" itemvalue="openmmtools" />
+            <item index="12" class="java.lang.String" itemvalue="numexpr" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
