@@ -33,6 +33,7 @@ from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.samplers import thermodynamics
 from perses.tests.utils import quantity_is_finite
+from perses.tests.utils import createOEMolFromSMILES
 
 ################################################################################
 # LOGGER
@@ -342,12 +343,12 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Performing NCMC switching")
         initial_time = time.time()
-        [old_final_sampler_state, new_final_sampler_state, logP_work, logP_energy] = self.ncmc_engine.integrate(topology_proposal, old_sampler_state, new_sampler_state, iteration=self.iteration)
+        [ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_initial_hybrid, logP_final_hybrid] = self.ncmc_engine.integrate(topology_proposal, old_sampler_state, new_sampler_state, iteration=self.iteration)
         if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
         # Check that positions are not NaN
         if new_sampler_state.has_nan():
             raise Exception("Positions are NaN after NCMC insert with %d steps" % self._switching_nsteps)
-        return old_final_sampler_state, new_final_sampler_state, logP_work, logP_energy
+        return ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_initial_hybrid, logP_final_hybrid
 
     def _geometry_ncmc_geometry(self, topology_proposal, sampler_state, old_log_weight, new_log_weight):
         """
@@ -385,7 +386,7 @@ class ExpandedEnsembleSampler(object):
         new_thermodynamic_state = self._system_to_thermodynamic_state(topology_proposal.new_system)
 
         initial_reduced_potential = feptasks.compute_reduced_potential(old_thermodynamic_state, sampler_state)
-        logP_initial = -initial_reduced_potential + old_log_weight
+        logP_initial_nonalchemical = - initial_reduced_potential
 
         new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, sampler_state)
         
@@ -394,44 +395,48 @@ class ExpandedEnsembleSampler(object):
             ncmc_old_sampler_state = sampler_state
             ncmc_new_sampler_state = new_geometry_sampler_state
             logP_work = 0.0
-            logP_energy = 0.0
+            logP_initial_hybrid = 0.0
+            logP_final_hybrid = 0.0
         else:
-            ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_energy = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
+            ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_initial_hybrid, logP_final_hybrid = self._ncmc_hybrid(topology_proposal, sampler_state, new_geometry_sampler_state)
 
-        if logP_work > -np.inf and logP_energy > -np.inf:
+        if logP_work > -np.inf and logP_initial_hybrid > -np.inf and logP_final_hybrid > -np.inf:
             logP_geometry_reverse = self._geometry_reverse(topology_proposal, ncmc_new_sampler_state, ncmc_old_sampler_state)
+            logP_to_hybrid = logP_initial_hybrid - logP_initial_nonalchemical
 
             final_reduced_potential = feptasks.compute_reduced_potential(new_thermodynamic_state, ncmc_new_sampler_state)
-            logP_final = -final_reduced_potential + new_log_weight
+            logP_final_nonalchemical = -final_reduced_potential
+            logP_from_hybrid = logP_final_nonalchemical - logP_final_hybrid
+            logP_sams_weight = new_log_weight - old_log_weight
 
             # Compute total log acceptance probability according to Eq. 46
-            logP_accept = logP_final - logP_initial + logP_chemical_proposal + logP_geometry_reverse - logP_geometry_forward + logP_work + logP_energy
+            logP_accept = logP_to_hybrid - logP_geometry_forward + logP_work + logP_from_hybrid + logP_geometry_reverse + logP_sams_weight
         else:
             logP_geometry_reverse = 0.0
             logP_final = 0.0
-            logP_accept = logP_final - logP_initial + logP_chemical_proposal + logP_geometry_reverse - logP_geometry_forward + logP_work + logP_energy
+            logP_to_hybrid = 0.0
+            logP_from_hybrid = 0.0
+            logP_sams_weight = new_log_weight - old_log_weight
+            logP_accept = logP_to_hybrid - logP_geometry_forward + logP_work + logP_from_hybrid + logP_geometry_reverse + logP_sams_weight
             #TODO: mark failed proposals as unproposable
 
         if self.verbose:
-            print("logP_accept = %+10.4e [logP_final = %+10.4e, -logP_initial = %+10.4e, logP_chemical = %10.4e, logP_reverse = %+10.4e, -logP_forward = %+10.4e, logP_work = %+10.4e, logP_energy = %+10.4e]"
-                % (logP_accept, logP_final, -logP_initial, logP_chemical_proposal, logP_geometry_reverse, -logP_geometry_forward, logP_work, logP_energy))
+            print("logP_accept = %+10.4e [logP_to_hybrid = %+10.4e, logP_chemical_proposal = %10.4e, logP_reverse = %+10.4e, -logP_forward = %+10.4e, logP_work = %+10.4e, logP_from_hybrid = %+10.4e, logP_sams_weight = %+10.4e]"
+                % (logP_accept, logP_to_hybrid, logP_chemical_proposal, logP_geometry_reverse, -logP_geometry_forward, logP_work, logP_from_hybrid, logP_sams_weight))
         # Write to storage.
         if self.storage:
             self.storage.write_quantity('logP_accept', logP_accept, iteration=self.iteration)
             # Write components to storage
             self.storage.write_quantity('logP_ncmc_work', logP_work, iteration=self.iteration)
-            self.storage.write_quantity('logP_final', logP_final, iteration=self.iteration)
-            self.storage.write_quantity('logP_initial', logP_initial, iteration=self.iteration)
-            self.storage.write_quantity('logP_chemical', logP_chemical_proposal, iteration=self.iteration)
+            self.storage.write_quantity('logP_from_hybrid', logP_from_hybrid, iteration=self.iteration)
+            self.storage.write_quantity('logP_to_hybrid', logP_to_hybrid, iteration=self.iteration)
+            self.storage.write_quantity('logP_chemical_proposal', logP_chemical_proposal, iteration=self.iteration)
             self.storage.write_quantity('logP_reverse', logP_geometry_reverse, iteration=self.iteration)
             self.storage.write_quantity('logP_forward', logP_geometry_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_work', logP_work, iteration=self.iteration)
-            self.storage.write_quantity('logP_energy', logP_energy, iteration=self.iteration)
+            self.storage.write_quantity('logP_sams_weight', logP_sams_weight, iteration=self.iteration)
             # Write some aggregate statistics to storage to make contributions to acceptance probability easier to analyze
             self.storage.write_quantity('logP_groups_chemical', logP_chemical_proposal, iteration=self.iteration)
             self.storage.write_quantity('logP_groups_geometry', logP_geometry_reverse - logP_geometry_forward, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_work_and_energy', logP_work + logP_energy, iteration=self.iteration)
-            self.storage.write_quantity('logP_groups_target', logP_final - logP_initial, iteration=self.iteration)
 
         return logP_accept, ncmc_new_sampler_state
 
@@ -599,7 +604,7 @@ class SAMSSampler(object):
     >>> sams_sampler.run() # doctest: +ELLIPSIS
     ...
     """
-    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='two-stage', storage=None, second_stage_start=None):
+    def __init__(self, sampler, logZ=None, log_target_probabilities=None, update_method='two-stage', storage=None, second_stage_start=1000):
         """
         Create a SAMS Sampler.
 
@@ -619,6 +624,7 @@ class SAMSSampler(object):
 
         """
         from scipy.misc import logsumexp
+        from perses.tests.utils import createOEMolFromSMILES
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
@@ -633,8 +639,9 @@ class SAMSSampler(object):
             #Select a reference state that will always be subtracted (ensure that dict ordering does not change)
             self._reference_state = self.chemical_states[0]
 
-            #initialize the logZ dictionary with zeroes for each chemical state
-            self.logZ = {chemical_state : 0.0 for chemical_state in self.chemical_states}
+
+            #initialize the logZ dictionary with scores based on the number of atoms
+            self.logZ = {chemical_state: -1.0* self._num_dof_compensation(chemical_state) for chemical_state in self.chemical_states}
 
             #Initialize log target probabilities with log(1/n_states)
             self.log_target_probabilities = {chemical_state : np.log(len(self.chemical_states)) for chemical_state in self.chemical_states}
@@ -670,6 +677,7 @@ class SAMSSampler(object):
         # Initialize.
         self.iteration = 0
         self.verbose = False
+        self.sampler.log_weights = {state_key: - self.logZ[state_key] for state_key in self.logZ.keys()}
 
         self.second_stage_start = 0
         if second_stage_start is not None:
@@ -678,6 +686,41 @@ class SAMSSampler(object):
     @property
     def state_keys(self):
         return self.logZ.keys()
+
+    def _num_dof_compensation(self, smiles):
+        """
+        Compute an approximate compensating factor for a chemical state based on the number of degrees of freedom that it has.
+
+        The formula is:
+        (num_heavy*heavy_factor) + (num_hydrogen*h_factor) where
+        heavy_factor = 4.5 and
+        light_factor = 3.8
+
+        Parameters
+        ----------
+        smiles : str
+            The SMILES string of the molecule
+
+        Returns
+        -------
+        correction_factor : float
+        """
+        mol = createOEMolFromSMILES(smiles)
+        num_heavy = 0
+        num_light = 0
+
+        heavy_factor = 4.5
+        light_factor = 3.8
+
+        for atom in mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                num_light += 1
+            else:
+                num_heavy += 1
+
+        correction_factor = num_heavy*heavy_factor + num_light*light_factor
+
+        return correction_factor
 
     def update_sampler(self):
         """

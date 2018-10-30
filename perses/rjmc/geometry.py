@@ -362,6 +362,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 if self.verbose: _logger.info(
                     '%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (
                     atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
+
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 

@@ -2,10 +2,20 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="0ceea625-47bb-4f09-b3e5-fefd8d3f3a30" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/perses/data/protein.ff14SB.protonated-termini.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/perses/data/protein.ff14SB.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/scripts/generate-protonated-termini.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/lib/examples/tdi-example/tdi_setup.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/devtools/conda-recipe/meta.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/devtools/conda-recipe/meta.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/devtools/travis-ci/oe_license.txt.enc" beforeDir="false" afterPath="$PROJECT_DIR$/devtools/travis-ci/oe_license.txt.enc" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/annihilation/ncmc_switching.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/annihilation/ncmc_switching.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/annihilation/new_relative.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/annihilation/new_relative.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/dispersed/feptasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/dispersed/feptasks.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/perses/rjmc/geometry.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/rjmc/geometry.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/perses/rjmc/topology_proposal.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/rjmc/topology_proposal.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/perses/samplers/samplers.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/samplers/samplers.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/perses/tests/testsystems.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/tests/testsystems.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -71,11 +81,11 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/perses/rjmc/topology_proposal.py">
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="264">
-              <caret line="1078" column="101" lean-forward="true" selection-start-line="1078" selection-start-column="12" selection-end-line="1078" selection-end-column="101" />
+              <caret line="1078" column="101" selection-start-line="1078" selection-start-column="12" selection-end-line="1078" selection-end-column="101" />
             </state>
           </provider>
         </entry>
@@ -89,11 +99,11 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/perses/rjmc/geometry.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="203">
-              <caret line="1486" column="84" selection-start-line="1486" selection-start-column="81" selection-end-line="1486" selection-end-column="84" />
+            <state relative-caret-position="-1175">
+              <caret line="264" column="39" selection-start-line="264" selection-start-column="39" selection-end-line="264" selection-end-column="39" />
               <folding>
                 <element signature="e#136#149#0" expanded="true" />
               </folding>
@@ -125,8 +135,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/perses/samplers/samplers.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-3870">
-              <caret line="70" column="3" lean-forward="true" selection-start-line="70" selection-start-column="3" selection-end-line="75" selection-end-column="72" />
+            <state relative-caret-position="-3855">
+              <caret line="71" column="3" selection-start-line="71" selection-start-column="3" selection-end-line="71" selection-end-column="3" />
               <folding>
                 <element signature="e#649#679#0" expanded="true" />
               </folding>
@@ -146,8 +156,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/perses/dispersed/feptasks.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="675">
-              <caret line="49" column="20" selection-start-line="49" selection-start-column="20" selection-end-line="49" selection-end-column="20" />
+            <state relative-caret-position="3600">
+              <caret line="244" column="20" selection-start-line="244" selection-start-column="20" selection-end-line="244" selection-end-column="20" />
               <folding>
                 <element signature="e#0#29#0" expanded="true" />
               </folding>
@@ -166,7 +176,6 @@
   </component>
   <component name="FindInProjectRecents">
     <findStrings>
-      <find>Polymer</find>
       <find>generate_residue_map</find>
       <find>GeometrySystem</find>
       <find>PointMutat</find>
@@ -196,6 +205,7 @@
       <find>GeometrySystemGenerator</find>
       <find>is_residue_equal</find>
       <find>HIS</find>
+      <find>&gt;&gt;&gt;&gt;&gt;</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -583,8 +593,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/perses/dispersed/feptasks.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="675">
-          <caret line="49" column="20" selection-start-line="49" selection-start-column="20" selection-end-line="49" selection-end-column="20" />
+        <state relative-caret-position="3600">
+          <caret line="244" column="20" selection-start-line="244" selection-start-column="20" selection-end-line="244" selection-end-column="20" />
           <folding>
             <element signature="e#0#29#0" expanded="true" />
           </folding>
@@ -600,8 +610,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/perses/samplers/samplers.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-3870">
-          <caret line="70" column="3" lean-forward="true" selection-start-line="70" selection-start-column="3" selection-end-line="75" selection-end-column="72" />
+        <state relative-caret-position="-3855">
+          <caret line="71" column="3" selection-start-line="71" selection-start-column="3" selection-end-line="71" selection-end-column="3" />
           <folding>
             <element signature="e#649#679#0" expanded="true" />
           </folding>
@@ -610,8 +620,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/perses/rjmc/geometry.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="203">
-          <caret line="1486" column="84" selection-start-line="1486" selection-start-column="81" selection-end-line="1486" selection-end-column="84" />
+        <state relative-caret-position="-1175">
+          <caret line="264" column="39" selection-start-line="264" selection-start-column="39" selection-end-line="264" selection-end-column="39" />
           <folding>
             <element signature="e#136#149#0" expanded="true" />
           </folding>
@@ -621,7 +631,7 @@
     <entry file="file://$PROJECT_DIR$/perses/rjmc/topology_proposal.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="264">
-          <caret line="1078" column="101" lean-forward="true" selection-start-line="1078" selection-start-column="12" selection-end-line="1078" selection-end-column="101" />
+          <caret line="1078" column="101" selection-start-line="1078" selection-start-column="12" selection-end-line="1078" selection-end-column="101" />
         </state>
       </provider>
     </entry>
