@@ -198,9 +198,7 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         thermodynamic_state : openmmtools.states.ThermodynamicState
             the thermodynamic state for which this integrator is cached.
         """
-        global_variables_to_reset = ['protocol_work', 'unperturbed_pe', 'perturbed_pe', 'first_step']
-        for variable in global_variables_to_reset:
-            self._integrator.setGlobalVariableByName(variable, 0.0)
+        self._integrator.reset()
         self._current_total_work = 0
 
     def _before_integration(self, context: openmm.Context, thermodynamic_state: states.ThermodynamicState):
