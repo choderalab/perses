@@ -38,7 +38,8 @@ class HydrationPersesRun(object):
                                                         forcefield_kwargs={'nonbondedMethod': app.PME,
                                                                            'nonbondedCutoff': 9.0 * unit.angstrom,
                                                                            'implicitSolvent': None,
-                                                                           'constraints': constraints},
+                                                                           'constraints': constraints,
+                                                                           'ewaldErrorTolerance': 1e-5},
                                                         barostat=barostat)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
                                                       forcefield_kwargs={'nonbondedMethod': app.NoCutoff,
