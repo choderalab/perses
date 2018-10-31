@@ -5,6 +5,7 @@ from simtk import openmm, unit
 from simtk.openmm import app
 from openmmtools import cache
 from perses.storage import NetCDFStorageView, NetCDFStorage
+from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from typing import List, Dict
 
 cache.global_context_cache.platform = openmm.Platform.getPlatformByName("CUDA")
@@ -17,7 +18,7 @@ class HydrationPersesRun(object):
     """
 
     def __init__(self, molecules: List[str], output_filename: str, ncmc_switching_times: Dict[str, int], equilibrium_steps: Dict[str, int], timestep: unit.Quantity, initial_molecule: str=None, geometry_options: Dict=None):
-        self._molecules = molecules
+        self._molecules = [SmallMoleculeSetProposalEngine.canonicalize_smiles(molecule) for molecule in molecules]
         environments = ['explicit', 'vacuum']
         temperature = 300 * unit.kelvin
         pressure = 1.0 * unit.atmospheres
@@ -71,7 +72,6 @@ class HydrationPersesRun(object):
         positions['explicit'] = modeller.getPositions()
 
         # Set up the proposal engines.
-        from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
         proposal_metadata = {}
         proposal_engines = dict()
 
