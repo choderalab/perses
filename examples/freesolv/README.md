@@ -17,3 +17,6 @@ the included database, run `bash prepare_freesolv.sh`. This will generate severa
 * `database.smi`: All molecules in FreeSolv in SMILES format
 * `full_database.pdf`: Depiction of the full FreeSolv database
 
+## Reference
+
+David L. Mobley, Michael Shirts, Nathan Lim, John Chodera, Kyle Beauchamp, & Lee-Ping. (2018, January 26). MobleyLab/FreeSolv: Version 0.52 (Version v0.52). Zenodo. http://doi.org/10.5281/zenodo.1161245
