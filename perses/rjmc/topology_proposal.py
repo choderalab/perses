@@ -1345,8 +1345,8 @@ class PolymerProposalEngine(ProposalEngine):
                 first_atom_index_new = atom.index
                 break
 
-            old_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(old_res)
-            new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(new_res)
+            old_oemol_res = FFAllAngleGeometryEngine.oemol_from_residue(old_res)
+            new_oemol_res = FFAllAngleGeometryEngine.oemol_from_residue(new_res)
             # local_atom_map : dict, key : index of atom in new residue, value : index of atom in old residue.
             local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res, first_atom_index_old, first_atom_index_new) ## IVY change back to "_, local_atom_map" if matches is used elsewhere
             for backbone_name in ['CA','N']:
@@ -1372,7 +1372,7 @@ class PolymerProposalEngine(ProposalEngine):
         first_atom_index_new : int
             The index of the first atom in the new residue/proposed molecule
 
-        Note: Since FFAllAngleGeometryEngine._oemol_from_residue creates a new topology for the specified residue,
+        Note: Since FFAllAngleGeometryEngine.oemol_from_residue creates a new topology for the specified residue,
         the atom indices in the output oemol (i.e. current_molecule and proposed_molecule) are reset to start at 0.
         Therefore, first_atom_index_old and first_atom_index_new are used to correct the indices such that they match
         the atom indices of the original old and new residues.

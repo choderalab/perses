@@ -15,21 +15,21 @@ import simtk.openmm.app as app
 import tempfile
 import itertools
 
-# Import packages necessary for _generateOEMolFromTopologyResidue
-import sys
-
-if sys.version_info >= (3, 0):
-    from subprocess import getstatusoutput, call
-
-
-    def run_command(command):
-        call(command.split())
-else:
-    from commands import getstatusoutput
-
-
-    def run_command(command):
-        getstatusoutput(command)
+# Import packages necessary for _generateOEMolFromTopologyResidue ## IVY Delete
+# import sys
+#
+# if sys.version_info >= (3, 0):
+#     from subprocess import getstatusoutput, call
+#
+#
+#     def run_command(command):
+#         call(command.split())
+# else:
+#     from commands import getstatusoutput
+#
+#
+#     def run_command(command):
+#         getstatusoutput(command)
 
 import os
 import time
@@ -398,7 +398,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp_proposal, new_positions
 
     @staticmethod
-    def _oemol_from_residue(res, verbose=True):
+    def oemol_from_residue(res, verbose=True):
         """
         Get an OEMol from a residue, even if that residue
         is polymeric. In the latter case, external bonds
@@ -416,89 +416,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         oemol : openeye.oechem.OEMol
             an oemol representation of the residue with topology indices
         """
-
-        # IVY add comments for this function
-        def _generateOEMolFromTopologyResidue(res, antechamber=False, geometry=False, tripos_atom_names=False):
-            # Create OEMol where all atoms have bond order 1.
-            molecule = oechem.OEMol()
-            molecule.SetTitle(res.name)  # name molecule after first residue
-            for atom in res.atoms():
-                oeatom = molecule.NewAtom(atom.element.atomic_number)
-                oeatom.SetName(atom.name)
-                try:
-                    oeatom.AddData("topology_index", atom.topology_index)
-                except AttributeError:
-                    pass
-                try:
-                    oeatom.AddData("stereo", atom.stereo)
-                except AttributeError:
-                    pass
-            oeatoms = {oeatom.GetName(): oeatom for oeatom in molecule.GetAtoms()}
-            for (atom1, atom2) in res.bonds():
-                order = 1
-                molecule.NewBond(oeatoms[atom1.name], oeatoms[atom2.name], order)
-
-            # Write out a mol2 file without altering molecule.
-            tmpdir = tempfile.mkdtemp()
-            mol2_input_filename = os.path.join(tmpdir, 'molecule-before-bond-perception.mol2')
-            ac_output_filename = os.path.join(tmpdir, 'molecule-after-bond-perception.ac')
-            ofs = oechem.oemolostream(mol2_input_filename)
-            m2h = True
-            substruct = False
-            oechem.OEWriteMol2File(ofs, molecule, m2h, substruct)
-            ofs.close()
-            # Run Antechamber for small molecules, Bondtype for proteins
-            if antechamber:
-                command = 'antechamber -i %s -fi mol2 -o %s -fo ac -j 4' % (mol2_input_filename, ac_output_filename)
-            else:
-                command = 'bondtype -i %s -o %s -f mol2 -j full' % (mol2_input_filename, ac_output_filename)
-
-            from subprocess import getstatusoutput
-            [status, output] = getstatusoutput(command)
-            # print("status: ", status) ##IVY
-            # print("output: ", output)
-            # run_command(command)
-
-            # Define mapping from GAFF bond orders to OpenEye bond orders.
-            order_map = {1: 1, 2: 2, 3: 3, 7: 1, 8: 2, 9: 5, 10: 5}
-            # Read bonds.
-            infile = open(ac_output_filename)
-            lines = infile.readlines()
-            infile.close()
-            antechamber_bond_types = list()
-            for line in lines:
-                elements = line.split()
-                if elements[0] == 'BOND':
-                    antechamber_bond_types.append(int(elements[4]))
-            oechem.OEClearAromaticFlags(molecule)
-            for (bond, antechamber_bond_type) in zip(molecule.GetBonds(), antechamber_bond_types):
-                # bond.SetOrder(order_map[antechamber_bond_type])
-                bond.SetIntType(order_map[antechamber_bond_type])
-            oechem.OEFindRingAtomsAndBonds(molecule)
-            oechem.OEKekulize(molecule)
-            oechem.OEAssignFormalCharges(molecule)
-            oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
-
-            # Clean up.
-            os.unlink(mol2_input_filename)
-            os.unlink(ac_output_filename)
-            os.rmdir(tmpdir)
-            oechem.OEAddExplicitHydrogens(molecule)
-
-            # Generate Tripos atom names if requested.
-            if tripos_atom_names:
-                oechem.OETriposAtomNames(molecule)
-
-            # Assign geometry
-            if geometry:
-                omega = oeomega.OEOmega()
-                omega.SetMaxConfs(1)
-                omega.SetIncludeInput(False)
-                omega.SetStrictStereo(False)
-                omega(molecule)
-
-            return molecule
-
         external_bonds = list(res.external_bonds())
         for bond in external_bonds:
             if verbose: print("external bond: ", bond)
@@ -532,11 +449,93 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                     new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res)
                     new_topology.addBond(new_hydrogen, new_atom)
-            oemol = _generateOEMolFromTopologyResidue(new_res)
+            oemol = FFAllAngleGeometryEngine.generateOEMolFromTopologyResidue(new_res)
         else:
-            oemol = _generateOEMolFromTopologyResidue(res, antechamber=True)
+            oemol = FFAllAngleGeometryEngine.generateOEMolFromTopologyResidue(res, antechamber=True)
         return oemol
 
+    # IVY add comments for this function
+    @staticmethod
+    def generateOEMolFromTopologyResidue(res, antechamber=False, geometry=False, tripos_atom_names=False):
+        # Create OEMol where all atoms have bond order 1.
+        molecule = oechem.OEMol()
+        molecule.SetTitle(res.name)  # name molecule after first residue
+        for atom in res.atoms():
+            oeatom = molecule.NewAtom(atom.element.atomic_number)
+            oeatom.SetName(atom.name)
+            try:
+                oeatom.AddData("topology_index", atom.topology_index)
+            except AttributeError:
+                pass
+            try:
+                oeatom.AddData("stereo", atom.stereo)
+            except AttributeError:
+                pass
+        oeatoms = {oeatom.GetName(): oeatom for oeatom in molecule.GetAtoms()}
+        for (atom1, atom2) in res.bonds():
+            order = 1
+            molecule.NewBond(oeatoms[atom1.name], oeatoms[atom2.name], order)
+
+        # Write out a mol2 file without altering molecule.
+        tmpdir = tempfile.mkdtemp()
+        mol2_input_filename = os.path.join(tmpdir, 'molecule-before-bond-perception.mol2')
+        ac_output_filename = os.path.join(tmpdir, 'molecule-after-bond-perception.ac')
+        ofs = oechem.oemolostream(mol2_input_filename)
+        m2h = True
+        substruct = False
+        oechem.OEWriteMol2File(ofs, molecule, m2h, substruct)
+        ofs.close()
+        # Run Antechamber for small molecules, Bondtype for proteins
+        if antechamber:
+            command = 'antechamber -i %s -fi mol2 -o %s -fo ac -j 4' % (mol2_input_filename, ac_output_filename)
+        else:
+            command = 'bondtype -i %s -o %s -f mol2 -j full' % (mol2_input_filename, ac_output_filename)
+
+        from subprocess import getstatusoutput
+        [status, output] = getstatusoutput(command)
+        # print("status: ", status) ##IVY
+        # print("output: ", output)
+        # run_command(command)
+
+        # Define mapping from GAFF bond orders to OpenEye bond orders.
+        order_map = {1: 1, 2: 2, 3: 3, 7: 1, 8: 2, 9: 5, 10: 5}
+        # Read bonds.
+        infile = open(ac_output_filename)
+        lines = infile.readlines()
+        infile.close()
+        antechamber_bond_types = list()
+        for line in lines:
+            elements = line.split()
+            if elements[0] == 'BOND':
+                antechamber_bond_types.append(int(elements[4]))
+        oechem.OEClearAromaticFlags(molecule)
+        for (bond, antechamber_bond_type) in zip(molecule.GetBonds(), antechamber_bond_types):
+            # bond.SetOrder(order_map[antechamber_bond_type])
+            bond.SetIntType(order_map[antechamber_bond_type])
+        oechem.OEFindRingAtomsAndBonds(molecule)
+        oechem.OEKekulize(molecule)
+        oechem.OEAssignFormalCharges(molecule)
+        oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+
+        # Clean up.
+        os.unlink(mol2_input_filename)
+        os.unlink(ac_output_filename)
+        os.rmdir(tmpdir)
+        oechem.OEAddExplicitHydrogens(molecule)
+
+        # Generate Tripos atom names if requested.
+        if tripos_atom_names:
+            oechem.OETriposAtomNames(molecule)
+
+        # Assign geometry
+        if geometry:
+            omega = oeomega.OEOmega()
+            omega.SetMaxConfs(1)
+            omega.SetIncludeInput(False)
+            omega.SetStrictStereo(False)
+            omega(molecule)
+
+        return molecule
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
         """
@@ -1708,7 +1707,7 @@ class GeometrySystemGenerator(object):
 
         # Generate oemol using reference topology residue. Also get the omega geometry of the molecule.
         try:
-            oemol = FFAllAngleGeometryEngine._oemol_from_residue(residues[0])
+            oemol = FFAllAngleGeometryEngine.oemol_from_residue(residues[0])
             omega = oeomega.OEOmega()
             omega.SetMaxConfs(1)
             omega.SetStrictStereo(False)
@@ -1738,6 +1737,7 @@ class GeometrySystemGenerator(object):
                     print("getting stereochemistry for small molecule") ## IVY delete
                     try:
                         stereo = oechem.OECIPAtomStereo_R if atom.GetData("stereo") == 'R' else oechem.OECIPAtomStereo_S
+                        print("got stereo ", stereo, " for atom: ", atom.GetName(), " with atomic num: ", atom.GetAtomicNum(), " and index: ", atom.GetIdx())
                         oechem.OESetCIPStereo(oemol, atom, stereo)
                     except:
                         print("Unable to get stereochemistry from topology for chiral atom at index ", atom.GetIdx())
@@ -1894,7 +1894,7 @@ class GeometrySystemGenerator(object):
 
         for residue in residues:
             try:
-                oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
+                oemol = FFAllAngleGeometryEngine.oemol_from_residue(residue)
             except Exception as e:
                 print("Could not generate an oemol from the residue.")
                 print(e)
