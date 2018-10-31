@@ -1,7 +1,7 @@
 #file to specify options for RJ hydration free energy optimization
 
 #Global options:
-timestep: 1.0 #fs
+timestep: 2.0 #fs
 n_designer_iterations: 10000
 output_filename: rj_hydration.nc
 molecule_file: filtered_database.smi

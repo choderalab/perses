@@ -1,7 +1,8 @@
 # FreeSolv example
 
 This folder contains an example of optimizing a subset of FreeSolv molecules for hydration free energy
-using Reversible Jump MCMC. 
+using Reversible Jump MCMC. The `MultiTargetDesigner` that gets instantiated is intended to focus on the states
+whose relative hydration free energy is most favorable.
 
 ## Components
 
