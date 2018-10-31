@@ -5,16 +5,18 @@ import os
 import copy
 
 #Add the variables specific to the Alchemical langevin integrator
-cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
-     "protocol_work" : 0.0,
-     "Eold" : 0.0,
-     "Enew" : 0.0,
-     "lambda" : 0.0,
-     "nsteps" : 0.0,
-     "step" : 0.0,
-     "n_lambda_steps" : 0.0,
-     "lambda_step" : 0.0
- })
+#only do this if we're not using the DummyContextCache
+if type(cache.global_context_cache) == cache.ContextCache:
+    cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
+         "protocol_work" : 0.0,
+         "Eold" : 0.0,
+         "Enew" : 0.0,
+         "lambda" : 0.0,
+         "nsteps" : 0.0,
+         "step" : 0.0,
+         "n_lambda_steps" : 0.0,
+         "lambda_step" : 0.0
+     })
 
 
 import openmmtools.mcmc as mcmc
@@ -711,7 +713,11 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     reduced_potential : float
         unitless reduced potential (kT)
     """
-    context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
+    if type(cache.global_context_cache) == cache.DummyContextCache:
+        integrator = openmm.VerletIntegrator(1.0) #we won't take any steps, so use a simple integrator
+        context, integrator = cache.global_context_cache.get_context(thermodynamic_state, integrator)
+    else:
+        context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 
