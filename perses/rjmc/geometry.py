@@ -97,7 +97,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.verbose = verbose
         self.use_sterics = use_sterics
         self._n_torsion_divisions = n_torsion_divisions
-        self._storage = NetCDFStorageView(modname="GeometryEngine", storage=storage)
+        if self._storage:
+            self._storage = NetCDFStorageView(modname="GeometryEngine", storage=storage)
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -229,8 +230,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         logp_proposal = logp_choice
-
-        self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
+        if self._storage:
+            self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
 
         if self.use_sterics:
             platform_name = 'CPU'
@@ -322,7 +323,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         total_time = time.time() - initial_time
 
         #use a new array for each placement, since the variable size will be different.
-        self._storage.write_array("atom_placement_logp_{}_{}".format(direction, self.nproposed), np.stack(atom_placements))
+        if self._storage:
+            self._storage.write_array("atom_placement_logp_{}_{}".format(direction, self.nproposed), np.stack(atom_placements))
 
         if direction=='forward':
             logging.log(logging.DEBUG, "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
