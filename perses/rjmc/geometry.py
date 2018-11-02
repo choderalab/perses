@@ -97,8 +97,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.verbose = verbose
         self.use_sterics = use_sterics
         self._n_torsion_divisions = n_torsion_divisions
-        if self._storage:
+        if storage:
             self._storage = NetCDFStorageView(modname="GeometryEngine", storage=storage)
+        else:
+            self._storage = None
 
     def propose(self, top_proposal, current_positions, beta):
         """
