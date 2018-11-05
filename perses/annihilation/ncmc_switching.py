@@ -9,7 +9,7 @@ from perses.storage import NetCDFStorageView
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
-from openmmtools.cache import LRUCache, ContextCache
+from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
 from openmmtools.alchemy import AlchemicalState
 
@@ -325,20 +325,34 @@ class NCMCEngine(object):
         #run the NCMC protocol
         try:
             ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
-        except:
+        except Exception as e:
+            _logger.warn("NCMC failed because {}; rejecting.".format(str(e)))
             logP_work = -np.inf
-            logP_energy = -np.inf
-            return [initial_sampler_state, proposed_sampler_state, logP_work, logP_energy]
+            return [initial_sampler_state, proposed_sampler_state, -np.inf, 0.0, 0.0]
 
         #get the total work:
         logP_work = - ne_move.cumulative_work[-1]
 
         # Compute contribution of transforming to and from the hybrid system:
-        compound_thermodynamic_state.set_alchemical_parameters(0.0)
-        initial_reduced_potential = compute_reduced_potential(compound_thermodynamic_state, initial_hybrid_sampler_state)
+        context, integrator = global_context_cache.get_context(hybrid_thermodynamic_state)
 
-        compound_thermodynamic_state.set_alchemical_parameters(1.0)
-        final_reduced_potential = compute_reduced_potential(compound_thermodynamic_state, final_hybrid_sampler_state)
+        #set all alchemical parameters to zero:
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 0.0)
+
+        initial_hybrid_sampler_state.apply_to_context(context, ignore_velocities=True)
+        initial_reduced_potential = hybrid_thermodynamic_state.reduced_potential(context)
+
+        #set all alchemical parameters to one:
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 1.0)
+
+        final_hybrid_sampler_state.apply_to_context(context, ignore_velocities=True)
+        final_reduced_potential = hybrid_thermodynamic_state.reduced_potential(context)
+
+        #reset the parameters back to zero just in case
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 0.0)
 
         #compute the output SamplerState, which has the atoms only for the new system post-NCMC:
         new_positions = hybrid_factory.new_positions(final_hybrid_sampler_state.positions)
@@ -351,15 +365,15 @@ class NCMCEngine(object):
         final_old_sampler_state = SamplerState(old_positions, box_vectors=old_box_vectors)
 
         #extract the trajectory and box vectors from the move:
-        trajectory = ne_move.trajectory
+        trajectory = ne_move.trajectory[::-self._write_ncmc_interval, :, :][::-1]
         topology = hybrid_factory.hybrid_topology
         position_varname = "ncmcpositions"
-        nframes = ne_move.n_frames
+        nframes = np.shape(trajectory)[0]
 
         #extract box vectors:
         box_vec_varname = "ncmcboxvectors"
-        box_lengths = ne_move.box_lengths
-        box_angles = ne_move.box_angles
+        box_lengths = ne_move.box_lengths[::-self._write_ncmc_interval, :][::-1]
+        box_angles = ne_move.box_angles[::-self._write_ncmc_interval, :][::-1]
         box_lengths_and_angles = np.stack([box_lengths, box_angles])
 
         #write out the positions of the topology

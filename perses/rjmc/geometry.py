@@ -15,27 +15,10 @@ import simtk.openmm.app as app
 import tempfile
 import itertools
 from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
-
-# Import packages necessary for _generateOEMolFromTopologyResidue ## IVY Delete
-# import sys
-#
-# if sys.version_info >= (3, 0):
-#     from subprocess import getstatusoutput, call
-#
-#
-#     def run_command(command):
-#         call(command.split())
-# else:
-#     from commands import getstatusoutput
-#
-#
-#     def run_command(command):
-#         getstatusoutput(command)
-
 import os
 import time
 import logging
-
+from perses.storage import NetCDFStorage, NetCDFStorageView
 _logger = logging.getLogger("geometry")
 
 
@@ -49,7 +32,7 @@ class GeometryEngine(object):
         GeometryEngine-related metadata as a dict
     """
 
-    def __init__(self, metadata=None):
+    def __init__(self, metadata=None, storage=None):
         # TODO: Either this base constructor should be called by subclasses, or we should remove its arguments.
         pass
 
@@ -107,8 +90,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
-
-    def __init__(self, metadata=None, use_sterics=False, verbose=True):
+    def __init__(self, metadata=None, use_sterics=False, n_torsion_divisions=180, verbose=True, storage=None):
         self._metadata = metadata
         self.write_proposal_pdb = False  # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal'  # PDB file prefix for writing sequential atom placements
@@ -118,6 +100,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._position_set_time = 0.0
         self.verbose = verbose
         self.use_sterics = use_sterics
+        self._n_torsion_divisions = n_torsion_divisions
+        if storage:
+            self._storage = NetCDFStorageView(modname="GeometryEngine", storage=storage)
+        else:
+            self._storage = None
 
     def propose(self, top_proposal, current_positions, beta):
         """
@@ -256,29 +243,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         logp_proposal = logp_choice
-
-        if self.write_proposal_pdb:
-            # DEBUG: Write growth stages
-            from simtk.openmm.app import PDBFile
-            prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
-            self._proposal_pdbfile = open("%s-proposal.pdb" % prefix, 'w')  # PDB file for proposal probabilities
-            self._proposal_pdbfile.write('MODEL\n')
-            self._proposal_pdbfile.write('TER\n')
-            self._proposal_pdbfile.write('ENDMDL\n')
-
-            if direction == 'forward':
-                pdbfile = open('%s-initial.pdb' % prefix, 'w')
-                PDBFile.writeFile(top_proposal.old_topology, old_positions, file=pdbfile)
-                pdbfile.close()
-                pdbfile = open("%s-stages.pdb" % prefix, 'w')
-                self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions, 0)
-            else:
-                pdbfile = open('%s-initial.pdb' % prefix, 'w')
-                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
-                pdbfile.close()
-                pdbfile = open("%s-stages.pdb" % prefix, 'w')
-                self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions, 0)
-
+        if self._storage:
+            self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
         if self.use_sterics:
             platform_name = 'CPU'
         else:
@@ -287,18 +253,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1 * units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-
-        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys()) + 1, context)
-        debug = False
-        if debug:
-            context.setPositions(self._metadata['reference_positions'])
-            context.setParameter(growth_parameter_name, len(atom_proposal_order.keys()))
-            state = context.getState(getEnergy=True)
-            _logger.debug("The potential of the valence terms is %s" % str(state.getPotentialEnergy()))
+        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys())+1, context)
         growth_parameter_value = 1
-        # now for the main loop:
+
+        #now for the main loop:
         logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
+        atom_placements = []
         for atom, torsion in atom_proposal_order.items():
+
             growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
@@ -347,52 +309,39 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             logZ_theta = np.log((np.sqrt(2 * np.pi) * (sigma_theta.value_in_unit(units.radians))))
             logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
 
-            # propose a torsion angle and calcualate its probability
-            if direction == 'forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=360)
-                xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx],
-                                                        new_positions[torsion_atom.idx], r, theta, phi)
+            #propose a torsion angle and calcualate its probability
+            if direction=='forward':
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=self._n_torsion_divisions)
+                xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta,
-                                              n_divisions=360)
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=self._n_torsion_divisions)
 
-            # accumulate logp
-            if direction == 'reverse':
-                if self.verbose: _logger.info(
-                    '%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (
-                    atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
+            #accumulate logp
+            #if direction == 'reverse':
+            if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
+
+            atom_placement_array = np.array([atom.idx, r.value_in_unit_system(units.md_unit_system),
+                                             theta.value_in_unit_system(units.md_unit_system),
+                                             phi.value_in_unit_system(units.md_unit_system),
+                                             logp_r, logp_theta, logp_phi, np.log(detJ)])
+            atom_placements.append(atom_placement_array)
 
             logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
             growth_parameter_value += 1
 
             # DEBUG: Write PDB file for placed atoms
             atoms_with_positions.append(atom)
-            if self.write_proposal_pdb:
-                if direction == 'forward':
-                    self._write_partial_pdb(pdbfile, top_proposal.new_topology, new_positions, atoms_with_positions,
-                                            growth_parameter_value)
-                else:
-                    self._write_partial_pdb(pdbfile, top_proposal.old_topology, old_positions, atoms_with_positions,
-                                            growth_parameter_value)
 
-        if self.write_proposal_pdb:
-            pdbfile.close()
-            # Close proposal probability PDB file
-            self._proposal_pdbfile.close()
-            self._proposal_pdbfile = None
-            prefix = '%s-%d-%s' % (self.pdb_filename_prefix, self.nproposed, direction)
-            if direction == 'forward':
-                pdbfile = open('%s-final.pdb' % prefix, 'w')
-                PDBFile.writeFile(top_proposal.new_topology, new_positions, file=pdbfile)
-                pdbfile.close()
         total_time = time.time() - initial_time
-        if direction == 'forward':
-            logging.log(logging.DEBUG,
-                        "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (
-                        proposal_order_time, growth_system_time, self._torsion_coordinate_time, self._energy_time,
-                        self._position_set_time, total_time))
+
+        #use a new array for each placement, since the variable size will be different.
+        if self._storage:
+            self._storage.write_array("atom_placement_logp_{}_{}".format(direction, self.nproposed), np.stack(atom_placements))
+
+        if direction=='forward':
+            logging.log(logging.DEBUG, "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
         self._torsion_coordinate_time = 0.0
         self._energy_time = 0.0
         self._position_set_time = 0.0
