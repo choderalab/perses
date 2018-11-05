@@ -2,31 +2,21 @@
 # sys.path.append('../../')
 #
 #
+from openmmtools import cache
+from simtk import openmm
 from perses.tests.testsystems import AlanineDipeptideTestSystem
-from perses.tests.utils import compute_potential_components
-# import sys
-# sys.stdout = open("stdout", mode='w')
-#skip 'buffering' if you don't want the output to be flushed right away after written
-testsystem = AlanineDipeptideTestSystem()
+from perses.tests.testsystems import AlkanesTestSystem
+from perses.tests.testsystems import KinaseInhibitorsTestSystem
+
+# testsystem = AlanineDipeptideTestSystem()
+# testsystem = AlkanesTestSystem(storage_filename='output.nc')
+testsystem = KinaseInhibitorsTestSystem()
 # Build a system
 system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
 # Retrieve a SAMSSampler
-sams_sampler = testsystem.sams_samplers['implicit']
+sams_sampler = testsystem.sams_samplers['explicit'] ## For alkanes test system and kinase inhibitor test system
+# sams_sampler = testsystem.sams_samplers['implicit'] ## for alanine dipeptide test system
 testsystem.exen_samplers['vacuum'].run(niterations=20)
-
-# from perses.tests.testsystems import AlkanesTestSystem
-# from perses.tests.utils import compute_potential_components
-# # import sys
-# # sys.stdout = open("stdout", mode='w')
-# #skip 'buffering' if you don't want the output to be flushed right away after written
-# testsystem = AlkanesTestSystem()
-# # Build a system
-# system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
-# # Retrieve a SAMSSampler
-# sams_sampler = testsystem.sams_samplers['vacuum']
-# testsystem.exen_samplers['vacuum'].run(niterations=20)
-
-
 
 #
 # #### Test pdb fixer (compare results with results from my implementation)
