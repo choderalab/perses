@@ -20,7 +20,7 @@ class HydrationPersesRun(object):
     def __init__(self, molecules: List[str], output_filename: str, ncmc_switching_times: Dict[str, int], equilibrium_steps: Dict[str, int], timestep: unit.Quantity, initial_molecule: str=None, geometry_options: Dict=None):
         self._molecules = [SmallMoleculeSetProposalEngine.canonicalize_smiles(molecule) for molecule in molecules]
         environments = ['explicit', 'vacuum']
-        temperature = 300 * unit.kelvin
+        temperature = 298.15 * unit.kelvin
         pressure = 1.0 * unit.atmospheres
         constraints = app.HBonds
         self._storage = NetCDFStorage(output_filename)
