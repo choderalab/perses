@@ -1811,6 +1811,7 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules = list()
         with open(smiles_filename, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
+            next(csvreader)
             for row in csvreader:
                 name = row[0]
                 smiles = row[1]
