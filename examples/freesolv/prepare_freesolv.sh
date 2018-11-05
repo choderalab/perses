@@ -2,7 +2,7 @@
 #Extract the SMILES from the database
 #the first command excludes the first four lines
 #the second command cuts by delimiter semicolon and takes the 3rd column
-#the final comman removes the leading whitespace in the file
+#the final command removes the leading whitespace in the file
 tail -n +4 database.txt | cut -d ';' -f 2 | tr -d " " > database.smi
 
 #use the openeye molgrep utility to find patterns matching the desired SMARTS
