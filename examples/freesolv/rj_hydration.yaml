@@ -1,0 +1,27 @@
+#file to specify options for RJ hydration free energy optimization
+
+#Global options:
+timestep: 2.0 #fs
+n_designer_iterations: 10000
+output_filename: rj_hydration.nc
+molecule_file: filtered_database.smi
+
+
+#define NCMC switching times for each phase:
+ncmc_switching_times:
+  vacuum: 100
+  explicit: 10000 #number of steps
+
+#define number of equilibrium steps for each phase:
+equilibrium_steps:
+  vacuum: 500
+  explicit: 1000
+
+#add some geometry options:
+use_sterics:
+  vacuum: False
+  explicit: False
+
+geometry_divisions:
+  vacuum: 180
+  explicit: 180

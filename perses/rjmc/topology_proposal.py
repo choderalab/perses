@@ -41,9 +41,11 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
-DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+#DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
+#DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms
+DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 ################################################################################
 # LOGGER
 ################################################################################
@@ -2263,6 +2265,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         for matchpair in match.GetAtoms():
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
+
+            if current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index)).GetAtomicNum() == 1 or proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index)).GetAtomicNum() == 1:
+                continue
+
             new_to_old_atom_map[new_index] = old_index
 
         _logger.info('Atom map took %.3f s' % (time.time() - timer_start))
