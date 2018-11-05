@@ -8,7 +8,6 @@ from perses.storage import NetCDFStorageView, NetCDFStorage
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from typing import List, Dict
 
-cache.global_context_cache.platform = openmm.Platform.getPlatformByName("CUDA")
 cache.global_context_cache.capacity = 30
 
 
