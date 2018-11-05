@@ -14,6 +14,7 @@ import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import tempfile
 import itertools
+from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
 
 # Import packages necessary for _generateOEMolFromTopologyResidue ## IVY Delete
 # import sys
@@ -430,6 +431,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
                 try:
                     new_atom.stereo = atom.stereo
+                    print("got stereo in oemol from residue: ", atom.stereo) ## IVY
                 except AttributeError:
                     pass
 
@@ -449,9 +451,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                     new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res)
                     new_topology.addBond(new_hydrogen, new_atom)
-            oemol = FFAllAngleGeometryEngine.generateOEMolFromTopologyResidue(new_res)
+            oemol = generateOEMolFromTopologyResidue(new_res)
         else:
-            oemol = FFAllAngleGeometryEngine.generateOEMolFromTopologyResidue(res, antechamber=True)
+            oemol = generateOEMolFromTopologyResidue(res)
+        oechem.OEAddExplicitHydrogens(oemol)
         return oemol
 
     # IVY add comments for this function
@@ -469,6 +472,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 pass
             try:
                 oeatom.AddData("stereo", atom.stereo)
+                print("got stereo in generateOEMOlfromtopology residue ", atom.stereo) ## IVY
             except AttributeError:
                 pass
         oeatoms = {oeatom.GetName(): oeatom for oeatom in molecule.GetAtoms()}
@@ -521,7 +525,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         os.unlink(mol2_input_filename)
         os.unlink(ac_output_filename)
         os.rmdir(tmpdir)
-        oechem.OEAddExplicitHydrogens(molecule)
 
         # Generate Tripos atom names if requested.
         if tripos_atom_names:
@@ -1700,6 +1703,9 @@ class GeometrySystemGenerator(object):
             print("got residue from modified: ", residues) ## IVY
         except AttributeError:
             residues = [atoms[growth_indices[0].idx].residue]
+            print("residues: ", residues)
+            for atom in residues[0].atoms():
+                print("atom: ", atom)
             print("got residue from small molecule way") ## IVY
         if len(residues) > 1:
             raise Exception("Please only modify one residue at a time. The residues you tried to modify are: ",
@@ -1736,9 +1742,14 @@ class GeometrySystemGenerator(object):
                 else:  # For small molecule, use stereo property from topology that was transferred to oemol
                     print("getting stereochemistry for small molecule") ## IVY delete
                     try:
-                        stereo = oechem.OECIPAtomStereo_R if atom.GetData("stereo") == 'R' else oechem.OECIPAtomStereo_S
-                        print("got stereo ", stereo, " for atom: ", atom.GetName(), " with atomic num: ", atom.GetAtomicNum(), " and index: ", atom.GetIdx())
-                        oechem.OESetCIPStereo(oemol, atom, stereo)
+                        print("get stereo in determine extra torsions: ", atom.GetData("stereo")) ## IVY
+                        # stereo = oechem.OEAtomStereo_RightHanded if atom.GetData("stereo") == 2 else oechem.OEAtomStereo_LeftHanded
+                        # print("got stereo ", stereo, " for atom: ", atom.GetName(), " with atomic num: ", atom.GetAtomicNum(), " and index: ", atom.GetIdx())
+                        # nbrs = {}
+                        # for nbr in atom.GetAtoms():
+                        #     nbrs[nbr.GetAtomicNum()] = nbr
+                        # nbrs_sorted = [nbrs[key] for key in sorted(nbrs.keys())]
+                        # atom.SetStereo(nbrs_sorted, oechem.OEAtomStereo_Tetra, stereo)
                     except:
                         print("Unable to get stereochemistry from topology for chiral atom at index ", atom.GetIdx())
 

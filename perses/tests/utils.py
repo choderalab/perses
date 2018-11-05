@@ -490,6 +490,7 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     """
     from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
     sanitized_smiles_set = set()
+    OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
     for smiles in smiles_list:
         molecule = OEGraphMol()
         OESmilesToMol(molecule, smiles)
@@ -511,13 +512,19 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
                     print('original: %s', smiles)
                 molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
                 for molecule in molecules:
-                    isosmiles = OECreateIsoSmiString(molecule)
-                    if verbose: print('expanded: %s', isosmiles)
-                    sanitized_smiles_set.add(isosmiles)
+                    # isosmiles = OECreateIsoSmiString(molecule) ## IVY
+                    # sanitized_smiles_set.add(isosmiles) ## IVY
+
+                    # smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)  ## IVY
+                    smiles_string = oechem.OEMolToSmiles(molecule)
+                    sanitized_smiles_set.add(smiles_string)  ## IVY
+                    if verbose: print('expanded: %s', smiles_string)
         else:
             # Convert to OpenEye's canonical isomeric SMILES.
-            isosmiles = OECreateIsoSmiString(molecule)
-            sanitized_smiles_set.add(isosmiles)
+            # isosmiles = OECreateIsoSmiString(molecule)
+            # smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS) ## IVY
+            smiles_string = oechem.OEMolToSmiles(molecule)
+            sanitized_smiles_set.add(smiles_string) ## IVY
 
     sanitized_smiles_list = list(sanitized_smiles_set)
     return sanitized_smiles_list
@@ -613,7 +620,6 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
 
-
 def canonicalize_SMILES(smiles_list):
     """Ensure all SMILES strings end up in canonical form.
     Stereochemistry must already have been expanded.
@@ -629,13 +635,14 @@ def canonicalize_SMILES(smiles_list):
     """
 
     # Round-trip each molecule to a Topology to end up in canonical form
-    from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue, generateTopologyFromOEMol
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol, generateOEMolFromTopologyResidue
+    # from perses.rjmc.geometry import FFAllAngleGeometryEngine ## IVY
     from openeye import oechem
     canonical_smiles_list = list()
     for smiles in smiles_list:
         molecule = smiles_to_oemol(smiles)
         topology = generateTopologyFromOEMol(molecule)
-        residues = [ residue for residue in topology.residues() ]
+        residues = [residue for residue in topology.residues()]
         new_molecule = generateOEMolFromTopologyResidue(residues[0])
         new_smiles = oechem.OECreateIsoSmiString(new_molecule)
         canonical_smiles_list.append(new_smiles)

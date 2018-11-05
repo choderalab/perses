@@ -4,7 +4,7 @@ from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
 
-#Add the variables specific to the Alchemical langevin integrator
+# Add the variables specific to the Alchemical langevin integrator
 cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
      "protocol_work" : 0.0,
      "Eold" : 0.0,
@@ -714,12 +714,8 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
         unitless reduced potential (kT)
     """
     context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
-
-    ## IVY run utils
-    from perses.tests.utils import compute_potential_components
-    print(compute_potential_components(context))
-
     sampler_state.apply_to_context(context, ignore_velocities=True)
+
     return thermodynamic_state.reduced_potential(context)
 
 def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult, nonequilibrium_trajectory: md.Trajectory, trajectory_filename: str) -> float:

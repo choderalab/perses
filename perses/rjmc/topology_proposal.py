@@ -25,7 +25,7 @@ try:
     from StringIO import StringIO
 except ImportError:
     from io import StringIO
-import openmoltools
+from openmoltools import forcefield_generators
 import base64
 import logging
 import time
@@ -2056,7 +2056,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         self._allow_ring_breaking = True # allow ring breaking
 
         # Canonicalize all SMILES strings
-        self._smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in set(list_of_smiles)]
+        self._smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in set(list_of_smiles)] ## IVY
 
         self._n_molecules = len(self._smiles_list)
 
@@ -2181,8 +2181,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
         oechem.OEAddExplicitHydrogens(mol)
-        iso_can_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
-        return iso_can_smiles
+        new_smiles = oechem.OEMolToSmiles(mol) ## IVY
+        # new_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
+        return new_smiles
 
     def _topology_to_smiles(self, topology):
         """
@@ -2202,14 +2203,29 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             molecule
         """
         molecule_name = self._residue_name
-        matching_molecules = [res for res in topology.residues() if res.name==molecule_name]
+        matching_molecules = [res for res in topology.residues() if res.name == molecule_name]
         if len(matching_molecules) != 1:
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        smiles_string = oechem.OECreateSmiString(oemol, OESMILES_OPTIONS)
-        final_smiles_string = smiles_string
-        return final_smiles_string, oemol
+        omega = oeomega.OEOmega()
+        omega.SetMaxConfs(1)
+        omega.SetStrictStereo(False)
+        omega(oemol)
+        for atom in oemol.GetAtoms():
+            try:
+                stereo = atom.GetData("stereo")
+                nbrs = {}
+                for nbr in atom.GetAtoms():
+                    nbrs[nbr.GetAtomicNum()] = nbr
+                nbrs_sorted = [nbrs[key] for key in sorted(nbrs.keys())]
+                atom.OESetStereo(nbrs_sorted, oechem.OEAtomStereo_Tetra, stereo)
+                print("got topology to smiles handedness: ", stereo)
+            except:
+                pass
+        smiles_string = oechem.OEMolToSmiles(oemol) ## IVY
+        # smiles_string = oechem.OECreateSmiString(oemol, OESMILES_OPTIONS)
+        return smiles_string, oemol
 
     def compute_state_key(self, topology):
         """
@@ -2277,7 +2293,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         timer_start = time.time()
 
         oemol_proposed.SetTitle(self._residue_name)
-        mol_topology = self._generateTopologyFromOEMol(oemol_proposed)
+        mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
         append_topology(new_topology, current_receptor_topology)
         append_topology(new_topology, mol_topology)
@@ -2289,47 +2305,47 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         return new_topology
 
-    def _generateTopologyFromOEMol(self, molecule):
-        """
-           Generate an OpenMM Topology object from an OEMol molecule.
-           Parameters
-           ----------
-           molecule : openeye.oechem.OEMol
-               The molecule from which a Topology object is to be generated.
-           Returns
-           -------
-           topology : simtk.openmm.app.Topology
-               The Topology object generated from `molecule`.
-           """
-        # Create a Topology object with one Chain and one Residue.
-        topology = app.Topology()
-        chain = topology.addChain()
-        resname = molecule.GetTitle()
-        residue = topology.addResidue(resname, chain)
-
-        # Create atoms in the residue.
-        for atom in molecule.GetAtoms():
-            name = atom.GetName()
-            element = app.Element.getByAtomicNumber(atom.GetAtomicNum())
-            new_atom = topology.addAtom(name, element, residue)
-            cip = oechem.OEPerceiveCIPStereo(molecule, atom)
-            if atom.HasStereoSpecified():
-                print("atom %d is" % atom.GetIdx(), end=" ") ## IVY Delete
-                if cip == oechem.OECIPAtomStereo_S:
-                    print('S') ## IVY delete
-                    new_atom.stereo = 'S'
-                if cip == oechem.OECIPAtomStereo_R:
-                    print('R') ## IVY delete
-                    new_atom.stereo = 'R'
-                if cip == oechem.OECIPAtomStereo_NotStereo:
-                    print('not a CIP stereo center') ## IVY delete
-
-        # Create bonds.
-        atoms = {atom.name: atom for atom in topology.atoms()}
-        for bond in molecule.GetBonds():
-            topology.addBond(atoms[bond.GetBgn().GetName()], atoms[bond.GetEnd().GetName()])
-
-        return topology
+    # def _generateTopologyFromOEMol(self, molecule): ## IVY delete
+    #     """
+    #        Generate an OpenMM Topology object from an OEMol molecule.
+    #        Parameters
+    #        ----------
+    #        molecule : openeye.oechem.OEMol
+    #            The molecule from which a Topology object is to be generated.
+    #        Returns
+    #        -------
+    #        topology : simtk.openmm.app.Topology
+    #            The Topology object generated from `molecule`.
+    #        """
+    #     # Create a Topology object with one Chain and one Residue.
+    #     topology = app.Topology()
+    #     chain = topology.addChain()
+    #     resname = molecule.GetTitle()
+    #     residue = topology.addResidue(resname, chain)
+    #
+    #     # Create atoms in the residue.
+    #     for atom in molecule.GetAtoms():
+    #         name = atom.GetName()
+    #         element = app.Element.getByAtomicNumber(atom.GetAtomicNum())
+    #         new_atom = topology.addAtom(name, element, residue)
+    #         cip = oechem.OEPerceiveCIPStereo(molecule, atom)
+    #         if atom.HasStereoSpecified():
+    #             print("atom %d is" % atom.GetIdx(), end=" ") ## IVY Delete
+    #             if cip == oechem.OECIPAtomStereo_S:
+    #                 print('S') ## IVY delete
+    #                 new_atom.stereo = 'S'
+    #             if cip == oechem.OECIPAtomStereo_R:
+    #                 print('R') ## IVY delete
+    #                 new_atom.stereo = 'R'
+    #             if cip == oechem.OECIPAtomStereo_NotStereo:
+    #                 print('not a CIP stereo center') ## IVY delete
+    #
+    #     # Create bonds.
+    #     atoms = {atom.name: atom for atom in topology.atoms()}
+    #     for bond in molecule.GetBonds():
+    #         topology.addBond(atoms[bond.GetBgn().GetName()], atoms[bond.GetEnd().GetName()])
+    #
+    #     return topology
 
     def _remove_small_molecule(self, topology):
         """
@@ -2516,6 +2532,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Retrieve the current molecule index
         try:
             current_smiles_idx = self._smiles_list.index(molecule_smiles)
+            print("molecule: ", molecule_smiles)
+            print("molecule set: ", self._smiles_list)
         except ValueError as e:
             msg = "Current SMILES string '%s' not found in canonical molecule set.\n"
             msg += "Molecule set: %s" % self._smiles_list
