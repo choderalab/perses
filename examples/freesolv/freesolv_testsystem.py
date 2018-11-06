@@ -38,12 +38,14 @@ class HydrationPersesRun(object):
                                                                            'nonbondedCutoff': 9.0 * unit.angstrom,
                                                                            'implicitSolvent': None,
                                                                            'constraints': constraints,
-                                                                           'ewaldErrorTolerance': 1e-5},
+                                                                           'ewaldErrorTolerance': 1e-5,
+                                                                           'hydrogenMass': 3.0*unit.amu},
                                                         barostat=barostat)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
                                                       forcefield_kwargs={'nonbondedMethod': app.NoCutoff,
                                                                          'implicitSolvent': None,
-                                                                         'constraints': constraints})
+                                                                         'constraints': constraints,
+                                                                         'hydrogenMass': 3.0*unit.amu})
 
         #
         # Create topologies and positions
