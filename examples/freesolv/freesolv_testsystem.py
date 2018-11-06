@@ -148,7 +148,8 @@ class HydrationPersesRun(object):
 
 if __name__=="__main__":
     import yaml
-    with open('rj_hydration.yaml', 'r') as option_file:
+    import sys
+    with open(sys.argv[1], 'r') as option_file:
         options_dictionary = yaml.load(option_file)
 
     #read the molecules into a list:
