@@ -168,5 +168,15 @@ if __name__=="__main__":
         hydration_run.sams_samplers[environment].verbose = True
         hydration_run.designer.verbose = True
 
-    n_designer_iterations = options_dictionary['n_designer_iterations']
-    hydration_run.designer.run(niterations=n_designer_iterations)
+    n_iterations = options_dictionary['n_iterations']
+
+    phase = options_dictionary['phase']
+
+    if phase == "vacuum":
+        hydration_run.sams_samplers['vacuum'].run(niterations=n_iterations)
+    elif phase == "solvent":
+        hydration_run.sams_samplers['explicit'].run(niterations=n_iterations)
+    elif phase == "multitarget":
+        hydration_run.designer.run(niterations=n_iterations)
+    else:
+        raise ValueError("Phase needs to be either vacuum, solvent, or multitarget.")
