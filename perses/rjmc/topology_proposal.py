@@ -80,6 +80,10 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
             newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
             for atom in residue.atoms():
                 newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
+                try:
+                    newAtom.stereo = atom.stereo
+                except:
+                    pass
                 newAtoms[atom] = newAtom
     for bond in source_topology.bonds():
         if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
@@ -2125,6 +2129,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Build the new Topology object, including the proposed molecule
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
+
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
 
         # Generate an OpenMM System from the proposed Topology
@@ -2225,7 +2230,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 print("got topology to smiles handedness: ", stereo)
             except:
                 pass
-        smiles_string = oechem.OEMolToSmiles(oemol) ## IVY
+        smiles_string = oechem.OEMolToSmiles(oemol)
         # smiles_string = oechem.OECreateSmiString(oemol, OESMILES_OPTIONS)
         return smiles_string, oemol
 
@@ -2306,48 +2311,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info('Topology generation took %.3f s' % (time.time() - timer_start))
 
         return new_topology
-
-    # def _generateTopologyFromOEMol(self, molecule): ## IVY delete
-    #     """
-    #        Generate an OpenMM Topology object from an OEMol molecule.
-    #        Parameters
-    #        ----------
-    #        molecule : openeye.oechem.OEMol
-    #            The molecule from which a Topology object is to be generated.
-    #        Returns
-    #        -------
-    #        topology : simtk.openmm.app.Topology
-    #            The Topology object generated from `molecule`.
-    #        """
-    #     # Create a Topology object with one Chain and one Residue.
-    #     topology = app.Topology()
-    #     chain = topology.addChain()
-    #     resname = molecule.GetTitle()
-    #     residue = topology.addResidue(resname, chain)
-    #
-    #     # Create atoms in the residue.
-    #     for atom in molecule.GetAtoms():
-    #         name = atom.GetName()
-    #         element = app.Element.getByAtomicNumber(atom.GetAtomicNum())
-    #         new_atom = topology.addAtom(name, element, residue)
-    #         cip = oechem.OEPerceiveCIPStereo(molecule, atom)
-    #         if atom.HasStereoSpecified():
-    #             print("atom %d is" % atom.GetIdx(), end=" ") ## IVY Delete
-    #             if cip == oechem.OECIPAtomStereo_S:
-    #                 print('S') ## IVY delete
-    #                 new_atom.stereo = 'S'
-    #             if cip == oechem.OECIPAtomStereo_R:
-    #                 print('R') ## IVY delete
-    #                 new_atom.stereo = 'R'
-    #             if cip == oechem.OECIPAtomStereo_NotStereo:
-    #                 print('not a CIP stereo center') ## IVY delete
-    #
-    #     # Create bonds.
-    #     atoms = {atom.name: atom for atom in topology.atoms()}
-    #     for bond in molecule.GetBonds():
-    #         topology.addBond(atoms[bond.GetBgn().GetName()], atoms[bond.GetEnd().GetName()])
-    #
-    #     return topology
 
     def _remove_small_molecule(self, topology):
         """
@@ -2538,8 +2501,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Retrieve the current molecule index
         try:
             current_smiles_idx = self._smiles_list.index(molecule_smiles)
-            print("molecule: ", molecule_smiles)
-            print("molecule set: ", self._smiles_list)
         except ValueError as e:
             msg = "Current SMILES string '%s' not found in canonical molecule set.\n"
             msg += "Molecule set: %s" % self._smiles_list
@@ -2552,6 +2513,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         forward_probability = molecule_probabilities[proposed_smiles_idx]
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
         logp = np.log(reverse_probability) - np.log(forward_probability)
+
         from perses.tests.utils import smiles_to_oemol
         proposed_mol = smiles_to_oemol(proposed_smiles)
         return proposed_smiles, proposed_mol, logp

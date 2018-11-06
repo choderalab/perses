@@ -1655,6 +1655,11 @@ class GeometrySystemGenerator(object):
             print("residues: ", residues)
             for atom in residues[0].atoms():
                 print("atom: ", atom)
+                try:
+                    print("stereo is ", atom.stereo)
+                except:
+                    pass
+            print("there should be stereos above this") ## IVY
             print("got residue from small molecule way") ## IVY
         if len(residues) > 1:
             raise Exception("Please only modify one residue at a time. The residues you tried to modify are: ",
@@ -1674,9 +1679,9 @@ class GeometrySystemGenerator(object):
         # Specify stereochemistry
         res_name = residues[0].name
         for atom in oemol.GetAtoms():
-            if atom.IsChiral():
+            neighbors = [nbr.GetName() for nbr in atom.GetAtoms()]
+            if atom.IsChiral() and len(neighbors) >= 4:  # Only add improper torsions for tetrahedral chiral centers
                 if res_name in self._aminos:
-                    neighbors = [nbr.GetName() for nbr in atom.GetAtoms()]
                     calpha_neighbors = ['C', 'CB', 'HA', 'N']
                     if set(neighbors) == set(calpha_neighbors):
                         if res_name == 'CYS':
@@ -1767,39 +1772,39 @@ class GeometrySystemGenerator(object):
                     neighbors_top.append(nbr.GetData("topology_index"))
                     neighbors_oemol.append(nbr.GetIdx())
                     neighbors.append(nbr)
+                if len(neighbors) >= 4:  # Only add improper torsions for tetrahedral chiral centers
+                    # Specify atom order for calculating angle
+                    contains_H = False
+                    for i, nbr in enumerate(neighbors):  # Replace H (if it exists in neighbors) with chiral center
+                        if nbr.GetAtomicNum() == oechem.OEElemNo_H:
+                            neighbors_top[i] = atom.GetData("topology_index")
+                            neighbors_oemol[i] = atom.GetIdx()
+                            contains_H = True
+                            break
+                    if not contains_H:  # Replace first neighbor with chiral center if H doesn't exist
+                        neighbors_top[0] = atom.GetData("topology_index")
+                        neighbors_oemol[0] = atom.GetIdx()
 
-                # Specify atom order for calculating angle
-                contains_H = False
-                for i, nbr in enumerate(neighbors):  # Replace H (if it exists in neighbors) with chiral center
-                    if nbr.GetAtomicNum() == oechem.OEElemNo_H:
-                        neighbors_top[i] = atom.GetData("topology_index")
-                        neighbors_oemol[i] = atom.GetIdx()
-                        contains_H = True
-                        break
-                if not contains_H:  # Replace first neighbor with chiral center if H doesn't exist
-                    neighbors_top[0] = atom.GetData("topology_index")
-                    neighbors_oemol[0] = atom.GetIdx()
+                    # Calculate improper angles
+                    phase = coordinate_numba.cartesian_to_internal(np.array(coords[neighbors_oemol[0]], dtype='float64'),
+                                                                   np.array(coords[neighbors_oemol[1]], dtype='float64'),
+                                                                   np.array(coords[neighbors_oemol[2]], dtype='float64'),
+                                                                   np.array(coords[neighbors_oemol[3]],
+                                                                            dtype='float64'))[2]
+                    print("phase: ", phase) ## IVY delete
 
-                # Calculate improper angles
-                phase = coordinate_numba.cartesian_to_internal(np.array(coords[neighbors_oemol[0]], dtype='float64'),
-                                                               np.array(coords[neighbors_oemol[1]], dtype='float64'),
-                                                               np.array(coords[neighbors_oemol[2]], dtype='float64'),
-                                                               np.array(coords[neighbors_oemol[3]],
-                                                                        dtype='float64'))[2]
-                print("phase: ", phase) ## IVY delete
+                    #  Determine phase in [-pi,+pi) interval
+                    #  phase = (np.pi)*units.radians+angle
+                    phase = phase + np.pi  # TODO: Check that this is the correct convention?
+                    while (phase >= np.pi):
+                        phase -= 2 * np.pi
+                    while (phase < -np.pi):
+                        phase += 2 * np.pi
+                    phase *= units.radian
 
-                #  Determine phase in [-pi,+pi) interval
-                #  phase = (np.pi)*units.radians+angle
-                phase = phase + np.pi  # TODO: Check that this is the correct convention?
-                while (phase >= np.pi):
-                    phase -= 2 * np.pi
-                while (phase < -np.pi):
-                    phase += 2 * np.pi
-                phase *= units.radian
-
-                growth_idx = self._calculate_growth_idx(neighbors_top, growth_indices)
-                stereochemistry_force.addTorsion(neighbors_top[0], neighbors_top[1], neighbors_top[2], neighbors_top[3],
-                                         [phase, sigma, growth_idx])
+                    growth_idx = self._calculate_growth_idx(neighbors_top, growth_indices)
+                    stereochemistry_force.addTorsion(neighbors_top[0], neighbors_top[1], neighbors_top[2], neighbors_top[3],
+                                             [phase, sigma, growth_idx])
         return torsion_force, stereochemistry_force
 
     def _select_torsions_without_h(self, torsion_list):
