@@ -152,9 +152,6 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         #set the master parameter to zero:
         master_lambda = 0.0
 
-        #get the increment for lambda:
-        lambda_increment = 1.0 / self._nsteps_neq
-
         # loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
         for iteration in range(self._nsteps_neq):
 
@@ -165,7 +162,7 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             integrator.step(1)
 
             #increment the master lambda variable
-            master_lambda += lambda_increment
+            master_lambda += 1
 
             #retrieve the current amount of work and add it to the appropriate array
             self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)
