@@ -15,6 +15,7 @@ import simtk.openmm.app as app
 import tempfile
 import itertools
 from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
+from perses.tests import utils
 import os
 import time
 import logging
@@ -225,6 +226,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(),
                                                               growth_parameter_name,
                                                               reference_topology=top_proposal.new_topology,
+                                                              reference_state_key=top_proposal.new_chemical_state_key,
                                                               use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
@@ -237,6 +239,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(),
                                                               growth_parameter_name,
                                                               reference_topology=top_proposal.old_topology,
+                                                              reference_state_key=top_proposal.old_chemical_state_key,
                                                               use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
         else:
@@ -348,7 +351,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         return logp_proposal, new_positions
 
     @staticmethod
-    def oemol_from_residue(res, verbose=True):
+    def oemol_from_residue(res, verbose=False):
         """
         Get an OEMol from a residue, even if that residue
         is polymeric. In the latter case, external bonds
@@ -377,16 +380,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             for atom in res.atoms():
                 new_atom = new_topology.addAtom(atom.name, atom.element, new_res)
                 new_atom.topology_index = atom.index  # Save the atom index from the input topology
-
-                try:
-                    new_atom.stereo = atom.stereo
-                    print("got stereo in oemol from residue: ", atom.stereo) ## IVY
-                except AttributeError:
-                    pass
-
+                # new_atom.stereo = atom.stereo ## IVY delete
                 new_atoms[atom] = new_atom
             for bond in res.internal_bonds():
-                new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
+                new_bond = new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
+                new_bond.stereo = bond.stereo
             for bond in res.external_bonds():
                 internal_atom = bond[0] if bond[0].residue == res else bond[1]
                 if verbose: print('internal atom: ', internal_atom)
@@ -405,89 +403,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             oemol = generateOEMolFromTopologyResidue(res)
         oechem.OEAddExplicitHydrogens(oemol)
         return oemol
-
-    # IVY add comments for this function
-    @staticmethod
-    def generateOEMolFromTopologyResidue(res, antechamber=False, geometry=False, tripos_atom_names=False):
-        # Create OEMol where all atoms have bond order 1.
-        molecule = oechem.OEMol()
-        molecule.SetTitle(res.name)  # name molecule after first residue
-        for atom in res.atoms():
-            oeatom = molecule.NewAtom(atom.element.atomic_number)
-            oeatom.SetName(atom.name)
-            try:
-                oeatom.AddData("topology_index", atom.topology_index)
-            except AttributeError:
-                pass
-            try:
-                oeatom.AddData("stereo", atom.stereo)
-                print("got stereo in generateOEMOlfromtopology residue ", atom.stereo) ## IVY
-            except AttributeError:
-                pass
-        oeatoms = {oeatom.GetName(): oeatom for oeatom in molecule.GetAtoms()}
-        for (atom1, atom2) in res.bonds():
-            order = 1
-            molecule.NewBond(oeatoms[atom1.name], oeatoms[atom2.name], order)
-
-        # Write out a mol2 file without altering molecule.
-        tmpdir = tempfile.mkdtemp()
-        mol2_input_filename = os.path.join(tmpdir, 'molecule-before-bond-perception.mol2')
-        ac_output_filename = os.path.join(tmpdir, 'molecule-after-bond-perception.ac')
-        ofs = oechem.oemolostream(mol2_input_filename)
-        m2h = True
-        substruct = False
-        oechem.OEWriteMol2File(ofs, molecule, m2h, substruct)
-        ofs.close()
-        # Run Antechamber for small molecules, Bondtype for proteins
-        if antechamber:
-            command = 'antechamber -i %s -fi mol2 -o %s -fo ac -j 4' % (mol2_input_filename, ac_output_filename)
-        else:
-            command = 'bondtype -i %s -o %s -f mol2 -j full' % (mol2_input_filename, ac_output_filename)
-
-        from subprocess import getstatusoutput
-        [status, output] = getstatusoutput(command)
-        # print("status: ", status) ##IVY
-        # print("output: ", output)
-        # run_command(command)
-
-        # Define mapping from GAFF bond orders to OpenEye bond orders.
-        order_map = {1: 1, 2: 2, 3: 3, 7: 1, 8: 2, 9: 5, 10: 5}
-        # Read bonds.
-        infile = open(ac_output_filename)
-        lines = infile.readlines()
-        infile.close()
-        antechamber_bond_types = list()
-        for line in lines:
-            elements = line.split()
-            if elements[0] == 'BOND':
-                antechamber_bond_types.append(int(elements[4]))
-        oechem.OEClearAromaticFlags(molecule)
-        for (bond, antechamber_bond_type) in zip(molecule.GetBonds(), antechamber_bond_types):
-            # bond.SetOrder(order_map[antechamber_bond_type])
-            bond.SetIntType(order_map[antechamber_bond_type])
-        oechem.OEFindRingAtomsAndBonds(molecule)
-        oechem.OEKekulize(molecule)
-        oechem.OEAssignFormalCharges(molecule)
-        oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
-
-        # Clean up.
-        os.unlink(mol2_input_filename)
-        os.unlink(ac_output_filename)
-        os.rmdir(tmpdir)
-
-        # Generate Tripos atom names if requested.
-        if tripos_atom_names:
-            oechem.OETriposAtomNames(molecule)
-
-        # Assign geometry
-        if geometry:
-            omega = oeomega.OEOmega()
-            omega.SetMaxConfs(1)
-            omega.SetIncludeInput(False)
-            omega.SetStrictStereo(False)
-            omega(molecule)
-
-        return molecule
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
         """
@@ -1390,7 +1305,7 @@ class GeometrySystemGenerator(object):
     _VonMisesTorsionForceEnergy = "select(step({}+0.1 - growth_idx), (1/(sigma^2))*(cos(theta-phase)), 0);"
 
     def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True,
-                 reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
+                 reference_topology=None, reference_state_key=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
         ----------
@@ -1588,7 +1503,7 @@ class GeometrySystemGenerator(object):
         if add_extra_torsions:
             if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
-        self._determine_extra_torsions(modified_torsion_force, modified_stereochemistry_force, reference_topology, growth_indices)
+        self._determine_extra_torsions(modified_torsion_force, modified_stereochemistry_force, reference_topology, reference_state_key, growth_indices)
         if add_extra_angles:
             if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra angles")
@@ -1619,7 +1534,7 @@ class GeometrySystemGenerator(object):
         """
         return self._growth_system
 
-    def _determine_extra_torsions(self, torsion_force, stereochemistry_force, reference_topology, growth_indices):
+    def _determine_extra_torsions(self, torsion_force, stereochemistry_force, reference_topology, reference_state_key, growth_indices):
         """
         Determine which atoms need an extra torsion. First figure out which residue is
         covered by the new atoms, then determine the rotatable bonds. Finally, construct
@@ -1644,44 +1559,43 @@ class GeometrySystemGenerator(object):
         if len(growth_indices) == 0:
             return torsion_force
 
-        # Identify modified residue and type of reference_topology (small molecule or polymer)
+        # Identify modified residue depending on the type of reference_topology (small molecule or polymer)
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
-        try:
-            residues = [res for res in reference_topology.residues() if res.modified]
-            print("got residue from modified: ", residues) ## IVY
-        except AttributeError:
-            residues = [atoms[growth_indices[0].idx].residue]
-            print("residues: ", residues)
-            for atom in residues[0].atoms():
-                print("atom: ", atom)
-                try:
-                    print("stereo is ", atom.stereo)
-                except:
-                    pass
-            print("there should be stereos above this") ## IVY
-            print("got residue from small molecule way") ## IVY
+        residues = [res for res in reference_topology.residues() if res.modified_aa]  # Polymer topology
+        print("residues: ", residues) ## IVY
         if len(residues) > 1:
             raise Exception("Please only modify one residue at a time. The residues you tried to modify are: ",
                             residues)
+        elif not residues:  # Small molecule topology
+            residues = [atoms[growth_indices[0].idx].residue]
+            print("got residue from small molecule way") ## IVY
+
+        # Interpret as HIE, HID templates as HIS
+        res_name = residues[0].name
+        if res_name in ['HIE', 'HID']:
+            res_name = 'HIS'
+
+        # Create oemol from reference_state_key (contains stereochemistry)
+        if res_name not in self._aminos:
+            stereo_mol = utils.smiles_to_oemol(reference_state_key)
+            oechem.OEPerceiveChiral(stereo_mol)
 
         # Generate oemol using reference topology residue. Also get the omega geometry of the molecule.
         try:
             oemol = FFAllAngleGeometryEngine.oemol_from_residue(residues[0])
-            omega = oeomega.OEOmega()
-            omega.SetMaxConfs(1)
-            omega.SetStrictStereo(False)
-            omega(oemol)
         except Exception as e:
             print("Could not generate an oemol from the residue.")
             print(e)
 
-        # Specify stereochemistry
-        res_name = residues[0].name
+        # Set atom stereochemistry
+        oechem.OEPerceiveChiral(oemol)
+        is_stereo_set = False
         for atom in oemol.GetAtoms():
             neighbors = [nbr.GetName() for nbr in atom.GetAtoms()]
-            if atom.IsChiral() and len(neighbors) >= 4:  # Only add improper torsions for tetrahedral chiral centers
+            if atom.IsChiral() and len(neighbors) >= 4:  # Exclude improper torsions for nitrogen chiral centers
                 if res_name in self._aminos:
+                    print("getting stereochemistry for protein") ## IVY
                     calpha_neighbors = ['C', 'CB', 'HA', 'N']
                     if set(neighbors) == set(calpha_neighbors):
                         if res_name == 'CYS':
@@ -1693,19 +1607,50 @@ class GeometrySystemGenerator(object):
                             oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_R)
                         elif res_name == 'ILE':
                             oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_S)
+                    print("stereo: ", oechem.OEPerceiveCIPStereo(oemol, atom)) ## IVY
+                    is_stereo_set = True
                 else:  # For small molecule, use stereo property from topology that was transferred to oemol
                     print("getting stereochemistry for small molecule") ## IVY delete
-                    try:
-                        print("get stereo in determine extra torsions: ", atom.GetData("stereo")) ## IVY
-                        # stereo = oechem.OEAtomStereo_RightHanded if atom.GetData("stereo") == 2 else oechem.OEAtomStereo_LeftHanded
-                        # print("got stereo ", stereo, " for atom: ", atom.GetName(), " with atomic num: ", atom.GetAtomicNum(), " and index: ", atom.GetIdx())
-                        # nbrs = {}
-                        # for nbr in atom.GetAtoms():
-                        #     nbrs[nbr.GetAtomicNum()] = nbr
-                        # nbrs_sorted = [nbrs[key] for key in sorted(nbrs.keys())]
-                        # atom.SetStereo(nbrs_sorted, oechem.OEAtomStereo_Tetra, stereo)
-                    except:
-                        print("Unable to get stereochemistry from topology for chiral atom at index ", atom.GetIdx())
+                    # print("get stereo in determine extra torsions: ", atom.GetData("stereo")) ## IVY
+                    # stereo = atom.GetData("stereo")
+
+                    match_found = False
+                    for stereo_atom in stereo_mol.GetAtoms():
+                        if stereo_atom.GetIdx() == atom.GetIdx():
+                            print("current atom ", atom.GetIdx(), "matching atom: ", stereo_atom.GetIdx())
+                            stereo = oechem.OEPerceiveCIPStereo(stereo_mol, stereo_atom)
+                            oechem.OESetCIPStereo(oemol, atom, stereo)
+                            match_found = True
+                            break
+                    if not match_found:
+                        raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string.")
+
+                    print("stereo: ", oechem.OEPerceiveCIPStereo(oemol, atom)) ## IVY
+                    is_stereo_set = True
+
+        # Set bond stereochemistry for small molecules
+        if res_name not in self._aminos:
+            for bond in oemol.GetBonds():
+                if bond.GetOrder() == 2:
+                    match_found = False
+                    for stereo_bond in stereo_mol.GetBonds():
+                        if stereo_bond.GetIdx() == bond.GetIdx():
+                            print("current bond ", stereo_bond.GetBgn().GetIdx(), " ", stereo_bond.GetEnd().GetIdx(), "matching bond: ", stereo_bond.GetBgn().GetIdx(), " ", stereo_bond.GetEnd().GetIdx())
+                            stereo = oechem.OEPerceiveCIPStereo(stereo_mol, stereo_bond)
+                            oechem.OESetCIPStereo(oemol, bond, stereo)
+                            match_found = True
+                            break
+                    if not match_found:
+                        raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string.")
+                    print("bond stereo: ", stereo) ## IVY
+                    print("beg atom: ", bond.GetBgn().GetAtomicNum())
+                    print("end atom: ", bond.GetEnd().GetAtomicNum())
+                    # oechem.OESetCIPStereo(oemol, bond, stereo)
+
+        omega = oeomega.OEOmega()
+        omega.SetMaxConfs(1)
+        omega.SetStrictStereo(is_stereo_set)
+        omega(oemol)
 
         # DEBUG: Write mol2 file.
         debug = True
@@ -1765,14 +1710,17 @@ class GeometrySystemGenerator(object):
         for atom in oemol.GetAtoms():
             if atom.IsChiral():
                 # Get neighbors
-                neighbors_top = [] ## IVY specify what this data structure does
+                # neighbors_top : list(int) contains topology indices of the neighbors
+                # neighbors_oemol : list(int) contains oemol indices of the neighbors
+                # neighbors: list(OEAtomBase) contains oemol atoms representing the neighbors
+                neighbors_top = []
                 neighbors_oemol = []
                 neighbors = []
                 for nbr in atom.GetAtoms():
                     neighbors_top.append(nbr.GetData("topology_index"))
                     neighbors_oemol.append(nbr.GetIdx())
                     neighbors.append(nbr)
-                if len(neighbors) >= 4:  # Only add improper torsions for tetrahedral chiral centers
+                if len(neighbors) >= 4:  # Exclude improper torsions for nitrogen chiral centers
                     # Specify atom order for calculating angle
                     contains_H = False
                     for i, nbr in enumerate(neighbors):  # Replace H (if it exists in neighbors) with chiral center
@@ -1934,7 +1882,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
     """
 
     def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True,
-                 reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=True):
+                 reference_topology=None, reference_state_key=None, use_sterics=True, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
         ----------
@@ -2005,7 +1953,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         if add_extra_torsions:
             if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
-            self._determine_extra_torsions(reference_forces['PeriodicTorsionForce'], modified_stereochemistry_force, reference_topology, growth_indices)
+            self._determine_extra_torsions(reference_forces['PeriodicTorsionForce'], modified_stereochemistry_force, reference_topology, reference_state_key, growth_indices)
         if add_extra_angles:
             if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra angles")
@@ -2059,6 +2007,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
             # Update parameters in context
             if context is not None:
                 growth_force.updateParametersInContext(context)
+                context.setParameter(self._growth_parameter_name, growth_index)
 
 
 class PredHBond(oechem.OEUnaryBondPred):
@@ -2117,6 +2066,7 @@ class ProposalOrderTools(object):
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology,
                                                     self._topology_proposal.new_system)
             unique_atoms = self._topology_proposal.unique_new_atoms
+            print("in determine_proposal_order unique atoms: ", unique_atoms) ## IVY
             # atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
                                     self._topology_proposal.new_to_old_atom_map.keys()]
@@ -2126,6 +2076,7 @@ class ProposalOrderTools(object):
             structure = parmed.openmm.load_topology(self._topology_proposal.old_topology,
                                                     self._topology_proposal.old_system)
             unique_atoms = self._topology_proposal.unique_old_atoms
+            print("in determine_proposal_order unique atoms: ", unique_atoms)  ## IVY
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
                                     self._topology_proposal.old_to_new_atom_map.keys()]
         else:

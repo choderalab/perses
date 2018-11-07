@@ -203,7 +203,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         proposal_engines = dict()
         chain_id = '1'
         # allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','ILE')]]
-        allowed_mutations = [('2', 'ILE'), ('2', 'VAL')]
+        allowed_mutations = [('2', 'ILE'), ('2', 'HIS')]
 
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
@@ -1685,7 +1685,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     def __init__(self, constraints=app.HBonds, premapped_json_dict=None, **kwargs):
         super(SmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
-        molecules = sanitizeSMILES(self.molecules, mode='expand') ## IVY add this back in
+        molecules = sanitizeSMILES(self.molecules)
         environments = ['explicit', 'vacuum']
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
@@ -1717,8 +1717,11 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # smiles = 'C5=C(C1=CN=CC=C1)N=C(NC2=C(C=CC(=C2)NC(C3=CC=C(C=C3)CN4CCN(CC4)C)=O)C)N=C5'  ## IVY delete this Imatinib
         # smiles = 'Cc1ccc(cc1C#Cc2cnc3n2nccc3)C(=O)Nc4ccc(c(c4)C(F)(F)F)CN5CCN(CC5)C'
         # smiles = 'Cc1c2cnc(nc2n(c(=O)c1C(=O)C)C3CCCC3)Nc4ccc(cn4)N5CCNCC5' # palbociclib
-        smiles = 'Cc1c2cnc(nc2n(c(=O)c1C(=O)C)C3CCCC3)Nc4ccc(cn4)N5CCNCC5'
+        # smiles = 'Cc1c2cnc(nc2n(c(=O)c1C(=O)C)C3CCCC3)Nc4ccc(cn4)N5CCNCC5'
+        # smiles = 'C[C@@H]1CCN(C[C@@H]1[N@](C)c2c3cc[nH]c3ncn2)C(=O)CC#N'
+        smiles = 'Cc1ccc(cc1S(=O)(=O)N)Nc2nccc(n2)N(C)c3ccc4c(n(nc4c3)C)C'
         print("smiles: ", smiles)
+        smiles = sanitizeSMILES([smiles])[0]
         molecule = smiles_to_oemol(smiles)
 
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
@@ -1749,7 +1752,6 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         for environment in environments:
             systems[environment] = system_generators[environment].build_system(topologies[environment])
         # Define thermodynamic state of interest.
-        
         thermodynamic_states = dict()
         thermodynamic_states['explicit'] = states.ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
         thermodynamic_states['vacuum'] = states.ThermodynamicState(system=systems['vacuum'], temperature=temperature)
@@ -1762,6 +1764,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             storage = None
             if self.storage:
                 storage = NetCDFStorageView(self.storage, envname=environment)
+
             chemical_state_key = proposal_engines[environment].compute_state_key(topologies[environment])
             if environment == 'explicit':
                 sampler_state = states.SamplerState(positions=positions[environment], box_vectors=systems[environment].getDefaultPeriodicBoxVectors())
@@ -1769,17 +1772,18 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
              # reduce number of steps for testing
+
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':5000}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
             sams_samplers[environment].verbose = True
+
         # Create test MultiTargetDesign sampler.
         from perses.samplers.samplers import MultiTargetDesign
         target_samplers = { sams_samplers['explicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
         designer = MultiTargetDesign(target_samplers, storage=self.storage)
         # Store things.
-        # self.molecules = molecules ## IVY this was original
-        self.molecules = [smiles] ## IVY
+        self.molecules = molecules ## IVY this was original
         self.environments = environments
         self.topologies = topologies
         self.positions = positions
@@ -1811,7 +1815,7 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules = list()
         with open(smiles_filename, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
-            next(csvreader)
+            # next(csvreader) ## IVY only use this if using the new clinical-kinase-inhibitors.csv (with 44 inhibitors)
             for row in csvreader:
                 name = row[0]
                 smiles = row[1]
