@@ -25,12 +25,14 @@ def collect_file_conditions(experiment_directory):
         with open(filename, 'r') as yamlfile:
             experiment_options = yaml.load(yamlfile)
             phase = "explicit" if experiment_options['phase'] == "solvent" else "vacuum"
+            if experiment_options['phase'] == 'multitarget':
+                continue
             data_filename = experiment_options['output_filename']
-            ncmc_length = experiment_options['ncmc_switching_times'][phase]
+            ncmc_length = experiment_options['ncmc_switching_times'][experiment_options['phase']]
             sterics = experiment_options['use_sterics'][phase]
             geometry_intervals = experiment_options['geometry_divisions'][phase]
 
-            condition_files[(phase, ncmc_length, sterics, geometry_intervals)] = data_filename
+            condition_files[(phase, ncmc_length, sterics, geometry_intervals)] = os.path.join(experiment_directory, data_filename)
 
     return condition_files
 
