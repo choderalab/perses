@@ -150,6 +150,7 @@ class HydrationPersesRun(object):
 
 if __name__=="__main__":
     import yaml
+    import openeye.oechem as oechem
     import sys
     with open(sys.argv[1], 'r') as option_file:
         options_dictionary = yaml.load(option_file)
@@ -160,6 +161,13 @@ if __name__=="__main__":
         molecule_string = molecule_input_file.read()
 
     molecules = molecule_string.split("\n")
+    valid_molecules = []
+    for molecule in molecules:
+        mol = oechem.OEMol()
+        oechem.OESmilesToMol(mol, molecule)
+        if mol.GetNumAtoms() == 0:
+            continue
+        valid_molecules.append(molecule)
 
     hydration_run = HydrationPersesRun(molecules, options_dictionary['output_filename'],
                                        options_dictionary['ncmc_switching_times'],
