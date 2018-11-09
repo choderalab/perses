@@ -2033,7 +2033,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             molecule
         """
         molecule_name = self._residue_name
-        matching_molecules = [res for res in topology.residues() if res.name==molecule_name]
+
+        matching_molecules = [res for res in topology.residues() if res.name[:3] == molecule_name[:3]]  # Find residue in topology by searching for residues with name "MOL"
         if len(matching_molecules) != 1:
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
@@ -2079,7 +2080,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             the number of atoms in the molecule
         """
         resname = self._residue_name
-        mol_residues = [res for res in topology.residues() if res.name==resname]
+        mol_residues = [res for res in topology.residues() if res.name[:3]==resname[:3]]  # Find the residue by searching for residues with "MOL"
         if len(mol_residues)!=1:
             raise ValueError("There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'" % (len(mol_residues), resname))
         mol_residue = mol_residues[0]
@@ -2107,7 +2108,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info('Building new Topology object...')
         timer_start = time.time()
 
-        oemol_proposed.SetTitle(self._residue_name)
+        oemol_proposed.SetTitle(oemol_proposed.GetTitle())
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
         append_topology(new_topology, current_receptor_topology)
@@ -2322,7 +2323,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
         logp = np.log(reverse_probability) - np.log(forward_probability)
         from perses.tests.utils import smiles_to_oemol
-        proposed_mol = smiles_to_oemol(proposed_smiles)
+        proposed_mol = smiles_to_oemol(proposed_smiles, "MOL_%d" %proposed_smiles_idx)
         return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):
