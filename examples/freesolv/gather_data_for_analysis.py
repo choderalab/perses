@@ -63,3 +63,9 @@ def collect_logP_accept(condition_files):
             continue
 
     return logP_accept_conditions
+
+if __name__=="__main__":
+    experiment_directory = "/data/chodera/pgrinaway/experiments"
+    condition_files = collect_file_conditions(experiment_directory)
+    logP_accept_conditions = collect_logP_accept(condition_files)
+    np.save("condition_logP.npy", logP_accept_conditions)
