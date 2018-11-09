@@ -2113,7 +2113,10 @@ class ProposalOrderTools(object):
             from scipy import special
             logp_torsion_choice = 0.0
             while (len(new_atoms)) > 0:
+                print("atoms left: ", len(new_atoms)) ## IVY
+                print("atom order: ", atoms_with_positions) ## IVY
                 eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
+                print("eligible atoms: ", eligible_atoms) ## IVY
 
                 # randomize positions
                 eligible_atoms_in_order = np.random.choice(eligible_atoms, size=len(eligible_atoms), replace=False)
@@ -2139,7 +2142,9 @@ class ProposalOrderTools(object):
         # Handle heavy atoms before hydrogen atoms
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
+        print("adding heavy atoms") ##IVY
         logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
+        print("adding hydrogen atoms") ## IVY
         logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
 
         return atoms_torsions, logp_torsion_choice
