@@ -1,5 +1,6 @@
 import numpy as np
 import yaml
+import os
 from perses.analysis import Analysis
 import glob
 
@@ -19,7 +20,7 @@ def collect_file_conditions(experiment_directory):
         The filename for each condition
     """
     condition_files = {}
-    yaml_filenames = glob.glob(experiment_directory)
+    yaml_filenames = glob.glob(os.path.join(experiment_directory, "*.yaml"))
     for filename in yaml_filenames:
         with open(filename, 'r') as yamlfile:
             experiment_options = yaml.load(yamlfile)
@@ -51,12 +52,13 @@ def collect_logP_accept(condition_files):
     for condition, filename in condition_files.items():
         try:
             analyzer = Analysis(filename)
-            logP_without_sams = analyzer.extract_logP_values(condition[0], "logP_accept", subtract_sams=True)
-            logPs_flat_list = []
-            for value in logP_without_sams.values():
-                logPs_flat_list.extend(value)
-            logP_array = np.array(logPs_flat_list)
-            logP_accept_conditions[condition] = logP_array
+            logP_with_sams = analyzer._ncfile.groups[condition[0]]['ExpandedEnsembleSampler']['logP_accept'][:]
+            sams = analyzer._ncfile.groups[condition[0]]['ExpandedEnsembleSampler']['logP_sams'][:]
+
+            logP_without_sams = logP_with_sams - sams
+            logP_unmasked = logP_without_sams[~logP_without_sams.mask]
+
+            logP_accept_conditions[condition] = logP_unmasked
         except Exception as e:
             print(str(e))
             print("Unable to process {}".format(filename))
