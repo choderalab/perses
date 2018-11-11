@@ -1356,14 +1356,12 @@ class HybridTopologyFactory(object):
             #now we check if the pair is in the exception dictionary
             if old_index_atom_pair in self._old_system_exceptions:
                 [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair]
-                chargeProd *= 0.0
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #check if the pair is in the reverse order and use that if so
             elif old_index_atom_pair[::-1] in self._old_system_exceptions:
                 [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair[::-1]]
-                chargeProd *= 0.0
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
@@ -1372,7 +1370,6 @@ class HybridTopologyFactory(object):
                 [charge0, sigma0, epsilon0] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[0])
                 [charge1, sigma1, epsilon1] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[1])
                 chargeProd = charge0*charge1
-                chargeProd *= 0.0
                 epsilon = unit.sqrt(epsilon0*epsilon1)
                 sigma = 0.5*(sigma0+sigma1)
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
@@ -1386,14 +1383,12 @@ class HybridTopologyFactory(object):
             #now we check if the pair is in the exception dictionary
             if new_index_atom_pair in self._new_system_exceptions:
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair]
-                chargeProd *= 0.0
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #check if the pair is present in the reverse order and use that if so
             elif new_index_atom_pair[::-1] in self._new_system_exceptions:
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair[::-1]]
-                chargeProd *= 0.0
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
@@ -1402,7 +1397,6 @@ class HybridTopologyFactory(object):
                 [charge0, sigma0, epsilon0] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[0])
                 [charge1, sigma1, epsilon1] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[1])
                 chargeProd = charge0*charge1
-                chargeProd *= 0.0
                 epsilon = unit.sqrt(epsilon0*epsilon1)
                 sigma = 0.5*(sigma0+sigma1)
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
