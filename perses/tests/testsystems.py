@@ -1715,15 +1715,15 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         from openmoltools import forcefield_generators ## IVY
         forcefield.registerTemplateGenerator(gaffTemplateGenerator) ## IVY
         d_smiles_to_oemol = {smiles : smiles_to_oemol(smiles, "MOL_%d" % i)for i, smiles in enumerate(molecules)}
-        # ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
-        #
-        # f = open('clinical-kinase-inhibitors.xml', 'w')
-        # f.write(ffxml)
-        # f.close()
-        #
-        # if failed_molecule_list:
-        #     raise Exception("Failed to generate forcefield for the following molecules: ", failed_molecule_list)
-        # forcefield.loadFile(StringIO(ffxml))
+        ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
+
+        f = open('clinical-kinase-inhibitors.xml', 'w')
+        f.write(ffxml)
+        f.close()
+
+        if failed_molecule_list:
+            raise Exception("Failed to generate forcefield for the following molecules: ", failed_molecule_list)
+        forcefield.loadFile(StringIO(ffxml))
 
         # Create molecule in vacuum.
         smiles = molecules[0]  # current sampler state ## IVY add this back in
