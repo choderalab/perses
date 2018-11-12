@@ -1830,7 +1830,7 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules = list()
         with open(smiles_filename, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
-            # next(csvreader) ## IVY only use this if using the new clinical-kinase-inhibitors.csv (with 44 inhibitors)
+            next(csvreader) ## IVY only use this if using the new clinical-kinase-inhibitors.csv (with 44 inhibitors)
             for row in csvreader:
                 name = row[0]
                 smiles = row[1]
