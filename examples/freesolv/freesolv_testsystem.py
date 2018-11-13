@@ -188,7 +188,7 @@ if __name__=="__main__":
 
     if phase == "vacuum":
         hydration_run.sams_samplers['vacuum'].run(niterations=n_iterations)
-    elif phase == "solvent":
+    elif phase == "explicit":
         hydration_run.sams_samplers['explicit'].run(niterations=n_iterations)
     elif phase == "multitarget":
         hydration_run.designer.run(niterations=n_iterations)
