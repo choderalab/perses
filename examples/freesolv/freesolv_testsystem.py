@@ -165,7 +165,7 @@ if __name__=="__main__":
     for molecule in molecules:
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, molecule)
-        if mol.GetNumAtoms() == 0:
+        if mol.NumAtoms() == 0:
             continue
         valid_molecules.append(molecule)
 
