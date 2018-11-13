@@ -81,7 +81,7 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
                 newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
                 newAtoms[atom] = newAtom
     for bond in source_topology.bonds():
-        if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+        if (bond[0].residue.name[:3]==exclude_residue_name[:3]) or (bond[1].residue.name[:3]==exclude_residue_name[:3]):
             continue
         # TODO: Preserve bond order info using extended OpenMM API
         destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
