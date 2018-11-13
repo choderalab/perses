@@ -70,6 +70,8 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         If specified, any residues matching this name are excluded.
 
     """
+    if exclude_residue_name is None:
+        exclude_residue_name = "   " #something with 3 characters that is never a residue name
     newAtoms = {}
     for chain in source_topology.chains():
         newChain = destination_topology.addChain(chain.id)
