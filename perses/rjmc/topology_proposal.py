@@ -76,7 +76,7 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
     for chain in source_topology.chains():
         newChain = destination_topology.addChain(chain.id)
         for residue in chain.residues():
-            if (residue.name == exclude_residue_name):
+            if (residue.name[:3] == exclude_residue_name[:3]):
                 continue
             newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
             for atom in residue.atoms():
