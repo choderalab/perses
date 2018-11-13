@@ -447,7 +447,6 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     """
     Sanitize set of SMILES strings by ensuring all are canonical isomeric SMILES.
     Duplicates are also removed.
-
     Parameters
     ----------
     smiles_list : iterable of str
@@ -459,40 +458,36 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
         'expand' : expand all stereocenters into multiple molecules
     verbose : bool, optional, default=False
         If True, print verbose output.
-
     Returns
     -------
     sanitized_smiles_list : list of str
          Sanitized list of canonical isomeric SMILES strings.
-
     Examples
     --------
-
     Sanitize a simple list.
     >>> smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
-
     Throw an exception if undefined stereochemistry is present.
     >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='exception')
     Traceback (most recent call last):
       ...
     Exception: Molecule '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]' has undefined stereocenters
-
     Drop molecules iwth undefined stereochemistry.
     >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
     >>> len(sanitized_smiles_list)
     2
-
     Expand molecules iwth undefined stereochemistry.
     >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='expand')
     >>> len(sanitized_smiles_list)
     4
-
     """
     from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
     sanitized_smiles_set = set()
+    OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
     for smiles in smiles_list:
         molecule = OEGraphMol()
         OESmilesToMol(molecule, smiles)
+
+        oechem.OEAddExplicitHydrogens(molecule)
 
         if verbose:
             molecule.SetTitle(smiles)
@@ -511,16 +506,23 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
                     print('original: %s', smiles)
                 molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
                 for molecule in molecules:
-                    isosmiles = OECreateIsoSmiString(molecule)
-                    if verbose: print('expanded: %s', isosmiles)
-                    sanitized_smiles_set.add(isosmiles)
+                    # isosmiles = OECreateIsoSmiString(molecule) ## IVY
+                    # sanitized_smiles_set.add(isosmiles) ## IVY
+
+                    smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)  ## IVY
+                    # smiles_string = oechem.OEMolToSmiles(molecule)
+                    sanitized_smiles_set.add(smiles_string)  ## IVY
+                    if verbose: print('expanded: %s', smiles_string)
         else:
             # Convert to OpenEye's canonical isomeric SMILES.
-            isosmiles = OECreateIsoSmiString(molecule)
-            sanitized_smiles_set.add(isosmiles)
+            # isosmiles = OECreateIsoSmiString(molecule)
+            smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS) ## IVY
+            # smiles_string = oechem.OEMolToSmiles(molecule)
+            sanitized_smiles_set.add(smiles_string) ## IVY
 
     sanitized_smiles_list = list(sanitized_smiles_set)
     return sanitized_smiles_list
+
 
 def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=1200):
     """
