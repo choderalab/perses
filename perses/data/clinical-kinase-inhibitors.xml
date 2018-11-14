@@ -1,0 +1,532 @@
+<ForceField>
+  <Info>
+    <DateGenerated>2018-11-12</DateGenerated>
+  </Info>
+  <Residues>
+    <Residue name="MOL0">
+      <Atom charge="-0.1544" name="C1" type="ca"/>
+      <Atom charge="-0.0969" name="C2" type="ca"/>
+      <Atom charge="-0.08" name="C3" type="ca"/>
+      <Atom charge="0.4326" name="C4" type="ca"/>
+      <Atom charge="0.3036" name="C5" type="cc"/>
+      <Atom charge="-0.1363" name="C6" type="cd"/>
+      <Atom charge="-0.1415" name="C7" type="ca"/>
+      <Atom charge="-0.2031" name="C8" type="cc"/>
+      <Atom charge="-0.0474" name="C9" type="ca"/>
+      <Atom charge="-0.0794" name="C10" type="ca"/>
+      <Atom charge="0.1293" name="C11" type="ca"/>
+      <Atom charge="0.0068" name="C12" type="ca"/>
+      <Atom charge="0.0161" name="C13" type="ca"/>
+      <Atom charge="0.6352" name="C14" type="ca"/>
+      <Atom charge="-0.0914" name="C15" type="c3"/>
+      <Atom charge="-0.0914" name="C16" type="c3"/>
+      <Atom charge="0.1635" name="C17" type="c3"/>
+      <Atom charge="0.1635" name="C18" type="c3"/>
+      <Atom charge="0.0793" name="C19" type="c3"/>
+      <Atom charge="-0.118" name="C20" type="c3"/>
+      <Atom charge="0.1836" name="C21" type="c3"/>
+      <Atom charge="-0.7145" name="N1" type="nb"/>
+      <Atom charge="-0.5063" name="N2" type="nd"/>
+      <Atom charge="0.0902" name="N3" type="na"/>
+      <Atom charge="-0.8185" name="N4" type="n3"/>
+      <Atom charge="-0.9288" name="N5" type="nh"/>
+      <Atom charge="-0.3345" name="O1" type="os"/>
+      <Atom charge="-0.1209" name="F1" type="f"/>
+      <Atom charge="-0.0817" name="Cl1" type="cl"/>
+      <Atom charge="-0.0496" name="Cl2" type="cl"/>
+      <Atom charge="0.1554" name="H1" type="ha"/>
+      <Atom charge="0.162" name="H2" type="ha"/>
+      <Atom charge="0.1487" name="H3" type="ha"/>
+      <Atom charge="0.0204" name="H4" type="h4"/>
+      <Atom charge="0.0443" name="H5" type="h4"/>
+      <Atom charge="0.1755" name="H6" type="h4"/>
+      <Atom charge="0.0671" name="H7" type="hc"/>
+      <Atom charge="0.0671" name="H8" type="hc"/>
+      <Atom charge="0.0671" name="H9" type="hc"/>
+      <Atom charge="0.0671" name="H10" type="hc"/>
+      <Atom charge="0.0309" name="H11" type="h1"/>
+      <Atom charge="0.0309" name="H12" type="h1"/>
+      <Atom charge="0.0309" name="H13" type="h1"/>
+      <Atom charge="0.0309" name="H14" type="h1"/>
+      <Atom charge="0.056" name="H15" type="h1"/>
+      <Atom charge="0.0542" name="H16" type="hc"/>
+      <Atom charge="0.0542" name="H17" type="hc"/>
+      <Atom charge="0.0542" name="H18" type="hc"/>
+      <Atom charge="0.0716" name="H19" type="h1"/>
+      <Atom charge="0.3676" name="H20" type="hn"/>
+      <Atom charge="0.4172" name="H21" type="hn"/>
+      <Atom charge="0.4172" name="H22" type="hn"/>
+      <Bond atomName1="C1" atomName2="C2"/>
+      <Bond atomName1="C1" atomName2="C11"/>
+      <Bond atomName1="C2" atomName2="C12"/>
+      <Bond atomName1="C3" atomName2="C7"/>
+      <Bond atomName1="C3" atomName2="C10"/>
+      <Bond atomName1="C4" atomName2="C7"/>
+      <Bond atomName1="C4" atomName2="N1"/>
+      <Bond atomName1="C5" atomName2="C8"/>
+      <Bond atomName1="C5" atomName2="N2"/>
+      <Bond atomName1="C6" atomName2="C8"/>
+      <Bond atomName1="C6" atomName2="N3"/>
+      <Bond atomName1="C7" atomName2="C8"/>
+      <Bond atomName1="C9" atomName2="C12"/>
+      <Bond atomName1="C9" atomName2="C13"/>
+      <Bond atomName1="C9" atomName2="C21"/>
+      <Bond atomName1="C10" atomName2="C14"/>
+      <Bond atomName1="C10" atomName2="O1"/>
+      <Bond atomName1="C11" atomName2="C13"/>
+      <Bond atomName1="C11" atomName2="F1"/>
+      <Bond atomName1="C12" atomName2="Cl1"/>
+      <Bond atomName1="C13" atomName2="Cl2"/>
+      <Bond atomName1="C14" atomName2="N1"/>
+      <Bond atomName1="C14" atomName2="N5"/>
+      <Bond atomName1="C15" atomName2="C17"/>
+      <Bond atomName1="C15" atomName2="C19"/>
+      <Bond atomName1="C16" atomName2="C18"/>
+      <Bond atomName1="C16" atomName2="C19"/>
+      <Bond atomName1="C17" atomName2="N4"/>
+      <Bond atomName1="C18" atomName2="N4"/>
+      <Bond atomName1="C19" atomName2="N3"/>
+      <Bond atomName1="C20" atomName2="C21"/>
+      <Bond atomName1="C21" atomName2="O1"/>
+      <Bond atomName1="N2" atomName2="N3"/>
+      <Bond atomName1="C1" atomName2="H1"/>
+      <Bond atomName1="C2" atomName2="H2"/>
+      <Bond atomName1="C3" atomName2="H3"/>
+      <Bond atomName1="C4" atomName2="H4"/>
+      <Bond atomName1="C5" atomName2="H5"/>
+      <Bond atomName1="C6" atomName2="H6"/>
+      <Bond atomName1="C15" atomName2="H7"/>
+      <Bond atomName1="C15" atomName2="H8"/>
+      <Bond atomName1="C16" atomName2="H9"/>
+      <Bond atomName1="C16" atomName2="H10"/>
+      <Bond atomName1="C17" atomName2="H11"/>
+      <Bond atomName1="C17" atomName2="H12"/>
+      <Bond atomName1="C18" atomName2="H13"/>
+      <Bond atomName1="C18" atomName2="H14"/>
+      <Bond atomName1="C19" atomName2="H15"/>
+      <Bond atomName1="C20" atomName2="H16"/>
+      <Bond atomName1="C20" atomName2="H17"/>
+      <Bond atomName1="C20" atomName2="H18"/>
+      <Bond atomName1="C21" atomName2="H19"/>
+      <Bond atomName1="N4" atomName2="H20"/>
+      <Bond atomName1="N5" atomName2="H21"/>
+      <Bond atomName1="N5" atomName2="H22"/>
+    </Residue>
+    <Residue name="MOL1">
+      <Atom charge="-0.1255" name="C1" type="ca"/>
+      <Atom charge="-0.1232" name="C2" type="ca"/>
+      <Atom charge="-0.1181" name="C3" type="ca"/>
+      <Atom charge="-0.447" name="C4" type="ca"/>
+      <Atom charge="0.4045" name="C5" type="cc"/>
+      <Atom charge="-0.0469" name="C6" type="ca"/>
+      <Atom charge="0.0549" name="C7" type="ca"/>
+      <Atom charge="-0.0055" name="C8" type="ca"/>
+      <Atom charge="-0.2991" name="C9" type="cd"/>
+      <Atom charge="0.6866" name="C10" type="ca"/>
+      <Atom charge="0.7006" name="C11" type="ca"/>
+      <Atom charge="0.6989" name="C12" type="ca"/>
+      <Atom charge="0.6658" name="C13" type="cd"/>
+      <Atom charge="0.7217" name="C14" type="c"/>
+      <Atom charge="0.1946" name="C15" type="c3"/>
+      <Atom charge="0.1946" name="C16" type="c3"/>
+      <Atom charge="0.172" name="C17" type="c3"/>
+      <Atom charge="0.172" name="C18" type="c3"/>
+      <Atom charge="-0.0591" name="C19" type="c3"/>
+      <Atom charge="-0.1357" name="C20" type="c3"/>
+      <Atom charge="0.1736" name="C21" type="c3"/>
+      <Atom charge="0.1278" name="C22" type="c3"/>
+      <Atom charge="-0.6483" name="N1" type="nc"/>
+      <Atom charge="-0.7653" name="N2" type="nb"/>
+      <Atom charge="-0.7143" name="N3" type="nb"/>
+      <Atom charge="-0.7581" name="N4" type="nh"/>
+      <Atom charge="-0.7489" name="N5" type="n3"/>
+      <Atom charge="-0.4734" name="N6" type="n"/>
+      <Atom charge="-0.834" name="N7" type="nh"/>
+      <Atom charge="-0.5945" name="O1" type="o"/>
+      <Atom charge="-0.6051" name="O2" type="oh"/>
+      <Atom charge="-0.0611" name="S1" type="ss"/>
+      <Atom charge="-0.0991" name="Cl1" type="cl"/>
+      <Atom charge="0.1377" name="H1" type="ha"/>
+      <Atom charge="0.1383" name="H2" type="ha"/>
+      <Atom charge="0.1489" name="H3" type="ha"/>
+      <Atom charge="0.1542" name="H4" type="ha"/>
+      <Atom charge="0.0462" name="H5" type="h4"/>
+      <Atom charge="0.0522" name="H6" type="h1"/>
+      <Atom charge="0.0522" name="H7" type="h1"/>
+      <Atom charge="0.0522" name="H8" type="h1"/>
+      <Atom charge="0.0522" name="H9" type="h1"/>
+      <Atom charge="0.0403" name="H10" type="h1"/>
+      <Atom charge="0.0403" name="H11" type="h1"/>
+      <Atom charge="0.0403" name="H12" type="h1"/>
+      <Atom charge="0.0403" name="H13" type="h1"/>
+      <Atom charge="0.0547" name="H14" type="hc"/>
+      <Atom charge="0.0547" name="H15" type="hc"/>
+      <Atom charge="0.0547" name="H16" type="hc"/>
+      <Atom charge="0.0651" name="H17" type="hc"/>
+      <Atom charge="0.0651" name="H18" type="hc"/>
+      <Atom charge="0.0651" name="H19" type="hc"/>
+      <Atom charge="0.048" name="H20" type="h1"/>
+      <Atom charge="0.048" name="H21" type="h1"/>
+      <Atom charge="0.0296" name="H22" type="h1"/>
+      <Atom charge="0.0296" name="H23" type="h1"/>
+      <Atom charge="0.3233" name="H24" type="hn"/>
+      <Atom charge="0.4586" name="H25" type="hn"/>
+      <Atom charge="0.4031" name="H26" type="ho"/>
+      <Bond atomName1="C1" atomName2="C2"/>
+      <Bond atomName1="C1" atomName2="C3"/>
+      <Bond atomName1="C2" atomName2="C6"/>
+      <Bond atomName1="C3" atomName2="C8"/>
+      <Bond atomName1="C4" atomName2="C10"/>
+      <Bond atomName1="C4" atomName2="C11"/>
+      <Bond atomName1="C5" atomName2="C9"/>
+      <Bond atomName1="C5" atomName2="N1"/>
+      <Bond atomName1="C6" atomName2="C7"/>
+      <Bond atomName1="C6" atomName2="C19"/>
+      <Bond atomName1="C7" atomName2="C8"/>
+      <Bond atomName1="C7" atomName2="N6"/>
+      <Bond atomName1="C8" atomName2="Cl1"/>
+      <Bond atomName1="C9" atomName2="C14"/>
+      <Bond atomName1="C9" atomName2="S1"/>
+      <Bond atomName1="C10" atomName2="N2"/>
+      <Bond atomName1="C10" atomName2="N4"/>
+      <Bond atomName1="C11" atomName2="N3"/>
+      <Bond atomName1="C11" atomName2="N7"/>
+      <Bond atomName1="C12" atomName2="C20"/>
+      <Bond atomName1="C12" atomName2="N2"/>
+      <Bond atomName1="C12" atomName2="N3"/>
+      <Bond atomName1="C13" atomName2="N1"/>
+      <Bond atomName1="C13" atomName2="N7"/>
+      <Bond atomName1="C13" atomName2="S1"/>
+      <Bond atomName1="C14" atomName2="N6"/>
+      <Bond atomName1="C14" atomName2="O1"/>
+      <Bond atomName1="C15" atomName2="C17"/>
+      <Bond atomName1="C15" atomName2="N4"/>
+      <Bond atomName1="C16" atomName2="C18"/>
+      <Bond atomName1="C16" atomName2="N4"/>
+      <Bond atomName1="C17" atomName2="N5"/>
+      <Bond atomName1="C18" atomName2="N5"/>
+      <Bond atomName1="C21" atomName2="C22"/>
+      <Bond atomName1="C21" atomName2="N5"/>
+      <Bond atomName1="C22" atomName2="O2"/>
+      <Bond atomName1="C1" atomName2="H1"/>
+      <Bond atomName1="C2" atomName2="H2"/>
+      <Bond atomName1="C3" atomName2="H3"/>
+      <Bond atomName1="C4" atomName2="H4"/>
+      <Bond atomName1="C5" atomName2="H5"/>
+      <Bond atomName1="C15" atomName2="H6"/>
+      <Bond atomName1="C15" atomName2="H7"/>
+      <Bond atomName1="C16" atomName2="H8"/>
+      <Bond atomName1="C16" atomName2="H9"/>
+      <Bond atomName1="C17" atomName2="H10"/>
+      <Bond atomName1="C17" atomName2="H11"/>
+      <Bond atomName1="C18" atomName2="H12"/>
+      <Bond atomName1="C18" atomName2="H13"/>
+      <Bond atomName1="C19" atomName2="H14"/>
+      <Bond atomName1="C19" atomName2="H15"/>
+      <Bond atomName1="C19" atomName2="H16"/>
+      <Bond atomName1="C20" atomName2="H17"/>
+      <Bond atomName1="C20" atomName2="H18"/>
+      <Bond atomName1="C20" atomName2="H19"/>
+      <Bond atomName1="C21" atomName2="H20"/>
+      <Bond atomName1="C21" atomName2="H21"/>
+      <Bond atomName1="C22" atomName2="H22"/>
+      <Bond atomName1="C22" atomName2="H23"/>
+      <Bond atomName1="N6" atomName2="H24"/>
+      <Bond atomName1="N7" atomName2="H25"/>
+      <Bond atomName1="O2" atomName2="H26"/>
+    </Residue>
+    <Residue name="MOL2">
+      <Atom charge="-0.1334" name="C1" type="c1"/>
+      <Atom charge="-0.1268" name="C2" type="cg"/>
+      <Atom charge="-0.1102" name="C3" type="ca"/>
+      <Atom charge="-0.1285" name="C4" type="ca"/>
+      <Atom charge="-0.1308" name="C5" type="ca"/>
+      <Atom charge="-0.1576" name="C6" type="ca"/>
+      <Atom charge="-0.1166" name="C7" type="ca"/>
+      <Atom charge="-0.2534" name="C8" type="ca"/>
+      <Atom charge="0.6696" name="C9" type="ca"/>
+      <Atom charge="0.0471" name="C10" type="ca"/>
+      <Atom charge="-0.2994" name="C11" type="ca"/>
+      <Atom charge="0.4556" name="C12" type="ca"/>
+      <Atom charge="0.1652" name="C13" type="ca"/>
+      <Atom charge="0.083" name="C14" type="ca"/>
+      <Atom charge="0.1489" name="C15" type="ca"/>
+      <Atom charge="0.7155" name="C16" type="ca"/>
+      <Atom charge="0.1183" name="C17" type="c3"/>
+      <Atom charge="0.1187" name="C18" type="c3"/>
+      <Atom charge="0.1258" name="C19" type="c3"/>
+      <Atom charge="0.1183" name="C20" type="c3"/>
+      <Atom charge="0.1198" name="C21" type="c3"/>
+      <Atom charge="0.1211" name="C22" type="c3"/>
+      <Atom charge="-0.7147" name="N1" type="nb"/>
+      <Atom charge="-0.7585" name="N2" type="nb"/>
+      <Atom charge="-0.7635" name="N3" type="nh"/>
+      <Atom charge="-0.3221" name="O1" type="os"/>
+      <Atom charge="-0.3123" name="O2" type="os"/>
+      <Atom charge="-0.4248" name="O3" type="os"/>
+      <Atom charge="-0.4231" name="O4" type="os"/>
+      <Atom charge="0.1677" name="H1" type="ha"/>
+      <Atom charge="0.138" name="H2" type="ha"/>
+      <Atom charge="0.1416" name="H3" type="ha"/>
+      <Atom charge="0.1511" name="H4" type="ha"/>
+      <Atom charge="0.1393" name="H5" type="ha"/>
+      <Atom charge="0.1441" name="H6" type="ha"/>
+      <Atom charge="0.1675" name="H7" type="ha"/>
+      <Atom charge="0.0552" name="H8" type="h5"/>
+      <Atom charge="0.0356" name="H9" type="h1"/>
+      <Atom charge="0.0356" name="H10" type="h1"/>
+      <Atom charge="0.0356" name="H11" type="h1"/>
+      <Atom charge="0.0357" name="H12" type="h1"/>
+      <Atom charge="0.0357" name="H13" type="h1"/>
+      <Atom charge="0.0357" name="H14" type="h1"/>
+      <Atom charge="0.0521" name="H15" type="h1"/>
+      <Atom charge="0.0521" name="H16" type="h1"/>
+      <Atom charge="0.0609" name="H17" type="h1"/>
+      <Atom charge="0.0609" name="H18" type="h1"/>
+      <Atom charge="0.044" name="H19" type="h1"/>
+      <Atom charge="0.044" name="H20" type="h1"/>
+      <Atom charge="0.0441" name="H21" type="h1"/>
+      <Atom charge="0.0441" name="H22" type="h1"/>
+      <Atom charge="0.4483" name="H23" type="hn"/>
+      <Bond atomName1="C1" atomName2="C2"/>
+      <Bond atomName1="C2" atomName2="C10"/>
+      <Bond atomName1="C3" atomName2="C4"/>
+      <Bond atomName1="C3" atomName2="C5"/>
+      <Bond atomName1="C4" atomName2="C10"/>
+      <Bond atomName1="C5" atomName2="C13"/>
+      <Bond atomName1="C6" atomName2="C10"/>
+      <Bond atomName1="C6" atomName2="C13"/>
+      <Bond atomName1="C7" atomName2="C11"/>
+      <Bond atomName1="C7" atomName2="C14"/>
+      <Bond atomName1="C8" atomName2="C12"/>
+      <Bond atomName1="C8" atomName2="C15"/>
+      <Bond atomName1="C9" atomName2="N1"/>
+      <Bond atomName1="C9" atomName2="N2"/>
+      <Bond atomName1="C11" atomName2="C12"/>
+      <Bond atomName1="C11" atomName2="C16"/>
+      <Bond atomName1="C12" atomName2="N1"/>
+      <Bond atomName1="C13" atomName2="N3"/>
+      <Bond atomName1="C14" atomName2="C15"/>
+      <Bond atomName1="C14" atomName2="O1"/>
+      <Bond atomName1="C15" atomName2="O2"/>
+      <Bond atomName1="C16" atomName2="N2"/>
+      <Bond atomName1="C16" atomName2="N3"/>
+      <Bond atomName1="C17" atomName2="O3"/>
+      <Bond atomName1="C18" atomName2="O4"/>
+      <Bond atomName1="C19" atomName2="C21"/>
+      <Bond atomName1="C19" atomName2="O1"/>
+      <Bond atomName1="C20" atomName2="C22"/>
+      <Bond atomName1="C20" atomName2="O2"/>
+      <Bond atomName1="C21" atomName2="O3"/>
+      <Bond atomName1="C22" atomName2="O4"/>
+      <Bond atomName1="C1" atomName2="H1"/>
+      <Bond atomName1="C3" atomName2="H2"/>
+      <Bond atomName1="C4" atomName2="H3"/>
+      <Bond atomName1="C5" atomName2="H4"/>
+      <Bond atomName1="C6" atomName2="H5"/>
+      <Bond atomName1="C7" atomName2="H6"/>
+      <Bond atomName1="C8" atomName2="H7"/>
+      <Bond atomName1="C9" atomName2="H8"/>
+      <Bond atomName1="C17" atomName2="H9"/>
+      <Bond atomName1="C17" atomName2="H10"/>
+      <Bond atomName1="C17" atomName2="H11"/>
+      <Bond atomName1="C18" atomName2="H12"/>
+      <Bond atomName1="C18" atomName2="H13"/>
+      <Bond atomName1="C18" atomName2="H14"/>
+      <Bond atomName1="C19" atomName2="H15"/>
+      <Bond atomName1="C19" atomName2="H16"/>
+      <Bond atomName1="C20" atomName2="H17"/>
+      <Bond atomName1="C20" atomName2="H18"/>
+      <Bond atomName1="C21" atomName2="H19"/>
+      <Bond atomName1="C21" atomName2="H20"/>
+      <Bond atomName1="C22" atomName2="H21"/>
+      <Bond atomName1="C22" atomName2="H22"/>
+      <Bond atomName1="N3" atomName2="H23"/>
+    </Residue>
+    <Residue name="MOL3">
+      <Atom charge="-0.2523" name="C1" type="ca"/>
+      <Atom charge="-0.0701" name="C2" type="ca"/>
+      <Atom charge="-0.0932" name="C3" type="ca"/>
+      <Atom charge="-0.0932" name="C4" type="ca"/>
+      <Atom charge="-0.1262" name="C5" type="ca"/>
+      <Atom charge="-0.1262" name="C6" type="ca"/>
+      <Atom charge="-0.0903" name="C7" type="ca"/>
+      <Atom charge="-0.157" name="C8" type="ca"/>
+      <Atom charge="-0.4128" name="C9" type="ca"/>
+      <Atom charge="-0.1866" name="C10" type="ca"/>
+      <Atom charge="0.4045" name="C11" type="ca"/>
+      <Atom charge="0.4641" name="C12" type="ca"/>
+      <Atom charge="0.4326" name="C13" type="ca"/>
+      <Atom charge="-0.2747" name="C14" type="cp"/>
+      <Atom charge="-0.1474" name="C15" type="ca"/>
+      <Atom charge="-0.0585" name="C16" type="ca"/>
+      <Atom charge="-0.1399" name="C17" type="ca"/>
+      <Atom charge="0.0802" name="C18" type="ca"/>
+      <Atom charge="0.1825" name="C19" type="ca"/>
+      <Atom charge="0.5359" name="C20" type="cp"/>
+      <Atom charge="0.8922" name="C21" type="ca"/>
+      <Atom charge="0.6802" name="C22" type="c"/>
+      <Atom charge="0.1715" name="C23" type="c3"/>
+      <Atom charge="0.1715" name="C24" type="c3"/>
+      <Atom charge="0.1713" name="C25" type="c3"/>
+      <Atom charge="0.1713" name="C26" type="c3"/>
+      <Atom charge="-0.0485" name="C27" type="c3"/>
+      <Atom charge="0.1609" name="C28" type="c3"/>
+      <Atom charge="0.2143" name="C29" type="c3"/>
+      <Atom charge="-0.6668" name="N1" type="nb"/>
+      <Atom charge="-0.7377" name="N2" type="nb"/>
+      <Atom charge="-0.7521" name="N3" type="nb"/>
+      <Atom charge="-0.7406" name="N4" type="n3"/>
+      <Atom charge="-0.7377" name="N5" type="n3"/>
+      <Atom charge="-0.7298" name="N6" type="nh"/>
+      <Atom charge="-0.4722" name="N7" type="n"/>
+      <Atom charge="-0.5839" name="O1" type="o"/>
+      <Atom charge="0.1451" name="H1" type="ha"/>
+      <Atom charge="0.1454" name="H2" type="ha"/>
+      <Atom charge="0.1473" name="H3" type="ha"/>
+      <Atom charge="0.1473" name="H4" type="ha"/>
+      <Atom charge="0.1432" name="H5" type="ha"/>
+      <Atom charge="0.1432" name="H6" type="ha"/>
+      <Atom charge="0.1361" name="H7" type="ha"/>
+      <Atom charge="0.1668" name="H8" type="ha"/>
+      <Atom charge="0.1583" name="H9" type="ha"/>
+      <Atom charge="0.1552" name="H10" type="ha"/>
+      <Atom charge="0.0254" name="H11" type="h4"/>
+      <Atom charge="0.0288" name="H12" type="h4"/>
+      <Atom charge="0.0355" name="H13" type="h4"/>
+      <Atom charge="0.0379" name="H14" type="h1"/>
+      <Atom charge="0.0379" name="H15" type="h1"/>
+      <Atom charge="0.0379" name="H16" type="h1"/>
+      <Atom charge="0.0379" name="H17" type="h1"/>
+      <Atom charge="0.038" name="H18" type="h1"/>
+      <Atom charge="0.038" name="H19" type="h1"/>
+      <Atom charge="0.038" name="H20" type="h1"/>
+      <Atom charge="0.038" name="H21" type="h1"/>
+      <Atom charge="0.0426" name="H22" type="hc"/>
+      <Atom charge="0.0426" name="H23" type="hc"/>
+      <Atom charge="0.0426" name="H24" type="hc"/>
+      <Atom charge="0.0321" name="H25" type="h1"/>
+      <Atom charge="0.0321" name="H26" type="h1"/>
+      <Atom charge="0.0321" name="H27" type="h1"/>
+      <Atom charge="0.0416" name="H28" type="h1"/>
+      <Atom charge="0.0416" name="H29" type="h1"/>
+      <Atom charge="0.4584" name="H30" type="hn"/>
+      <Atom charge="0.318" name="H31" type="hn"/>
+      <Bond atomName1="C1" atomName2="C2"/>
+      <Bond atomName1="C1" atomName2="C11"/>
+      <Bond atomName1="C2" atomName2="C14"/>
+      <Bond atomName1="C3" atomName2="C5"/>
+      <Bond atomName1="C3" atomName2="C15"/>
+      <Bond atomName1="C4" atomName2="C6"/>
+      <Bond atomName1="C4" atomName2="C15"/>
+      <Bond atomName1="C5" atomName2="C16"/>
+      <Bond atomName1="C6" atomName2="C16"/>
+      <Bond atomName1="C7" atomName2="C8"/>
+      <Bond atomName1="C7" atomName2="C17"/>
+      <Bond atomName1="C8" atomName2="C18"/>
+      <Bond atomName1="C9" atomName2="C12"/>
+      <Bond atomName1="C9" atomName2="C20"/>
+      <Bond atomName1="C10" atomName2="C18"/>
+      <Bond atomName1="C10" atomName2="C19"/>
+      <Bond atomName1="C11" atomName2="N1"/>
+      <Bond atomName1="C12" atomName2="N2"/>
+      <Bond atomName1="C13" atomName2="C14"/>
+      <Bond atomName1="C13" atomName2="N1"/>
+      <Bond atomName1="C14" atomName2="C20"/>
+      <Bond atomName1="C15" atomName2="C22"/>
+      <Bond atomName1="C16" atomName2="C29"/>
+      <Bond atomName1="C17" atomName2="C19"/>
+      <Bond atomName1="C17" atomName2="C27"/>
+      <Bond atomName1="C18" atomName2="N7"/>
+      <Bond atomName1="C19" atomName2="N6"/>
+      <Bond atomName1="C20" atomName2="N3"/>
+      <Bond atomName1="C21" atomName2="N2"/>
+      <Bond atomName1="C21" atomName2="N3"/>
+      <Bond atomName1="C21" atomName2="N6"/>
+      <Bond atomName1="C22" atomName2="N7"/>
+      <Bond atomName1="C22" atomName2="O1"/>
+      <Bond atomName1="C23" atomName2="C25"/>
+      <Bond atomName1="C23" atomName2="N4"/>
+      <Bond atomName1="C24" atomName2="C26"/>
+      <Bond atomName1="C24" atomName2="N4"/>
+      <Bond atomName1="C25" atomName2="N5"/>
+      <Bond atomName1="C26" atomName2="N5"/>
+      <Bond atomName1="C28" atomName2="N4"/>
+      <Bond atomName1="C29" atomName2="N5"/>
+      <Bond atomName1="C1" atomName2="H1"/>
+      <Bond atomName1="C2" atomName2="H2"/>
+      <Bond atomName1="C3" atomName2="H3"/>
+      <Bond atomName1="C4" atomName2="H4"/>
+      <Bond atomName1="C5" atomName2="H5"/>
+      <Bond atomName1="C6" atomName2="H6"/>
+      <Bond atomName1="C7" atomName2="H7"/>
+      <Bond atomName1="C8" atomName2="H8"/>
+      <Bond atomName1="C9" atomName2="H9"/>
+      <Bond atomName1="C10" atomName2="H10"/>
+      <Bond atomName1="C11" atomName2="H11"/>
+      <Bond atomName1="C12" atomName2="H12"/>
+      <Bond atomName1="C13" atomName2="H13"/>
+      <Bond atomName1="C23" atomName2="H14"/>
+      <Bond atomName1="C23" atomName2="H15"/>
+      <Bond atomName1="C24" atomName2="H16"/>
+      <Bond atomName1="C24" atomName2="H17"/>
+      <Bond atomName1="C25" atomName2="H18"/>
+      <Bond atomName1="C25" atomName2="H19"/>
+      <Bond atomName1="C26" atomName2="H20"/>
+      <Bond atomName1="C26" atomName2="H21"/>
+      <Bond atomName1="C27" atomName2="H22"/>
+      <Bond atomName1="C27" atomName2="H23"/>
+      <Bond atomName1="C27" atomName2="H24"/>
+      <Bond atomName1="C28" atomName2="H25"/>
+      <Bond atomName1="C28" atomName2="H26"/>
+      <Bond atomName1="C28" atomName2="H27"/>
+      <Bond atomName1="C29" atomName2="H28"/>
+      <Bond atomName1="C29" atomName2="H29"/>
+      <Bond atomName1="N6" atomName2="H30"/>
+      <Bond atomName1="N7" atomName2="H31"/>
+    </Residue>
+  </Residues>
+  <PeriodicTorsionForce>
+    <Proper k1="2.9288" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="cc" type4="cc"/>
+    <Proper k1="2.9288" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="cc" type4="cd"/>
+    <Proper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cc" type2="cd" type3="ss" type4="cd"/>
+    <Proper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="nc" type2="cd" type3="ss" type4="cd"/>
+    <Proper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="nh" type2="cd" type3="ss" type4="cd"/>
+    <Proper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="c" type2="cd" type3="ss" type4="cd"/>
+    <Proper k1="0.0" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="cg" type4="c1"/>
+    <Proper k1="20.0832" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="cp" type3="nb" type4="ca"/>
+    <Proper k1="20.0832" periodicity1="2" phase1="3.141592653589793" type1="cp" type2="cp" type3="nb" type4="ca"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="ca" type4="ha"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="h4" type4="nb"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cc" type2="cc" type3="h4" type4="nd"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cd" type2="cc" type3="h4" type4="na"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="ca" type4="cc"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cc" type2="ca" type3="cc" type4="cd"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="ca" type4="os"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="nb" type4="nh"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="na" type2="c3" type3="cd" type4="nd"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="nh" type2="ca" type3="hn" type4="hn"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cc" type2="cd" type3="h4" type4="nc"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="ca" type4="n"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cd" type2="c" type3="cc" type4="ss"/>
+    <Improper k1="43.932" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="c3" type3="nb" type4="nb"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cd" type2="nc" type3="nh" type4="ss"/>
+    <Improper k1="43.932" periodicity1="2" phase1="3.141592653589793" type1="c" type2="cd" type3="n" type4="o"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="nh" type2="c3" type3="c3" type4="ca"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="n" type2="c" type3="ca" type4="hn"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="nh" type2="ca" type3="cd" type4="hn"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="h5" type3="nb" type4="nb"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="ca" type4="cg"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="ca" type4="ca"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="ca" type4="nb"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="ca" type4="nh"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="nh" type2="ca" type3="ca" type4="hn"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="ca" type3="cp" type4="ha"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="cp" type3="h4" type4="nb"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cp" type2="ca" type3="ca" type4="cp"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="c" type3="ca" type4="ca"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="cp" type2="ca" type3="cp" type4="nb"/>
+    <Improper k1="4.6024" periodicity1="2" phase1="3.141592653589793" type1="ca" type2="nb" type3="nb" type4="nh"/>
+    <Improper k1="43.932" periodicity1="2" phase1="3.141592653589793" type1="c" type2="ca" type3="n" type4="o"/>
+  </PeriodicTorsionForce>
+</ForceField>

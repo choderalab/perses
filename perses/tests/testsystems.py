@@ -1684,6 +1684,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
     def __init__(self, constraints=app.HBonds, premapped_json_dict=None, **kwargs):
         super(SmallMoleculeLibraryTestSystem, self).__init__(**kwargs)
+
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
         environments = ['explicit', 'vacuum']
@@ -1696,20 +1697,10 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         system_generators = dict()
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
-        # system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'], use_antechamber=False,
-        #     forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }, barostat=barostat)
-        # system_generators['vacuum'] = SystemGenerator([gaff_xml_filename], use_antechamber=False,
-        #     forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'],
-                                                        forcefield_kwargs={'nonbondedMethod': app.CutoffPeriodic,
-                                                                           'nonbondedCutoff': 9.0 * unit.angstrom,
-                                                                           'implicitSolvent': None,
-                                                                           'constraints': constraints},
-                                                        barostat=barostat)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
-                                                      forcefield_kwargs={'nonbondedMethod': app.NoCutoff,
-                                                                         'implicitSolvent': None,
-                                                                         'constraints': constraints})
+        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'], use_antechamber=False,
+            forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }, barostat=barostat)
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename], use_antechamber=False,
+            forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
 
         # Create topologies and positions
         topologies = dict()
@@ -1719,38 +1710,23 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         from openmoltools import forcefield_generators
         from io import StringIO
         from perses.tests.utils import smiles_to_oemol, extractPositionsFromOEMOL
-        forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-        # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
-        # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
-        from openmoltools import forcefield_generators ## IVY
-        forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator) ## IVY
-        # d_smiles_to_oemol = {smiles : smiles_to_oemol(smiles, "MOL%d" % i)for i, smiles in enumerate(molecules)}
-        # ffxml, failed_molecule_list = forcefield_generators.generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
+        clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
+        forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical_kinase_inhibitors_filename)
+        d_smiles_to_oemol = {smiles : smiles_to_oemol(smiles, "MOL%d" % i)for i, smiles in enumerate(molecules)}
 
+        ## Generate and ffxml, then add to forcefield
+        # ffxml, failed_molecule_list = forcefield_generators.generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
         # f = open('clinical-kinase-inhibitors.xml', 'w')
         # f.write(ffxml)
         # f.close()
-
         # if failed_molecule_list:
         #     raise Exception("Failed to generate forcefield for the following molecules: ", failed_molecule_list)
         # forcefield.loadFile(StringIO(ffxml))
 
         # Create molecule in vacuum.
-        smiles = molecules[0]  # current sampler state ## IVY add this back in
-        # smiles = 'C5=C(C1=CN=CC=C1)N=C(NC2=C(C=CC(=C2)NC(C3=CC=C(C=C3)CN4CCN(CC4)C)=O)C)N=C5'  ## IVY delete this Imatinib
-        # smiles = 'Cc1ccc(cc1C#Cc2cnc3n2nccc3)C(=O)Nc4ccc(c(c4)C(F)(F)F)CN5CCN(CC5)C'
-        # smiles = 'Cc1c2cnc(nc2n(c(=O)c1C(=O)C)C3CCCC3)Nc4ccc(cn4)N5CCNCC5' # palbociclib
-        # smiles = 'Cc1c2cnc(nc2n(c(=O)c1C(=O)C)C3CCCC3)Nc4ccc(cn4)N5CCNCC5'
-        # smiles = 'C[C@@H]1CCN(C[C@@H]1[N@](C)c2c3cc[nH]c3ncn2)C(=O)CC#N'
-        # smiles = 'CC1=C(C=C(C=C1)NC2=NC=CC(=N2)N(C)C3=CC4=NN(C(=C4C=C3)C)C)S(=O)(=O)N' # Pazopanib
-        # smiles = 'c1ccccc1'
-        # smiles = 'C[C@H](C1=C(C=CC(=C1Cl)F)Cl)OC2=C(N=CC(=C2)C3=CN(N=C3)C4CCNCC4)N' # Crizontinib
-        # smiles = 'C[C@@H]1CCN(C[C@@H]1N(C)C2=NC=NC3=C2C=CN3)C(=O)CC#N' # Tofacatinib
+        smiles = molecules[0]  # current sampler state
         print("smiles: ", smiles)
-        # smiles = sanitizeSMILES([smiles])[0]
-        # print("sanitized: ", smiles)
-        # molecule = smiles_to_oemol(smiles, title=d_smiles_to_oemol[smiles].GetTitle())
-        molecule = smiles_to_oemol(smiles)
+        molecule = smiles_to_oemol(smiles, title=d_smiles_to_oemol[smiles].GetTitle())
 
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMOL(molecule)
@@ -1768,15 +1744,13 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         if not premapped_json_dict:
             for environment in environments:
-                # proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
-                proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], smiles=smiles)
+                proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
 
         else:
             atom_mapper = SmallMoleculeAtomMapper.from_json(premapped_json_dict)
             for environment in environments:
-                # proposal_engines[environment] = PremappedSmallMoleculeSetProposalEngine(atom_mapper, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
-                proposal_engines[environment] = PremappedSmallMoleculeSetProposalEngine(atom_mapper,
-                                                                                        system_generators[environment], smiles=smiles)
+                proposal_engines[environment] = PremappedSmallMoleculeSetProposalEngine(atom_mapper, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
+
         # Generate systems
         systems = dict()
         for environment in environments:
@@ -1813,7 +1787,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         target_samplers = { sams_samplers['explicit'] : 1.0, sams_samplers['vacuum'] : -1.0 }
         designer = MultiTargetDesign(target_samplers, storage=self.storage)
         # Store things.
-        self.molecules = molecules ## IVY this was original
+        self.molecules = molecules
         self.environments = environments
         self.topologies = topologies
         self.positions = positions
