@@ -203,10 +203,10 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         proposal_engines = dict()
         chain_id = '1'
         # allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','ILE')]]
-        allowed_mutations = [('2', 'ILE'), ('2', 'HIS')]
+        allowed_mutations = [('2', 'ILE'), ('2', 'VAL')]
 
         for environment in environments:
-            proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+            proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations, aggregate=True)
 
         # Generate systems
         systems = dict()
@@ -1729,6 +1729,9 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         molecule = smiles_to_oemol(smiles, title=d_smiles_to_oemol[smiles].GetTitle())
 
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
+        for residue in topologies['vacuum'].residues(): ## IVY
+            print("residue name: ", residue.name)
+
         positions['vacuum'] = extractPositionsFromOEMOL(molecule)
 
         # Create molecule in solvent.
