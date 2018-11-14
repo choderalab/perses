@@ -14,7 +14,7 @@ import openeye.oeomega as oeomega
 import simtk.openmm.app as app
 import tempfile
 import itertools
-from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
+from openmoltools import forcefield_generators
 from perses.tests import utils
 import os
 import time
@@ -398,9 +398,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                     new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res)
                     new_topology.addBond(new_hydrogen, new_atom)
-            oemol = generateOEMolFromTopologyResidue(new_res)
+            oemol = forcefield_generators.generateOEMolFromTopologyResidue(new_res)
         else:
-            oemol = generateOEMolFromTopologyResidue(res)
+            oemol = forcefield_generators.generateOEMolFromTopologyResidue(res)
         oechem.OEAddExplicitHydrogens(oemol)
         return oemol
 

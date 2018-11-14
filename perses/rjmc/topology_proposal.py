@@ -21,6 +21,7 @@ from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.storage import NetCDFStorageView
+from perses.tests import utils
 try:
     from StringIO import StringIO
 except ImportError:
@@ -72,11 +73,13 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         If specified, any residues matching this name are excluded.
 
     """
+    if exclude_residue_name is None:
+        exclude_residue_name = "   "  # something with 3 characters that is never a residue name
     new_atoms = {}
     for chain in source_topology.chains():
         new_chain = destination_topology.addChain(chain.id)
         for residue in chain.residues():
-            if (residue.name == exclude_residue_name):
+            if (residue.name[:3] == exclude_residue_name[:3]):
                 continue
             new_residue = destination_topology.addResidue(residue.name, new_chain, residue.id)
             for atom in residue.atoms():
@@ -84,7 +87,7 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
                 # new_atom.stereo = atom.stereo ## IVY delete
                 new_atoms[atom] = new_atom
     for bond in source_topology.bonds():
-        if (bond[0].residue.name == exclude_residue_name) or (bond[1].residue.name == exclude_residue_name):
+        if (bond[0].residue.name[:3] == exclude_residue_name[:3]) or (bond[1].residue.name[:3] == exclude_residue_name[:3]):
             continue
         order = bond.order
         destination_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]], order=order)
@@ -2057,13 +2060,15 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         SystemGenerator initialized with the appropriate forcefields
     residue_name : str
         The name that will be used for small molecule residues in the topology
+    smiles : str
+        If specified, will use this smiles string (instead of generating it from the topology) to find match in molecule set
     proposal_metadata : dict
         metadata for the proposal engine
     storage : NetCDFStorageView, optional, default=None
         If specified, write statistics to this storage
     """
 
-    def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
+    def __init__(self, list_of_smiles, system_generator, residue_name='MOL', smiles=None,
                  atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
                  always_change=True, atom_map=None):
 
@@ -2074,6 +2079,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Canonicalize all SMILES strings
         self._smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in set(list_of_smiles)] ## IVY
+        self._smiles = smiles
 
         self._n_molecules = len(self._smiles_list)
 
@@ -2117,9 +2123,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Determine SMILES string for current small molecule
         if current_mol is None:
-            current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+            if self._smiles is None:
+                current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+            else:
+                current_mol_smiles = self._smiles
+                current_mol = utils.smiles_to_oemol(current_mol_smiles)
         else:
-            # TODO: Make sure we're using canonical mol to smiles conversion
             current_mol_smiles = oechem.OEMolToSmiles(current_mol)
 
         # Remove the small molecule from the current Topology object
@@ -2135,9 +2144,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         if proposed_mol is None:
             proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
         else:
-            # TODO: Make sure we're using canonical mol to smiles conversion
-            proposed_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            proposed_mol_smiles = oechem.OEMolToSmiles(proposed_mol)
             logp_proposal = 0.0
+        print("proposed smiles: ", proposed_mol_smiles) ## IVY
 
         # Build the new Topology object, including the proposed molecule
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
@@ -2176,6 +2185,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             else:
                 old_idx = i
             adjusted_atom_map[i] = old_idx
+
+        utils.render_atom_mapping("atom_mapping.pdf", current_mol, proposed_mol, adjusted_atom_map) ## IVY delete
 
         # Create the TopologyProposal onbject
         proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
@@ -2231,6 +2242,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         molecule_name = self._residue_name
 
+        # matching_molecules = [res for res in topology.residues() if res.name == molecule_name]  ## IVY # Find residue in topology by searching for residues with name "MOL"
         matching_molecules = [res for res in topology.residues() if res.name[:3] == molecule_name[:3]]  # Find residue in topology by searching for residues with name "MOL"
         if len(matching_molecules) != 1:
             raise ValueError("More than one residue with the same name!")
@@ -2238,15 +2250,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
         # smiles_string = oechem.OEMolToSmiles(oemol)
         smiles_string = oechem.OECreateSmiString(oemol, OESMILES_OPTIONS)
+        # # Feed smiles string back into oemol and generate SMILES again (since it's not actually canonicalized the first time OECreateSmiString is called)
+        # mol = oechem.OEMol()
+        # oechem.OESmilesToMol(mol, smiles_string)
+        # oechem.OEAddExplicitHydrogens(mol)
+        # # new_smiles = oechem.OEMolToSmiles(mol)
+        # new_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
 
-        # Feed smiles string back into oemol and generate SMILES again (since it's not actually canonicalized the first time OECreateSmiString is called)
-        mol = oechem.OEMol()
-        oechem.OESmilesToMol(mol, smiles_string)
-        oechem.OEAddExplicitHydrogens(mol)
-        # new_smiles = oechem.OEMolToSmiles(mol)
-        new_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
-
-        return new_smiles, oemol
+        return smiles_string, oemol
 
     def compute_state_key(self, topology):
         """
@@ -2285,6 +2296,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             the number of atoms in the molecule
         """
         resname = self._residue_name
+        # mol_residues = [res for res in topology.residues() if res.name == resname] ## IVY # Find the residue by searching for residues with "MOL"
         mol_residues = [res for res in topology.residues() if res.name[:3]==resname[:3]]  # Find the residue by searching for residues with "MOL"
         if len(mol_residues)!=1:
             raise ValueError("There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'" % (len(mol_residues), resname))
@@ -2313,6 +2325,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info('Building new Topology object...')
         timer_start = time.time()
 
+        # oemol_proposed.SetTitle(self._residue_name) ## IVY
         oemol_proposed.SetTitle(oemol_proposed.GetTitle())
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
@@ -2528,7 +2541,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
         logp = np.log(reverse_probability) - np.log(forward_probability)
         from perses.tests.utils import smiles_to_oemol
-        proposed_mol = smiles_to_oemol(proposed_smiles, "MOL_%d" %proposed_smiles_idx)
+        proposed_mol = smiles_to_oemol(proposed_smiles)
+        # proposed_mol = smiles_to_oemol(proposed_smiles, "MOL%d" %proposed_smiles_idx) ## IVY add this back in
         return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):

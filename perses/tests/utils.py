@@ -433,8 +433,14 @@ def smiles_to_oemol(smiles_string, title="MOL"):
     oechem.OETriposAtomNames(mol)
     oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
+    omega.SetStrictStereo(True)
     omega.SetMaxConfs(1)
     omega(mol)
+
+    for atom in mol.GetAtoms(): ## IVY Delete
+        if atom.IsChiral():
+            print("smiles to oemol stereo: ", oechem.OEPerceiveCIPStereo(mol, atom))
+
     return mol
 
 def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
