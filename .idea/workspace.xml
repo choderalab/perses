@@ -1,21 +1,106 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="0ceea625-47bb-4f09-b3e5-fefd8d3f3a30" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/perses/data/protein.ff14SB.protonated-termini.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/perses/data/protein.ff14SB.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/scripts/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/scripts/generate-protonated-termini.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/lib/examples/tdi-example/tdi_setup.yaml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/devtools/conda-recipe/meta.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/devtools/conda-recipe/meta.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/devtools/travis-ci/oe_license.txt.enc" beforeDir="false" afterPath="$PROJECT_DIR$/devtools/travis-ci/oe_license.txt.enc" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/perses/annihilation/ncmc_switching.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/annihilation/ncmc_switching.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/perses/annihilation/new_relative.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/annihilation/new_relative.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/perses/dispersed/feptasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/dispersed/feptasks.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/perses/rjmc/geometry.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/rjmc/geometry.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/perses/samplers/samplers.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/samplers/samplers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/perses/tests/testsystems.py" beforeDir="false" afterPath="$PROJECT_DIR$/perses/tests/testsystems.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
+    <list default="true" id="9382d1aa-1f00-4c2d-ac58-39503c45aa2b" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ANTECHAMBER_BOND_TYPE.AC" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ANTECHAMBER_BOND_TYPE.AC0" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ATOMTYPE.INF" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/current.mol2" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/dist/perses-0.1-py3.6.egg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/omega-00000.mol2" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses.egg-info/PKG-INFO" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses.egg-info/SOURCES.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses.egg-info/dependency_links.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses.egg-info/entry_points.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses.egg-info/not-zip-safe" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses.egg-info/requires.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses.egg-info/top_level.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/ANTECHAMBER_AC.AC" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/ANTECHAMBER_AC.AC0" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/ANTECHAMBER_BOND_TYPE.AC" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/ANTECHAMBER_BOND_TYPE.AC0" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/ATOMTYPE.INF" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/BuildSystem-failure.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-0-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-0-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-0-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-0-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-1-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-1-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-1-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-1-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-1-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-1-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-1-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-10-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-10-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-10-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-2-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-2-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-2-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-2-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-2-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-2-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-2-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-3-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-3-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-3-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-3-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-3-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-3-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-3-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-4-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-4-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-4-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-4-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-4-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-4-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-4-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-5-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-5-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-5-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-5-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-5-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-5-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-5-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-6-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-6-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-6-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-6-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-6-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-6-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-6-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-7-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-7-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-7-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-7-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-7-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-7-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-7-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-8-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-8-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-8-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-8-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-8-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-8-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-8-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-9-forward-final.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-9-forward-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-9-forward-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-9-forward-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-9-reverse-initial.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-9-reverse-proposal.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/geometry-9-reverse-stages.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/log_accept" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/omega-00000.mol2" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/stdout" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/stdout2" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/stdout3" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/stdout4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/stdout5" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/perses/tests/test-old_topology.pdb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test-old_topology.pdb" beforeDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -25,55 +110,37 @@
   </component>
   <component name="FUSProjectUsageTrigger">
     <session id="34971118">
-      <usages-collector id="statistics.lifecycle.project">
-        <counts>
-          <entry key="project.closed" value="66" />
-          <entry key="project.open.time.1" value="16" />
-          <entry key="project.open.time.10" value="3" />
-          <entry key="project.open.time.11" value="2" />
-          <entry key="project.open.time.12" value="1" />
-          <entry key="project.open.time.14" value="1" />
-          <entry key="project.open.time.2" value="5" />
-          <entry key="project.open.time.3" value="1" />
-          <entry key="project.open.time.4" value="1" />
-          <entry key="project.open.time.5" value="3" />
-          <entry key="project.open.time.6" value="11" />
-          <entry key="project.open.time.7" value="11" />
-          <entry key="project.open.time.8" value="11" />
-          <entry key="project.open.time.9" value="3" />
-          <entry key="project.opened" value="69" />
-        </counts>
-      </usages-collector>
-      <usages-collector id="statistics.file.extensions.open">
-        <counts>
-          <entry key="pdb" value="17" />
-          <entry key="png" value="1" />
-          <entry key="py" value="29" />
-          <entry key="yaml" value="1" />
-        </counts>
-      </usages-collector>
-      <usages-collector id="statistics.file.types.open">
-        <counts>
-          <entry key="Image" value="1" />
-          <entry key="PLAIN_TEXT" value="17" />
-          <entry key="Python" value="29" />
-          <entry key="YAML" value="1" />
-        </counts>
-      </usages-collector>
       <usages-collector id="statistics.file.extensions.edit">
         <counts>
-          <entry key="Python Console" value="968" />
-          <entry key="dummy" value="4" />
-          <entry key="py" value="53747" />
+          <entry key="csv" value="9" />
+          <entry key="py" value="1764" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.edit">
         <counts>
-          <entry key="PLAIN_TEXT" value="4" />
-          <entry key="Python" value="54715" />
+          <entry key="PLAIN_TEXT" value="9" />
+          <entry key="Python" value="1764" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.lifecycle.project">
+        <counts>
+          <entry key="project.closed" value="2" />
+          <entry key="project.open.time.12" value="1" />
+          <entry key="project.open.time.14" value="1" />
+          <entry key="project.opened" value="2" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.types.open">
+        <counts>
+          <entry key="PLAIN_TEXT" value="1" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.vcs.git.usages" />
+      <usages-collector id="statistics.file.extensions.open">
+        <counts>
+          <entry key="csv" value="1" />
+        </counts>
+      </usages-collector>
     </session>
   </component>
   <component name="FavoritesManager">
@@ -84,26 +151,20 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/perses/rjmc/topology_proposal.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="264">
-              <caret line="1078" column="101" selection-start-line="1078" selection-start-column="12" selection-end-line="1078" selection-end-column="101" />
+            <state relative-caret-position="32535">
+              <caret line="2188" column="113" selection-start-line="2188" selection-start-column="113" selection-end-line="2188" selection-end-column="113" />
+              <folding>
+                <element signature="e#68#97#0" expanded="true" />
+              </folding>
             </state>
           </provider>
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/perses/tests/test_geometry_engine.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="19095">
-              <caret line="1286" column="12" selection-start-line="1286" selection-start-column="12" selection-end-line="1286" selection-end-column="12" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/perses/rjmc/geometry.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-1175">
-              <caret line="264" column="39" selection-start-line="264" selection-start-column="39" selection-end-line="264" selection-end-column="39" />
+            <state relative-caret-position="6000">
+              <caret line="417" selection-start-line="417" selection-end-line="417" />
               <folding>
                 <element signature="e#136#149#0" expanded="true" />
               </folding>
@@ -111,23 +172,14 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/perses/tests/test_ivy.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="60">
-              <caret line="4" selection-start-line="4" selection-end-line="15" />
+            <state relative-caret-position="225">
+              <caret line="15" lean-forward="true" selection-start-line="15" selection-end-line="15" />
               <folding>
-                <element signature="e#45#108#0" expanded="true" />
+                <element signature="e#45#74#0" expanded="true" />
               </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/examples/cdk2-example/cdk2_setup.yaml">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1290">
-              <caret line="86" selection-start-line="86" selection-end-line="86" />
             </state>
           </provider>
         </entry>
@@ -135,8 +187,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/perses/samplers/samplers.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-3855">
-              <caret line="71" column="3" selection-start-line="71" selection-start-column="3" selection-end-line="71" selection-end-column="3" />
+            <state relative-caret-position="6585">
+              <caret line="463" column="60" selection-start-line="463" selection-end-line="464" />
               <folding>
                 <element signature="e#649#679#0" expanded="true" />
               </folding>
@@ -145,10 +197,37 @@
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/perses/annihilation/new_relative.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="585">
+              <caret line="49" column="29" selection-start-line="49" selection-start-column="29" selection-end-line="49" selection-end-column="29" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/perses/tests/testsystems.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="469">
-              <caret line="201" column="6" selection-start-line="201" selection-start-column="6" selection-end-line="201" selection-end-column="6" />
+            <state relative-caret-position="916">
+              <caret line="2300" column="14" selection-start-line="2300" selection-start-column="14" selection-end-line="2300" selection-end-column="14" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/perses/tests/utils.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="8025">
+              <caret line="545" column="37" selection-start-line="545" selection-start-column="37" selection-end-line="545" selection-end-column="37" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/perses/data/clinical-kinase-inhibitors.csv">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="285">
+              <caret line="19" column="63" selection-start-line="19" selection-start-column="12" selection-end-line="19" selection-end-column="63" />
             </state>
           </provider>
         </entry>
@@ -156,8 +235,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/perses/dispersed/feptasks.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="3600">
-              <caret line="244" column="20" selection-start-line="244" selection-start-column="20" selection-end-line="244" selection-end-column="20" />
+            <state relative-caret-position="10740">
+              <caret line="720" selection-start-line="720" selection-end-line="720" />
               <folding>
                 <element signature="e#0#29#0" expanded="true" />
               </folding>
@@ -167,45 +246,17 @@
       </file>
     </leaf>
   </component>
-  <component name="FileTemplateManagerImpl">
-    <option name="RECENT_TEMPLATES">
-      <list>
-        <option value="Python Script" />
-      </list>
-    </option>
-  </component>
   <component name="FindInProjectRecents">
     <findStrings>
-      <find>generate_residue_map</find>
-      <find>GeometrySystem</find>
-      <find>PointMutat</find>
-      <find>createSystem</find>
-      <find>PRO</find>
-      <find>self._aminos</find>
-      <find>aminos</find>
-      <find>AlkanesTestSystem</find>
-      <find>Alkanes</find>
-      <find>Abl</find>
-      <find>choose_mutant</find>
-      <find>modified</find>
-      <find>Geometry engin</find>
-      <find>AlanineDipeptide</find>
-      <find>determine_extra_torsions</find>
-      <find>.modified</find>
-      <find>oemol_from_residue</find>
-      <find>growth_indices</find>
-      <find>determine_proposal_order</find>
-      <find>geometry_forward</find>
-      <find>propose</find>
-      <find>FFAllAngleGeometryEngine</find>
-      <find>ncmc_engine</find>
-      <find>logp_propose</find>
-      <find>SmallMolecule</find>
+      <find>residue.name</find>
+      <find>build_system</find>
+      <find>SystemGenerator</find>
+      <find>smiles_to_</find>
+      <find>SmallMoleculeSetProposal</find>
+      <find>SmallMoleculeLibrary</find>
+      <find>generateOEMo</find>
+      <find>render</find>
       <find>SmallMoleculeSet</find>
-      <find>GeometrySystemGenerator</find>
-      <find>is_residue_equal</find>
-      <find>HIS</find>
-      <find>&gt;&gt;&gt;&gt;&gt;</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -214,24 +265,20 @@
   <component name="IdeDocumentHistory">
     <option name="CHANGED_PATHS">
       <list>
-        <option value="$PROJECT_DIR$/perses/rjmc/test.py" />
-        <option value="$PROJECT_DIR$/perses/tests/test.py" />
-        <option value="$PROJECT_DIR$/perses/tests/test_topology_proposal.py" />
+        <option value="$PROJECT_DIR$/perses/rjmc/geometry.py" />
+        <option value="$PROJECT_DIR$/perses/data/clinical-kinase-inhibitors.csv" />
         <option value="$PROJECT_DIR$/perses/tests/utils.py" />
-        <option value="$PROJECT_DIR$/perses/dispersed/feptasks.py" />
-        <option value="$PROJECT_DIR$/perses/samplers/samplers.py" />
-        <option value="$PROJECT_DIR$/perses/tests/test_ivy.py" />
         <option value="$PROJECT_DIR$/perses/rjmc/topology_proposal.py" />
         <option value="$PROJECT_DIR$/perses/tests/testsystems.py" />
-        <option value="$PROJECT_DIR$/perses/rjmc/geometry.py" />
+        <option value="$PROJECT_DIR$/perses/tests/test_ivy.py" />
       </list>
     </option>
   </component>
-  <component name="ProjectFrameBounds" extendedState="6">
-    <option name="x" value="1" />
-    <option name="y" value="203" />
-    <option name="width" value="1440" />
-    <option name="height" value="798" />
+  <component name="ProjectFrameBounds">
+    <option name="x" value="1440" />
+    <option name="y" value="-1383" />
+    <option name="width" value="1365" />
+    <option name="height" value="1338" />
   </component>
   <component name="ProjectView">
     <navigator proportions="" version="1">
@@ -254,7 +301,13 @@
               <item name="perses" type="b2602c69:ProjectViewProjectNode" />
               <item name="perses" type="462c0819:PsiDirectoryNode" />
               <item name="perses" type="462c0819:PsiDirectoryNode" />
-              <item name="dispersed" type="462c0819:PsiDirectoryNode" />
+              <item name="annihilation" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="perses" type="b2602c69:ProjectViewProjectNode" />
+              <item name="perses" type="462c0819:PsiDirectoryNode" />
+              <item name="perses" type="462c0819:PsiDirectoryNode" />
+              <item name="data" type="462c0819:PsiDirectoryNode" />
             </path>
             <path>
               <item name="perses" type="b2602c69:ProjectViewProjectNode" />
@@ -271,7 +324,14 @@
             <path>
               <item name="perses" type="b2602c69:ProjectViewProjectNode" />
               <item name="perses" type="462c0819:PsiDirectoryNode" />
-              <item name="scripts" type="462c0819:PsiDirectoryNode" />
+              <item name="perses" type="462c0819:PsiDirectoryNode" />
+              <item name="storage" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="perses" type="b2602c69:ProjectViewProjectNode" />
+              <item name="perses" type="462c0819:PsiDirectoryNode" />
+              <item name="perses" type="462c0819:PsiDirectoryNode" />
+              <item name="tests" type="462c0819:PsiDirectoryNode" />
             </path>
           </expand>
           <select />
@@ -279,24 +339,6 @@
       </pane>
       <pane id="Scope" />
     </panes>
-  </component>
-  <component name="PropertiesComponent">
-    <property name="SearchEverywhereHistoryKey" value="&#9;FILE&#9;file:///Users/ivy/Documents/Documents - Ivy’s MacBook Pro/cornell/year_1/chodera_lab/perses/perses/tests/test_ivy.py" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
-  </component>
-  <component name="PyConsoleOptionsProvider">
-    <option name="myPythonConsoleState">
-      <console-settings module-name="perses" is-module-sdk="true">
-        <option name="myUseModuleSdk" value="true" />
-        <option name="myModuleName" value="perses" />
-      </console-settings>
-    </option>
-  </component>
-  <component name="RecentsManager">
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$/perses/tests" />
-    </key>
   </component>
   <component name="RunDashboard">
     <option name="ruleStates">
@@ -310,60 +352,12 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.alanine dipeptide">
-    <configuration name="alanine dipeptide" type="PythonConfigurationType" factoryName="Python">
-      <module name="perses" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="/usr/local/bin/python3.5" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/perses/tests" />
-      <option name="IS_MODULE_SDK" value="false" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/perses/tests/testsystems.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-    <configuration name="test_ivy" type="PythonConfigurationType" factoryName="Python">
-      <module name="perses" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="/usr/local/bin/python3.5" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/perses/tests" />
-      <option name="IS_MODULE_SDK" value="false" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/perses/tests/test_ivy.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-    <list>
-      <item itemvalue="Python.test_ivy" />
-      <item itemvalue="Python.alanine dipeptide" />
-    </list>
-  </component>
   <component name="SvnConfiguration">
     <configuration />
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="0ceea625-47bb-4f09-b3e5-fefd8d3f3a30" name="Default Changelist" comment="" />
+      <changelist id="9382d1aa-1f00-4c2d-ac58-39503c45aa2b" name="Default Changelist" comment="" />
       <created>1536677680780</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
@@ -371,21 +365,12 @@
     </task>
     <servers />
   </component>
-  <component name="TodoView">
-    <todo-panel id="selected-file">
-      <is-autoscroll-to-source value="true" />
-    </todo-panel>
-    <todo-panel id="all">
-      <are-packages-shown value="true" />
-      <is-autoscroll-to-source value="true" />
-    </todo-panel>
-  </component>
   <component name="ToolWindowManager">
-    <frame x="0" y="23" width="1440" height="798" extended-state="6" />
+    <frame x="1440" y="-1383" width="1365" height="1338" extended-state="0" />
     <editor active="true" />
     <layout>
-      <window_info active="true" content_ui="combo" id="Project" order="0" sideWeight="0.35182482" visible="true" weight="0.21745351" />
-      <window_info id="Structure" order="1" sideWeight="0.6481752" side_tool="true" visible="true" weight="0.21745351" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" sideWeight="0.76035744" visible="true" weight="0.14739229" />
+      <window_info id="Structure" order="1" sideWeight="0.23964256" side_tool="true" visible="true" weight="0.14739229" />
       <window_info id="Favorites" order="2" sideWeight="0.63824886" side_tool="true" weight="0.22871377" />
       <window_info anchor="bottom" id="Message" order="0" />
       <window_info anchor="bottom" id="Find" order="1" weight="0.32981133" />
@@ -395,7 +380,7 @@
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="bottom" id="TODO" order="6" weight="0.32830188" />
       <window_info anchor="bottom" id="Version Control" order="7" weight="0.20679246" />
-      <window_info anchor="bottom" id="Terminal" order="8" sideWeight="0.49880096" visible="true" weight="0.029745042" />
+      <window_info anchor="bottom" id="Terminal" order="8" sideWeight="0.49880096" visible="true" weight="0.012038523" />
       <window_info anchor="bottom" id="Event Log" order="9" sideWeight="0.50119907" side_tool="true" weight="0.4090566" />
       <window_info anchor="bottom" id="Python Console" order="10" weight="0.17440975" />
       <window_info anchor="right" id="Commander" internal_type="SLIDING" order="0" type="SLIDING" weight="0.4" />
@@ -429,37 +414,9 @@
   <component name="VcsContentAnnotationSettings">
     <option name="myLimit" value="2678400000" />
   </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/perses/tests/testsystems.py</url>
-          <line>110</line>
-          <option name="timeStamp" value="6" />
-        </line-breakpoint>
-      </breakpoints>
-      <breakpoints-dialog>
-        <breakpoints-dialog />
-      </breakpoints-dialog>
-      <default-breakpoints>
-        <breakpoint type="python-exception">
-          <properties notifyOnTerminate="true" exception="BaseException">
-            <option name="notifyOnTerminate" value="true" />
-          </properties>
-        </breakpoint>
-      </default-breakpoints>
-    </breakpoint-manager>
-  </component>
   <component name="editorHistoryManager">
     <entry file="file://$USER_HOME$/Desktop/Screen Shot 2018-09-25 at 10.38.20 AM.png">
       <provider selected="true" editor-type-id="images" />
-    </entry>
-    <entry file="file://$PROJECT_DIR$/perses/tests/utils.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="9420">
-          <caret line="638" column="24" selection-start-line="638" selection-start-column="24" selection-end-line="638" selection-end-column="24" />
-        </state>
-      </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/perses/tests/geometry-1-forward-initial.pdb">
       <provider selected="true" editor-type-id="text-editor" />
@@ -550,13 +507,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/perses/annihilation/new_relative.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="205">
-          <caret line="47" column="32" selection-start-line="47" selection-start-column="32" selection-end-line="47" selection-end-column="32" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/perses/annihilation/relative.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="-28" />
@@ -574,16 +524,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/perses/tests/test_ivy.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="60">
-          <caret line="4" selection-start-line="4" selection-end-line="15" />
-          <folding>
-            <element signature="e#45#108#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/examples/cdk2-example/cdk2_setup.yaml">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="1290">
@@ -591,10 +531,68 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/perses/data/gaff.xml">
+      <provider selected="true" editor-type-id="text-editor">
+        <state>
+          <caret column="12" selection-start-column="12" selection-end-column="12" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/perses/rjmc/topology_proposal.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="32535">
+          <caret line="2188" column="113" selection-start-line="2188" selection-start-column="113" selection-end-line="2188" selection-end-column="113" />
+          <folding>
+            <element signature="e#68#97#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/perses/rjmc/geometry.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="6000">
+          <caret line="417" selection-start-line="417" selection-end-line="417" />
+          <folding>
+            <element signature="e#136#149#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/perses/samplers/samplers.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="6585">
+          <caret line="463" column="60" selection-start-line="463" selection-end-line="464" />
+          <folding>
+            <element signature="e#649#679#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/perses/annihilation/new_relative.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="585">
+          <caret line="49" column="29" selection-start-line="49" selection-start-column="29" selection-end-line="49" selection-end-column="29" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/perses/tests/utils.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="8025">
+          <caret line="545" column="37" selection-start-line="545" selection-start-column="37" selection-end-line="545" selection-end-column="37" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/perses/data/clinical-kinase-inhibitors.csv">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="285">
+          <caret line="19" column="63" selection-start-line="19" selection-start-column="12" selection-end-line="19" selection-end-column="63" />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/perses/dispersed/feptasks.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="3600">
-          <caret line="244" column="20" selection-start-line="244" selection-start-column="20" selection-end-line="244" selection-end-column="20" />
+        <state relative-caret-position="10740">
+          <caret line="720" selection-start-line="720" selection-end-line="720" />
           <folding>
             <element signature="e#0#29#0" expanded="true" />
           </folding>
@@ -603,35 +601,18 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/perses/tests/testsystems.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="469">
-          <caret line="201" column="6" selection-start-line="201" selection-start-column="6" selection-end-line="201" selection-end-column="6" />
+        <state relative-caret-position="916">
+          <caret line="2300" column="14" selection-start-line="2300" selection-start-column="14" selection-end-line="2300" selection-end-column="14" />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/perses/samplers/samplers.py">
+    <entry file="file://$PROJECT_DIR$/perses/tests/test_ivy.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-3855">
-          <caret line="71" column="3" selection-start-line="71" selection-start-column="3" selection-end-line="71" selection-end-column="3" />
+        <state relative-caret-position="225">
+          <caret line="15" lean-forward="true" selection-start-line="15" selection-end-line="15" />
           <folding>
-            <element signature="e#649#679#0" expanded="true" />
+            <element signature="e#45#74#0" expanded="true" />
           </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/perses/rjmc/geometry.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-1175">
-          <caret line="264" column="39" selection-start-line="264" selection-start-column="39" selection-end-line="264" selection-end-column="39" />
-          <folding>
-            <element signature="e#136#149#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/perses/rjmc/topology_proposal.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="264">
-          <caret line="1078" column="101" selection-start-line="1078" selection-start-column="12" selection-end-line="1078" selection-end-column="101" />
         </state>
       </provider>
     </entry>

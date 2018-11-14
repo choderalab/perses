@@ -1,3 +1,0 @@
-[openmm.forcefielddir]
-perses = perses:get_datadir
-
