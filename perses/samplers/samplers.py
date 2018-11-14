@@ -463,7 +463,8 @@ class ExpandedEnsembleSampler(object):
         [system, topology, positions] = [self.sampler.thermodynamic_state.get_system(remove_thermostat=True), self.topology, self.sampler.sampler_state.positions]
         omm_topology = topology.to_openmm() #convert to OpenMM topology for proposal engine
         omm_topology.setPeriodicBoxVectors(self.sampler.sampler_state.box_vectors) #set the box vectors because in OpenMM topology has these...
-        topology_proposal = self.proposal_engine.propose(system, omm_topology, current_metadata=self.state_key)
+        current_metadata = {"smiles": self.state_key}
+        topology_proposal = self.proposal_engine.propose(system, omm_topology, current_metadata=current_metadata)
         if self.verbose: print("Proposed transformation: %s => %s" % (topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
 
         # Determine state keys
