@@ -1715,7 +1715,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         topologies = dict()
         positions = dict()
 
-        # # Parametrize and generate residue templates for small molecule set
+        # Parametrize and generate residue templates for small molecule set
         from openmoltools import forcefield_generators
         from io import StringIO
         from perses.tests.utils import smiles_to_oemol, extractPositionsFromOEMOL
@@ -1845,12 +1845,11 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         molecules = list()
         with open(smiles_filename, 'r') as csvfile:
             csvreader = csv.reader(csvfile, delimiter=',', quotechar='"')
-            # next(csvreader) ## IVY only use this if using the new clinical-kinase-inhibitors.csv (with 44 inhibitors)
+            # next(csvreader) ## Only use this if using the new version of clinical-kinase-inhibitors.csv (with 44 inhibitors)
             for row in csvreader:
                 name = row[0]
                 smiles = row[1]
                 molecules.append(smiles)
-        print("molecules: ", len(molecules)) ## IVY
         self.molecules = molecules
         # Intialize
         super(KinaseInhibitorsTestSystem, self).__init__(**kwargs)

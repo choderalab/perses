@@ -380,7 +380,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             for atom in res.atoms():
                 new_atom = new_topology.addAtom(atom.name, atom.element, new_res)
                 new_atom.topology_index = atom.index  # Save the atom index from the input topology
-                # new_atom.stereo = atom.stereo ## IVY delete
                 new_atoms[atom] = new_atom
             for bond in res.internal_bonds():
                 new_bond = new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
@@ -1563,13 +1562,11 @@ class GeometrySystemGenerator(object):
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
         residues = [res for res in reference_topology.residues() if res.modified_aa]  # Polymer topology
-        print("residues: ", residues) ## IVY
         if len(residues) > 1:
             raise Exception("Please only modify one residue at a time. The residues you tried to modify are: ",
                             residues)
         elif not residues:  # Small molecule topology
             residues = [atoms[growth_indices[0].idx].residue]
-            print("got residue from small molecule way") ## IVY
 
         # Interpret as HIE, HID templates as HIS
         res_name = residues[0].name
@@ -1595,7 +1592,6 @@ class GeometrySystemGenerator(object):
             neighbors = [nbr.GetName() for nbr in atom.GetAtoms()]
             if atom.IsChiral() and len(neighbors) >= 4:  # Exclude improper torsions for nitrogen chiral centers
                 if res_name in self._aminos:
-                    print("getting stereochemistry for protein") ## IVY
                     calpha_neighbors = ['C', 'CB', 'HA', 'N']
                     if set(neighbors) == set(calpha_neighbors):
                         if res_name == 'CYS':
@@ -1607,25 +1603,17 @@ class GeometrySystemGenerator(object):
                             oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_R)
                         elif res_name == 'ILE':
                             oechem.OESetCIPStereo(oemol, atom, oechem.OECIPAtomStereo_S)
-                    print("stereo: ", oechem.OEPerceiveCIPStereo(oemol, atom)) ## IVY
                     is_stereo_set = True
-                else:  # For small molecule, use stereo property from topology that was transferred to oemol
-                    print("getting stereochemistry for small molecule") ## IVY delete
-                    # print("get stereo in determine extra torsions: ", atom.GetData("stereo")) ## IVY
-                    # stereo = atom.GetData("stereo")
-
+                else:  # For small molecule, use stereo from stereo_mol
                     match_found = False
                     for stereo_atom in stereo_mol.GetAtoms():
                         if stereo_atom.GetIdx() == atom.GetIdx():
-                            print("current atom ", atom.GetIdx(), "matching atom: ", stereo_atom.GetIdx())
                             stereo = oechem.OEPerceiveCIPStereo(stereo_mol, stereo_atom)
                             oechem.OESetCIPStereo(oemol, atom, stereo)
                             match_found = True
                             break
                     if not match_found:
                         raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string.")
-
-                    print("stereo: ", oechem.OEPerceiveCIPStereo(oemol, atom)) ## IVY
                     is_stereo_set = True
 
         # Set bond stereochemistry for small molecules
@@ -1635,17 +1623,12 @@ class GeometrySystemGenerator(object):
                     match_found = False
                     for stereo_bond in stereo_mol.GetBonds():
                         if stereo_bond.GetIdx() == bond.GetIdx():
-                            print("current bond ", stereo_bond.GetBgn().GetIdx(), " ", stereo_bond.GetEnd().GetIdx(), "matching bond: ", stereo_bond.GetBgn().GetIdx(), " ", stereo_bond.GetEnd().GetIdx())
                             stereo = oechem.OEPerceiveCIPStereo(stereo_mol, stereo_bond)
                             oechem.OESetCIPStereo(oemol, bond, stereo)
                             match_found = True
                             break
                     if not match_found:
                         raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string.")
-                    print("bond stereo: ", stereo) ## IVY
-                    print("beg atom: ", bond.GetBgn().GetAtomicNum())
-                    print("end atom: ", bond.GetEnd().GetAtomicNum())
-                    # oechem.OESetCIPStereo(oemol, bond, stereo)
 
         omega = oeomega.OEOmega()
         omega.SetMaxConfs(1)
@@ -1739,8 +1722,6 @@ class GeometrySystemGenerator(object):
                                                                    np.array(coords[neighbors_oemol[2]], dtype='float64'),
                                                                    np.array(coords[neighbors_oemol[3]],
                                                                             dtype='float64'))[2]
-                    print("phase: ", phase) ## IVY delete
-
                     #  Determine phase in [-pi,+pi) interval
                     #  phase = (np.pi)*units.radians+angle
                     phase = phase + np.pi  # TODO: Check that this is the correct convention?
@@ -2066,7 +2047,7 @@ class ProposalOrderTools(object):
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology,
                                                     self._topology_proposal.new_system)
             unique_atoms = self._topology_proposal.unique_new_atoms
-            print("in determine_proposal_order unique atoms: ", unique_atoms) ## IVY
+            print("in determine_proposal_order unique atoms: ", unique_atoms) ## DEBUG
             # atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
                                     self._topology_proposal.new_to_old_atom_map.keys()]
@@ -2076,7 +2057,7 @@ class ProposalOrderTools(object):
             structure = parmed.openmm.load_topology(self._topology_proposal.old_topology,
                                                     self._topology_proposal.old_system)
             unique_atoms = self._topology_proposal.unique_old_atoms
-            print("in determine_proposal_order unique atoms: ", unique_atoms)  ## IVY
+            print("in determine_proposal_order unique atoms: ", unique_atoms)  ## DEBUG
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
                                     self._topology_proposal.old_to_new_atom_map.keys()]
         else:
@@ -2113,10 +2094,10 @@ class ProposalOrderTools(object):
             from scipy import special
             logp_torsion_choice = 0.0
             while (len(new_atoms)) > 0:
-                print("atoms left: ", len(new_atoms)) ## IVY
-                print("atom order: ", atoms_with_positions) ## IVY
+                print("atoms left: ", len(new_atoms)) ## DEBUG
+                print("atom order: ", atoms_with_positions) ## DEBUG
                 eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-                print("eligible atoms: ", eligible_atoms) ## IVY
+                print("eligible atoms: ", eligible_atoms) ## DEBUG
 
                 # randomize positions
                 eligible_atoms_in_order = np.random.choice(eligible_atoms, size=len(eligible_atoms), replace=False)
@@ -2142,9 +2123,9 @@ class ProposalOrderTools(object):
         # Handle heavy atoms before hydrogen atoms
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
-        print("adding heavy atoms") ##IVY
+        print("adding heavy atoms") # DEBUG
         logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
-        print("adding hydrogen atoms") ## IVY
+        print("adding hydrogen atoms") ## DEBUG
         logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
 
         return atoms_torsions, logp_torsion_choice
