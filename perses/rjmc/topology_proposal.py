@@ -2094,10 +2094,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Determine SMILES string for current small molecule
         if current_mol is None:
-            if current_metadata is None:
+            if current_metadata is None or current_metadata['smiles'] is None:
                 current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
             else:
-                current_mol_smiles = current_metadata  # Read smiles directly (instead of using topology_to_smiles) because otherwise stereochemistry is lost
+                current_mol_smiles = current_metadata['smiles']  # Read smiles directly (instead of using topology_to_smiles) because otherwise stereochemistry is lost
                 current_mol = utils.smiles_to_oemol(current_mol_smiles)
         else:
             current_mol_smiles = oechem.OEMolToSmiles(current_mol)
