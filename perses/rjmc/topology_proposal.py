@@ -1348,7 +1348,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Create initial atom map for atoms in new topology that are not part of modified residues
         for atom in new_topology.atoms():
-            if atom.residue in modified_residues.values() or atom.element.name == "hydrogen":
+            if atom.residue in modified_residues.values():
                 continue
             try:
                 atom_map[atom.index] = atom.old_index

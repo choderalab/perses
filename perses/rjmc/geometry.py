@@ -223,11 +223,18 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(),
+            # growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(),
+            #                                                   growth_parameter_name,
+            #                                                   reference_topology=top_proposal.new_topology,
+            #                                                   reference_state_key=top_proposal.new_chemical_state_key,
+            #                                                   use_sterics=self.use_sterics)
+
+            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.new_system, atom_proposal_order.keys(),
                                                               growth_parameter_name,
                                                               reference_topology=top_proposal.new_topology,
                                                               reference_state_key=top_proposal.new_chemical_state_key,
                                                               use_sterics=self.use_sterics)
+
             growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
         elif direction == 'reverse':
@@ -236,11 +243,18 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(),
+            # growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(),
+            #                                                   growth_parameter_name,
+            #                                                   reference_topology=top_proposal.old_topology,
+            #                                                   reference_state_key=top_proposal.old_chemical_state_key,
+            #                                                   use_sterics=self.use_sterics)
+
+            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.old_system, atom_proposal_order.keys(),
                                                               growth_parameter_name,
                                                               reference_topology=top_proposal.old_topology,
                                                               reference_state_key=top_proposal.old_chemical_state_key,
                                                               use_sterics=self.use_sterics)
+
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -383,7 +397,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 new_atoms[atom] = new_atom
             for bond in res.internal_bonds():
                 new_bond = new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
-                new_bond.stereo = bond.stereo
             for bond in res.external_bonds():
                 internal_atom = bond[0] if bond[0].residue == res else bond[1]
                 if verbose: print('internal atom: ', internal_atom)
@@ -1889,6 +1902,9 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
 
         self.verbose = verbose
 
+        self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET',
+                        'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL']
+
         # Get list of particle indices for new and old atoms.
         self._new_particle_indices = [atom.idx for atom in growth_indices]
         self._old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if
@@ -1920,6 +1936,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
 
         # Ensure 'canonical form' of System has all parameters turned on, or else we'll run into nonbonded exceptions
         self.current_growth_index = -1
+        self._growth_parameter_name = parameter_name
         self.set_growth_parameter_index(len(self._growth_indices))
 
         # Add stereochemistry force to growth system
@@ -2049,6 +2066,11 @@ class ProposalOrderTools(object):
             unique_atoms = self._topology_proposal.unique_new_atoms
             print("in determine_proposal_order unique atoms: ", unique_atoms) ## DEBUG
             # atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
+            print("atom map: ", self._topology_proposal.new_to_old_atom_map) ## IVY
+            print("structure.atoms: ", structure.atoms) ## IVY
+            old_structure = parmed.openmm.load_topology(self._topology_proposal.old_topology,
+                                                    self._topology_proposal.old_system)
+            print("old_structure: ", old_structure.atoms) ## IVY
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
                                     self._topology_proposal.new_to_old_atom_map.keys()]
         elif direction == 'reverse':
@@ -2095,6 +2117,7 @@ class ProposalOrderTools(object):
             logp_torsion_choice = 0.0
             while (len(new_atoms)) > 0:
                 print("atoms left: ", len(new_atoms)) ## DEBUG
+                print("new_atoms: ", new_atoms) ## IVY
                 print("atom order: ", atoms_with_positions) ## DEBUG
                 eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
                 print("eligible atoms: ", eligible_atoms) ## DEBUG
