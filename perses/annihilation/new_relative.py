@@ -1643,6 +1643,12 @@ class HybridTopologyFactory(object):
 
             #add the atom using the mapped residue
             added_atoms[particle_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
+        print("unique new atoms: ", self._topology_proposal.unique_new_atoms) ## IVY
+        print("added_atoms: ", added_atoms) ##IVY
+        print("atom classes: ", self._atom_classes) ## IVY
+
+        map = {value : key for key, value in self._new_to_hybrid_map.items()}
+        print("new to hybrid map: ", map) ## IVY
 
         #now loop through the bonds in the new system, and if the bond contains a unique new atom, then add it to the hybrid topology
         for (atom1, atom2) in new_topology.bonds:
@@ -1650,18 +1656,20 @@ class HybridTopologyFactory(object):
             atom2_index_in_hybrid = self._new_to_hybrid_map[atom2.index]
 
             #if at least one atom is in the unique new class, we need to add it to the hybrid system
-            if atom1_index_in_hybrid in self._atom_classes['unique_new_atoms'] or atom2_index_in_hybrid in self._atom_classes['unique_new_atoms']:
-                if atom1.index in self._atom_classes['unique_new_atoms']:
-                    atom1_to_bond = added_atoms[atom1.index]
-                else:
-                    atom1_to_bond = atom1
+            if atom1_index_in_hybrid in self._atom_classes['unique_new_atoms'] and atom2_index_in_hybrid in self._atom_classes['unique_new_atoms']:
+                atom1_to_bond = added_atoms[atom1.index]
+                atom2_to_bond = added_atoms[atom2.index]
+            elif atom1_index_in_hybrid in self._atom_classes['unique_new_atoms']:
+                atom1_to_bond = added_atoms[atom1.index]
+                atom2_to_bond = atom2
+            elif atom2_index_in_hybrid in self._atom_classes['unique_new_atoms']:
+                atom1_to_bond = atom1
+                atom2_to_bond = added_atoms[atom2.index]
+            else:
+                atom1_to_bond = atom1
+                atom2_to_bond = atom2
 
-                if atom2.index in self._atom_classes['unique_new_atoms']:
-                    atom2_to_bond = added_atoms[atom2.index]
-                else:
-                    atom2_to_bond = atom2
-
-                hybrid_topology.add_bond(atom1_to_bond, atom2_to_bond)
+            hybrid_topology.add_bond(atom1_to_bond, atom2_to_bond)
 
         return hybrid_topology
 
