@@ -70,18 +70,20 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         If specified, any residues matching this name are excluded.
 
     """
+    if exclude_residue_name is None:
+        exclude_residue_name = "   " #something with 3 characters that is never a residue name
     newAtoms = {}
     for chain in source_topology.chains():
         newChain = destination_topology.addChain(chain.id)
         for residue in chain.residues():
-            if (residue.name == exclude_residue_name):
+            if (residue.name[:3] == exclude_residue_name[:3]):
                 continue
             newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
             for atom in residue.atoms():
                 newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
                 newAtoms[atom] = newAtom
     for bond in source_topology.bonds():
-        if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+        if (bond[0].residue.name[:3]==exclude_residue_name[:3]) or (bond[1].residue.name[:3]==exclude_residue_name[:3]):
             continue
         # TODO: Preserve bond order info using extended OpenMM API
         destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])

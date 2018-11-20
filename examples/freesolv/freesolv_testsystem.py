@@ -152,6 +152,7 @@ if __name__=="__main__":
     import yaml
     import openeye.oechem as oechem
     import sys
+    from perses.tests.utils import sanitizeSMILES
     with open(sys.argv[1], 'r') as option_file:
         options_dictionary = yaml.load(option_file)
 
@@ -165,11 +166,13 @@ if __name__=="__main__":
     for molecule in molecules:
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, molecule)
-        if mol.GetNumAtoms() == 0:
+        if mol.NumAtoms() == 0:
             continue
         valid_molecules.append(molecule)
 
-    hydration_run = HydrationPersesRun(molecules, options_dictionary['output_filename'],
+    sanitized_molecules = sanitizeSMILES(valid_molecules)
+
+    hydration_run = HydrationPersesRun(sanitized_molecules, options_dictionary['output_filename'],
                                        options_dictionary['ncmc_switching_times'],
                                        options_dictionary['equilibrium_steps'],
                                        options_dictionary['timestep'] * unit.femtoseconds)
@@ -185,7 +188,7 @@ if __name__=="__main__":
 
     if phase == "vacuum":
         hydration_run.sams_samplers['vacuum'].run(niterations=n_iterations)
-    elif phase == "solvent":
+    elif phase == "explicit":
         hydration_run.sams_samplers['explicit'].run(niterations=n_iterations)
     elif phase == "multitarget":
         hydration_run.designer.run(niterations=n_iterations)
