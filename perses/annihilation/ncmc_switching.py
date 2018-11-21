@@ -238,7 +238,7 @@ class NCMCEngine(object):
             hybrid_factory._new_positions = new_positions
             hybrid_factory._compute_hybrid_positions()
         except KeyError:
-            hybrid_facctory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
+            hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
             try:
                 hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
                 self._hybrid_cache[topology_proposal] = hybrid_factory
