@@ -1714,7 +1714,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical_kinase_inhibitors_filename)
         d_smiles_to_oemol = {smiles : smiles_to_oemol(smiles, "MOL%d" % i)for i, smiles in enumerate(molecules)}
 
-        ## Generate and ffxml, then add to forcefield
+        # ## Generate and ffxml, then add to forcefield
         # ffxml, failed_molecule_list = forcefield_generators.generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
         # f = open('clinical-kinase-inhibitors.xml', 'w')
         # f.write(ffxml)

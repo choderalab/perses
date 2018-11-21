@@ -5,8 +5,8 @@ from perses.tests.testsystems import AlkanesTestSystem
 from perses.tests.testsystems import KinaseInhibitorsTestSystem
 
 # testsystem = AlanineDipeptideTestSystem()
-testsystem = AlkanesTestSystem(storage_filename='output.nc')
-# testsystem = KinaseInhibitorsTestSystem()
+# testsystem = AlkanesTestSystem(storage_filename='output.nc')
+testsystem = KinaseInhibitorsTestSystem()
 # Build a system
 system = testsystem.system_generators['vacuum'].build_system(testsystem.topologies['vacuum'])
 # Retrieve a SAMSSampler
