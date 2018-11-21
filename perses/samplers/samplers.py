@@ -125,7 +125,7 @@ class ExpandedEnsembleSampler(object):
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
     >>> from perses.rjmc.geometry import FFAllAngleGeometryEngine
     >>> geometry_engine = FFAllAngleGeometryEngine(metadata={})
-    >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
+    >>> allowed_mutations = [('2','ALA')],[('2','VAL'),('2','LEU')]
     >>> proposal_engine = PointMutationEngine(test.topology, system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine, geometry_engine)
     >>> # Run the sampler
@@ -348,6 +348,7 @@ class ExpandedEnsembleSampler(object):
         """
         if self.verbose: print("Performing NCMC switching")
         initial_time = time.time()
+
         [ncmc_old_sampler_state, ncmc_new_sampler_state, logP_work, logP_initial_hybrid, logP_final_hybrid] = self.ncmc_engine.integrate(topology_proposal, old_sampler_state, new_sampler_state, iteration=self.iteration)
         if self.verbose: print('NCMC took %.3f s' % (time.time() - initial_time))
         # Check that positions are not NaN
@@ -601,7 +602,7 @@ class SAMSSampler(object):
     >>> geometry_engine = FFAllAngleGeometryEngine(metadata={})
     >>> # Create an Expanded Ensemble sampler
     >>> from perses.rjmc.topology_proposal import PointMutationEngine
-    >>> allowed_mutations = [[('2','ALA')],[('2','VAL'),('2','LEU')]]
+    >>> allowed_mutations = [('2','ALA')],[('2','VAL'),('2','LEU')]
     >>> proposal_engine = PointMutationEngine(test.topology, system_generator, max_point_mutants=1, chain_id='1', proposal_metadata=None, allowed_mutations=allowed_mutations)
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, test.topology, 'ACE-ALA-NME', proposal_engine, geometry_engine)
     >>> # Create a SAMS sampler

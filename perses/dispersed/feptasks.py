@@ -170,7 +170,6 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)
             self._cumulative_work[iteration + 1] = self._current_protocol_work
 
-
             #update the sampler state from the context and retrieve positions and box vectors
             sampler_state.update_from_context(context)
             trajectory_positions[iteration, :, :] = sampler_state.positions[:, :].value_in_unit_system(unit.md_unit_system)
@@ -718,7 +717,6 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     else:
         context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
     sampler_state.apply_to_context(context, ignore_velocities=True)
-
     return thermodynamic_state.reduced_potential(context)
 
 def write_nonequilibrium_trajectory(nonequilibrium_result: NonequilibriumResult, nonequilibrium_trajectory: md.Trajectory, trajectory_filename: str) -> float:

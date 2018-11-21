@@ -217,18 +217,17 @@ def test_specify_allowed_mutants():
     pdbid = "2HIU"
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
-    for chain in modeller.topology.chains():
-        pass
-
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
     modeller.delete([chain])
 
     ff_filename = "amber99sbildn.xml"
 
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
-    chain_id = 'A'
+    chain_id = '1'
 
-    allowed_mutations = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
+    allowed_mutations = [('5','GLU'),('5','ASN'),('14','PHE')]
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
@@ -259,8 +258,8 @@ def test_propose_self():
     pdbid = "2HIU"
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
-    for chain in modeller.topology.chains():
-        pass
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
 
     modeller.delete([chain])
 
@@ -268,13 +267,13 @@ def test_propose_self():
 
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
-    chain_id = 'A'
+    chain_id = '1'
 
     for chain in modeller.topology.chains():
         if chain.id == chain_id:
-            residues = chain._residues
+            residues = [res for res in chain.residues()]
     mutant_res = np.random.choice(residues)
-    allowed_mutations = [[(mutant_res.id,mutant_res.name)]]
+    allowed_mutations = [(mutant_res.id,mutant_res.name)]
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations, verbose=True)
@@ -291,25 +290,39 @@ def test_run_point_mutation_propose():
     """
     import perses.rjmc.topology_proposal as topology_proposal
 
-    pdbid = "2HIU"
+    # Read in topology
+    pdbid = "2HIU" # Cannot use this because it doesn't have cap residues
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
-    for chain in modeller.topology.chains():
-        pass
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
 
     modeller.delete([chain])
+    topology = modeller.topology
 
-    ff_filename = "amber99sbildn.xml"
-    max_point_mutants = 1
+    import mdtraj as md
+    topology = md.Topology.from_openmm(topology)
+    topology = topology.to_openmm()  # convert to OpenMM topology for proposal engine
 
-    ff = app.ForceField(ff_filename)
-    system = ff.createSystem(modeller.topology)
-    chain_id = 'A'
+    # Set up system generator and build the system
+    from perses.rjmc.topology_proposal import SystemGenerator
+    system_generator = SystemGenerator(['amber99sbildn.xml'],
+                                                  forcefield_kwargs={'nonbondedMethod': app.NoCutoff,
+                                                                     'implicitSolvent': None,
+                                                                     'constraints': app.HBonds},
+                                                  use_antechamber=False)
+    system = system_generator.build_system(topology)
 
-    system_generator = topology_proposal.SystemGenerator([ff_filename])
+    # Initalize proposal
+    chain_id = '1'
+    proposal_metadata = {
+        'ffxmls': ['amber99sbildn.xml'],  # take sidechain definitions from this ffxml file
+        'always_change': True  # don't propose self-transitions
+    }
+    pm_top_engine = topology_proposal.PointMutationEngine(topology, system_generator, chain_id, proposal_metadata=proposal_metadata)
 
-    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants)
-    pm_top_proposal = pm_top_engine.propose(system, modeller.topology)
+    # Call propose
+    pm_top_proposal = pm_top_engine.propose(system, topology)
 
 @attr('advanced')
 def test_alanine_dipeptide_map():
@@ -319,12 +332,16 @@ def test_alanine_dipeptide_map():
     import perses.rjmc.topology_proposal as topology_proposal
     modeller = app.Modeller(pdbfile.topology, pdbfile.positions)
 
+    import mdtraj as md
+    modeller.topology = md.Topology.from_openmm(modeller.topology)
+    modeller.topology = modeller.topology.to_openmm()  # convert to OpenMM topology for proposal engine
+
     ff_filename = "amber99sbildn.xml"
-    allowed_mutations = [[('2', 'PHE')]]
+    allowed_mutations = [('2', 'PHE')]
 
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
-    chain_id = ' '
+    chain_id = '1'
 
     metadata = dict()
     system_generator = topology_proposal.SystemGenerator([ff_filename])
@@ -368,83 +385,38 @@ def test_mutate_from_every_amino_to_every_other():
 
     aminos = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE','LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL']
 
-    failed_mutants = 0
-
     pdbid = "2A7U"
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
-    for chain in modeller.topology.chains():
-        pass
-
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
     modeller.delete([chain])
+    old_topology = modeller.topology
 
     ff_filename = "amber99sbildn.xml"
-    max_point_mutants = 1
-
     ff = app.ForceField(ff_filename)
     system = ff.createSystem(modeller.topology)
-    chain_id = 'A'
-
-    metadata = dict()
+    chain_id = '1'
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
-
-    pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants, always_change=True)
-
-    current_system = system
-    current_topology = modeller.topology
-    current_positions = modeller.positions
-
-    pm_top_engine._allowed_mutations = [list()]
-    for k, proposed_amino in enumerate(aminos):
-        pm_top_engine._allowed_mutations[0].append((str(k+2),proposed_amino))
-    pm_top_proposal = pm_top_engine.propose(current_system, current_topology)
-    current_system = pm_top_proposal.new_system
-    current_topology = pm_top_proposal.new_topology
-
-    for chain in current_topology.chains():
-        if chain.id == chain_id:
-            # num_residues : int
-            num_residues = len(chain._residues)
-            break
-    new_sequence = list()
-    for residue in current_topology.residues():
-        if residue.index == 0:
-            continue
-        if residue.index == (num_residues -1):
-            continue
-        if residue.name in ['HID','HIE']:
-            residue.name = 'HIS'
-        new_sequence.append(residue.name)
-    for i in range(len(aminos)):
-        assert new_sequence[i] == aminos[i]
-
-
-    pm_top_engine = topology_proposal.PointMutationEngine(current_topology, system_generator, chain_id, proposal_metadata=metadata, max_point_mutants=max_point_mutants)
-
-    from perses.rjmc.topology_proposal import append_topology
-    old_topology = app.Topology()
-    append_topology(old_topology, current_topology)
-    new_topology = app.Topology()
-    append_topology(new_topology, current_topology)
+    pm_top_engine = topology_proposal.PointMutationEngine(old_topology, system_generator, chain_id)
 
     old_chemical_state_key = pm_top_engine.compute_state_key(old_topology)
 
-
-    for chain in new_topology.chains():
+    for chain in old_topology.chains():
         if chain.id == chain_id:
             # num_residues : int
-            num_residues = len(chain._residues)
+            num_residues = len([res for res in chain.residues()])
+            residues = [res for res in chain.residues()]
             break
-    for proposed_location in range(1, num_residues-1):
+    for proposed_location in range(1, num_residues-1):  # mutable residue indexes: 1-21
         print('Making mutations at residue %s' % proposed_location)
-        original_residue_name = chain._residues[proposed_location].name
+
+        original_residue_name = residues[proposed_location].name
         matching_amino_found = 0
         for proposed_amino in aminos:
-            pm_top_engine._allowed_mutations = [[(str(proposed_location+1),proposed_amino)]]
-            new_topology = app.Topology()
-            append_topology(new_topology, current_topology)
-            old_system = current_system
+            pm_top_engine._allowed_mutations = [(str(proposed_location+1),proposed_amino)]
+            old_system = system
             old_topology_natoms = sum([1 for atom in old_topology.atoms()])
             old_system_natoms = old_system.getNumParticles()
             if old_topology_natoms != old_system_natoms:
@@ -452,29 +424,30 @@ def test_mutate_from_every_amino_to_every_other():
                 raise Exception(msg)
             metadata = dict()
 
-            for atom in new_topology.atoms():
-                atom.old_index = atom.index
-
-            index_to_new_residues, metadata = pm_top_engine._choose_mutant(new_topology, metadata)
+            index_to_new_residues, metadata = pm_top_engine._choose_mutant(old_topology, metadata)
             if len(index_to_new_residues) == 0:
-                matching_amino_found+=1
+                matching_amino_found += 1
                 continue
             print('Mutating %s to %s' % (original_residue_name, proposed_amino))
 
-            residue_map = pm_top_engine._generate_residue_map(new_topology, index_to_new_residues)
+            residue_map = pm_top_engine._generate_residue_map(old_topology, index_to_new_residues)
             for res_pair in residue_map:
                 residue = res_pair[0]
                 name = res_pair[1]
                 assert residue.index in index_to_new_residues.keys()
                 assert index_to_new_residues[residue.index] == name
-                assert residue.name+'-'+str(residue.id)+'-'+name in metadata['mutations']
+                assert residue.name+'-' + str(residue.id) + '-' + name in metadata['mutations']
 
-            new_topology, missing_atoms = pm_top_engine._delete_excess_atoms(new_topology, residue_map)
-            new_topology = pm_top_engine._add_new_atoms(new_topology, missing_atoms, residue_map)
+            excess_atoms, excess_bonds, missing_atoms, missing_bonds = pm_top_engine._identify_differences(old_topology,
+                                                                                                  residue_map)
+            excess_atoms_bonds = excess_atoms + excess_bonds
+            new_topology = pm_top_engine._delete_atoms(old_topology, excess_atoms_bonds)
+            new_topology = pm_top_engine._add_new_atoms(new_topology, missing_atoms, missing_bonds, residue_map)
+
             for res_pair in residue_map:
                 residue = res_pair[0]
                 name = res_pair[1]
-                assert residue.name == name
+                assert residue.name != name
 
             atom_map = pm_top_engine._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
             templates = pm_top_engine._ff.getMatchingTemplates(new_topology)
@@ -499,12 +472,18 @@ def test_limiting_allowed_residues():
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
 
-    chain_id = 'B'
+    chain_id = '2'
     to_delete = list()
-    for chain in modeller.topology.chains():
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
         if chain.id != chain_id:
             to_delete.append(chain)
     modeller.delete(to_delete)
+
+    # Re-number the chains so ids are contiguous from 1
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
+    chain_id = '1'
     modeller.addHydrogens()
 
     ff_filename = "amber99sbildn.xml"
@@ -514,10 +493,9 @@ def test_limiting_allowed_residues():
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    max_point_mutants = 1
     residues_allowed_to_mutate = ['903','904','905']
 
-    pl_top_library = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residues_allowed_to_mutate)
+    pl_top_library = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, residues_allowed_to_mutate=residues_allowed_to_mutate)
     pl_top_proposal = pl_top_library.propose(system, modeller.topology)
 
 @attr('advanced')
@@ -533,12 +511,18 @@ def test_always_change():
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
 
-    chain_id = 'B'
+    chain_id = '2'
     to_delete = list()
-    for chain in modeller.topology.chains():
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
         if chain.id != chain_id:
             to_delete.append(chain)
     modeller.delete(to_delete)
+
+    # Re-number the chains so ids are contiguous from 1
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
+    chain_id = '1'
     modeller.addHydrogens()
 
     ff_filename = "amber99sbildn.xml"
@@ -548,14 +532,13 @@ def test_always_change():
 
     system_generator = topology_proposal.SystemGenerator([ff_filename])
 
-    max_point_mutants = 1
-    residues_allowed_to_mutate = ['903']
+    residues_allowed_to_mutate = ['902']
 
     for residue in modeller.topology.residues():
         if residue.id in residues_allowed_to_mutate:
             print('Old residue: %s' % residue.name)
             old_res_name = residue.name
-    pl_top_library = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, max_point_mutants=max_point_mutants, residues_allowed_to_mutate=residues_allowed_to_mutate, always_change=True)
+    pl_top_library = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, residues_allowed_to_mutate=residues_allowed_to_mutate, always_change=True)
     topology = modeller.topology
     for i in range(50):
         pl_top_proposal = pl_top_library.propose(system, topology)
@@ -572,6 +555,9 @@ def test_always_change():
 def test_run_peptide_library_engine():
     """
     Test example system with peptide and library
+
+    Note: The PeptideLibraryEngine currently doesn't work because PolymerProposalEngine has been modified to handle
+    only one mutation at a time (in accordance with the geometry engine).
     """
     import perses.rjmc.topology_proposal as topology_proposal
 
@@ -581,9 +567,10 @@ def test_run_peptide_library_engine():
     topology, positions = load_pdbid_to_openmm(pdbid)
     modeller = app.Modeller(topology, positions)
 
-    chain_id = 'B'
+    chain_id = '2'
     to_delete = list()
-    for chain in modeller.topology.chains():
+    for i, chain in enumerate(modeller.topology.chains()):
+        chain.id = str(i + 1)  # Start chain ids at 1, not 0 (this is how OpenMM does it)
         if chain.id != chain_id:
             to_delete.append(chain)
     modeller.delete(to_delete)
@@ -677,14 +664,14 @@ def test_molecular_atom_mapping():
 
 if __name__ == "__main__":
 
-#    test_run_point_mutation_propose()
-#    test_mutate_from_every_amino_to_every_other()
-#    test_specify_allowed_mutants()
-#    test_propose_self()
-#    test_limiting_allowed_residues()
-#    test_run_peptide_library_engine()
-#    test_small_molecule_proposals()
-#    test_alanine_dipeptide_map()
-#    test_always_change()
-#    test_molecular_atom_mapping()
-    test_no_h_map()
+    # test_run_point_mutation_propose()
+    test_mutate_from_every_amino_to_every_other()
+    # test_specify_allowed_mutants()
+    # test_propose_self()
+    # test_limiting_allowed_residues()
+    # test_run_peptide_library_engine()
+    # test_small_molecule_proposals()
+    # test_alanine_dipeptide_map()
+    # test_always_change()
+    # test_molecular_atom_mapping()
+    # test_no_h_map()
