@@ -2390,7 +2390,7 @@ def run_alkanes():
     """
     Run alkanes in solvents test system.
     """
-    testsystem = AlkanesTestSystem(storage_filename='output.nc', ncmc_nsteps=5000, mcmc_nsteps=100)
+    testsystem = AlkanesTestSystem(ncmc_nsteps=5000, mcmc_nsteps=100)
     for environment in ['explicit', 'vacuum']:
         #testsystem.exen_samplers[environment].pdbfile = open('t4-' + component + '.pdb', 'w')
         #testsystem.exen_samplers[environment].options={'nsteps':50} # instantaneous MC
@@ -2452,14 +2452,13 @@ def run_abl_imatinib_resistance():
     #testsystem.exen_samplers[solvent + '-peptide'].verbose=True
     #testsystem.exen_samplers[solvent + '-peptide'].run(niterations=100)
 
-def run_kinase_inhibitors():
+def run_kinase_inhibitors(environment = 'vacuum'):
     """
     Run kinase inhibitors test system.
     """
-    with open("mapperkinase3.json", 'r') as jsoninput:
-        json_dict = jsoninput.read()
-    testsystem = KinaseInhibitorsTestSystem(ncmc_nsteps=100, mcmc_nsteps=10, premapped_json_dict=json_dict, constraints=None)
-    environment = 'vacuum'
+    # with open("mapperkinase3.json", 'r') as jsoninput:
+    #     json_dict = jsoninput.read()
+    testsystem = KinaseInhibitorsTestSystem(ncmc_nsteps=100, mcmc_nsteps=10, constraints=None)
     testsystem.exen_samplers[environment].pdbfile = open('kinase-inhibitors-vacuum.pdb', 'w')
     testsystem.exen_samplers[environment].geometry_pdbfile = open('kinase-inhibitors-%s-geometry-proposals.pdb' % environment, 'w')
     testsystem.exen_samplers[environment].geometry_engine.write_proposal_pdb = True # write proposal PDBs
@@ -2478,7 +2477,7 @@ def run_valence_system():
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
     testsystem.sams_samplers[environment].run(niterations=50)
 
-def run_alanine_system(sterics=False):
+def run_alanine_system(sterics=False, environment='vacuum'):
     """
     Run alanine dipeptide in vacuum test system.
 
@@ -2487,10 +2486,9 @@ def run_alanine_system(sterics=False):
 
     """
     if sterics:
-        testsystem = AlanineDipeptideTestSystem(storage_filename='output.nc', ncmc_nsteps=0, mcmc_nsteps=100)
+        testsystem = AlanineDipeptideTestSystem(ncmc_nsteps=100, mcmc_nsteps=100)
     else:
-        testsystem = AlanineDipeptideValenceTestSystem(storage_filename='output.nc', ncmc_nsteps=0, mcmc_nsteps=100)
-    environment = 'vacuum'
+        testsystem = AlanineDipeptideValenceTestSystem(ncmc_nsteps=100, mcmc_nsteps=100)
     print(testsystem.__class__.__name__)
     testsystem.exen_samplers[environment].pdbfile = open('valence.pdb', 'w')
     testsystem.sams_samplers[environment].update_method = 'two-stage'

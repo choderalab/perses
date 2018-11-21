@@ -987,6 +987,10 @@ class PolymerProposalEngine(ProposalEngine):
         new_chemical_state_key = self.compute_state_key(new_topology)
         # new_system : simtk.openmm.System
 
+        # Copy periodic box vectors from current topology
+        new_topology.setPeriodicBoxVectors(current_topology.getPeriodicBoxVectors())
+
+        # Build system
         new_system = self._system_generator.build_system(new_topology)
 
         # Adjust logp_propose based on HIS presence
