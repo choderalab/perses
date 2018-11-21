@@ -223,18 +223,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            # growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(),
-            #                                                   growth_parameter_name,
-            #                                                   reference_topology=top_proposal.new_topology,
-            #                                                   reference_state_key=top_proposal.new_chemical_state_key,
-            #                                                   use_sterics=self.use_sterics)
-
-            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.new_system, atom_proposal_order.keys(),
+            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(),
                                                               growth_parameter_name,
                                                               reference_topology=top_proposal.new_topology,
                                                               reference_state_key=top_proposal.new_chemical_state_key,
                                                               use_sterics=self.use_sterics)
-
             growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
         elif direction == 'reverse':
@@ -243,18 +236,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            # growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(),
-            #                                                   growth_parameter_name,
-            #                                                   reference_topology=top_proposal.old_topology,
-            #                                                   reference_state_key=top_proposal.old_chemical_state_key,
-            #                                                   use_sterics=self.use_sterics)
-
-            growth_system_generator = GeometrySystemGeneratorFast(top_proposal.old_system, atom_proposal_order.keys(),
+            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(),
                                                               growth_parameter_name,
                                                               reference_topology=top_proposal.old_topology,
                                                               reference_state_key=top_proposal.old_chemical_state_key,
                                                               use_sterics=self.use_sterics)
-
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -2064,13 +2050,9 @@ class ProposalOrderTools(object):
             structure = parmed.openmm.load_topology(self._topology_proposal.new_topology,
                                                     self._topology_proposal.new_system)
             unique_atoms = self._topology_proposal.unique_new_atoms
-            print("in determine_proposal_order unique atoms: ", unique_atoms) ## DEBUG
             # atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
-            print("atom map: ", self._topology_proposal.new_to_old_atom_map) ## IVY
-            print("structure.atoms: ", structure.atoms) ## IVY
             old_structure = parmed.openmm.load_topology(self._topology_proposal.old_topology,
                                                     self._topology_proposal.old_system)
-            print("old_structure: ", old_structure.atoms) ## IVY
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
                                     self._topology_proposal.new_to_old_atom_map.keys()]
         elif direction == 'reverse':
@@ -2079,7 +2061,6 @@ class ProposalOrderTools(object):
             structure = parmed.openmm.load_topology(self._topology_proposal.old_topology,
                                                     self._topology_proposal.old_system)
             unique_atoms = self._topology_proposal.unique_old_atoms
-            print("in determine_proposal_order unique atoms: ", unique_atoms)  ## DEBUG
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in
                                     self._topology_proposal.old_to_new_atom_map.keys()]
         else:
@@ -2116,11 +2097,7 @@ class ProposalOrderTools(object):
             from scipy import special
             logp_torsion_choice = 0.0
             while (len(new_atoms)) > 0:
-                print("atoms left: ", len(new_atoms)) ## DEBUG
-                print("new_atoms: ", new_atoms) ## IVY
-                print("atom order: ", atoms_with_positions) ## DEBUG
                 eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-                print("eligible atoms: ", eligible_atoms) ## DEBUG
 
                 # randomize positions
                 eligible_atoms_in_order = np.random.choice(eligible_atoms, size=len(eligible_atoms), replace=False)
@@ -2146,9 +2123,7 @@ class ProposalOrderTools(object):
         # Handle heavy atoms before hydrogen atoms
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
-        print("adding heavy atoms") # DEBUG
         logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
-        print("adding hydrogen atoms") ## DEBUG
         logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
 
         return atoms_torsions, logp_torsion_choice

@@ -1643,12 +1643,6 @@ class HybridTopologyFactory(object):
 
             #add the atom using the mapped residue
             added_atoms[particle_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
-        print("unique new atoms: ", self._topology_proposal.unique_new_atoms) ## IVY
-        print("added_atoms: ", added_atoms) ##IVY
-        print("atom classes: ", self._atom_classes) ## IVY
-
-        map = {value : key for key, value in self._new_to_hybrid_map.items()}
-        print("new to hybrid map: ", map) ## IVY
 
         #now loop through the bonds in the new system, and if the bond contains a unique new atom, then add it to the hybrid topology
         for (atom1, atom2) in new_topology.bonds:

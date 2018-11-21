@@ -238,7 +238,7 @@ class NCMCEngine(object):
             hybrid_factory._new_positions = new_positions
             hybrid_factory._compute_hybrid_positions()
         except KeyError:
-            hybrid_facctory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
+            hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
             try:
                 hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
                 self._hybrid_cache[topology_proposal] = hybrid_factory
@@ -382,7 +382,7 @@ class NCMCEngine(object):
             for frame in range(nframes):
                 self._storage.write_configuration(position_varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
 
-            #write out the periodict box vectors:
+            #write out the periodic box vectors:
             self._storage.write_array(box_vec_varname, box_lengths_and_angles, iteration=iteration)
 
             #retrieve the protocol work and write that out too:
