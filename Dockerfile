@@ -28,5 +28,7 @@ RUN pip install awscli
 
 RUN git clone https://github.com/choderalab/perses
 
+RUN git checkout experiment-harness
+
 RUN conda build perses/devtools/conda-recipe
 RUN conda install --yes --use-local perses-dev
