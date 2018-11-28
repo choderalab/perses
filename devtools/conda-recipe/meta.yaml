@@ -19,7 +19,7 @@ requirements:
     - autograd
     - pymbar
     - cuda92
-    - openmm == 7.3
+    - openmm = 7.3
     - parmed
     - openmoltools
     - alchemy >=1.2.3
@@ -45,7 +45,7 @@ requirements:
     - autograd
     - pymbar
     - cuda92
-    - openmm ==7.3
+    - openmm = 7.3
     - parmed
     - openmoltools
     - alchemy >=1.2.3
