@@ -20,6 +20,7 @@ RUN conda config --add channels conda-forge
 RUN conda update --yes --all
 RUN conda config --add channels omnia/label/dev
 RUN conda config --add channels openeye
+RUN conda config --add channels omnia/label/rccuda90
 
 
 RUN conda install --yes conda-build jinja2 anaconda-client pip
