@@ -26,9 +26,7 @@ RUN conda config --add channels omnia/label/rccuda90
 RUN conda install --yes conda-build jinja2 anaconda-client pip
 RUN pip install awscli
 
-RUN git clone https://github.com/choderalab/perses
-
-RUN git checkout experiment-harness
+RUN git clone -b experiment-harness https://github.com/choderalab/perses
 
 RUN conda build perses/devtools/conda-recipe
 RUN conda install --yes --use-local perses-dev
