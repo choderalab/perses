@@ -14,6 +14,9 @@ RUN MINICONDA="Miniconda3-latest-Linux-x86_64.sh" && \
 ENV PATH /miniconda/bin:$PATH
 
 # Add channels and build, then install
+RUN conda create -n perses python=3.6
+RUN source activate perses
+
 RUN conda config --add channels omnia
 RUN conda update --yes -n base conda
 RUN conda config --add channels conda-forge
