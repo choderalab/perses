@@ -225,6 +225,9 @@ if __name__=="__main__":
     input_filename = sys.argv[1]
     equilibrium = False if sys.argv[2] == 0 else True
 
+    if not equilibrium:
+        index = sys.argv[3]
+
     with open(input_filename, 'r') as yamlfile:
         options_dict = yaml.load(yamlfile)
 
