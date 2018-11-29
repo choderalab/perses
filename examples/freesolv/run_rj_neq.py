@@ -244,7 +244,7 @@ if __name__=="__main__":
          np.save(top_prop_reverse_filename, reverse_top_prop)
 
          n_steps = options_dict['eq_time'] * 1000 # timestep is 1fs, but we express time in ps
-         report_interval = options_dict['eq_write_intervail'] * 1000 # convert from ps -> fs again
+         report_interval = options_dict['eq_write_interval'] * 1000 # convert from ps -> fs again
 
          #run the equilibrium
          run_equilibrium(fwd_top_prop.old_sytem, fwd_top_prop.old_topology, cpos, n_steps, report_interval, equilibrium_filename_a)
