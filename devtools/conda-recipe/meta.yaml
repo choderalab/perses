@@ -31,7 +31,7 @@ requirements:
     - pdbfixer
     - mdtraj
     - parmed # for testing/debugging
-    - pdbfixer
+    #- pdbfixer
     - lxml
     - networkx >=2.0
     - yank
@@ -57,7 +57,7 @@ requirements:
     - pdbfixer
     - mdtraj
     - parmed # for testing/debugging
-    - pdbfixer
+    #- pdbfixer
     - lxml
     - networkx >=2.0
     - openeye-toolkits
