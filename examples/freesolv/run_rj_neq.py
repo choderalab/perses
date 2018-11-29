@@ -1,6 +1,5 @@
 import numpy as np
 import tqdm
-from perses.tests.utils import createSystemFromIUPAC, extractPositionsFromOEMOL, generate_solvated_hybrid_test_topology
 from openmmtools import integrators, states, mcmc, constants
 from perses.rjmc.topology_proposal import TopologyProposal
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -12,6 +11,72 @@ from dask import distributed
 import mdtraj as md
 temperature = 300.0*unit.kelvin
 beta = 1.0 / (temperature*constants.kB)
+
+def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
+    """
+    Generate a test solvated topology proposal, current positions, and new positions triplet
+    from two IUPAC molecule names.
+
+    Parameters
+    ----------
+    current_mol_name : str, optional
+        name of the first molecule
+    proposed_mol_name : str, optional
+        name of the second molecule
+
+    Returns
+    -------
+    topology_proposal : perses.rjmc.topology_proposal
+        The topology proposal representing the transformation
+    current_positions : np.array, unit-bearing
+        The positions of the initial system
+    new_positions : np.array, unit-bearing
+        The positions of the new system
+    """
+    import simtk.openmm.app as app
+    from openmoltools import forcefield_generators
+    from openeye import oechem
+    from perses.rjmc.topology_proposal import SystemGenerator, SmallMoleculeSetProposalEngine
+    from perses.rjmc import geometry
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+
+    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
+    current_mol.SetTitle("MOL")
+
+    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
+    proposed_mol.SetTitle("MOL")
+
+    initial_smiles = oechem.OEMolToSmiles(current_mol)
+    final_smiles = oechem.OEMolToSmiles(proposed_mol)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    modeller = app.Modeller(top_old, pos_old)
+    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    solvated_topology = modeller.getTopology()
+    solvated_positions = modeller.getPositions()
+    solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
+    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
+
+    solvated_system.addForce(barostat)
+
+    gaff_filename = get_data_filename('data/gaff.xml')
+
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
+    geometry_engine = geometry.FFAllAngleGeometryEngine()
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name="MOL")
+
+    #generate topology proposal
+    topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
+
+    #generate new positions with geometry engine
+    new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
+
+    return topology_proposal, solvated_positions, new_positions
 
 
 def run_equilibrium(system, topology, configuration, n_steps, report_interval, filename):
