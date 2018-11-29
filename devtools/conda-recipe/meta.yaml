@@ -28,7 +28,6 @@ requirements:
     - netcdf4
     - matplotlib
     - seaborn
-    - pdbfixer
     - mdtraj
     - parmed # for testing/debugging
     #- pdbfixer
@@ -54,7 +53,6 @@ requirements:
     - netcdf4
     - matplotlib
     - seaborn
-    - pdbfixer
     - mdtraj
     - parmed # for testing/debugging
     #- pdbfixer
