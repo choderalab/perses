@@ -5,12 +5,92 @@ from perses.rjmc.topology_proposal import TopologyProposal
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.annihilation.ncmc_switching import NCMCEngine
 from simtk import openmm, unit
+from io import StringIO
 from simtk.openmm import app
 from perses.dispersed.feptasks import compute_reduced_potential
 from dask import distributed
 import mdtraj as md
 temperature = 300.0*unit.kelvin
 beta = 1.0 / (temperature*constants.kB)
+
+def createOEMolFromIUPAC(iupac_name='bosutinib'):
+    from openeye import oechem, oeiupac, oeomega
+
+    # Create molecule.
+    mol = oechem.OEMol()
+    oeiupac.OEParseIUPACName(mol, iupac_name)
+    mol.SetTitle("MOL")
+
+    # Assign aromaticity and hydrogens.
+    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
+    oechem.OEAddExplicitHydrogens(mol)
+
+    # Create atom names.
+    oechem.OETriposAtomNames(mol)
+
+    # Create bond types
+    oechem.OETriposBondTypeNames(mol)
+
+    # Assign geometry
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega.SetIncludeInput(False)
+    omega.SetStrictStereo(True)
+    omega(mol)
+
+    return mol
+
+def createSystemFromIUPAC(iupac_name):
+    """
+    Create an openmm system out of an oemol
+
+    Parameters
+    ----------
+    iupac_name : str
+        IUPAC name
+
+    Returns
+    -------
+    molecule : openeye.OEMol
+        OEMol molecule
+    system : openmm.System object
+        OpenMM system
+    positions : [n,3] np.array of floats
+        Positions
+    topology : openmm.app.Topology object
+        Topology
+    """
+    from perses.tests.utils import get_data_filename, extractPositionsFromOEMOL
+    # Create OEMol
+    molecule = createOEMolFromIUPAC(iupac_name)
+
+    # Generate a topology.
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    topology = generateTopologyFromOEMol(molecule)
+
+    # Initialize a forcefield with GAFF.
+    # TODO: Fix path for `gaff.xml` since it is not yet distributed with OpenMM
+    from simtk.openmm.app import ForceField
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    forcefield = ForceField(gaff_xml_filename)
+
+    # Generate template and parameters.
+    from openmoltools.forcefield_generators import generateResidueTemplate
+    [template, ffxml] = generateResidueTemplate(molecule)
+
+    # Register the template.
+    forcefield.registerResidueTemplate(template)
+
+    # Add the parameters.
+    forcefield.loadFile(StringIO(ffxml))
+
+    # Create the system.
+    system = forcefield.createSystem(topology, removeCMMotion=False)
+
+    # Extract positions
+    positions = extractPositionsFromOEMOL(molecule)
+
+    return (molecule, system, positions, topology)
 
 def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
     """
@@ -39,7 +119,7 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     from perses.rjmc.topology_proposal import SystemGenerator, SmallMoleculeSetProposalEngine
     from perses.rjmc import geometry
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.tests.utils import get_data_filename
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
 
