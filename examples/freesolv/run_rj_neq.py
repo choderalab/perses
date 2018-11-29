@@ -247,7 +247,7 @@ if __name__=="__main__":
          report_interval = options_dict['eq_write_interval'] * 1000 # convert from ps -> fs again
 
          #run the equilibrium
-         run_equilibrium(fwd_top_prop.old_sytem, fwd_top_prop.old_topology, cpos, n_steps, report_interval, equilibrium_filename_a)
+         run_equilibrium(fwd_top_prop.old_system, fwd_top_prop.old_topology, cpos, n_steps, report_interval, equilibrium_filename_a)
          run_equilibrium(fwd_top_prop.new_system, fwd_top_prop.new_topology, npos, n_steps, report_interval, equilibrium_filename_a)
 
     # Otherwise, we want to run nonequilibrium from the equilibrium samples
