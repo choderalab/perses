@@ -42,7 +42,6 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    current_mol.SetTitle("MOL")
 
     proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
     proposed_mol.SetTitle("MOL")
