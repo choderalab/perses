@@ -248,7 +248,7 @@ if __name__=="__main__":
 
          #run the equilibrium
          run_equilibrium(fwd_top_prop.old_system, fwd_top_prop.old_topology, cpos, n_steps, report_interval, equilibrium_filename_a)
-         run_equilibrium(fwd_top_prop.new_system, fwd_top_prop.new_topology, npos, n_steps, report_interval, equilibrium_filename_a)
+         run_equilibrium(fwd_top_prop.new_system, fwd_top_prop.new_topology, npos, n_steps, report_interval, equilibrium_filename_b)
 
     # Otherwise, we want to run nonequilibrium from the equilibrium samples
     else:
