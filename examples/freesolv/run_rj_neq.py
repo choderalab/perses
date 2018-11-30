@@ -275,7 +275,7 @@ if __name__=="__main__":
 
         results = run_rj_proposals(parms_to_run[0], parms_to_run[1], parms_to_run[2], parms_to_run[3], parms_to_run[4])
 
-        np.save("ncmc_{}_{}_{}.npy".format(top_props[parms_to_run[0]].old_chemical_state_key, parms_to_run[2], parms_to_run[3]), results)
+        np.save("ncmc_{}_{}_{}_{}.npy".format(parms_to_run[0].old_chemical_state_key, parms_to_run[0].new_chemical_state_key, parms_to_run[2], parms_to_run[3]), results)
 
 
 
