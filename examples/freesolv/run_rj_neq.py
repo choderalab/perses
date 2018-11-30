@@ -223,7 +223,7 @@ if __name__=="__main__":
     import os
 
     input_filename = sys.argv[1]
-    equilibrium = False if sys.argv[2] == 0 else True
+    equilibrium = False if sys.argv[2] == '0' else True
 
     if not equilibrium:
         index = sys.argv[3]
