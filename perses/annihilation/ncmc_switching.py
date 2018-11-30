@@ -377,15 +377,17 @@ class NCMCEngine(object):
         box_lengths_and_angles = np.stack([box_lengths, box_angles])
 
         #write out the positions of the topology
-        for frame in range(nframes):
-            self._storage.write_configuration(position_varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
+        if self._storage:
+            for frame in range(nframes):
+                self._storage.write_configuration(position_varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
 
         #write out the periodict box vectors:
         self._storage.write_array(box_vec_varname, box_lengths_and_angles, iteration=iteration)
 
         #retrieve the protocol work and write that out too:
         protocol_work = ne_move.cumulative_work
-        self._storage.write_array("protocolwork", protocol_work, iteration=iteration)
+        if self._storage:
+            self._storage.write_array("protocolwork", protocol_work, iteration=iteration)
 
         # Return
         return [final_old_sampler_state, final_sampler_state, logP_work, -initial_reduced_potential, -final_reduced_potential]
