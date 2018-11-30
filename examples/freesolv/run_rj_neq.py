@@ -209,9 +209,9 @@ def run_rj_proposals(top_prop, configuration_traj, use_sterics, ncmc_nsteps, n_r
 
         logP_reverse = geometry_engine.logp_reverse(top_prop, final_sampler_state.positions, final_old_sampler_state.positions, beta)
 
-        results[i, 0] = (initial_hybrid_logP - initial_logP)
-        results[i, 1] = (logP_reverse - logP_geometry_forward)
-        results[i, 2] = (final_logP - final_hybrid_logP)
+        results[i, 0] = initial_hybrid_logP - initial_logP
+        results[i, 1] = logP_reverse - logP_geometry_forward
+        results[i, 2] = final_logP - final_hybrid_logP
         results[i, 3] = logP_work
 
     return results
