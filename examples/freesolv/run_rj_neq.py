@@ -182,7 +182,7 @@ def generate_solvated_topology_proposals(mol_a, mol_b):
 def traj_frame_to_sampler_state(traj: md.Trajectory, frame_number: int):
     xyz = traj.xyz[frame_number, :, :]
     box_vectors = traj.openmm_boxes(frame_number)
-    sampler_state  = states.SamplerState(xyz, box_vectors=box_vectors)
+    sampler_state = states.SamplerState(unit.Quantity(xyz, unit=unit.nanometers), box_vectors=box_vectors)
     return sampler_state
 
 def run_rj_proposals(top_prop, configuration_traj, use_sterics, ncmc_nsteps, n_replicates):
