@@ -268,7 +268,10 @@ if __name__=="__main__":
         config_trajs = [configuration_traj_a, configuration_traj_b]
 
         import itertools
-        parameters = list(itertools.product(top_props, config_trajs, use_sterics, lengths, [n_replicates_neq]))
+        parameters_forward = list(itertools.product(top_props[0], config_trajs[0], use_sterics, lengths, [n_replicates_neq]))
+        parameters_reverse = list(itertools.product(top_props[1], config_trajs[1], use_sterics, lengths, [n_replicates_neq]))
+
+        parameters = parameters_forward.extend(parameters_reverse)
 
 
 
