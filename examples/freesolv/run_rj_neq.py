@@ -191,7 +191,7 @@ def run_rj_proposals(top_prop, configuration_traj, use_sterics, ncmc_nsteps, n_r
     initial_thermodynamic_state = states.ThermodynamicState(top_prop.old_system, temperature=temperature, pressure=1.0*unit.atmosphere)
     final_thermodynamic_state = states.ThermodynamicState(top_prop.new_system, temperature=temperature, pressure=1.0*unit.atmosphere)
     traj_indices = np.arange(0, configuration_traj.n_frames)
-    results = np.array([n_replicates, 4])
+    results = np.zeros([n_replicates, 4])
 
     for i in tqdm.trange(n_replicates):
         frame_index = np.random.choice(traj_indices)
