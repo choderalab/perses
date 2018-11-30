@@ -267,7 +267,7 @@ if __name__=="__main__":
 
         parameters = []
         for top_prop_config_traj in zip([0,1], [0,1]):
-            parameters.append(list(itertools.product([top_prop_config_traj[0]], [top_prop_config_traj[1]], [use_sterics], lengths, [n_replicates_neq])))
+            parameters.extend(list(itertools.product([top_prop_config_traj[0]], [top_prop_config_traj[1]], [use_sterics], lengths, [n_replicates_neq])))
 
         top_props = [fwd_top_prop, reverse_top_prop]
         config_trajs = [configuration_traj_a, configuration_traj_b]
