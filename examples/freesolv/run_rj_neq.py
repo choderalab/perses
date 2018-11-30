@@ -266,14 +266,17 @@ if __name__=="__main__":
         use_sterics = options_dict['use_sterics']
 
         parameters = []
-        for top_prop_config_traj in zip([fwd_top_prop, reverse_top_prop], [configuration_traj_a, configuration_traj_b]):
+        for top_prop_config_traj in zip([0,1], [0,1]):
             parameters.append(list(itertools.product(top_prop_config_traj[0], top_prop_config_traj[1], use_sterics, lengths, n_replicates_neq)))
 
-        index = os.getenv("ARRAYID")
+        top_props = [fwd_top_prop, reverse_top_prop]
+        config_trajs = [configuration_traj_a, configuration_traj_b]
 
         parms_to_run = parameters[index]
 
-        results = run_rj_proposals(parms_to_run[0], parms_to_run[1], parms_to_run[2], parms_to_run[3], parms_to_run[4])
+        results = run_rj_proposals(top_props[parms_to_run[0]], config_trajs[parms_to_run[1]], parms_to_run[2], parms_to_run[3], parms_to_run[4])
+
+        np.save("ncmc_{}_{}_{}.npy".format(top_props[parms_to_run[0]].old_chemical_state_key, parms_to_run[2], parms_to_run[3]), results)
 
 
 
