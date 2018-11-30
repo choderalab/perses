@@ -382,7 +382,8 @@ class NCMCEngine(object):
                 self._storage.write_configuration(position_varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
 
         #write out the periodict box vectors:
-        self._storage.write_array(box_vec_varname, box_lengths_and_angles, iteration=iteration)
+        if self._storage:
+            self._storage.write_array(box_vec_varname, box_lengths_and_angles, iteration=iteration)
 
         #retrieve the protocol work and write that out too:
         protocol_work = ne_move.cumulative_work
