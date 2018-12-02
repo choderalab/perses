@@ -60,7 +60,7 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
         complex_positions[:n_receptor_atoms, :] = receptor_positions
         complex_positions[n_receptor_atoms:, :] = ligand_positions
 
-        complex_positions[smiles] = complex_positions
+        complex_positions_dict[smiles] = complex_positions
 
     return complex_topologies, complex_positions_dict
 
