@@ -80,7 +80,7 @@ def create_solvated_complex_systems(protein_pdb_filename, ligand_filename, outpu
 
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
-    system_generator = SystemGenerator(['ff99sbildn.xml', 'gaff.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'nonbondedMethod': app.PME,
+    system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml'], barostat=barostat, forcefield_kwargs={'nonbondedMethod': app.PME,
                                                                         'constraints': app.HBonds,
                                                                         'hydrogenMass': 4 * unit.amus})
 
