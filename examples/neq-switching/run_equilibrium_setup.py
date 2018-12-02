@@ -93,7 +93,7 @@ def create_solvated_complex_systems(protein_pdb_filename, ligand_filename, outpu
     initial_topology = complex_topologies[initial_smiles]
     initial_positions = complex_positions[initial_smiles]
 
-    solvated_initial_positions, solvated_topology, solvated_system = solvate_system(initial_topology, initial_positions, system_generator)
+    solvated_initial_positions, solvated_topology, solvated_system = solvate_system(initial_topology.to_openmm(), initial_positions, system_generator)
 
     md_topology = md.Topology.from_openmm(solvated_topology)
 
@@ -111,7 +111,7 @@ def create_solvated_complex_systems(protein_pdb_filename, ligand_filename, outpu
         topology = complex_topologies[smiles]
         positions = complex_positions[smiles]
 
-        solvated_positions, solvated_topology, solvated_system = solvate_system(topology, positions, system_generator, padding=None, num_added=num_added)
+        solvated_positions, solvated_topology, solvated_system = solvate_system(topology.to_openmm(), positions, system_generator, padding=None, num_added=num_added)
 
         np.save("{}_{}_initial.npy".format(project_prefix, i),
                 (solvated_positions, md.Topology.from_openmm(solvated_topology), solvated_system))
