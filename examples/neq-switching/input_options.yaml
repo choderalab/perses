@@ -1,0 +1,17 @@
+setup:
+  ligand_filename: MCL1_ligands.sdf
+  protein_pdb_filename: MCL1.pdb
+  project_prefix: MCL1
+  output_directory: MCL1_complex
+
+equilibrium:
+  n_equilibration_steps: 500 #ps
+  n_equilibrium_steps: 5000 #ps
+  report_interval: 20 #ps
+  output_directory: MCL1_complex_equilibrium
+
+nonequilibrium:
+  n_attempts: 100 #number of proposals
+  ncmc_length: 20000 #steps, 1fs
+  output_directory: MCL1_complex_nonequilibrium
+
