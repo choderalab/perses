@@ -49,7 +49,7 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
         n_complex_atoms = ligand_md_topology.n_atoms + n_receptor_atoms
         copy_receptor_md_topology = copy.deepcopy(receptor_md_topology)
 
-        complex_positions = unit.Quantity(np.array([n_complex_atoms, 3]), unit=unit.nanometers)
+        complex_positions = unit.Quantity(np.zeros([n_complex_atoms, 3]), unit=unit.nanometers)
 
         complex_topology = copy_receptor_md_topology.join(ligand_md_topology)
 
