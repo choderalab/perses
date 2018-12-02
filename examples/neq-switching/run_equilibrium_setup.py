@@ -122,8 +122,8 @@ if __name__=="__main__":
 
     yaml_filename = sys.argv[1]
 
-    with open(yaml_filename, "r") as yamlfile:
-        options = yaml.load(yaml_filename)
+    with open(yaml_filename, "r") as yaml_file:
+        options = yaml.load(yaml_file)
 
     setup_options = options['setup']
 
