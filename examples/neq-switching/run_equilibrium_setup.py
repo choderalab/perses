@@ -26,7 +26,9 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
     # get the list of molecules
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
 
-    mol_dict = {oechem.OEMolToSmiles(mol) : mol for mol in mol_list}
+    mols_with_titles = [mol.SetTitle("MOL") for mol in mol_list]
+
+    mol_dict = {oechem.OEMolToSmiles(mol) : mol for mol in mols_with_titles}
 
     ligand_topology_dict = {smiles : forcefield_generators.generateTopologyFromOEMol(mol) for smiles, mol in mol_dict.items()}
 
@@ -67,6 +69,11 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
 def solvate_system(topology, positions, system_generator, padding=9.0 * unit.angstrom, num_added=None, water_model='tip3p'):
 
     modeller = app.Modeller(topology, positions)
+
+    hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name != "MOL"]
+    modeller.delete(hs)
+    modeller.addHydrogens(forcefield=system_generator._forcefield)
+
     modeller.addSolvent(system_generator._forcefield, model=water_model, padding=padding, numAdded=num_added)
 
     solvated_topology = modeller.topology
