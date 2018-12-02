@@ -41,7 +41,7 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
     n_receptor_atoms = receptor_md_topology.n_atoms
 
     complex_topologies = {}
-    complex_positions = {}
+    complex_positions_dict = {}
 
     for smiles, ligand_topology in ligand_topology_dict.items():
         ligand_md_topology = md.Topology.from_openmm(ligand_topology)
@@ -62,7 +62,7 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
 
         complex_positions[smiles] = complex_positions
 
-    return complex_topologies, complex_positions
+    return complex_topologies, complex_positions_dict
 
 def solvate_system(topology, positions, system_generator, padding=9.0 * unit.angstrom, num_added=None, water_model='tip3p'):
 
