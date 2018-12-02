@@ -28,7 +28,7 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
 
     mol_dict = {oechem.OEMolToSmiles(mol) : mol for mol in mol_list}
 
-    ligand_topology_dict = {smiles : forcefield_generators.generateTopologyFromOEMol(mol) for smiles, mol in mol_dict}
+    ligand_topology_dict = {smiles : forcefield_generators.generateTopologyFromOEMol(mol) for smiles, mol in mol_dict.items()}
 
 
     protein_pdbfile = open(protein_pdb_filename, 'r')
