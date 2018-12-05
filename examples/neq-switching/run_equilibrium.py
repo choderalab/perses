@@ -46,7 +46,7 @@ if __name__=="__main__":
     equilibrium_options = options['equilibrium']
 
     project_prefix = setup_options['project_prefix']
-    setup_directory = setup_options['setup_directory']
+    setup_directory = setup_options['output_directory']
 
     file_to_read = os.path.join(setup_directory, "{}_{}_initial.npy".format(project_prefix, index))
 
