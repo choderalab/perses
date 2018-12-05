@@ -20,12 +20,10 @@ def run_equilibrium(system, topology, configuration, n_steps, report_interval, e
     integrator = integrators.LangevinIntegrator()
     simulation = app.Simulation(topology, system, integrator)
     simulation.context.setPositions(configuration)
+    openmm.LocalEnergyMinimizer.minimize(simulation.context)
 
     #equilibrate:
     integrator.step(equilibration_steps)
-
-    #equilibrate a little bit:
-    simulation.step(10000)
 
     reporter = HDF5Reporter(filename, report_interval)
     simulation.reporters.append(reporter)
@@ -40,7 +38,7 @@ if __name__=="__main__":
     index = int(sys.argv[2])
 
     with open(yaml_filename, "r") as yamlfile:
-        options = yaml.load(yaml_filename)
+        options = yaml.load(yamlfile)
 
     setup_options = options['setup']
     equilibrium_options = options['equilibrium']
