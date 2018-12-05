@@ -90,7 +90,7 @@ def create_solvated_complex_systems(protein_pdb_filename, ligand_filename, outpu
 
     system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml', 'MCL1_ligands.xml'], barostat=barostat, forcefield_kwargs={'nonbondedMethod': app.PME,
                                                                         'constraints': app.HBonds,
-                                                                        'hydrogenMass': 4 * unit.amus})
+                                                                        'hydrogenMass': 4 * unit.amus}, use_antechamber=False)
 
     complex_topologies, complex_positions = generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filename)
 
