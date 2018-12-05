@@ -28,6 +28,7 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
 
     for idx, mol in enumerate(mol_list):
         mol.SetTitle("MOL{}".format(idx))
+        oechem.OETriposAtomNames(mol)
 
     mol_dict = {oechem.OEMolToSmiles(mol) : mol for mol in mol_list}
 
