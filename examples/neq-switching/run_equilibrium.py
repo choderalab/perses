@@ -25,6 +25,8 @@ def run_equilibrium(system, topology, configuration, n_steps, report_interval, e
     #equilibrate:
     integrator.step(equilibration_steps)
 
+    print("equilibration complete")
+
     reporter = HDF5Reporter(filename, report_interval)
     simulation.reporters.append(reporter)
     simulation.step(n_steps)
