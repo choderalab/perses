@@ -37,7 +37,7 @@ if __name__=="__main__":
     import os
 
     yaml_filename = sys.argv[1]
-    index = int(sys.argv[2])
+    index = int(sys.argv[2]) - 1 # Indices start at one
 
     with open(yaml_filename, "r") as yamlfile:
         options = yaml.load(yamlfile)
