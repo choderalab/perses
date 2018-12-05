@@ -26,8 +26,8 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
     # get the list of molecules
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
 
-    for mol in mol_list:
-        mol.SetTitle("MOL")
+    for idx, mol in enumerate(mol_list):
+        mol.SetTitle("MOL{}".format(idx))
 
     mol_dict = {oechem.OEMolToSmiles(mol) : mol for mol in mol_list}
 
@@ -88,7 +88,7 @@ def create_solvated_complex_systems(protein_pdb_filename, ligand_filename, outpu
 
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
-    system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml'], barostat=barostat, forcefield_kwargs={'nonbondedMethod': app.PME,
+    system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml', 'MCL1_ligands.xml'], barostat=barostat, forcefield_kwargs={'nonbondedMethod': app.PME,
                                                                         'constraints': app.HBonds,
                                                                         'hydrogenMass': 4 * unit.amus})
 
