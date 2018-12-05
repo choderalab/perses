@@ -71,7 +71,7 @@ def solvate_system(topology, positions, system_generator, padding=9.0 * unit.ang
 
     modeller = app.Modeller(topology, positions)
 
-    hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name != "MOL"]
+    hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name[:3] != "MOL"]
     modeller.delete(hs)
     modeller.addHydrogens(forcefield=system_generator._forcefield)
 
