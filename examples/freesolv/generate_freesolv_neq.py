@@ -38,10 +38,10 @@ if __name__=="__main__":
         with open(new_yaml_filename, 'w') as yaml_outfile:
             yaml.dump(new_yaml_dict, yaml_outfile)
 
-        with open("submit_{}_{}_eq.sh".format(pair[0], pair[1])) as submiteqfile:
+        with open("submit_{}_{}_eq.sh".format(pair[0], pair[1]), 'w') as submiteqfile:
             submit_eq = create_submit_script(template_script_file_eq, new_yaml_filename)
             submiteqfile.write(submit_eq)
 
-        with open("submit_{}_{}_neq.sh".format(pair[0], pair[1])) as submitneqfile:
+        with open("submit_{}_{}_neq.sh".format(pair[0], pair[1]), 'w') as submitneqfile:
             submit_neq = create_submit_script(template_script_file_neq, new_yaml_filename)
             submitneqfile.write(submit_neq)
