@@ -86,7 +86,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
-    def __init__(self, metadata=None, use_sterics=False, n_torsion_divisions=180, verbose=True, storage=None):
+    def __init__(self, metadata=None, use_sterics=False, n_torsion_divisions=180, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
@@ -97,6 +97,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.verbose = verbose
         self.use_sterics = use_sterics
         self._n_torsion_divisions = n_torsion_divisions
+        self._bond_softening_constant = bond_softening_constant
+        self._angle_softening_constant = angle_softening_constant
         if storage:
             self._storage = NetCDFStorageView(modname="GeometryEngine", storage=storage)
         else:
@@ -275,7 +277,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             if bond is not None:
                 if direction=='forward':
                     r = self._propose_bond(bond, beta)
-                bond_k = bond.type.k
+                bond_k = bond.type.k * self._bond_softening_constant
                 sigma_r = units.sqrt(1/(beta*bond_k))
                 logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
                 logp_r = self._bond_logq(r, bond, beta) - logZ_r
@@ -291,7 +293,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
             if direction=='forward':
                 theta = self._propose_angle(angle, beta)
-            angle_k = angle.type.k
+            angle_k = angle.type.k * self._angle_softening_constant
             sigma_theta = units.sqrt(1/(beta*angle_k))
             logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
             logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
@@ -668,7 +670,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         Bond length proposal
         """
         r0 = bond.type.req
-        k = bond.type.k
+        k = bond.type.k * self._bond_softening_constant
         sigma_r = units.sqrt(1.0/(beta*k))
         r = sigma_r*np.random.randn() + r0
         return r
@@ -678,7 +680,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         Bond angle proposal
         """
         theta0 = angle.type.theteq
-        k = angle.type.k
+        k = angle.type.k * self._angle_softening_constant
         sigma_theta = units.sqrt(1.0/(beta*k))
         theta = sigma_theta*np.random.randn() + theta0
         return theta
