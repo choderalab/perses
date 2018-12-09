@@ -45,7 +45,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False):
         """
         Initialize the Hybrid topology factory.
 
@@ -89,6 +89,7 @@ class HybridTopologyFactory(object):
         self._hybrid_system_forces = dict()
         self._old_positions = current_positions
         self._new_positions = new_positions
+        self._soften_only_new = soften_only_new
 
         if bond_softening_constant != 1.0:
             self._bond_softening_constant = bond_softening_constant
@@ -991,8 +992,8 @@ class HybridTopologyFactory(object):
             # that would mean that this bond is core-unique_old or unique_old-unique_old
             elif not index_set.issubset(self._atom_classes['environment_atoms']):
 
-                # If we're not softening bonds, we can just add it to the regular bond force
-                if not self._soften_bonds:
+                # If we're not softening bonds, we can just add it to the regular bond force. Likewise if we are only softening new bonds
+                if not self._soften_bonds or self._soften_only_new:
                     self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old,
                                                                               k_old)
                 # Otherwise, we will need to soften one of the endpoints. For unique old atoms, the softening endpoint is at lambda =1
@@ -1146,8 +1147,8 @@ class HybridTopologyFactory(object):
             # Check if the atoms are neither all core nor all environment, which would mean they involve unique old interactions
             elif not hybrid_index_set.issubset(self._atom_classes['environment_atoms']):
 
-                # Check if we are softening angles:
-                if self._soften_angles:
+                # Check if we are softening angles, and not softening only new angles:
+                if self._soften_angles and not self._soften_only_new:
 
                     # If we are, then we need to generate the softened parameters (at lambda=1 for old atoms)
                     # We do this by using the same equilibrium angle, and scaling the force constant at the non-interacting
