@@ -93,10 +93,14 @@ class HybridTopologyFactory(object):
         if bond_softening_constant != 1.0:
             self._bond_softening_constant = bond_softening_constant
             self._soften_bonds = True
+        else:
+            self._soften_bonds = False
 
         if angle_softening_constant != 1.0:
             self._angle_softening_constant = angle_softening_constant
             self._soften_angles = True
+        else:
+            self._soften_angles = False
 
         self._use_dispersion_correction = use_dispersion_correction
 
