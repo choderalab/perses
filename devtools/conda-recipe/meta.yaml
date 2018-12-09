@@ -22,7 +22,6 @@ requirements:
     - openmm >=7.3.0
     - parmed
     - openmoltools
-    - alchemy >=1.2.3
     - openmmtools
     - numba
     - netcdf4
@@ -33,7 +32,6 @@ requirements:
     #- pdbfixer
     - lxml
     - networkx >=2.0
-    - yank
 
   run:
     - python
@@ -47,7 +45,6 @@ requirements:
     - openmm >=7.3.0
     - parmed
     - openmoltools
-    - alchemy >=1.2.3
     - openmmtools
     - numba
     - netcdf4
@@ -62,7 +59,6 @@ requirements:
     - dask
     - distributed
     - progressbar2
-    - yank
 
 test:
   requires:
