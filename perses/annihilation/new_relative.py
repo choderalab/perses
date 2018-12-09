@@ -45,7 +45,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
         """
         Initialize the Hybrid topology factory.
 
@@ -73,6 +73,12 @@ class HybridTopologyFactory(object):
             "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
         softcore_beta: unit, default None
             "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
+        bond_softening_constant : float
+            For bonds between unique atoms and unique-core atoms, soften the force constant at the "dummy" endpoint by this factor.
+            If 1.0, do not soften
+        angle_softening_constant : float
+            For bonds between unique atoms and unique-core atoms, soften the force constant at the "dummy" endpoint by this factor.
+            If 1.0, do not soften
 
         """
         self._topology_proposal = topology_proposal
@@ -83,6 +89,14 @@ class HybridTopologyFactory(object):
         self._hybrid_system_forces = dict()
         self._old_positions = current_positions
         self._new_positions = new_positions
+
+        if bond_softening_constant != 1.0:
+            self._bond_softening_constant = bond_softening_constant
+            self._soften_bonds = True
+
+        if angle_softening_constant != 1.0:
+            self._angle_softening_constant = angle_softening_constant
+            self._soften_angles = True
 
         self._use_dispersion_correction = use_dispersion_correction
 
@@ -969,9 +983,28 @@ class HybridTopologyFactory(object):
                     [index1, index2, r0_new, k_new] = self._find_bond_parameters(new_system_bond_force, index1_new, index2_new)
                 self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,[r0_old, k_old, r0_new, k_new])
 
-            #otherwise, we just add the same parameters as those in the old system.
+            #check if the index set is a subset of anything besides environemnt (in the case of environment, we just add the bond to the regular bond force)
+            # that would mean that this bond is core-unique_old or unique_old-unique_old
+            elif not index_set.issubset(self._atom_classes['environment']):
+
+                # If we're not softening bonds, we can just add it to the regular bond force
+                if not self._soften_bonds:
+                    self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old,
+                                                                              k_old)
+                # Otherwise, we will need to soften one of the endpoints. For unique old atoms, the softening endpoint is at lambda =1
+                else:
+
+                    r0_new = r0_old # The bond length won't change
+                    k_new = self._bond_softening_constant * k_old # We multiply the endpoint by the bond softening constant
+
+                    # Now we add to the core bond force, since that is an alchemically-modified force.
+                    self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                                                                          [r0_old, k_old, r0_new, k_new])
+
+            #otherwise, we just add the same parameters as those in the old system (these are environment atoms, and the parameters are the same)
             else:
                 self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old, k_old)
+
 
         #now loop through the new system to get the interactions that are unique to it.
         for bond_index in range(new_system_bond_force.getNumBonds()):
@@ -986,7 +1019,19 @@ class HybridTopologyFactory(object):
             #if the intersection of this set and unique new atoms contains anything, the bond is unique to the new system and must be added
             #all other bonds in the new system have been accounted for already.
             if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_new, k_new)
+
+                # If we are softening bonds, we have to use the core bond force, and scale the force constant at lambda = 0:
+                if self._soften_bonds:
+                    r0_old = r0_new # Do not change the length
+                    k_old = k_new * self._bond_softening_constant # Scale the force constant by the requested parameter
+
+                    # Now we add to the core bond force, since that is an alchemically-modified force.
+                    self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                                                                          [r0_old, k_old, r0_new, k_new])
+
+                # If we aren't softening bonds, then just add it to the standard bond force
+                else:
+                    self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_new, k_new)
 
             #if the bond is in the core, it has probably already been added in the above loop. However, there are some circumstances
             #where it was not (closing a ring). In that case, the bond has not been added and should be added here.
