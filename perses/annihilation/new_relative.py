@@ -259,7 +259,7 @@ class HybridTopologyFactory(object):
 
             #If it's a virtual site, make sure it is not in the unique or core atoms (unsupported).
             if old_system.isVirtualSite(particle_idx):
-                if hybrid_idx not in self._atom_classes['environment']:
+                if hybrid_idx not in self._atom_classes['environment_atoms']:
                     raise Exception("Virtual sites in changing residue are unsupported.")
                 else:
                     virtual_site = old_system.getVirtualSite(particle_idx)
@@ -271,7 +271,7 @@ class HybridTopologyFactory(object):
             hybrid_idx = self._new_to_hybrid_map[particle_idx]
 
             if new_system.isVirtualSite(particle_idx):
-                if hybrid_idx not in self._atom_classes['environment']:
+                if hybrid_idx not in self._atom_classes['environment_atoms']:
                     raise Exception("Virtual sites in changing residue are unsupported.")
 
     def _get_core_atoms(self):
@@ -985,7 +985,7 @@ class HybridTopologyFactory(object):
 
             #check if the index set is a subset of anything besides environemnt (in the case of environment, we just add the bond to the regular bond force)
             # that would mean that this bond is core-unique_old or unique_old-unique_old
-            elif not index_set.issubset(self._atom_classes['environment']):
+            elif not index_set.issubset(self._atom_classes['environment_atoms']):
 
                 # If we're not softening bonds, we can just add it to the regular bond force
                 if not self._soften_bonds:
