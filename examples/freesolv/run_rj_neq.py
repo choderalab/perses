@@ -146,8 +146,9 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
 
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
+    canonicalized_smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in [initial_smiles, final_smiles]]
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name="MOL")
+        canonicalized_smiles_list, system_generator, residue_name="MOL")
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
