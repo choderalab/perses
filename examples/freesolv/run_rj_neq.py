@@ -186,9 +186,9 @@ def traj_frame_to_sampler_state(traj: md.Trajectory, frame_number: int):
     sampler_state = states.SamplerState(unit.Quantity(xyz, unit=unit.nanometers), box_vectors=box_vectors)
     return sampler_state
 
-def run_rj_proposals(top_prop, configuration_traj, use_sterics, ncmc_nsteps, n_replicates):
-    ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps, pressure=1.0*unit.atmosphere)
-    geometry_engine = FFAllAngleGeometryEngine(use_sterics=use_sterics)
+def run_rj_proposals(top_prop, configuration_traj, use_sterics, ncmc_nsteps, n_replicates, bond_softening_constant=1.0, angle_softening_constant=1.0):
+    ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps, pressure=1.0*unit.atmosphere, bond_softening_constant=bond_softening_constant, angle_softening_constant=angle_softening_constant)
+    geometry_engine = FFAllAngleGeometryEngine(use_sterics=use_sterics, bond_softening_constant=bond_softening_constant, angle_softening_constant=angle_softening_constant)
     initial_thermodynamic_state = states.ThermodynamicState(top_prop.old_system, temperature=temperature, pressure=1.0*unit.atmosphere)
     final_thermodynamic_state = states.ThermodynamicState(top_prop.new_system, temperature=temperature, pressure=1.0*unit.atmosphere)
     traj_indices = np.arange(0, configuration_traj.n_frames)
