@@ -2269,8 +2269,37 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
 
-            if current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index)).GetAtomicNum() == 1 or proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index)).GetAtomicNum() == 1:
+            old_atom = current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index))
+            new_atom = proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index)).GetAtomicNum()
+
+            #Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
+            if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
                 continue
+
+            # If the above is not true, then they are either both hydrogens or both not hydrogens
+            elif old_atom.GetAtomicNum() == 1:
+                bond = list(old_atom.GetBonds()) # There is only one for hydrogen
+                bgn = bond.GetBgn()
+                end = bond.GetEnd()
+
+                # Is this atom the beginning of the bond?
+                if bgn.GetIdx() == old_index:
+                    other_atom = end
+                else:
+                    other_atom = bgn
+
+                new_bond = list(new_atom.GetBonds())
+                new_bgn = new_bond.GetBgn()
+                new_end = new_bond.GetEnd()
+
+                if new_bgn.GetIdx() == new_index:
+                    new_other_atom = new_end
+                else:
+                    new_other_atom = new_bgn
+
+                if new_other_atom.GetAtomicNum() != other_atom.GetAtomicNum():
+                    continue
+
 
             new_to_old_atom_map[new_index] = old_index
 
