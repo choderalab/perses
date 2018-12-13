@@ -2270,7 +2270,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             new_index = matchpair.target.GetIdx()
 
             old_atom = current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index))
-            new_atom = proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index)).GetAtomicNum()
+            new_atom = proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index))
 
             #Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
             if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
@@ -2278,7 +2278,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
             # If the above is not true, then they are either both hydrogens or both not hydrogens
             elif old_atom.GetAtomicNum() == 1:
-                bond = list(old_atom.GetBonds()) # There is only one for hydrogen
+                bond = list(old_atom.GetBonds())[0] # There is only one for hydrogen
                 bgn = bond.GetBgn()
                 end = bond.GetEnd()
 
@@ -2288,7 +2288,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 else:
                     other_atom = bgn
 
-                new_bond = list(new_atom.GetBonds())
+                new_bond = list(new_atom.GetBonds())[0]
                 new_bgn = new_bond.GetBgn()
                 new_end = new_bond.GetEnd()
 
