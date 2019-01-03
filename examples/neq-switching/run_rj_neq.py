@@ -264,6 +264,8 @@ if __name__=="__main__":
 
         n_replicates_neq = options_dict['n_replicates_neq']
         lengths = options_dict['lengths']
+        bond_softenings = options_dict['bond_softenings']
+
         use_sterics = options_dict['use_sterics']
         top_props = [fwd_top_prop, reverse_top_prop]
         config_trajs = [configuration_traj_a, configuration_traj_b]
