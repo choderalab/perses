@@ -138,7 +138,7 @@ def solvate_system(topology, positions, system_generator, padding=9.0 * unit.ang
 
     return solvated_positions, solvated_topology, solvated_system
 
-def create_solvated_systems(topologies_dict, positions_dict, output_directory, project_prefix):
+def create_systems(topologies_dict, positions_dict, output_directory, project_prefix, solvate=True):
 
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
@@ -153,11 +153,17 @@ def create_solvated_systems(topologies_dict, positions_dict, output_directory, p
     initial_topology = topologies_dict[initial_smiles]
     initial_positions = positions_dict[initial_smiles]
 
-    solvated_initial_positions, solvated_topology, solvated_system = solvate_system(initial_topology.to_openmm(), initial_positions, system_generator)
+    if solvate:
+        solvated_initial_positions, solvated_topology, solvated_system = solvate_system(initial_topology.to_openmm(), initial_positions, system_generator)
+    else:
+        solvated_initial_positions = initial_positions
+        solvated_topology = initial_topology
+        solvated_system = system_generator.build_system(solvated_topology)
 
     md_topology = md.Topology.from_openmm(solvated_topology)
 
-    num_added = md_topology.n_residues - initial_topology.n_residues
+    if solvate:
+        num_added = md_topology.n_residues - initial_topology.n_residues
 
     if not os.path.exists(output_directory):
         os.mkdir(output_directory)
@@ -171,7 +177,12 @@ def create_solvated_systems(topologies_dict, positions_dict, output_directory, p
         topology = topologies_dict[smiles]
         positions = positions_dict[smiles]
 
-        solvated_positions, solvated_topology, solvated_system = solvate_system(topology.to_openmm(), positions, system_generator, padding=None, num_added=num_added)
+        if solvate:
+            solvated_positions, solvated_topology, solvated_system = solvate_system(topology.to_openmm(), positions, system_generator, padding=None, num_added=num_added)
+        else:
+            solvated_positions = initial_positions
+            solvated_topology = initial_topology
+            solvated_system = system_generator.build_system(solvated_topology)
 
         np.save("{}_{}_initial.npy".format(project_prefix, i),
                 (solvated_positions, md.Topology.from_openmm(solvated_topology), solvated_system))
@@ -201,4 +212,4 @@ if __name__=="__main__":
     else:
         raise ValueError("Phase must be either complex or solvent.")
 
-    create_solvated_systems(topologies, positions, output_directory, project_prefix)
+    create_systems(topologies, positions, output_directory, project_prefix)
