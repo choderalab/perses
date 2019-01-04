@@ -14,7 +14,7 @@ python generate_forcefields_from_molfile.py MCL1_ligands.sdf MCL1_ligands.xml
 To parameterize the MCL1 systems for equilibrium simulation (which precedes the nonequilibrium switching experiments),
 run:
 ```bash
-python run_equilibrium_setup.py input_options.yaml
+python run_equilibrium_setup.py input_options_complex.yaml
 ```
 
 where `input_options.yaml` contains the options (such as output directories) for simulation. See the example file for more details
@@ -27,7 +27,7 @@ All systems are solvated to the same number of waters.
 Before running the transdimensional nonequilibrium switching calculations, we generate a cache of equilibrium samples.
 To do this, run:
 ```bash
-python run_equilibrium.py input_options.yaml [index]
+python run_equilibrium.py input_options_complex.yaml [index]
 ```
 
 where `input_options.yaml` is the same as the one used in the setup, and `index` is the index (starting at 1)
@@ -39,7 +39,7 @@ run as an array job (whose indices start at 1 for LSF).
 After generating the equilibrium cache, run the transdimensional nonequilibrium switching experiments by:
 
 ```bash
-python run_nonequilibrium.py input_options.yaml [pair_index]
+python run_nonequilibrium.py input_options_complex.yaml [pair_index]
 ```
 
 Similarly to the equilibrium run command, we give the same `input_options.yaml` file that we've been using.
@@ -59,3 +59,9 @@ The components of each iteration are:
         results[i, 5] = final_hybrid_logP
         results[i, 6] = logP_geometry_forward
 ```
+
+# Solvent phase
+
+To run the solvent phase, simply repeat the steps above but with the `input_options_solvent.yaml` file.
+Note that the directory for output that you specify there (or the prefix for the filenames) should be different
+from the complex phase, otherwise one may overwrite another.

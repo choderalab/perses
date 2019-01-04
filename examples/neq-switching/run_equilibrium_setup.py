@@ -68,6 +68,41 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
 
     return complex_topologies, complex_positions_dict
 
+def generate_ligand_topologies_and_positions(ligand_filename):
+    """
+
+    :param ligand_filename:
+    :return:
+    """
+    ifs = oechem.oemolistream()
+    ifs.open(ligand_filename)
+
+    # get the list of molecules
+    mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
+
+    for idx, mol in enumerate(mol_list):
+        mol.SetTitle("MOL{}".format(idx))
+        oechem.OETriposAtomNames(mol)
+
+    mol_dict = {oechem.OEMolToSmiles(mol) : mol for mol in mol_list}
+
+    ligand_topology_dict = {smiles : forcefield_generators.generateTopologyFromOEMol(mol) for smiles, mol in mol_dict.items()}
+
+    ligand_topologies = {}
+    ligand_positions_dict = {}
+
+    for smiles, ligand_topology in ligand_topology_dict.items():
+        ligand_md_topology = md.Topology.from_openmm(ligand_topology)
+
+        ligand_topologies[smiles] = ligand_md_topology
+
+        ligand_positions = extractPositionsFromOEMOL(mol_dict[smiles])
+
+        ligand_positions_dict[smiles] = ligand_positions
+
+    return ligand_topologies, ligand_positions_dict
+
+
 def solvate_system(topology, positions, system_generator, padding=9.0 * unit.angstrom, num_added=None, water_model='tip3p'):
 
     modeller = app.Modeller(topology, positions)
@@ -85,7 +120,7 @@ def solvate_system(topology, positions, system_generator, padding=9.0 * unit.ang
 
     return solvated_positions, solvated_topology, solvated_system
 
-def create_solvated_complex_systems(protein_pdb_filename, ligand_filename, output_directory, project_prefix):
+def create_solvated_systems(topologies_dict, positions_dict, output_directory, project_prefix):
 
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
@@ -93,14 +128,12 @@ def create_solvated_complex_systems(protein_pdb_filename, ligand_filename, outpu
                                                                         'constraints': app.HBonds,
                                                                         'hydrogenMass': 4 * unit.amus}, use_antechamber=False)
 
-    complex_topologies, complex_positions = generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filename)
-
-    list_of_smiles = list(complex_topologies.keys())
+    list_of_smiles = list(topologies_dict.keys())
 
     initial_smiles = list_of_smiles[0]
 
-    initial_topology = complex_topologies[initial_smiles]
-    initial_positions = complex_positions[initial_smiles]
+    initial_topology = topologies_dict[initial_smiles]
+    initial_positions = positions_dict[initial_smiles]
 
     solvated_initial_positions, solvated_topology, solvated_system = solvate_system(initial_topology.to_openmm(), initial_positions, system_generator)
 
@@ -117,8 +150,8 @@ def create_solvated_complex_systems(protein_pdb_filename, ligand_filename, outpu
 
         smiles = list_of_smiles[i]
 
-        topology = complex_topologies[smiles]
-        positions = complex_positions[smiles]
+        topology = topologies_dict[smiles]
+        positions = positions_dict[smiles]
 
         solvated_positions, solvated_topology, solvated_system = solvate_system(topology.to_openmm(), positions, system_generator, padding=None, num_added=num_added)
 
@@ -141,4 +174,13 @@ if __name__=="__main__":
     project_prefix = setup_options['project_prefix']
     output_directory = setup_options['output_directory']
 
-    create_solvated_complex_systems(protein_pdb_filename, ligand_filename, output_directory, project_prefix)
+    if setup_options['phase'] == 'complex':
+        topologies, positions = generate_complex_topologies_and_positions(ligand_filename,protein_pdb_filename)
+
+    elif setup_options['phase'] == 'solvent':
+        topologies, positions = generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filename)
+
+    else:
+        raise ValueError("Phase must be either complex or solvent.")
+
+    create_solvated_systems(topologies, positions, output_directory, project_prefix)
