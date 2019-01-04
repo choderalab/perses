@@ -202,6 +202,7 @@ if __name__=="__main__":
     protein_pdb_filename = setup_options['protein_pdb_filename']
     project_prefix = setup_options['project_prefix']
     output_directory = setup_options['output_directory']
+    solvate = setup_options['solvate']
 
     if setup_options['phase'] == 'complex':
         topologies, positions = generate_complex_topologies_and_positions(ligand_filename,protein_pdb_filename)
@@ -212,4 +213,4 @@ if __name__=="__main__":
     else:
         raise ValueError("Phase must be either complex or solvent.")
 
-    create_systems(topologies, positions, output_directory, project_prefix)
+    create_systems(topologies, positions, output_directory, project_prefix, solvate=solvate)

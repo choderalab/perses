@@ -4,6 +4,7 @@ setup:
   project_prefix: MCL1
   output_directory: MCL1_solvent
   phase: complex
+  solvate: True
 
 equilibrium:
   n_equilibration_steps: 500 #ps
