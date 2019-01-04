@@ -19,7 +19,25 @@ temperature = 300.0*unit.kelvin
 beta = 1.0 / (temperature*constants.kB)
 
 def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filename):
+    """
+    Generate the topologies and positions for complex phase simulations, given an input ligand file (in supported openeye
+    format) and protein pdb file. Note that the input ligand file should have coordinates placing the ligand in the binding
+    site.
 
+    Parameters
+    ----------
+    ligand_filename : str
+        Name of the file containing ligands
+    protein_pdb_filename : str
+        Name of the protein pdb file
+
+    Returns
+    -------
+    complex_topologies_dict : dict of smiles: md.topology
+        Dictionary of topologies for various complex systems
+    complex_positions_dict : dict of smiles:  [n, 3] array of Quantity
+        Positions for corresponding complexes
+    """
     ifs = oechem.oemolistream()
     ifs.open(ligand_filename)
 
