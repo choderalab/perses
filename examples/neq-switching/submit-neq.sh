@@ -21,4 +21,4 @@ cd $LS_SUBCWD
 
 # Launch my program.
 module load cuda/9.2
-python /home/pgrinaway/perses/examples/neq-switching/run_nonequilibrium.py /home/pgrinaway/perses/examples/neq-switching/input_options.yaml $LSB_JOBINDEX
+python /home/pgrinaway/perses/examples/neq-switching/run_nonequilibrium.py /home/pgrinaway/perses/examples/neq-switching/input_options.yaml $LSB_JOBINDEX 10
