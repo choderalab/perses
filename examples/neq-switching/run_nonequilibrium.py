@@ -60,7 +60,9 @@ if __name__=="__main__":
 
     yaml_filename = sys.argv[1]
     job_index = int(sys.argv[2])
-    map_index = int(sys.argv[3])
+    n_maps = int(sys.argv[3])
+    map_index = job_index % n_maps
+    molecule_index = job_index // n_maps
 
     with open(yaml_filename, "r") as yaml_file:
         options = yaml.load(yaml_file)
@@ -81,7 +83,7 @@ if __name__=="__main__":
     n_ligand_range = list(range(n_ligands))
     ligand_permutations = list(itertools.permutations(n_ligand_range, 2))
 
-    ligand_pair_to_compute = ligand_permutations[job_index]
+    ligand_pair_to_compute = ligand_permutations[molecule_index]
 
     initial_ligand = ligand_pair_to_compute[0]
     proposal_ligand = ligand_pair_to_compute[1]
