@@ -39,11 +39,14 @@ run as an array job (whose indices start at 1 for LSF).
 After generating the equilibrium cache, run the transdimensional nonequilibrium switching experiments by:
 
 ```bash
-python run_nonequilibrium.py input_options_complex.yaml [pair_index]
+python run_nonequilibrium.py input_options_complex.yaml [job_index] [n_maps]
 ```
 
 Similarly to the equilibrium run command, we give the same `input_options.yaml` file that we've been using.
-We also give an index, but note that this is an index for the pair `(molecule_a, molecule_b)` (note that this is not equivalent to `(molecule_b, molecule_a)`, which has a different index).
+The job index indicates which calculation this job should run. The integer division of the job index by the number of maps gives the
+index of the pair, while the remainder of this division specifies which map index should be used. `n_maps` specifies the number of maps
+to use for each pair. If there are fewer than `n_maps` for a given pair, the index wraps around.
+
 
 The output files will be placed in the directory specified in the configuration file. The output is a numpy array that is named:
 `project_prefix_initial_ligand_proposal_ligand.npy`, and contains an array of size: `[n_iterations, 7]`
