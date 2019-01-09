@@ -185,7 +185,7 @@ def create_systems(topologies_dict, positions_dict, output_directory, project_pr
             solvated_system = system_generator.build_system(solvated_topology)
 
         np.save("{}_{}_initial.npy".format(project_prefix, i),
-                (solvated_positions, md.Topology.from_openmm(solvated_topology), solvated_system))
+                (solvated_positions, md.Topology.from_openmm(solvated_topology), solvated_system, smiles))
 
 if __name__=="__main__":
     import sys

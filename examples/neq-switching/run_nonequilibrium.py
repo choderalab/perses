@@ -93,7 +93,7 @@ if __name__=="__main__":
 
     file_to_read = os.path.join(setup_directory, "{}_{}_initial.npy".format(project_prefix, initial_ligand))
 
-    positions, topology, system = np.load(file_to_read)
+    positions, topology, system, initial_smiles = np.load(file_to_read)
 
     ifs = oechem.oemolistream()
     ifs.open(ligand_filename)
@@ -107,6 +107,7 @@ if __name__=="__main__":
 
     initial_mol = mol_list[initial_ligand]
     proposal_mol = mol_list[proposal_ligand]
+    proposal_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OECreateCanSmiString(proposal_mol))
 
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 

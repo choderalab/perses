@@ -50,7 +50,7 @@ if __name__=="__main__":
 
     file_to_read = os.path.join(setup_directory, "{}_{}_initial.npy".format(project_prefix, index))
 
-    positions, topology, system = np.load(file_to_read)
+    positions, topology, system, _ = np.load(file_to_read)
 
     omm_topology = topology.to_openmm()
 
