@@ -1,6 +1,6 @@
 from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator
+from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, SmallMoleculeAtomMapper, PremappedSmallMoleculeSetProposalEngine
 from openmmtools import states, constants
 import tqdm
 from simtk import openmm, unit
@@ -60,6 +60,7 @@ if __name__=="__main__":
 
     yaml_filename = sys.argv[1]
     job_index = int(sys.argv[2])
+    map_index = int(sys.argv[3])
 
     with open(yaml_filename, "r") as yaml_file:
         options = yaml.load(yaml_file)
@@ -115,9 +116,13 @@ if __name__=="__main__":
                                                                         'constraints': app.HBonds,
                                                                         'hydrogenMass': 4 * unit.amus}, use_antechamber=False)
 
-    proposal_engine = SmallMoleculeSetProposalEngine([oechem.OEMolToSmiles(mol) for mol in [initial_mol, proposal_mol]], system_generator)
+    atom_mapper_filename = os.path.join(setup_directory, "{}_atom_mapper.json".format(project_prefix))
+    with open(atom_mapper_filename, 'r') as infile:
+        atom_mapper = SmallMoleculeAtomMapper.from_json(infile.read())
 
-    topology_proposal = proposal_engine.propose(system, topology, proposed_mol=proposal_mol)
+    proposal_engine = PremappedSmallMoleculeSetProposalEngine(atom_mapper, system_generator)
+
+    topology_proposal = proposal_engine.propose(system, topology, proposed_mol=proposal_mol, map_index=map_index)
 
     results = run_rj_proposals(topology_proposal, configuration_traj, use_sterics, ncmc_nsteps, n_replicates,
                      temperature=temperature)
