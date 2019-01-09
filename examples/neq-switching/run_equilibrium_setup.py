@@ -4,9 +4,7 @@ import tqdm
 from openeye import oechem, oeiupac
 from openmmtools import integrators, states, mcmc, constants
 from openmoltools import forcefield_generators
-from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator
-from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.annihilation.ncmc_switching import NCMCEngine
+from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeAtomMapper
 from perses.tests.utils import extractPositionsFromOEMOL
 from simtk import openmm, unit
 from io import StringIO
@@ -17,6 +15,7 @@ import mdtraj as md
 
 temperature = 300.0*unit.kelvin
 beta = 1.0 / (temperature*constants.kB)
+OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
 def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filename):
     """
@@ -214,3 +213,21 @@ if __name__=="__main__":
         raise ValueError("Phase must be either complex or solvent.")
 
     create_systems(topologies, positions, output_directory, project_prefix, solvate=solvate)
+
+    #generate atom maps for all pairs:
+    ifs = oechem.oemolistream()
+    ifs.open(ligand_filename)
+
+    # get the list of molecules
+    mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
+
+    for idx, mol in enumerate(mol_list):
+        mol.SetTitle("MOL{}".format(idx))
+        oechem.OETriposAtomNames(mol)
+
+    smiles_list = [oechem.OECreateSmiString(mol, OESMILES_OPTIONS)]
+    atom_mapper = SmallMoleculeAtomMapper(smiles_list)
+
+    atom_mapper_filename = os.path.join(output_directory, "{}_atom_mapper.json".format(project_prefix))
+    with open(atom_mapper_filename, 'w') as map_outfile:
+        map_outfile.write(atom_mapper.to_json())
