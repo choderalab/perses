@@ -3,7 +3,7 @@ setup:
   protein_pdb_filename: MCL1_protein_fixed.pdb
   project_prefix: MCL1
   output_directory: MCL1_solvent
-  phase: complex
+  phase: solvent
   solvate: True
 
 equilibrium:
