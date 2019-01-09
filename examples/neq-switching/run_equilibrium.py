@@ -59,6 +59,9 @@ if __name__=="__main__":
     output_directory = equilibrium_options['output_directory']
     report_interval = equilibrium_options['report_interval'] * 1000 # also in ps
 
+    if not os.path.exists(output_directory):
+        os.mkdir(output_directory)
+
     output_file = os.path.join(output_directory, "{}_{}.h5".format(project_prefix, index))
 
     run_equilibrium(system, omm_topology, positions, equilibrium_steps, report_interval, equilibration_steps, output_file)
