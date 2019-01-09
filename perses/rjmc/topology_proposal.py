@@ -2476,7 +2476,7 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
                  proposal_metadata=None, storage=storage,
                  always_change=True)
 
-    def propose(self, current_system, current_topology, current_metadata=None):
+    def propose(self, current_system, current_topology, proposed_mol=None, map_index=None, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -2486,6 +2486,10 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
             the system of the current state
         current_topology : app.Topology object
             the topology of the current state
+        proposed_mol : oechem.OEMol, optional
+            the molecule to propose. If None, choose randomly based on the current molecule
+        map_index : int, default None
+            The index of the atom map to use. If None, choose randomly. Otherwise, use map idx of map_index mod n_maps
         current_metadata : dict
             dict containing current smiles as a key
 
@@ -2509,25 +2513,31 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         # Select the next molecule SMILES given proposal probabilities
         current_mol_index = self._atom_mapper.get_smiles_index(current_mol_smiles)
 
-        #get probability vector for proposal
-        proposal_probability = self._proposal_matrix[current_mol_index, :]
+        #If we aren't specifying a proposed molecule, then randomly propose one:
+        if proposed_mol is None:
+            #get probability vector for proposal
+            proposal_probability = self._proposal_matrix[current_mol_index, :]
 
-        #propose next index
-        proposed_index = np.random.choice(range(self._n_molecules), p=proposal_probability)
-        
-        #proposal logp
-        proposed_logp = np.log(proposal_probability[proposed_index])
-        
-        #reverse proposal logp
-        reverse_logp = np.log(self._proposal_matrix[proposed_index, current_mol_index])
+            #propose next index
+            proposed_index = np.random.choice(range(self._n_molecules), p=proposal_probability)
 
-        #logp overall of proposal
-        logp_proposal = reverse_logp - proposed_logp
+            #proposal logp
+            proposed_logp = np.log(proposal_probability[proposed_index])
 
-        #get the oemol corresponding to the proposed molecule:
-        proposed_mol_smiles = self._atom_mapper.smiles_list[proposed_index]
-        proposed_mol = self._atom_mapper.get_oemol_from_smiles(proposed_mol_smiles)
-        
+            #reverse proposal logp
+            reverse_logp = np.log(self._proposal_matrix[proposed_index, current_mol_index])
+
+            #logp overall of proposal
+            logp_proposal = reverse_logp - proposed_logp
+
+            #get the oemol corresponding to the proposed molecule:
+            proposed_mol_smiles = self._atom_mapper.smiles_list[proposed_index]
+            proposed_mol = self._atom_mapper.get_oemol_from_smiles(proposed_mol_smiles)
+
+        else:
+            logp_proposal = 0.0
+            proposed_mol_smiles = oechem.OECreateSmiString(proposed_mol, OESMILES_OPTIONS)
+
         #You will get a weird error if you don't assign atom names.
         oechem.OETriposAtomNames(proposed_mol)
 
@@ -2540,7 +2550,16 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
 
         # Determine atom mapping between old and new molecules
         mol_atom_maps = self._atom_mapper.get_atom_maps(current_mol_smiles, proposed_mol_smiles)
-        mol_atom_map = np.random.choice(mol_atom_maps)
+
+        #If no map index is given, just randomly choose one:
+        if map_index is None:
+            mol_atom_map = np.random.choice(mol_atom_maps)
+
+        #Otherwise, pick the map whose index is the specified index mod n_maps
+        else:
+            n_atom_maps = len(mol_atom_maps)
+            index_to_choose = map_index % n_atom_maps
+            mol_atom_map = mol_atom_maps[index_to_choose]
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}
