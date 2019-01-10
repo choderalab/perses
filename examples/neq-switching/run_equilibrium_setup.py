@@ -227,6 +227,7 @@ if __name__=="__main__":
 
     smiles_list = [oechem.OECreateSmiString(mol, OESMILES_OPTIONS)]
     atom_mapper = SmallMoleculeAtomMapper(smiles_list)
+    atom_mapper.map_all_molecules()
 
     atom_mapper_filename = os.path.join(output_directory, "{}_atom_mapper.json".format(project_prefix))
     with open(atom_mapper_filename, 'w') as map_outfile:
