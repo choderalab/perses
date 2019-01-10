@@ -167,7 +167,7 @@ def create_systems(topologies_dict, positions_dict, output_directory, project_pr
     if not os.path.exists(output_directory):
         os.mkdir(output_directory)
 
-    np.save("{}/{}_{}_initial.npy".format(output_directory,project_prefix, 0), (solvated_initial_positions, md_topology, solvated_system))
+    np.save("{}/{}_{}_initial.npy".format(output_directory,project_prefix, 0), (solvated_initial_positions, md_topology, solvated_system, initial_smiles))
 
     for i in tqdm.trange(1, len(list_of_smiles)):
 
