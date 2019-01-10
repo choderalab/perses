@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J "neqeq[1-41]"
+#BSUB -J "neqeq[1-42]"
 #BSUB -n 1
 #BSUB -R rusage[mem=16]
 #BSUB -R span[hosts=1]
@@ -20,4 +20,4 @@ cd $LS_SUBCWD
 
 # Launch my program.
 module load cuda/9.2
-python /home/pgrinaway/perses/examples/neq-switching/run_equilibrium.py /home/pgrinaway/perses/examples/neq-switching/input_options.yaml $LSB_JOBINDEX
+python run_equilibrium.py input_options.yaml $LSB_JOBINDEX
