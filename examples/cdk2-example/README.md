@@ -8,7 +8,7 @@ The input files in this directory are from the Schrodinger JACS dataset, with th
 
 ## Running example
 
-The example can be run by calling `python setup_relative_calculation.py cdk2_setup.yaml`. By default, the included yaml file directs the code to set up and run the solvent phase. 
+The example can be run by calling `python ../../scripts/setup_relative_calculation.py cdk2_setup.yaml`. By default, the included yaml file directs the code to set up and run the solvent phase. 
 
 ## References
 
