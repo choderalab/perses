@@ -87,9 +87,19 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
 
 def generate_ligand_topologies_and_positions(ligand_filename):
     """
+    Generate the topologies and positions for ligand-only systems
 
-    :param ligand_filename:
-    :return:
+    Parameters
+    ----------
+    ligand_filename : str
+        The name of the file containing the ligands in any OpenEye supported format
+
+    Returns
+    -------
+    ligand_topologies : dict of str: md.Topology
+        A dictionary of the ligand topologies generated from the file indexed by SMILES strings
+    ligand_positions_dict : dict of str: unit.Quantity array
+        A dictionary of the corresponding positions, indexed by SMILES strings
     """
     ifs = oechem.oemolistream()
     ifs.open(ligand_filename)
@@ -121,7 +131,33 @@ def generate_ligand_topologies_and_positions(ligand_filename):
 
 
 def solvate_system(topology, positions, system_generator, padding=9.0 * unit.angstrom, num_added=None, water_model='tip3p'):
+    """
+    Solvate the system with either the appropriate amount of padding or a given number of waters
 
+    Parameters
+    ----------
+    topology : simtk.openmm.app.Topology
+        The topology to solvate
+    positions : unit.Quantity array
+        The initial positions corresponding to the topology
+    system_generator : perses.rjmc.topology_proposal.TopologyProposal
+        The system generator object used to make the system
+    padding: unit.Quantity, default 9*unit.angstroms
+        The padding of solvent to apply
+    num_added: int, default None
+        If not None, add exactly this many waters
+    water_model : str, default 'tip3p'
+        Water model to use. Default tip3p
+
+    Returns
+    -------
+    solvated_positions : unit.Quantity array
+        The initial positions of the solvated system
+    solvated_topology : simtk.openmm.app.Topology
+        The solvated topology
+    solvated_system : simtk.openmm.System
+        The solvated system
+    """
     modeller = app.Modeller(topology, positions)
 
     hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name[:3] != "MOL"]
@@ -138,7 +174,22 @@ def solvate_system(topology, positions, system_generator, padding=9.0 * unit.ang
     return solvated_positions, solvated_topology, solvated_system
 
 def create_systems(topologies_dict, positions_dict, output_directory, project_prefix, solvate=True):
+    """
+    Generate the systems ready for equilibrium simulations from a dictionary of topologies and positions
 
+    Parameters
+    ----------
+    topologies_dict : dict of str: app.Topoology
+        A dictionary of the topologies to prepare, indexed by SMILES strings
+    positions_dict : dict of str: unit.Quantity array
+        A dictionary of positions for the corresponding topologies, indexed by SMILES strings
+    output_directory : str
+        Location of output files
+    project_prefix : str
+        What to prepend to the names of files for this run
+    solvate : bool, default True
+        Whether to solvate the systems
+    """
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
     system_generator = SystemGenerator(['amber14/protein.ff14SB.xml', 'gaff.xml', 'amber14/tip3p.xml', 'MCL1_ligands.xml'], barostat=barostat, forcefield_kwargs={'nonbondedMethod': app.PME,
