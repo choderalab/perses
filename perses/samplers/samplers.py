@@ -641,12 +641,12 @@ class SAMSSampler(object):
             logger.warn("The proposal engine has not properly implemented the chemical state property; SAMS will add states on the fly.")
 
         if self.chemical_states:
-            #Select a reference state that will always be subtracted (ensure that dict ordering does not change)
+            # Select a reference state that will always be subtracted (ensure that dict ordering does not change)
             self._reference_state = self.chemical_states[0]
 
-
-            #initialize the logZ dictionary with scores based on the number of atoms
-            self.logZ = {chemical_state: -1.0* self._num_dof_compensation(chemical_state) for chemical_state in self.chemical_states}
+            # Initialize the logZ dictionary with scores based on the number of atoms
+            # This is not the negative because the weights are set to the negative of the initial weights
+            self.logZ = {chemical_state: self._num_dof_compensation(chemical_state) for chemical_state in self.chemical_states}
 
             #Initialize log target probabilities with log(1/n_states)
             self.log_target_probabilities = {chemical_state : np.log(len(self.chemical_states)) for chemical_state in self.chemical_states}

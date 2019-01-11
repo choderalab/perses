@@ -70,18 +70,20 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         If specified, any residues matching this name are excluded.
 
     """
+    if exclude_residue_name is None:
+        exclude_residue_name = "   " #something with 3 characters that is never a residue name
     newAtoms = {}
     for chain in source_topology.chains():
         newChain = destination_topology.addChain(chain.id)
         for residue in chain.residues():
-            if (residue.name == exclude_residue_name):
+            if (residue.name[:3] == exclude_residue_name[:3]):
                 continue
             newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
             for atom in residue.atoms():
                 newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
                 newAtoms[atom] = newAtom
     for bond in source_topology.bonds():
-        if (bond[0].residue.name==exclude_residue_name) or (bond[1].residue.name==exclude_residue_name):
+        if (bond[0].residue.name[:3]==exclude_residue_name[:3]) or (bond[1].residue.name[:3]==exclude_residue_name[:3]):
             continue
         # TODO: Preserve bond order info using extended OpenMM API
         destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
@@ -2033,7 +2035,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             molecule
         """
         molecule_name = self._residue_name
-        matching_molecules = [res for res in topology.residues() if res.name==molecule_name]
+
+        matching_molecules = [res for res in topology.residues() if res.name[:3] == molecule_name[:3]]  # Find residue in topology by searching for residues with name "MOL"
         if len(matching_molecules) != 1:
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
@@ -2079,7 +2082,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             the number of atoms in the molecule
         """
         resname = self._residue_name
-        mol_residues = [res for res in topology.residues() if res.name==resname]
+        mol_residues = [res for res in topology.residues() if res.name[:3]==resname[:3]]  # Find the residue by searching for residues with "MOL"
         if len(mol_residues)!=1:
             raise ValueError("There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'" % (len(mol_residues), resname))
         mol_residue = mol_residues[0]
@@ -2107,7 +2110,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info('Building new Topology object...')
         timer_start = time.time()
 
-        oemol_proposed.SetTitle(self._residue_name)
+        oemol_proposed.SetTitle(oemol_proposed.GetTitle())
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
         append_topology(new_topology, current_receptor_topology)
@@ -2266,8 +2269,37 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_index = matchpair.pattern.GetIdx()
             new_index = matchpair.target.GetIdx()
 
-            if current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index)).GetAtomicNum() == 1 or proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index)).GetAtomicNum() == 1:
+            old_atom = current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index))
+            new_atom = proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index))
+
+            #Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
+            if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
                 continue
+
+            # If the above is not true, then they are either both hydrogens or both not hydrogens
+            elif old_atom.GetAtomicNum() == 1:
+                bond = list(old_atom.GetBonds())[0] # There is only one for hydrogen
+                bgn = bond.GetBgn()
+                end = bond.GetEnd()
+
+                # Is this atom the beginning of the bond?
+                if bgn.GetIdx() == old_index:
+                    other_atom = end
+                else:
+                    other_atom = bgn
+
+                new_bond = list(new_atom.GetBonds())[0]
+                new_bgn = new_bond.GetBgn()
+                new_end = new_bond.GetEnd()
+
+                if new_bgn.GetIdx() == new_index:
+                    new_other_atom = new_end
+                else:
+                    new_other_atom = new_bgn
+
+                if new_other_atom.GetAtomicNum() != other_atom.GetAtomicNum():
+                    continue
+
 
             new_to_old_atom_map[new_index] = old_index
 
@@ -2322,7 +2354,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
         logp = np.log(reverse_probability) - np.log(forward_probability)
         from perses.tests.utils import smiles_to_oemol
-        proposed_mol = smiles_to_oemol(proposed_smiles)
+        proposed_mol = smiles_to_oemol(proposed_smiles, "MOL_%d" %proposed_smiles_idx)
         return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):
@@ -2444,7 +2476,7 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
                  proposal_metadata=None, storage=storage,
                  always_change=True)
 
-    def propose(self, current_system, current_topology, current_metadata=None):
+    def propose(self, current_system, current_topology, proposed_mol=None, map_index=None, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -2454,6 +2486,10 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
             the system of the current state
         current_topology : app.Topology object
             the topology of the current state
+        proposed_mol : oechem.OEMol, optional
+            the molecule to propose. If None, choose randomly based on the current molecule
+        map_index : int, default None
+            The index of the atom map to use. If None, choose randomly. Otherwise, use map idx of map_index mod n_maps
         current_metadata : dict
             dict containing current smiles as a key
 
@@ -2477,25 +2513,31 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         # Select the next molecule SMILES given proposal probabilities
         current_mol_index = self._atom_mapper.get_smiles_index(current_mol_smiles)
 
-        #get probability vector for proposal
-        proposal_probability = self._proposal_matrix[current_mol_index, :]
+        #If we aren't specifying a proposed molecule, then randomly propose one:
+        if proposed_mol is None:
+            #get probability vector for proposal
+            proposal_probability = self._proposal_matrix[current_mol_index, :]
 
-        #propose next index
-        proposed_index = np.random.choice(range(self._n_molecules), p=proposal_probability)
-        
-        #proposal logp
-        proposed_logp = np.log(proposal_probability[proposed_index])
-        
-        #reverse proposal logp
-        reverse_logp = np.log(self._proposal_matrix[proposed_index, current_mol_index])
+            #propose next index
+            proposed_index = np.random.choice(range(self._n_molecules), p=proposal_probability)
 
-        #logp overall of proposal
-        logp_proposal = reverse_logp - proposed_logp
+            #proposal logp
+            proposed_logp = np.log(proposal_probability[proposed_index])
 
-        #get the oemol corresponding to the proposed molecule:
-        proposed_mol_smiles = self._atom_mapper.smiles_list[proposed_index]
-        proposed_mol = self._atom_mapper.get_oemol_from_smiles(proposed_mol_smiles)
-        
+            #reverse proposal logp
+            reverse_logp = np.log(self._proposal_matrix[proposed_index, current_mol_index])
+
+            #logp overall of proposal
+            logp_proposal = reverse_logp - proposed_logp
+
+            #get the oemol corresponding to the proposed molecule:
+            proposed_mol_smiles = self._atom_mapper.smiles_list[proposed_index]
+            proposed_mol = self._atom_mapper.get_oemol_from_smiles(proposed_mol_smiles)
+
+        else:
+            logp_proposal = 0.0
+            proposed_mol_smiles = oechem.OECreateSmiString(proposed_mol, OESMILES_OPTIONS)
+
         #You will get a weird error if you don't assign atom names.
         oechem.OETriposAtomNames(proposed_mol)
 
@@ -2508,7 +2550,16 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
 
         # Determine atom mapping between old and new molecules
         mol_atom_maps = self._atom_mapper.get_atom_maps(current_mol_smiles, proposed_mol_smiles)
-        mol_atom_map = np.random.choice(mol_atom_maps)
+
+        #If no map index is given, just randomly choose one:
+        if map_index is None:
+            mol_atom_map = np.random.choice(mol_atom_maps)
+
+        #Otherwise, pick the map whose index is the specified index mod n_maps
+        else:
+            n_atom_maps = len(mol_atom_maps)
+            index_to_choose = map_index % n_atom_maps
+            mol_atom_map = mol_atom_maps[index_to_choose]
 
         # Adjust atom mapping indices for the presence of the receptor
         adjusted_atom_map = {}

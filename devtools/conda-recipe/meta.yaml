@@ -19,22 +19,19 @@ requirements:
     - autograd
     - pymbar
     - cuda92
-    - openmm ==7.4.0
+    - openmm >=7.3.0
     - parmed
     - openmoltools
-    - alchemy >=1.2.3
     - openmmtools
     - numba
     - netcdf4
     - matplotlib
     - seaborn
-    - pdbfixer
     - mdtraj
     - parmed # for testing/debugging
-    - pdbfixer
+    #- pdbfixer
     - lxml
     - networkx >=2.0
-    - yank
 
   run:
     - python
@@ -45,26 +42,23 @@ requirements:
     - autograd
     - pymbar
     - cuda92
-    - openmm ==7.4.0
+    - openmm >=7.3.0
     - parmed
     - openmoltools
-    - alchemy >=1.2.3
     - openmmtools
     - numba
     - netcdf4
     - matplotlib
     - seaborn
-    - pdbfixer
     - mdtraj
     - parmed # for testing/debugging
-    - pdbfixer
+    #- pdbfixer
     - lxml
     - networkx >=2.0
     - openeye-toolkits
     - dask
     - distributed
     - progressbar2
-    - yank
 
 test:
   requires:

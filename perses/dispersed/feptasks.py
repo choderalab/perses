@@ -28,6 +28,7 @@ from perses.annihilation.new_relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
 import pickle
 import simtk.unit as unit
+import tqdm
 from perses.tests.utils import compute_potential_components
 from openmmtools.constants import kB
 import pdb
@@ -152,11 +153,8 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         #set the master parameter to zero:
         master_lambda = 0.0
 
-        #get the increment for lambda:
-        lambda_increment = 1.0 / self._nsteps_neq
-
         # loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
-        for iteration in range(self._nsteps_neq):
+        for iteration in tqdm.trange(self._nsteps_neq):
 
             #update all relevant context parameters
             for parameter, parameter_function in self._alchemical_functions.items():
@@ -165,7 +163,7 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             integrator.step(1)
 
             #increment the master lambda variable
-            master_lambda += lambda_increment
+            master_lambda += 1
 
             #retrieve the current amount of work and add it to the appropriate array
             self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)

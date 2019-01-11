@@ -8,7 +8,7 @@ from perses.storage import NetCDFStorageView, NetCDFStorage
 from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
 from typing import List, Dict
 
-cache.global_context_cache.capacity = 30
+cache.global_context_cache.capacity = 1
 
 
 class HydrationPersesRun(object):
@@ -38,12 +38,14 @@ class HydrationPersesRun(object):
                                                                            'nonbondedCutoff': 9.0 * unit.angstrom,
                                                                            'implicitSolvent': None,
                                                                            'constraints': constraints,
-                                                                           'ewaldErrorTolerance': 1e-5},
+                                                                           'ewaldErrorTolerance': 1e-5,
+                                                                           'hydrogenMass': 3.0*unit.amu},
                                                         barostat=barostat)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename],
                                                       forcefield_kwargs={'nonbondedMethod': app.NoCutoff,
                                                                          'implicitSolvent': None,
-                                                                         'constraints': constraints})
+                                                                         'constraints': constraints,
+                                                                         'hydrogenMass': 3.0*unit.amu})
 
         #
         # Create topologies and positions
@@ -148,7 +150,10 @@ class HydrationPersesRun(object):
 
 if __name__=="__main__":
     import yaml
-    with open('rj_hydration.yaml', 'r') as option_file:
+    import openeye.oechem as oechem
+    import sys
+    from perses.tests.utils import sanitizeSMILES
+    with open(sys.argv[1], 'r') as option_file:
         options_dictionary = yaml.load(option_file)
 
     #read the molecules into a list:
@@ -157,8 +162,17 @@ if __name__=="__main__":
         molecule_string = molecule_input_file.read()
 
     molecules = molecule_string.split("\n")
+    valid_molecules = []
+    for molecule in molecules:
+        mol = oechem.OEMol()
+        oechem.OESmilesToMol(mol, molecule)
+        if mol.NumAtoms() == 0:
+            continue
+        valid_molecules.append(molecule)
 
-    hydration_run = HydrationPersesRun(molecules, options_dictionary['output_filename'],
+    sanitized_molecules = sanitizeSMILES(valid_molecules)
+
+    hydration_run = HydrationPersesRun(sanitized_molecules, options_dictionary['output_filename'],
                                        options_dictionary['ncmc_switching_times'],
                                        options_dictionary['equilibrium_steps'],
                                        options_dictionary['timestep'] * unit.femtoseconds)
@@ -168,5 +182,15 @@ if __name__=="__main__":
         hydration_run.sams_samplers[environment].verbose = True
         hydration_run.designer.verbose = True
 
-    n_designer_iterations = options_dictionary['n_designer_iterations']
-    hydration_run.designer.run(niterations=n_designer_iterations)
+    n_iterations = options_dictionary['n_iterations']
+
+    phase = options_dictionary['phase']
+
+    if phase == "vacuum":
+        hydration_run.sams_samplers['vacuum'].run(niterations=n_iterations)
+    elif phase == "explicit":
+        hydration_run.sams_samplers['explicit'].run(niterations=n_iterations)
+    elif phase == "multitarget":
+        hydration_run.designer.run(niterations=n_iterations)
+    else:
+        raise ValueError("Phase needs to be either vacuum, solvent, or multitarget.")

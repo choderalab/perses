@@ -74,7 +74,7 @@ class NCMCEngine(object):
     def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps,
                  steps_per_propagation=default_steps_per_propagation, timestep=default_timestep,
                  constraint_tolerance=None, platform=None, write_ncmc_interval=1, measure_shadow_work=False,
-                 integrator_splitting='V R O H R V', storage=None, verbose=False, LRUCapacity=10, pressure=None):
+                 integrator_splitting='V R O H R V', storage=None, verbose=False, LRUCapacity=10, pressure=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -131,6 +131,8 @@ class NCMCEngine(object):
         self._steps_per_propagation = steps_per_propagation
         self._verbose = verbose
         self._pressure = pressure
+        self._bond_softening_constant = bond_softening_constant
+        self._angle_softening_constant = angle_softening_constant
         self._disable_barostat = False
         self._hybrid_cache = LRUCache(capacity=LRUCapacity)
         self._measure_shadow_work = measure_shadow_work
@@ -239,7 +241,7 @@ class NCMCEngine(object):
             hybrid_factory._compute_hybrid_positions()
         except KeyError:
             try:
-                hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
+                hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, bond_softening_constant=self._bond_softening_constant, angle_softening_constant=self._angle_softening_constant)
                 self._hybrid_cache[topology_proposal] = hybrid_factory
             except:
                 hybrid_factory = None
@@ -377,15 +379,18 @@ class NCMCEngine(object):
         box_lengths_and_angles = np.stack([box_lengths, box_angles])
 
         #write out the positions of the topology
-        for frame in range(nframes):
-            self._storage.write_configuration(position_varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
+        if self._storage:
+            for frame in range(nframes):
+                self._storage.write_configuration(position_varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
 
         #write out the periodict box vectors:
-        self._storage.write_array(box_vec_varname, box_lengths_and_angles, iteration=iteration)
+        if self._storage:
+            self._storage.write_array(box_vec_varname, box_lengths_and_angles, iteration=iteration)
 
         #retrieve the protocol work and write that out too:
         protocol_work = ne_move.cumulative_work
-        self._storage.write_array("protocolwork", protocol_work, iteration=iteration)
+        if self._storage:
+            self._storage.write_array("protocolwork", protocol_work, iteration=iteration)
 
         # Return
         return [final_old_sampler_state, final_sampler_state, logP_work, -initial_reduced_potential, -final_reduced_potential]
