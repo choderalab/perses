@@ -32,6 +32,7 @@ requirements:
     #- pdbfixer
     - lxml
     - networkx >=2.0
+    - yank
 
   run:
     - python
@@ -59,6 +60,7 @@ requirements:
     - dask
     - distributed
     - progressbar2
+    - yank
 
 test:
   requires:
