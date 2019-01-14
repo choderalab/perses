@@ -26,11 +26,11 @@ requirements:
     - matplotlib
     - seaborn
     - mdtraj
-    - parmed
     - pdbfixer
     - lxml
     - networkx >=2.0
     - yank
+    - parmed
 
   run:
     - python
@@ -49,7 +49,6 @@ requirements:
     - matplotlib
     - seaborn
     - mdtraj
-    - parmed
     - pdbfixer
     - lxml
     - networkx >=2.0
@@ -58,7 +57,7 @@ requirements:
     - distributed
     - progressbar2
     - yank
-
+    - parmed
 test:
   requires:
     - nose
