@@ -6,6 +6,16 @@ This folder contains an example setup for a protein-ligand relative free energy 
 
 The input files in this directory are from the Schrodinger JACS dataset, with the protein pdb fixed using [PDBFixer](https://github.com/pandegroup/pdbfixer).
 
+## File description
+
+* CDK2_fixed_nohet.pdb: PDB file for CDK2 structure from JACS benchmark (cited below) run through PDBFixer and pdb4amber.
+
+* CDK2_ligands.sdf: SDF file of CDK2 ligands from JACS structure
+
+* cdk2_nonequilibrium.yaml: Example configuration file for running CDK2 relative free energy calculations with nonequilibrium switching
+
+* cdk2_sams.yaml: Example configuration file for running CDK2 relative free energy calculations with SAMS.
+
 ## Running example
 
 The example can be run by calling `python ../../scripts/setup_relative_calculation.py cdk2_sams.yaml`. By default, the included yaml file directs the code to set up and run the solvent phase. 
