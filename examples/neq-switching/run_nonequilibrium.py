@@ -111,6 +111,7 @@ if __name__=="__main__":
     initial_mol = mol_list[initial_ligand]
     proposal_mol = mol_list[proposal_ligand]
     proposal_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OECreateCanSmiString(proposal_mol))
+    current_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OECreateCanSmiString(initial_mol))
 
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
@@ -124,7 +125,7 @@ if __name__=="__main__":
 
     proposal_engine = PremappedSmallMoleculeSetProposalEngine(atom_mapper, system_generator)
 
-    topology_proposal = proposal_engine.propose(system, topology, proposed_mol=proposal_mol, map_index=map_index)
+    topology_proposal = proposal_engine.propose(system, topology, current_smiles=current_smiles, proposed_mol=proposal_mol, map_index=map_index)
 
     results = run_rj_proposals(topology_proposal, configuration_traj, use_sterics, ncmc_nsteps, n_replicates,
                      temperature=temperature)
