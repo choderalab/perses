@@ -18,9 +18,7 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - cuda92
     - openmm >=7.3.0
-    - parmed
     - openmoltools
     - openmmtools
     - numba
@@ -28,11 +26,11 @@ requirements:
     - matplotlib
     - seaborn
     - mdtraj
-    - parmed # for testing/debugging
-    #- pdbfixer
+    - pdbfixer
     - lxml
     - networkx >=2.0
     - yank
+    - parmed
 
   run:
     - python
@@ -42,7 +40,6 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - cuda92
     - openmm >=7.3.0
     - parmed
     - openmoltools
@@ -52,8 +49,7 @@ requirements:
     - matplotlib
     - seaborn
     - mdtraj
-    - parmed # for testing/debugging
-    #- pdbfixer
+    - pdbfixer
     - lxml
     - networkx >=2.0
     - openeye-toolkits
@@ -61,7 +57,7 @@ requirements:
     - distributed
     - progressbar2
     - yank
-
+    - parmed
 test:
   requires:
     - nose
