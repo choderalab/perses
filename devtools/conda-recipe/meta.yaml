@@ -28,8 +28,8 @@ requirements:
     - matplotlib
     - seaborn
     - mdtraj
-    - parmed # for testing/debugging
-    #- pdbfixer
+    - parmed
+    - pdbfixer
     - lxml
     - networkx >=2.0
     - yank
@@ -52,8 +52,8 @@ requirements:
     - matplotlib
     - seaborn
     - mdtraj
-    - parmed # for testing/debugging
-    #- pdbfixer
+    - parmed
+    - pdbfixer
     - lxml
     - networkx >=2.0
     - openeye-toolkits
