@@ -13,6 +13,7 @@ requirements:
   build:
     - python
     - setuptools
+    - ambertools
     - numpy
     - scipy
     - numexpr
@@ -35,6 +36,7 @@ requirements:
   run:
     - python
     - setuptools
+    - ambertools
     - numpy
     - scipy
     - numexpr
