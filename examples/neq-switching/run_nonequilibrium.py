@@ -11,7 +11,7 @@ import numpy as np
 
 def traj_frame_to_sampler_state(traj: md.Trajectory, frame_number: int,box_vectors):
     xyz = traj.xyz[frame_number, :, :]
-    #box_vectors = traj.openmm_boxes(frame_number)
+    box_vectors = traj.openmm_boxes(frame_number)
     sampler_state = states.SamplerState(unit.Quantity(xyz, unit=unit.nanometers))
     return sampler_state
 
