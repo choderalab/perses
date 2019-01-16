@@ -272,11 +272,13 @@ if __name__=="__main__":
     # get the list of molecules
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
 
+    smiles_list = []
     for idx, mol in enumerate(mol_list):
         mol.SetTitle("MOL{}".format(idx))
         oechem.OETriposAtomNames(mol)
+        smiles_list.append(oechem.OECreateSmiString(mol, OESMILES_OPTIONS))
 
-    smiles_list = [oechem.OECreateSmiString(mol, OESMILES_OPTIONS)]
+    #smiles_list = [oechem.OECreateSmiString(mol, OESMILES_OPTIONS)]
     atom_mapper = SmallMoleculeAtomMapper(smiles_list)
     atom_mapper.map_all_molecules()
 
