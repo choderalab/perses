@@ -305,8 +305,8 @@ def create_simple_topology_proposal(sys_pos_top, n_atoms_initial=3, n_atoms_fina
     :return:
     """
     from perses.rjmc import topology_proposal as tp
-    initial_topology, initial_system, initial_position = sys_pos_top[n_atoms_initial]
-    final_topology, final_system, final_positions = sys_pos_top[n_atoms_final]
+    initial_system, initial_topology, initial_position = sys_pos_top[n_atoms_initial]
+    final_system, final_topology, final_positions = sys_pos_top[n_atoms_final]
 
     if n_atoms_initial == 3 and (n_atoms_final == 4 or n_atoms_final == 5):
         new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
@@ -354,6 +354,7 @@ def simulate_equilibrium(system, starting_configuration, n_iterations):
     from openmmtools import integrators
     import tqdm
     integrator = integrators.LangevinIntegrator()
+    platform = openmm.Platform.getPlatformByName("CPU")
     ctx = openmm.Context(system, integrator)
     ctx.setPositions(starting_configuration)
     simulated_positions = unit.Quantity(np.zeros([n_iterations, system.getNumParticles(), 3]), unit=unit.nanometers)
