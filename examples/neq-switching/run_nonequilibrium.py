@@ -91,15 +91,14 @@ if __name__=="__main__":
     temperature = 300.0*unit.kelvin
 
 
+    equilibrium_snapshots_filename = os.path.join(equilibrium_output_directory, "{}_{}.h5".format(project_prefix, initial_ligand))
+    configuration_traj = md.load(equilibrium_snapshots_filename)
 
     file_to_read = os.path.join(setup_directory, "{}_{}_initial.npy".format(project_prefix, initial_ligand))
 
     positions, topology, system, initial_smiles = np.load(file_to_read)
     topology = topology.to_openmm()
     topology.setPeriodicBoxVectors(system.getDefaultPeriodicBoxVectors())
-
-    equilibrium_snapshots_filename = os.path.join(equilibrium_output_directory, "{}_{}.h5".format(project_prefix, initial_ligand))
-    configuration_traj = md.load(equilibrium_snapshots_filename)
 
     ifs = oechem.oemolistream()
     ifs.open(ligand_filename)
@@ -135,5 +134,5 @@ if __name__=="__main__":
     if not os.path.exists(nonequilibrium_output_directory):
         os.mkdir(nonequilibrium_output_directory)
 
-    np.save(os.path.join(nonequilibrium_output_directory, "{}_{}_{}.npy".format(project_prefix, initial_ligand, proposal_ligand)))
+    np.save(os.path.join(nonequilibrium_output_directory, "{}_{}_{}.npy".format(project_prefix, initial_ligand, proposal_ligand)), results)
 
