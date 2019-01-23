@@ -74,7 +74,7 @@ if __name__=="__main__":
     n_ligands = nonequilibrium_options['n_ligands']
     equilibrium_output_directory = equilibrium_options['output_directory']
     project_prefix = setup_options['project_prefix']
-    ncmc_nsteps = nonequilibrium_options['ncmc_lengths']
+    ncmc_nsteps = nonequilibrium_options['ncmc_length']
     n_replicates = nonequilibrium_options['n_attempts']
     nonequilibrium_output_directory = nonequilibrium_options['output_directory']
     setup_directory = setup_options['output_directory']
@@ -91,12 +91,14 @@ if __name__=="__main__":
     temperature = 300.0*unit.kelvin
 
 
-    equilibrium_snapshots_filename = os.path.join(equilibrium_output_directory, "{}_{}".format(project_prefix, initial_ligand))
+    equilibrium_snapshots_filename = os.path.join(equilibrium_output_directory, "{}_{}.h5".format(project_prefix, initial_ligand))
     configuration_traj = md.load(equilibrium_snapshots_filename)
 
     file_to_read = os.path.join(setup_directory, "{}_{}_initial.npy".format(project_prefix, initial_ligand))
 
     positions, topology, system, initial_smiles = np.load(file_to_read)
+    topology = topology.to_openmm()
+    topology.setPeriodicBoxVectors(system.getDefaultPeriodicBoxVectors())
 
     ifs = oechem.oemolistream()
     ifs.open(ligand_filename)
@@ -132,5 +134,5 @@ if __name__=="__main__":
     if not os.path.exists(nonequilibrium_output_directory):
         os.mkdir(nonequilibrium_output_directory)
 
-    np.save(os.path.join(nonequilibrium_output_directory, "{}_{}_{}.npy".format(project_prefix, initial_ligand, proposal_ligand)))
+    np.save(os.path.join(nonequilibrium_output_directory, "{}_{}_{}.npy".format(project_prefix, initial_ligand, proposal_ligand)), results)
 
