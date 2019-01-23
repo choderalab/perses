@@ -102,6 +102,8 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         Whether to include the angle force term
     torsion : Boolean, default True
         Whether to include the torsion force term
+    four_atom: Boolean, default True
+        Whether to include a fourth atom
 
     Properties
     ----------
@@ -115,14 +117,20 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         The periodicity, along with the phase and force constant in radians and kJ/mol respectively, atoms 0-1-2-3
     """
 
-    def __init__(self, bond=True, angle=True, torsion=True):
+    def __init__(self, bond=True, angle=True, torsion=True, n_atoms=4):
+
+        if n_atoms < 3 or n_atoms > 5:
+            raise ValueError("Number of atoms must be 3, 4, or 5")
 
         #make a simple set of positions. These are taken from another test used for testing the torsions in GeometryEngine
-        self._default_positions = unit.Quantity(np.zeros([4,3]), unit=unit.nanometer)
+        self._default_positions = unit.Quantity(np.zeros([n_atoms,3]), unit=unit.nanometer)
         self._default_positions[0] = unit.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
         self._default_positions[1] = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
         self._default_positions[2] = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
-        self._default_positions[3] = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
+        if n_atoms > 3:
+            self._default_positions[3] = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
+        if n_atoms == 5:
+            self._default_positions[3] = unit.Quantity(np.array([-0.057, 0.0951, -0.1863]), unit=unit.nanometers)
 
         #use parameters taken from various parts of the AlanineDipeptideTestSystem
         self._default_r0 = unit.Quantity(value=0.1522, unit=unit.nanometer)
@@ -131,7 +139,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         self._default_angle_k = unit.Quantity(value=418.40000000000003, unit=unit.kilojoule/(unit.mole*unit.radian**2))
         self._default_torsion_periodicity = 2
         self._default_torsion_phase = unit.Quantity(value=np.pi/2.0, unit=unit.radians)
-        self._default_torsion_k = unit.Quantity(value=20.0, unit=unit.kilojoule/unit.mole)
+        self._default_torsion_k = unit.Quantity(value=1.0, unit=unit.kilojoule/unit.mole)
 
         #set up a topology with the appropriate atoms (make them all carbon)
         self._topology = app.Topology()
@@ -140,16 +148,22 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         atom1 = self._topology.addAtom("C1", app.Element.getByAtomicNumber(6), new_res, 0)
         atom2 = self._topology.addAtom("C2", app.Element.getByAtomicNumber(6), new_res, 1)
         atom3 = self._topology.addAtom("C3", app.Element.getByAtomicNumber(6), new_res, 2)
-        atom4 = self._topology.addAtom("C4", app.Element.getByAtomicNumber(6), new_res, 3)
+        if n_atoms > 3:
+            atom4 = self._topology.addAtom("C4", app.Element.getByAtomicNumber(6), new_res, 3)
+        if n_atoms == 5:
+            atom5 = self._topology.addAtom("C5", app.Element.getByAtomicNumber(6), new_res, 4)
 
         #add the bonds to make a linear molecule 1-2-3-4
         self._topology.addBond(atom1, atom2)
         self._topology.addBond(atom2, atom3)
-        self._topology.addBond(atom3, atom4)
+        if n_atoms > 3:
+            self._topology.addBond(atom3, atom4)
+        if n_atoms == 5:
+            self._topology.addBond(atom3, atom5)
 
         #create a system using the same particle information
         self._system = openmm.System()
-        indices = [self._system.addParticle(CARBON_MASS) for i in range(4)]
+        indices = [self._system.addParticle(CARBON_MASS) for i in range(n_atoms)]
 
         #the growth order includes only the 0th atom, since there are only four atoms total
         self._growth_order = [0]
@@ -159,18 +173,31 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
             bond_force = openmm.HarmonicBondForce()
             self._system.addForce(bond_force)
             bond_force.addBond(0, 1, self._default_r0, self._default_bond_k)
+            bond_force.addBond(1, 2, self._default_r0, self._default_bond_k)
+            if n_atoms > 3:
+                bond_force.addBond(2, 3, self._default_r0, self._default_bond_k)
+            if n_atoms == 5:
+                bond_force.addBond(4, 2, self._default_r0, self._default_bond_k)
 
         #if the user has specified that an angle force should be used, add it with the appropriate constants
         if angle:
             angle_force = openmm.HarmonicAngleForce()
             self._system.addForce(angle_force)
             angle_force.addAngle(0, 1, 2, self._default_angle_theta0, self._default_angle_k)
+            if n_atoms > 3:
+                angle_force.addAngle(1, 2, 3, self._default_angle_theta0, self._default_angle_k)
+            if n_atoms == 5:
+                angle_force.addAngle(1, 2, 4, self._default_angle_theta0, self._default_angle_k)
 
         #if the user has specified that a torsion force should be used, add it with the appropriate constants
-        if torsion:
+        if torsion and n_atoms > 3:
             torsion_force = openmm.PeriodicTorsionForce()
             self._system.addForce(torsion_force)
             torsion_force.addTorsion(0, 1, 2, 3, self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
+
+            if n_atoms == 5:
+                torsion_force.addTorsion(0, 1, 2, 4, self._default_torsion_periodicity, self._default_torsion_phase,
+                                         self._default_torsion_k)
 
         #Now make a ParmEd structure from the topology and system, which will include relevant force parameters
         self._structure = parmed.openmm.load_topology(self._topology, self._system)
@@ -183,6 +210,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         #create a context and set positions so we can get potential energies
         self._context = openmm.Context(self._system, self._integrator, self._platform)
         self._context.setPositions(self._positions)
+
 
     @property
     def internal_coordinates(self):
@@ -211,6 +239,163 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
     @property
     def torsion_parameters(self):
         return (self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
+
+def simulate_simple_systems():
+    """
+    Simulate the 3, 4, and 5 particle simple systems
+    :return:
+    """
+    system_sizes = [3,4,5]
+
+    configuration_rp = {}
+    sys_pos_top = {}
+
+    for system_size in system_sizes:
+        testsystem = FourAtomValenceTestSystem(n_atoms=system_size)
+        sys = testsystem.system
+        top = testsystem.topology
+        initial_pos = testsystem.positions
+
+        pos = minimize(sys, initial_pos)
+
+        sys_pos_top[system_size] = (sys, pos, top)
+
+        configurations, reduced_potentials = simulate_equilibrium(sys, pos, 5000)
+
+        configuration_rp[system_size] = (configurations, reduced_potentials)
+
+    return sys_pos_top, configuration_rp
+
+def compute_rp(system, positions):
+    i = openmm.VerletIntegrator(1.0)
+    ctx = openmm.Context(system, i)
+    ctx.setPositions(positions)
+    return beta*ctx.getState(getEnergy=True).getPotentialEnergy()
+
+def run_rj_simple_system(configurations_initial, topology_proposal):
+    import tqdm
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    n_replicates = 500
+    final_positions = []
+    logPs = np.zeros([n_replicates, 4])
+    geometry_engine = FFAllAngleGeometryEngine()
+    potential_components_nb = np.zeros([n_replicates, 2, 4])
+    for replicate_idx in tqdm.trange(range(n_replicates)):
+        oldpos_idx = np.random.choice(range(5000))
+        old_positions = configurations_initial[oldpos_idx, :, :]
+        new_positions, lp = geometry_engine.propose(topology_proposal, old_positions, beta)
+        lp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, beta)
+        initial_rp, pot_comp_initial = compute_rp(topology_proposal.old_system, old_positions)
+        potential_components_nb[replicate_idx, 0, :] = pot_comp_initial
+        logPs[replicate_idx, 0] = -1 * initial_rp
+        logPs[replicate_idx, 1] = lp
+        logPs[replicate_idx, 2] = lp_reverse
+        final_rp = compute_rp(topology_proposal.new_system, new_positions)
+        logPs[replicate_idx, 3] = -1 * final_rp
+        final_positions.append(new_positions)
+    return logPs, final_positions
+
+def create_simple_topology_proposal(sys_pos_top, n_atoms_initial=3, n_atoms_final=4):
+    """
+
+    :param n_atoms_initial:
+    :param n_atoms_final:
+    :param configurations_rp:
+    :param sys_pos_top:
+    :return:
+    """
+    from perses.rjmc import topology_proposal as tp
+    initial_topology, initial_system, initial_position = sys_pos_top[n_atoms_initial]
+    final_topology, final_system, final_positions = sys_pos_top[n_atoms_final]
+
+    if n_atoms_initial == 3 and (n_atoms_final == 4 or n_atoms_final == 5):
+        new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
+    elif n_atoms_initial == 4 and n_atoms_final == 5:
+        new_to_old_atom_map = {0: 0, 1: 1, 2: 2, 3: 3}
+    else:
+        raise ValueError("This method only supports going from 3->4, 4->5, or 3->5")
+
+    topology_proposal = tp.TopologyProposal(new_topology=final_topology, new_system=final_system, old_topology=initial_topology,
+                                            old_system=initial_system, logp_proposal=0.0,
+                                            new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key=str(n_atoms_initial),
+                                            new_chemical_state_key=str(n_atoms_final))
+    return topology_proposal
+
+def minimize(system, positions):
+    """
+    Utility function to minimize a system
+    """
+    ctx = openmm.Context(system, openmm.VerletIntegrator(1.0))
+    ctx.setPositions(positions)
+    openmm.LocalEnergyMinimizer.minimize(ctx)
+
+    return ctx.getState(getPositions=True).getPositions(asNumpy=True)
+
+def simulate_equilibrium(system, starting_configuration, n_iterations):
+    """
+    Simulate equilibrium Langevin dynamics at 300.0 kelvin
+
+    Parameters
+    ----------
+    system : openmm.System
+        The system to simulate
+    starting_configuration : [n, 3] np.array of quantity
+        The initial configuration of the system
+    n_iterations : int
+        The number of times to run 1000 steps of dynamics
+
+    Returns
+    ----------
+    simulated_positions : np.array of quantity
+        The positions from the simulations
+    reduced_potentials : np.array
+        The reduced potentials corresponding to each frame
+    """
+    from openmmtools import integrators
+    import tqdm
+    integrator = integrators.LangevinIntegrator()
+    ctx = openmm.Context(system, integrator)
+    ctx.setPositions(starting_configuration)
+    simulated_positions = unit.Quantity(np.zeros([n_iterations, system.getNumParticles(), 3]), unit=unit.nanometers)
+    reduced_potentials = np.zeros([n_iterations])
+    for iteration in tqdm.trange(n_iterations):
+        integrator.step(1000)
+        state = ctx.getState(getPositions=True, getEnergy=True)
+        positions = state.getPositions(asNumpy=True)
+        reduced_potentials[iteration] = beta * state.getPotentialEnergy()
+        simulated_positions[iteration, :, :] = positions
+
+    return simulated_positions, reduced_potentials
+
+def run_simple_transformations():
+    """
+    Run all simple transformations (3->4, 4->5)
+    :return:
+    """
+    sys_pos_top, configuration_rp = simulate_simple_systems()
+    logp_final_positions = {}
+
+    proposals = [[3,4], [4,5]]
+
+    for proposal in proposals:
+        topology_proposal = create_simple_topology_proposal(sys_pos_top, n_atoms_initial=proposal[0], n_atoms_final=proposal[1])
+        configurations = configuration_rp[proposal[0]][0]
+        logp, final_positions = run_rj_simple_system(configurations, topology_proposal)
+        final_positions_no_units = [pos.value_in_unit_system(unit.md_unit_system) for pos in
+                                    final_positions]
+        final_positions_stacked = np.stack(final_positions_no_units)
+        logp_final_positions['{}-{}'.format(proposal)] = (logp, final_positions_stacked)
+
+    return sys_pos_top, configuration_rp, logp_final_positions
+
+def run_and_save_tx(outfile="saved_run.npy"):
+    """
+
+    :param outfile:
+    :return:
+    """
+    sys_pos_top, configuration_rp, logp_final_positions = run_simple_transformations()
+    np.save(outfile, (sys_pos_top, configuration_rp, logp_final_positions))
 
 def test_propose_angle():
     """
@@ -1478,4 +1663,4 @@ def _generate_ffxmls():
     ffxml_out_t4.close()
 
 if __name__ == "__main__":
-    test_try_random_itoc()
+    run_and_save_tx()
