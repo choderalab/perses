@@ -386,7 +386,7 @@ def run_simple_transformations():
         final_positions_no_units = [pos.value_in_unit_system(unit.md_unit_system) for pos in
                                     final_positions]
         final_positions_stacked = np.stack(final_positions_no_units)
-        logp_final_positions['{}-{}'.format(proposal)] = (logp, final_positions_stacked)
+        logp_final_positions['{}-{}'.format(*proposal)] = (logp, final_positions_stacked)
 
     return sys_pos_top, configuration_rp, logp_final_positions
 
