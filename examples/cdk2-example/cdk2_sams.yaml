@@ -25,6 +25,9 @@ pressure: 1.0
 temperature: 300.0
 solvent_padding: 9.0
 
+#number of equilibrium steps per move application
+n_steps_per_move_application: 2500
+
 
 #The name of the pickle file where we will save the setup object
 save_setup_pickle_as: fesetup_hbonds.pkl
