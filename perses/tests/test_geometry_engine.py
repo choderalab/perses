@@ -288,7 +288,6 @@ def run_rj_simple_system(configurations_initial, topology_proposal):
         new_positions, lp = geometry_engine.propose(topology_proposal, old_positions, beta)
         lp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, beta)
         initial_rp = compute_rp(topology_proposal.old_system, old_positions)
-        potential_components_nb[replicate_idx, 0, :] = pot_comp_initial
         logPs[replicate_idx, 0] = -1 * initial_rp
         logPs[replicate_idx, 1] = lp
         logPs[replicate_idx, 2] = lp_reverse
