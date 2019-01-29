@@ -1027,7 +1027,6 @@ def run_setup(setup_options):
     else:
         top_prop = np.load(setup_options['topology_proposal']).item()
 
-    n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
     n_steps_per_move_application = setup_options['n_steps_per_move_application']
     trajectory_directory = setup_options['trajectory_directory']
     trajectory_prefix = setup_options['trajectory_prefix']
@@ -1042,6 +1041,8 @@ def run_setup(setup_options):
     else:
         phases = ['complex', 'solvent']
     if setup_options['fe_type'] == 'nonequilibrium':
+        n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+
         forward_functions = setup_options['forward_functions']
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
         scheduler_address = setup_options['scheduler_address']
