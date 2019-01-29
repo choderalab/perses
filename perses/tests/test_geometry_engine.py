@@ -117,7 +117,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         The periodicity, along with the phase and force constant in radians and kJ/mol respectively, atoms 0-1-2-3
     """
 
-    def __init__(self, bond=True, angle=True, torsion=True, n_atoms=4):
+    def __init__(self, bond=True, angle=True, torsion=True, n_atoms=4, add_extra_angle=False):
 
         if n_atoms < 3 or n_atoms > 5:
             raise ValueError("Number of atoms must be 3, 4, or 5")
@@ -188,6 +188,8 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
                 angle_force.addAngle(1, 2, 3, self._default_angle_theta0, self._default_angle_k)
             if n_atoms == 5:
                 angle_force.addAngle(1, 2, 4, self._default_angle_theta0, self._default_angle_k)
+                if add_extra_angle:
+                    angle_force.addAngle(4, 2, 3, self._default_angle_theta0, self._default_angle_k)
 
         #if the user has specified that a torsion force should be used, add it with the appropriate constants
         if torsion and n_atoms > 3:
