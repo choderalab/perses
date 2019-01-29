@@ -39,6 +39,9 @@ n_states: 100
 #the number of equilibration iterations:
 n_equilibration_iterations: 10
 
+#the number of equilibrium steps per iteration
+n_equilibrium_steps_per_iteration: 1000
+
 #where to put the trajectories
 trajectory_directory: cdk2_neq_hbonds
 
