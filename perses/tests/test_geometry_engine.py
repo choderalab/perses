@@ -283,7 +283,7 @@ def run_rj_simple_system(configurations_initial, topology_proposal):
     geometry_engine = FFAllAngleGeometryEngine()
     potential_components_nb = np.zeros([n_replicates, 2, 4])
     for replicate_idx in tqdm.trange(n_replicates):
-        oldpos_idx = np.random.choice(range(5000))
+        oldpos_idx = np.random.choice(range(len(configurations_initial)))
         old_positions = configurations_initial[oldpos_idx, :, :]
         new_positions, lp = geometry_engine.propose(topology_proposal, old_positions, beta)
         lp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, beta)
