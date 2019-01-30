@@ -36,6 +36,9 @@ save_setup_pickle_as: fesetup_hbonds.pkl
 #currently, this could be either nonequilibrium or sams
 fe_type: sams
 
+#number of iterations
+n_cycles: 100
+
 #The number of SAMS states
 n_states: 100
 
