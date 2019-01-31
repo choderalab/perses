@@ -107,8 +107,4 @@ if __name__ == "__main__":
             hss_run.extend(setup_options['n_cycles'])
             logZ[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
             free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
-            print("Finished phase %s with dG estimated as %.4f +/- %.4f kT" % (
-            phase, free_energies[phase], hss_run._last_err_free_energy))
-            print("Finished phase %s with logZ dG estimated as %.4f kT" % (phase, logZ[phase]))
-
-        print("Total ddG is estimated as %.4f kT" % (free_energies['complex'] - free_energies['solvent']))
+            print("Finished phase {}".format(phase))
