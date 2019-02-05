@@ -13,7 +13,7 @@ import simtk.unit as unit
 import numpy as np
 from perses.tests.utils import giveOpenmmPositionsToOEMOL, get_data_filename, extractPositionsFromOEMOL
 from perses.annihilation.new_relative import HybridTopologyFactory
-from perses.annihilation.ncmc_switching import RelativeAlchemicalState
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, \
     SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
