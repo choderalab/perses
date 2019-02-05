@@ -13,7 +13,6 @@ from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
 from openmmtools.alchemy import AlchemicalState
 
-
 # make something hyperbolic or something to go from on to off to on
 default_hybrid_functions = {
     'lambda_sterics_core' : 'lambda',
@@ -45,6 +44,28 @@ default_nsteps = 1
 default_timestep = 1.0 * unit.femtoseconds
 default_steps_per_propagation = 1
 _logger = logging.getLogger("NCMCEngine")
+
+class RelativeAlchemicalState(AlchemicalState):
+    """
+    Relative AlchemicalState to handle all lambda parameters required for relative perturbations
+
+    Attributes
+    ----------
+    lambda_sterics_core
+    lambda_sterics_insert
+    lambda_sterics_delete
+    lambda_electrostatics_insert
+    lambda_electrostatics_delete
+    """
+
+    class _LambdaParameter(AlchemicalState._LambdaParameter):
+        pass 
+
+    lambda_sterics_core = _LambdaParameter('lambda_sterics_core') 
+    lambda_sterics_insert = _LambdaParameter('lambda_sterics_insert')
+    lambda_sterics_delete = _LambdaParameter('lambda_sterics_delete')
+    lambda_electrostatics_insert = _LambdaParameter('lambda_electrostatics_insert')
+    lambda_electrostatics_delete = _LambdaParameter('lambda_electrostatics_delete')
 
 class NaNException(Exception):
     def __init__(self, *args, **kwargs):
@@ -299,8 +320,8 @@ class NCMCEngine(object):
         hybrid_system = hybrid_factory.hybrid_system
         hybrid_thermodynamic_state = ThermodynamicState(hybrid_system, temperature=self._temperature, pressure=self._pressure)
 
-        #Now create an AlchemicalState from the hybrid system:
-        alchemical_state = AlchemicalState.from_system(hybrid_system)
+        #Now create an RelativeAlchemicalState from the hybrid system:
+        alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
         alchemical_state.set_alchemical_parameters(0.0)
 
         #Now create a compound thermodynamic state that combines the hybrid thermodynamic state with the alchemical state:
