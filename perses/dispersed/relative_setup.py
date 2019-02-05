@@ -13,6 +13,7 @@ import simtk.unit as unit
 import numpy as np
 from perses.tests.utils import giveOpenmmPositionsToOEMOL, get_data_filename, extractPositionsFromOEMOL
 from perses.annihilation.new_relative import HybridTopologyFactory
+from perses.annihilation.ncmc_switching import RelativeAlchemicalState
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, \
     SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -525,7 +526,7 @@ class NonequilibriumSwitchingFEP(object):
         self._n_eq_iterations_per_call = 1
 
         # create the thermodynamic state
-        lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(self._hybrid_system)
+        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(self._hybrid_system)
         lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
 
         lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
@@ -882,7 +883,7 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
     def setup(self, n_states, temperature, storage_file):
         hybrid_system = self._factory.hybrid_system
         initial_hybrid_positions = self._factory.hybrid_positions
-        lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(hybrid_system)
+        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
         #lambda_zero_alchemical_state.set_alchemical_parameters(1.0)
 
         thermostate = states.ThermodynamicState(hybrid_system, temperature=temperature)
