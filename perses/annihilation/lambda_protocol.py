@@ -51,3 +51,18 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_sterics_delete = _LambdaParameter('lambda_sterics_delete')
     lambda_electrostatics_insert = _LambdaParameter('lambda_electrostatics_insert')
     lambda_electrostatics_delete = _LambdaParameter('lambda_electrostatics_delete')
+
+    def set_achemical_parameters(self, master_lambda):
+       """Set all defined lambda parameters to the given value.
+       The undefined parameters (i.e. those being set to None) remain
+       undefined.
+       Parameters
+       ----------
+       new_value : float
+           The new value for all defined parameters.
+       """
+       for parameter_name in python_hybrid_functions:
+           lambda_value = python_hybrid_functions[parameter_name]
+           print('IN LAMBDA PROTOCOL: {} {}'.format(parameter_name, lambda_value))
+           self.setParameter(parameter_name, lambda_value) 
+
