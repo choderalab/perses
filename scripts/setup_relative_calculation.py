@@ -108,5 +108,5 @@ if __name__ == "__main__":
             logZ[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
             free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
             print("Finished phase {}".format(phase))
-       for phase in free_energies:
+        for phase in free_energies:
             print("{} phase has a free energy of {}".format(phase, free_energies[phase])) 

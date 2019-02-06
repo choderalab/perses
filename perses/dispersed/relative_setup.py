@@ -467,10 +467,7 @@ class NonequilibriumSwitchingFEP(object):
         else:
             self._forward_functions = forward_functions
 
-        if reverse_functions == None:
-            self._reverse_functions = python_reverse_functions 
-        else:
-            self._reverse_functions = reverse_functions
+        self._reverse_functions = python_reverse_functions 
 
         # setup splitting string:
         self._neq_splitting_string = neq_splitting_string
