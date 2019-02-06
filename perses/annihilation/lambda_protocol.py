@@ -30,6 +30,18 @@ python_hybrid_functions = {
     'lambda_torsions': lambda x: x
 }
 
+python_reverse_functions = {
+    'lambda_sterics_core': lambda x: (1-x),
+    'lambda_electrostatics': lambda x: (1-x),
+    'lambda_sterics_insert': lambda x: 2.0*(1-x) if x> 0.5 else 1.0,
+    'lambda_sterics_delete': lambda x: 1.0 if x > 0.5 else 2.0*x,
+    'lambda_electrostatics_insert': lambda x: 1.0 if x > 0.5 else 2.0*x,
+    'lambda_electrostatics_delete': lambda x: 2.0*(1-x) if x> 0.5 else 1.0,
+    'lambda_bonds': lambda x: (1-x),
+    'lambda_angles': lambda x: (1-x),
+    'lambda_torsions': lambda x: (1-x)
+}
+
 class RelativeAlchemicalState(AlchemicalState):
     """
     Relative AlchemicalState to handle all lambda parameters required for relative perturbations

@@ -13,7 +13,7 @@ import simtk.unit as unit
 import numpy as np
 from perses.tests.utils import giveOpenmmPositionsToOEMOL, get_data_filename, extractPositionsFromOEMOL
 from perses.annihilation.new_relative import HybridTopologyFactory
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState, python_hybrid_functions, python_reverse_functions
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, \
     SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -405,14 +405,6 @@ class NonequilibriumSwitchingFEP(object):
     This class manages Nonequilibrium switching based relative free energy calculations, carried out on a distributed computing framework.
     """
 
-    default_forward_functions = {
-        'lambda_sterics': 'lambda',
-        'lambda_electrostatics': 'lambda',
-        'lambda_bonds': 'lambda',
-        'lambda_angles': 'lambda',
-        'lambda_torsions': 'lambda'
-    }
-
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=None, n_equil_steps=1000, ncmc_nsteps=100, nsteps_per_iteration=1,
                  temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
@@ -471,13 +463,14 @@ class NonequilibriumSwitchingFEP(object):
 
         # use default functions if none specified
         if forward_functions == None:
-            self._forward_functions = self.default_forward_functions
+            self._forward_functions = python_hybrid_functions 
         else:
             self._forward_functions = forward_functions
 
-        # reverse functions to get a symmetric protocol
-        self._reverse_functions = {param: param_formula.replace("lambda", "(1-lambda)") for param, param_formula in
-                                   self._forward_functions.items()}
+        if reverse_functions == None:
+            self._reverse_functions = python_reverse_functions 
+        else:
+            self._reverse_functions = reverse_functions
 
         # setup splitting string:
         self._neq_splitting_string = neq_splitting_string
@@ -1044,7 +1037,6 @@ def run_setup(setup_options):
     if setup_options['fe_type'] == 'nonequilibrium':
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
 
-        forward_functions = setup_options['forward_functions']
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
         scheduler_address = setup_options['scheduler_address']
 
@@ -1053,7 +1045,6 @@ def run_setup(setup_options):
             ne_fep[phase] = NonequilibriumSwitchingFEP(top_prop['%s_topology_proposal' % phase],
                                                        top_prop['%s_old_positions' % phase],
                                                        top_prop['%s_new_positions' % phase],
-                                                       forward_functions=forward_functions, 
                                                        n_equil_steps=n_equilibrium_steps_per_iteration,
                                                        ncmc_nsteps=n_steps_ncmc_protocol,
                                                        nsteps_per_iteration=n_steps_per_move_application,
