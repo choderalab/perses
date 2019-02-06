@@ -27,7 +27,7 @@ import logging
 import os
 import pickle
 import dask.distributed as distributed
-from yank.multistate import MultiStateReporter, sams, replicaexchange
+from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 import parmed as pm
 
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove
