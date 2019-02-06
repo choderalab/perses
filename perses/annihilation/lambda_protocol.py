@@ -74,7 +74,6 @@ class RelativeAlchemicalState(AlchemicalState):
            The new value for all defined parameters.
        """
        for parameter_name in python_hybrid_functions:
-           print('lambda of {} set to {}'.format(parameter_name, python_hybrid_functions[parameter_name]))
            lambda_value = python_hybrid_functions[parameter_name](master_lambda)
            setattr(self, parameter_name, lambda_value)
 
