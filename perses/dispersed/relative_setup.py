@@ -1073,7 +1073,7 @@ def run_setup(setup_options):
             else:
                 selection_indices = None
             
-            storage_name = "-".join([trajectory_prefix, '%s.nc' % phase])
+            storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
             reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
                                           checkpoint_interval=checkpoint_interval)
 

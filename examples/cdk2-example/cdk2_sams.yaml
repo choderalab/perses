@@ -6,8 +6,8 @@ ligand_file: CDK2_ligands.sdf
 
 #The ligand file contains multiple ligands. Choose the indices of the ligands
 #between which we should compute a relative free energy
-old_ligand_index: LIGANDA_INDEX
-new_ligand_index: LIGANDB_INDEX
+old_ligand_index: 14
+new_ligand_index: 15
 
 #Provide the list of forcefield files. Non-standard files should
 #be provided with a full path
@@ -25,6 +25,8 @@ pressure: 1.0
 temperature: 300.0
 solvent_padding: 9.0
 
+#number of equilibrium steps per move application
+n_steps_per_move_application: 250
 
 #The name of the pickle file where we will save the setup object
 save_setup_pickle_as: fesetup_hbonds.pkl
@@ -33,6 +35,12 @@ save_setup_pickle_as: fesetup_hbonds.pkl
 #currently, this could be either nonequilibrium or sams
 fe_type: sams
 
+#checkpoint interval in iterations:
+checkpoint_interval: 10
+
+#number of iterations
+n_cycles: 50 
+
 #The number of SAMS states
 n_states: 100
 
@@ -40,7 +48,7 @@ n_states: 100
 n_equilibration_iterations: 10
 
 #where to put the trajectories
-trajectory_directory: OUTPUT_DIRECTORY 
+trajectory_directory: cdk2_sams_hbonds
 
 #how to prefix the trajectory files (project-specific name)
 trajectory_prefix: cdk2
@@ -54,4 +62,4 @@ phases:
     - complex
 
 #timestep in fs
-timestep: 1.0
+timestep: 2.0

@@ -55,7 +55,7 @@ n_steps_ncmc_protocol: 50
 n_steps_per_move_application: 2500
 
 #where to put the trajectories
-trajectory_directory: cdk2_neq_hbonds
+trajectory_directory: cdk2_nonequilibrium_hbonds
 
 #how to prefix the trajectory files (project-specific name)
 trajectory_prefix: cdk2
