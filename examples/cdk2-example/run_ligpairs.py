@@ -5,8 +5,8 @@ import os
 
 def run_relative_perturbation(ligA, ligB,tidy=True):
     print('Starting relative calcluation of ligand {} to {}'.format(ligA,ligB))
-    trajectory_directory = 'lig{}to{}'.format(ligand1,ligand2) 
-    new_yaml = 'cdk2_{}to{}sams.yaml'.format(ligand1,ligand2) 
+    trajectory_directory = 'lig{}to{}'.format(ligA,ligB) 
+    new_yaml = 'cdk2_{}to{}sams.yaml'.format(ligA,ligB) 
     
     # rewrite yaml file
     with open('cdk2_sams.yaml', "r") as yaml_file:
