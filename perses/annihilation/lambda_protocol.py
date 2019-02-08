@@ -18,15 +18,19 @@ class RelativeAlchemicalState(AlchemicalState):
     Attributes
     ----------
     lambda_sterics_core
+    lambda_electrostatics_core
     lambda_sterics_insert
     lambda_sterics_delete
     lambda_electrostatics_insert
     lambda_electrostatics_delete
     """
+    
+    def __init__(self):
+        super(RelativeAlchemicalState, self).__init__()
 
-    python_hybrid_functions = {
+    lambda_functions = {
         'lambda_sterics_core': lambda x: x,
-        'lambda_electrostatics': lambda x: x,
+        'lambda_electrostatics_core': lambda x: x,
         'lambda_sterics_insert': lambda x: 2.0*x if x< 0.5 else 1.0,
         'lambda_sterics_delete': lambda x: 1.0 if x < 0.5 else 2.0*(1-x),
         'lambda_electrostatics_insert': lambda x: 1.0 if x < 0.5 else 2.0*(1-x),
@@ -35,18 +39,19 @@ class RelativeAlchemicalState(AlchemicalState):
         'lambda_angles': lambda x: x,
         'lambda_torsions': lambda x: x
     }
-    
+
     class _LambdaParameter(AlchemicalState._LambdaParameter):
         pass 
 
     lambda_sterics_core = _LambdaParameter('lambda_sterics_core') 
+    lambda_electrostatics_core = _LambdaParameter('lambda_electrostatics_core') 
     lambda_sterics_insert = _LambdaParameter('lambda_sterics_insert')
     lambda_sterics_delete = _LambdaParameter('lambda_sterics_delete')
     lambda_electrostatics_insert = _LambdaParameter('lambda_electrostatics_insert')
     lambda_electrostatics_delete = _LambdaParameter('lambda_electrostatics_delete')
 
     def set_alchemical_parameters(self, master_lambda):
-       """Set each lambda value according to the python_hybrid_function protocol.
+       """Set each lambda value according to the lambda_functions protocol.
        The undefined parameters (i.e. those being set to None) remain
        undefined.
        Parameters
@@ -54,7 +59,7 @@ class RelativeAlchemicalState(AlchemicalState):
        lambda_value : float
            The new value for all defined parameters.
        """
-       for parameter_name in python_hybrid_functions:
-           lambda_value = python_hybrid_functions[parameter_name](master_lambda)
+       for parameter_name in self.lambda_functions:
+           lambda_value = self.lambda_functions[parameter_name](master_lambda)
            setattr(self, parameter_name, lambda_value)
 
