@@ -740,6 +740,7 @@ class HybridTopologyFactory(object):
             sterics_custom_nonbonded_force.addEnergyParameterDerivative('lambda')
         else:
             sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_core", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics_core", 0.0)
             sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_insert", 0.0)
             sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_delete", 0.0)
 

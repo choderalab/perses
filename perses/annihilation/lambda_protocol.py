@@ -5,9 +5,6 @@ import logging
 import traceback
 from openmmtools.alchemy import AlchemicalState
 
-# make something hyperbolic or something to go from on to off to on
-
-
 class RelativeAlchemicalState(AlchemicalState):
     """
     Relative AlchemicalState to handle all lambda parameters required for relative perturbations
@@ -25,8 +22,6 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_electrostatics_delete
     """
     
-    def __init__(self):
-        super(RelativeAlchemicalState, self).__init__()
 
     lambda_functions = {
         'lambda_sterics_core': lambda x: x,
@@ -41,7 +36,7 @@ class RelativeAlchemicalState(AlchemicalState):
     }
 
     class _LambdaParameter(AlchemicalState._LambdaParameter):
-        pass 
+        pass
 
     lambda_sterics_core = _LambdaParameter('lambda_sterics_core') 
     lambda_electrostatics_core = _LambdaParameter('lambda_electrostatics_core') 
