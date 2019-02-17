@@ -134,13 +134,11 @@ class HybridTopologyFactory(object):
         self._new_system_forces = {type(force).__name__ : force for force in self._new_system.getForces()}
 
         #check that there are no unknown forces in the new and old systems:
-        for force_name in self._old_system_forces.keys():
-            if force_name not in self._known_forces:
-                raise ValueError("Unkown force %s encountered in old system" % force_name)
-
-        for force_name in self._new_system_forces.keys():
-            if force_name not in self._known_forces:
-                raise ValueError("Unkown force %s encountered in new system" % force_name)
+        for system_name in ('old', 'new'):
+            force_names = getattr(self, '_{}_system_forces'.format(system_name)).keys()
+            unknown_forces = set(force_names) - set(self._known_forces)
+            if len(unknown_forces) > 0:
+                raise ValueError("Unkown forces {} encountered in {} system" % (unknown_forces, system_name))
 
         #get and store the nonbonded method from the system:
         self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
