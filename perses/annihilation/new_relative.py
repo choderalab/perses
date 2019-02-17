@@ -229,29 +229,20 @@ class HybridTopologyFactory(object):
         Ensure that all virtual sites in old and new system are copied over to the hybrid system. Note that we do not
         support virtual sites in the changing region.
         """
-        old_system = self._topology_proposal.old_system
-        new_system = self._topology_proposal.new_system
+        for system_name in ('old', 'new'):
+            system = getattr(self._topology_proposal, '{}_system'.format(system_name))
+            hybrid_atom_map = getattr(self, '_{}_to_hybrid_map'.format(system_name))
 
-        #first loop through the old system, looking for virtual sites
-        for particle_idx in range(old_system.getNumParticles()):
-            hybrid_idx = self._old_to_hybrid_map[particle_idx]
-
-            #If it's a virtual site, make sure it is not in the unique or core atoms (unsupported).
-            if old_system.isVirtualSite(particle_idx):
-                if hybrid_idx not in self._atom_classes['environment_atoms']:
-                    raise Exception("Virtual sites in changing residue are unsupported.")
-                else:
-                    virtual_site = old_system.getVirtualSite(particle_idx)
-                    self._hybrid_system.setVirtualSite(hybrid_idx, virtual_site)
-
-        #Since all supported virtual sites are in the environment, which are by definition common to both the new and
-        #old systems, we only need to check that there are no virtual sites not in environment:
-        for particle_idx in range(new_system.getNumParticles()):
-            hybrid_idx = self._new_to_hybrid_map[particle_idx]
-
-            if new_system.isVirtualSite(particle_idx):
-                if hybrid_idx not in self._atom_classes['environment_atoms']:
-                    raise Exception("Virtual sites in changing residue are unsupported.")
+            # Loop through virtual sites
+            for particle_idx in range(system.getNumParticles()):
+                if system.isVirtualSite(particle_idx):
+                    # If it's a virtual site, make sure it is not in the unique or core atoms, since this is currently unsupported
+                    hybrid_idx = hybrid_atom_map[particle_idx]
+                    if hybrid_idx not in self._atom_classes['environment_atoms']:
+                        raise Exception("Virtual sites in changing residue are unsupported.")
+                    else:
+                        virtual_site = system.getVirtualSite(particle_idx)
+                        self._hybrid_system.setVirtualSite(hybrid_idx, virtual_site)
 
     def _get_core_atoms(self):
         """
