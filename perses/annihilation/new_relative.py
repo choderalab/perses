@@ -108,29 +108,18 @@ class HybridTopologyFactory(object):
         if softcore_alpha is None:
             self.softcore_alpha = 0.5
         else:
+            # TODO: Check that softcore_alpha is in a valid range
             self.softcore_alpha = softcore_alpha
 
         if softcore_beta is None:
+            # TODO: Refactor so that softcore_beta is unitless to match softcore_alpha
             self.softcore_beta = 12*unit.angstrom**2
         else:
+            # TODO: Check that softcore_beta is in a valid range and has correct units
             self.softcore_beta = softcore_beta
 
         if softcore_method not in self._known_softcore_methods:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
-
-        if softcore_alpha is None:
-            self.softcore_alpha = 0.5
-        else:
-            self.softcore_alpha = softcore_alpha
-
-        if softcore_beta is None:
-            self.softcore_beta = 12*unit.angstrom**2
-        else:
-            self.softcore_beta = softcore_beta
-
-        if softcore_method not in self._known_softcore_methods:
-            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
-
 
         self._softcore_method = softcore_method
 
