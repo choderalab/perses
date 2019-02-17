@@ -40,6 +40,9 @@ class HybridTopologyFactory(object):
         The topology of the hybrid system
     omm_hybrid_topology : openmm.app.Topology
         The OpenMM topology object corresponding to the hybrid system
+
+    .. warning :: This API is experimental and subject to change.
+
     """
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
@@ -73,12 +76,15 @@ class HybridTopologyFactory(object):
             "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
         softcore_beta: unit, default None
             "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
+            Must have dimension distance^2 if provided.
         bond_softening_constant : float
             For bonds between unique atoms and unique-core atoms, soften the force constant at the "dummy" endpoint by this factor.
             If 1.0, do not soften
         angle_softening_constant : float
             For bonds between unique atoms and unique-core atoms, soften the force constant at the "dummy" endpoint by this factor.
             If 1.0, do not soften
+
+        .. todo :: Document how positions for hybrid system are constructed
 
         """
         self._topology_proposal = topology_proposal
@@ -130,6 +136,7 @@ class HybridTopologyFactory(object):
             self._has_functions = False
 
         #prepare dicts of forces, which will be useful later
+        # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
         self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
         self._new_system_forces = {type(force).__name__ : force for force in self._new_system.getForces()}
 
@@ -149,6 +156,7 @@ class HybridTopologyFactory(object):
         #begin by copying all particles in the old system to the hybrid system. Note that this does not copy the
         #interactions. It does, however, copy the particle masses. In general, hybrid index and old index should be
         #the same.
+        # TODO: Refactor this into self._add_particles()
         for particle_idx in range(self._topology_proposal.n_atoms_old):
             particle_mass = self._old_system.getParticleMass(particle_idx)
             hybrid_idx = self._hybrid_system.addParticle(particle_mass)
@@ -173,7 +181,8 @@ class HybridTopologyFactory(object):
             self._hybrid_system.addForce(barostat)
 
         #initialize unitless softcore beta
-        self.softcore_beta = self.softcore_beta / self.softcore_beta.in_unit_system(unit.md_unit_system).unit
+        # TODO: We should instead use a dimensionless definition of softcore_beta
+        self.softcore_beta = self.softcore_beta.value_in_unit_system(unit.md_unit_system)
 
         #Copy over the box vectors:
         box_vectors = self._old_system.getDefaultPeriodicBoxVectors()
@@ -181,8 +190,6 @@ class HybridTopologyFactory(object):
 
         #assign atoms to one of the classes described in the class docstring
         self._atom_classes = self._determine_atom_classes()
-
-        #verify that no constraints are changing over the course of the switching.
 
         #create the opposite atom maps for use in nonbonded force processing
         self._hybrid_to_old_map = {value : key for key, value in self._old_to_hybrid_map.items()}
@@ -216,26 +223,6 @@ class HybridTopologyFactory(object):
 
         #generate the topology representation
         self._hybrid_topology = self._create_topology()
-
-    def _force_sanity_check(self, force_name_list):
-        """
-        Make sure that there are no unknown forces in the system--these will not be handled by the hybrid topology
-        engine.
-
-        Parameters
-        ----------
-        force_name_list : list of str
-            list of the force names for
-        Returns
-        -------
-        unknown_forces_present : bool
-            Whether unknown forces are present in the system
-        """
-        force_name_set = set(force_name_list)
-        if len(force_name_set - self._known_forces) > 0:
-            return True
-        else:
-            return False
 
     def _handle_virtual_sites(self):
         """
