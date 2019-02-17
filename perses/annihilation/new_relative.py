@@ -246,8 +246,9 @@ class HybridTopologyFactory(object):
 
     def _get_core_atoms(self):
         """
-        Determine which atoms in the old system are part of the "core" class. All necessary information is contained in
-        the topology proposal passed to the constructor.
+        Determine which atoms in the old system are part of the "core" class.
+
+        All necessary information is contained in the topology proposal passed to the constructor.
 
         Returns
         -------
@@ -255,6 +256,13 @@ class HybridTopologyFactory(object):
             The set of atoms (hybrid topology indexed) that are core atoms.
         environment_atoms : set of int
             The set of atoms (hybrid topology indexed) that are environment atoms.
+
+        .. todo ::
+
+           Overhaul this method and methods it calls by instead having this class accept
+           an alchemical atom set that denotes atoms not in the environment. The core would
+           then be very easy to figure out.
+
         """
 
         #In order to be either a core or environment atom, the atom must be mapped.
@@ -277,6 +285,7 @@ class HybridTopologyFactory(object):
                                                                      self._new_to_hybrid_map)
 
         #The union of the two will give the core atoms that can result from either new or old topology
+        # TODO: Shouldn't these sets be the same?
         total_core_atoms = core_atoms_from_old.union(core_atoms_from_new)
 
         #as a side effect, we can now compute the environment atom indices too, by subtracting the core indices
@@ -377,29 +386,26 @@ class HybridTopologyFactory(object):
 
     def _handle_constraints(self):
         """
-        This method adds relevant constraints from the old and new systems. First, all constraints from the old system
-        are added. Then, constraints to atoms unique to the new system are added.
+        This method adds relevant constraints from the old and new systems.
+
+        First, all constraints from the old systenm are added.
+        Then, constraints to atoms unique to the new system are added.
+
         """
-        #we add all constraints from the old system first.
-        for constraint_idx in range(self._topology_proposal.old_system.getNumConstraints()):
-            atom1, atom2, constraint = self._topology_proposal.old_system.getConstraintParameters(constraint_idx)
-            atom1_hybrid = self._old_to_hybrid_map[atom1]
-            atom2_hybrid = self._old_to_hybrid_map[atom2]
-            self._hybrid_system.addConstraint(atom1_hybrid, atom2_hybrid, constraint)
-
-        #Now we loop through constraints in the new system, but only add constraints involving new system atoms
-        #since anything common to both was already added. Note that we do not have to worry about changing constraint
-        #lengths because we already checked that that doesn't happen.
-        for constraint_idx in range(self._topology_proposal.new_system.getNumConstraints()):
-            atom1, atom2, constraint = self._topology_proposal.new_system.getConstraintParameters(constraint_idx)
-            atom1_hybrid = self._new_to_hybrid_map[atom1]
-            atom2_hybrid = self._new_to_hybrid_map[atom2]
-
-            atom_set = {atom1_hybrid, atom2_hybrid}
-
-            #If there's a nonempty intersection with unique new atoms, this constraint wasn't added.
-            if len(atom_set.intersection(self._atom_classes['unique_new_atoms'])):
-                self._hybrid_system.addConstraint(atom1_hybrid, atom2_hybrid, constraint)
+        constraint_lengths = dict() # lengths of constraints already added
+        for system_name in ('old', 'new'):
+            system = getattr(self._topology_proposal, '{}_system'.format(system_name))
+            hybrid_map = getattr(self, '_{}_to_hybrid_map'.format(system_name))
+            for constraint_idx in range(system.getNumConstraints()):
+                atom1, atom2, length = system.getConstraintParameters(constraint_idx)
+                hybrid_atoms = tuple(sorted(hybrid_map[atom1], hybrid_map[atom2]))
+                if hybrid_atoms not in added_constraints:
+                    self._hybrid_system.addConstraint(atom1_hybrid, atom2_hybrid, length)
+                    contraint_lengths[hybrid_atoms] = length
+                else:
+                    # TODO: We can skip this if we have already checked for constraints changing lengths
+                    if constraint_lengths[hybrid_atoms] != length:
+                        raise Exception('Constraint length is changing for atoms {} in hybrid system: old {} new {}'.format(hybrid_atoms, constraint_lengths[hybrid_atoms], length))
 
     def _constraint_check(self):
         """
