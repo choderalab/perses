@@ -9,13 +9,13 @@ import mdtraj as md
 from perses.dispersed.feptasks import compute_reduced_potential
 import numpy as np
 
-def traj_frame_to_sampler_state(traj: md.Trajectory, frame_number: int):
+def traj_frame_to_sampler_state(traj: md.Trajectory, frame_number: int,box_vectors):
     xyz = traj.xyz[frame_number, :, :]
     box_vectors = traj.openmm_boxes(frame_number)
-    sampler_state = states.SamplerState(unit.Quantity(xyz, unit=unit.nanometers), box_vectors=box_vectors)
+    sampler_state = states.SamplerState(unit.Quantity(xyz, unit=unit.nanometers))
     return sampler_state
 
-def run_rj_proposals(top_prop, configuration_traj, use_sterics, ncmc_nsteps, n_replicates, temperature=300.0*unit.kelvin):
+def run_rj_proposals(top_prop, configuration_traj, use_sterics, ncmc_nsteps, n_replicates, box_vectors, temperature=300.0*unit.kelvin):
     ncmc_engine = NCMCEngine(nsteps=ncmc_nsteps, pressure=1.0*unit.atmosphere)
     geometry_engine = FFAllAngleGeometryEngine(use_sterics=use_sterics)
     initial_thermodynamic_state = states.ThermodynamicState(top_prop.old_system, temperature=temperature, pressure=1.0*unit.atmosphere)
@@ -26,8 +26,8 @@ def run_rj_proposals(top_prop, configuration_traj, use_sterics, ncmc_nsteps, n_r
 
     for i in tqdm.trange(n_replicates):
         frame_index = np.random.choice(traj_indices)
-        initial_sampler_state = traj_frame_to_sampler_state(configuration_traj, frame_index)
 
+        initial_sampler_state = traj_frame_to_sampler_state(configuration_traj, frame_index,box_vectors)
         initial_logP = - compute_reduced_potential(initial_thermodynamic_state, initial_sampler_state)
 
         proposed_geometry, logP_geometry_forward = geometry_engine.propose(top_prop, initial_sampler_state.positions, beta)
@@ -74,7 +74,7 @@ if __name__=="__main__":
     n_ligands = nonequilibrium_options['n_ligands']
     equilibrium_output_directory = equilibrium_options['output_directory']
     project_prefix = setup_options['project_prefix']
-    ncmc_nsteps = nonequilibrium_options['ncmc_lengths']
+    ncmc_nsteps = nonequilibrium_options['ncmc_length']
     n_replicates = nonequilibrium_options['n_attempts']
     nonequilibrium_output_directory = nonequilibrium_options['output_directory']
     setup_directory = setup_options['output_directory']
@@ -91,12 +91,14 @@ if __name__=="__main__":
     temperature = 300.0*unit.kelvin
 
 
-    equilibrium_snapshots_filename = os.path.join(equilibrium_output_directory, "{}_{}".format(project_prefix, initial_ligand))
+    equilibrium_snapshots_filename = os.path.join(equilibrium_output_directory, "{}_{}.h5".format(project_prefix, initial_ligand))
     configuration_traj = md.load(equilibrium_snapshots_filename)
 
     file_to_read = os.path.join(setup_directory, "{}_{}_initial.npy".format(project_prefix, initial_ligand))
 
     positions, topology, system, initial_smiles = np.load(file_to_read)
+    topology = topology.to_openmm()
+    topology.setPeriodicBoxVectors(system.getDefaultPeriodicBoxVectors())
 
     ifs = oechem.oemolistream()
     ifs.open(ligand_filename)
@@ -111,6 +113,7 @@ if __name__=="__main__":
     initial_mol = mol_list[initial_ligand]
     proposal_mol = mol_list[proposal_ligand]
     proposal_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OECreateCanSmiString(proposal_mol))
+    current_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OECreateCanSmiString(initial_mol))
 
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
@@ -124,13 +127,12 @@ if __name__=="__main__":
 
     proposal_engine = PremappedSmallMoleculeSetProposalEngine(atom_mapper, system_generator)
 
-    topology_proposal = proposal_engine.propose(system, topology, proposed_mol=proposal_mol, map_index=map_index)
+    topology_proposal = proposal_engine.propose(system, topology, current_smiles=current_smiles, proposed_mol=proposal_mol, map_index=map_index)
 
-    results = run_rj_proposals(topology_proposal, configuration_traj, use_sterics, ncmc_nsteps, n_replicates,
-                     temperature=temperature)
+    results = run_rj_proposals(topology_proposal, configuration_traj, use_sterics, ncmc_nsteps, n_replicates, system.getDefaultPeriodicBoxVectors() , temperature=temperature)
 
     if not os.path.exists(nonequilibrium_output_directory):
         os.mkdir(nonequilibrium_output_directory)
 
-    np.save(os.path.join(nonequilibrium_output_directory, "{}_{}_{}.npy".format(project_prefix, initial_ligand, proposal_ligand)))
+    np.save(os.path.join(nonequilibrium_output_directory, "{}_{}_{}.npy".format(project_prefix, initial_ligand, proposal_ligand)), results)
 

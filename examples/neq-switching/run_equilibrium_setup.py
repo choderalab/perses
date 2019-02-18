@@ -258,7 +258,7 @@ if __name__=="__main__":
         topologies, positions = generate_complex_topologies_and_positions(ligand_filename,protein_pdb_filename)
 
     elif setup_options['phase'] == 'solvent':
-        topologies, positions = generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filename)
+        topologies, positions = generate_ligand_topologies_and_positions(ligand_filename)
 
     else:
         raise ValueError("Phase must be either complex or solvent.")
@@ -272,13 +272,16 @@ if __name__=="__main__":
     # get the list of molecules
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
 
+    smiles_list = []
     for idx, mol in enumerate(mol_list):
         mol.SetTitle("MOL{}".format(idx))
         oechem.OETriposAtomNames(mol)
+        smiles_list.append(oechem.OECreateSmiString(mol, OESMILES_OPTIONS))
 
-    smiles_list = [oechem.OECreateSmiString(mol, OESMILES_OPTIONS)]
+    #smiles_list = [oechem.OECreateSmiString(mol, OESMILES_OPTIONS)]
     atom_mapper = SmallMoleculeAtomMapper(smiles_list)
     atom_mapper.map_all_molecules()
+    atom_mapper.generate_and_check_proposal_matrix()    
 
     atom_mapper_filename = os.path.join(output_directory, "{}_atom_mapper.json".format(project_prefix))
     with open(atom_mapper_filename, 'w') as map_outfile:

@@ -53,6 +53,7 @@ if __name__=="__main__":
     positions, topology, system, _ = np.load(file_to_read)
 
     omm_topology = topology.to_openmm()
+    omm_topology.setPeriodicBoxVectors(system.getDefaultPeriodicBoxVectors())
 
     equilibration_steps = equilibrium_options['n_equilibration_steps'] * 1000 # value was in ps
     equilibrium_steps = equilibrium_options['n_equilibrium_steps'] * 1000 # also in ps
