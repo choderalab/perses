@@ -106,7 +106,7 @@ def check_result(results, threshold=3.0, neffmin=10):
 
 def test_simple_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='pentane', proposed_mol_name='butane')
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='imatinib', proposed_mol_name='nilotinib')
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
