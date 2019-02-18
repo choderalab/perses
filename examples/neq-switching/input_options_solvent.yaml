@@ -16,4 +16,4 @@ nonequilibrium:
   n_attempts: 100 #number of proposals
   ncmc_length: 20000 #steps, 1fs
   output_directory: MCL1_solvent_nonequilibrium
-
+  n_ligands: 42
