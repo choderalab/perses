@@ -244,7 +244,7 @@ def forcefield_directory():
     forcefield_directory_name = resource_filename("perses", "data")
     return forcefield_directory_name
 
-def createSystemFromIUPAC(iupac_name):
+def createSystemFromIUPAC(iupac_name, resname="MOL"):
     """
     Create an openmm system out of an oemol
 
@@ -252,6 +252,8 @@ def createSystemFromIUPAC(iupac_name):
     ----------
     iupac_name : str
         IUPAC name
+    resname : str
+        Residue name to create
 
     Returns
     -------
@@ -267,6 +269,9 @@ def createSystemFromIUPAC(iupac_name):
 
     # Create OEMol
     molecule = createOEMolFromIUPAC(iupac_name)
+
+    if resname is not None:
+        molecule.SetTitle(resname)
 
     # Generate a topology.
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
@@ -876,20 +881,22 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
     proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
 
+    ffxml = forcefield_generators.generateForceFieldFromMolecules([current_mol, proposed_mol])
+
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', StringIO(ffxml))
+
+    #forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
-    gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml', StringIO(ffxml)], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
+        [initial_smiles, final_smiles], system_generator, residue_name='MOL')
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
