@@ -397,10 +397,10 @@ class HybridTopologyFactory(object):
             hybrid_map = getattr(self, '_{}_to_hybrid_map'.format(system_name))
             for constraint_idx in range(system.getNumConstraints()):
                 atom1, atom2, length = system.getConstraintParameters(constraint_idx)
-                hybrid_atoms = tuple(sorted(hybrid_map[atom1], hybrid_map[atom2]))
-                if hybrid_atoms not in added_constraints:
-                    self._hybrid_system.addConstraint(atom1_hybrid, atom2_hybrid, length)
-                    contraint_lengths[hybrid_atoms] = length
+                hybrid_atoms = tuple(sorted([hybrid_map[atom1], hybrid_map[atom2]]))
+                if hybrid_atoms not in constraint_lengths.keys():
+                    self._hybrid_system.addConstraint(hybrid_atoms[0], hybrid_atoms[1], length)
+                    constraint_lengths[hybrid_atoms] = length
                 else:
                     # TODO: We can skip this if we have already checked for constraints changing lengths
                     if constraint_lengths[hybrid_atoms] != length:
