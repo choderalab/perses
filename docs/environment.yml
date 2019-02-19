@@ -2,27 +2,32 @@ name: perses
 channels:
     - omnia
     - omnia/label/dev
+    - omnia/label/beta
+    - openeye
 dependencies:
     - python
     - setuptools
-    - openmm >=7.1.0
-    - alchemy >=1.2.3
     - numpy
     - scipy
     - numexpr
-    - openmoltools
-    - openmmtools
-    - netcdf4
     - autograd
     - pymbar
+    - cuda92
+    - openmm ==7.3.0
     - parmed
+    - openmoltools
+    - alchemy >=1.2.3
+    - openmmtools
     - numba
     - netcdf4
     - matplotlib
     - seaborn
     - pdbfixer
     - mdtraj
-    - parmed
+    - parmed # for testing/debugging
     - pdbfixer
-    - six
+    - lxml
+    - networkx >=2.0
+    - yank
     - numpydoc
+    - openeye-toolkits

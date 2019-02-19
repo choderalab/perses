@@ -14,9 +14,6 @@ Nonequilibrium switching
     :toctree: api/generated/
 
     NCMCEngine
-    NCMCHybridEngine
-    NCMCAlchemicalIntegrator
-    NCMCGHMCAlchemicalIntegrator
 
 Relative alchemical transformations
 -----------------------------------
