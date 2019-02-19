@@ -2,7 +2,7 @@
 protein_pdb: CDK2_fixed_nohet.pdb
 
 #provide the path to the ligand file with coordinates
-ligand_file: CDK2_ligands.mol2
+ligand_file: CDK2_ligands.sdf
 
 #The ligand file contains multiple ligands. Choose the indices of the ligands
 #between which we should compute a relative free energy
@@ -31,9 +31,7 @@ save_setup_pickle_as: fesetup_hbonds.pkl
 
 #the type of free energy calculation.
 #currently, this could be either nonequilibrium or sams
-fe_type: sams
-
-n_states: 100
+fe_type: nonequilibrium
 
 #the forward switching functions. The reverse ones will be computed from this. Only valid for nonequilibrium switching
 forward_functions:

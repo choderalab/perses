@@ -45,7 +45,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False):
         """
         Initialize the Hybrid topology factory.
 
@@ -73,6 +73,12 @@ class HybridTopologyFactory(object):
             "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
         softcore_beta: unit, default None
             "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
+        bond_softening_constant : float
+            For bonds between unique atoms and unique-core atoms, soften the force constant at the "dummy" endpoint by this factor.
+            If 1.0, do not soften
+        angle_softening_constant : float
+            For bonds between unique atoms and unique-core atoms, soften the force constant at the "dummy" endpoint by this factor.
+            If 1.0, do not soften
 
         """
         self._topology_proposal = topology_proposal
@@ -83,6 +89,19 @@ class HybridTopologyFactory(object):
         self._hybrid_system_forces = dict()
         self._old_positions = current_positions
         self._new_positions = new_positions
+        self._soften_only_new = soften_only_new
+
+        if bond_softening_constant != 1.0:
+            self._bond_softening_constant = bond_softening_constant
+            self._soften_bonds = True
+        else:
+            self._soften_bonds = False
+
+        if angle_softening_constant != 1.0:
+            self._angle_softening_constant = angle_softening_constant
+            self._soften_angles = True
+        else:
+            self._soften_angles = False
 
         self._use_dispersion_correction = use_dispersion_correction
 
@@ -245,7 +264,7 @@ class HybridTopologyFactory(object):
 
             #If it's a virtual site, make sure it is not in the unique or core atoms (unsupported).
             if old_system.isVirtualSite(particle_idx):
-                if hybrid_idx not in self._atom_classes['environment']:
+                if hybrid_idx not in self._atom_classes['environment_atoms']:
                     raise Exception("Virtual sites in changing residue are unsupported.")
                 else:
                     virtual_site = old_system.getVirtualSite(particle_idx)
@@ -257,7 +276,7 @@ class HybridTopologyFactory(object):
             hybrid_idx = self._new_to_hybrid_map[particle_idx]
 
             if new_system.isVirtualSite(particle_idx):
-                if hybrid_idx not in self._atom_classes['environment']:
+                if hybrid_idx not in self._atom_classes['environment_atoms']:
                     raise Exception("Virtual sites in changing residue are unsupported.")
 
     def _get_core_atoms(self):
@@ -720,7 +739,9 @@ class HybridTopologyFactory(object):
             sterics_custom_nonbonded_force.addGlobalParameter('lambda', 0.0)
             sterics_custom_nonbonded_force.addEnergyParameterDerivative('lambda')
         else:
-            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_core", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_insert", 0.0)
+            sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics_delete", 0.0)
 
 
         sterics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
@@ -761,19 +782,23 @@ class HybridTopologyFactory(object):
 
         if self._softcore_method == "default":
             sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics + (1 - dummyA*dummyB)*4*lambda_sterics*(1-lambda_sterics);"
-            sterics_addition += "dummyA = select(step(2*epsilonA - epsilonA), 0, 1);"
-            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 0, 1);"
+            sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*lambda_sterics_delete;"
+            sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "amber":
             sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics) + dummyB*lambda_sterics;"
-            sterics_addition += "dummyA = select(step(2*epsilonA - epsilonA), 0, 1);"
-            sterics_addition += "dummyB = select(step(2*epsilonB - epsilonB), 0, 1);"
+            sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*lambda_sterics_delete;"
+            sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "classic":
+            sterics_addition += "lambda_sterics = lambda_core"
             sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+
 
         else:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
+
+
 
         return sterics_addition
 
@@ -792,13 +817,11 @@ class HybridTopologyFactory(object):
 
         if self._softcore_method =="default":
             electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics) + (1- dummyA*dummyB)*4*lambda_electrostatics*(1-lambda_electrostatics);"
-            electrostatics_addition += "dummyA = select(step(2*chargeprodA - chargeprodA), 0, 1);"
-            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 0, 1);"
+            electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "amber":
             electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics);"
-            electrostatics_addition += "dummyA = select(step(2*chargeprodA - chargeprodA), 0, 1);"
-            electrostatics_addition += "dummyB = select(step(2*chargeprodB - chargeprodB), 0, 1);"
+            electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "classic":
             electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
@@ -965,9 +988,28 @@ class HybridTopologyFactory(object):
                     [index1, index2, r0_new, k_new] = self._find_bond_parameters(new_system_bond_force, index1_new, index2_new)
                 self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,[r0_old, k_old, r0_new, k_new])
 
-            #otherwise, we just add the same parameters as those in the old system.
+            #check if the index set is a subset of anything besides environemnt (in the case of environment, we just add the bond to the regular bond force)
+            # that would mean that this bond is core-unique_old or unique_old-unique_old
+            elif not index_set.issubset(self._atom_classes['environment_atoms']):
+
+                # If we're not softening bonds, we can just add it to the regular bond force. Likewise if we are only softening new bonds
+                if not self._soften_bonds or self._soften_only_new:
+                    self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old,
+                                                                              k_old)
+                # Otherwise, we will need to soften one of the endpoints. For unique old atoms, the softening endpoint is at lambda =1
+                else:
+
+                    r0_new = r0_old # The bond length won't change
+                    k_new = self._bond_softening_constant * k_old # We multiply the endpoint by the bond softening constant
+
+                    # Now we add to the core bond force, since that is an alchemically-modified force.
+                    self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                                                                          [r0_old, k_old, r0_new, k_new])
+
+            #otherwise, we just add the same parameters as those in the old system (these are environment atoms, and the parameters are the same)
             else:
                 self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old, k_old)
+
 
         #now loop through the new system to get the interactions that are unique to it.
         for bond_index in range(new_system_bond_force.getNumBonds()):
@@ -982,7 +1024,19 @@ class HybridTopologyFactory(object):
             #if the intersection of this set and unique new atoms contains anything, the bond is unique to the new system and must be added
             #all other bonds in the new system have been accounted for already.
             if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_new, k_new)
+
+                # If we are softening bonds, we have to use the core bond force, and scale the force constant at lambda = 0:
+                if self._soften_bonds:
+                    r0_old = r0_new # Do not change the length
+                    k_old = k_new * self._bond_softening_constant # Scale the force constant by the requested parameter
+
+                    # Now we add to the core bond force, since that is an alchemically-modified force.
+                    self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                                                                          [r0_old, k_old, r0_new, k_new])
+
+                # If we aren't softening bonds, then just add it to the standard bond force
+                else:
+                    self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_new, k_new)
 
             #if the bond is in the core, it has probably already been added in the above loop. However, there are some circumstances
             #where it was not (closing a ring). In that case, the bond has not been added and should be added here.
@@ -992,7 +1046,6 @@ class HybridTopologyFactory(object):
                      k_old = 0.0*unit.kilojoule_per_mole/unit.angstrom**2
                      self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
                                                                            [r0_old, k_old, r0_new, k_new])
-
 
 
     def _find_angle_parameters(self, angle_force, indices):
@@ -1091,7 +1144,32 @@ class HybridTopologyFactory(object):
                 hybrid_force_parameters = [angle_parameters[3], angle_parameters[4], new_angle_parameters[3], new_angle_parameters[4]]
                 self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
 
-            #otherwise, just add the parameters to the regular force:
+            # Check if the atoms are neither all core nor all environment, which would mean they involve unique old interactions
+            elif not hybrid_index_set.issubset(self._atom_classes['environment_atoms']):
+
+                # Check if we are softening angles, and not softening only new angles:
+                if self._soften_angles and not self._soften_only_new:
+
+                    # If we are, then we need to generate the softened parameters (at lambda=1 for old atoms)
+                    # We do this by using the same equilibrium angle, and scaling the force constant at the non-interacting
+                    # endpoint:
+                    hybrid_force_parameters = [angle_parameters[3], angle_parameters[4], angle_parameters[3],
+                                               self._angle_softening_constant * angle_parameters[4]]
+
+                    # Add this interaction to the alchemical angle force
+                    self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2],
+                                                                            hybrid_force_parameters)
+
+
+                # If not, we can just add this to the standard angle force
+                else:
+                    self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0],
+                                                                                hybrid_index_list[1],
+                                                                                hybrid_index_list[2],
+                                                                                angle_parameters[3],
+                                                                                angle_parameters[4])
+            #otherwise, only environment atoms are in this interaction, so add it to the standard angle force
             else:
                 self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], angle_parameters[3],
@@ -1107,7 +1185,20 @@ class HybridTopologyFactory(object):
 
             #if the intersection of this hybrid set with the unique new atoms is nonempty, it must be added:
             if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
+
+                # Check to see if we are softening angles:
+                if self._soften_angles:
+
+                    # If so, generate the parameters for the alchemical angle by scaling the force constant at the dummy endpoint (lambda=0 for new atoms)
+                    hybrid_force_parameters = [angle_parameters[3], angle_parameters[4] * self._angle_softening_constant, angle_parameters[3], angle_parameters[4]]
+
+                    # Then add the angle to the alchemical force:
+                    self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
+                                                                            hybrid_index_list[2],
+                                                                            hybrid_force_parameters)
+                # Otherwise, just add to the nonalchemical force
+                else:
+                    self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], angle_parameters[3],
                                                                             angle_parameters[4])
 
@@ -1198,6 +1289,8 @@ class HybridTopologyFactory(object):
         # Define new global parameters for NonbondedForce
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_electrostatics', 0.0)
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_sterics', 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_delete", 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_insert", 0.0)
 
         #We have to loop through the particles in the system, because nonbonded force does not accept index
         for particle_index in range(self._hybrid_system.getNumParticles()):
@@ -1212,8 +1305,8 @@ class HybridTopologyFactory(object):
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
                 particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, 0.0)
-                # Charge will be turned on at lambda_electrostatics = 0, off at lambda_electrostatics = 1
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, -charge, 0, 0)
+                # Charge will be turned on at lambda_electrostatics_delete = 0, off at lambda_electrostatics_delete = 1
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_delete', particle_index, -charge, 0, 0)
 
             elif particle_index in self._atom_classes['unique_new_atoms']:
                 #get the parameters in the new system
@@ -1225,8 +1318,8 @@ class HybridTopologyFactory(object):
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
                 particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, sigma, 0.0)
-                # Charge will be turned off at lambda_electrostatics = 0, on at lambda_electrostatics = 1
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, +charge, 0, 0)
+                # Charge will be turned off at lambda_electrostatics_insert = 0, on at lambda_electrostatics_insert = 1
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_insert', particle_index, +charge, 0, 0)
 
             elif particle_index in self._atom_classes['core_atoms']:
                 #get the parameters in the new and old systems:
@@ -1350,14 +1443,12 @@ class HybridTopologyFactory(object):
             #now we check if the pair is in the exception dictionary
             if old_index_atom_pair in self._old_system_exceptions:
                 [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair]
-                chargeProd *= 0.0
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #check if the pair is in the reverse order and use that if so
             elif old_index_atom_pair[::-1] in self._old_system_exceptions:
                 [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair[::-1]]
-                chargeProd *= 0.0
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
@@ -1366,7 +1457,6 @@ class HybridTopologyFactory(object):
                 [charge0, sigma0, epsilon0] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[0])
                 [charge1, sigma1, epsilon1] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[1])
                 chargeProd = charge0*charge1
-                chargeProd *= 0.0
                 epsilon = unit.sqrt(epsilon0*epsilon1)
                 sigma = 0.5*(sigma0+sigma1)
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
@@ -1380,14 +1470,12 @@ class HybridTopologyFactory(object):
             #now we check if the pair is in the exception dictionary
             if new_index_atom_pair in self._new_system_exceptions:
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair]
-                chargeProd *= 0.0
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #check if the pair is present in the reverse order and use that if so
             elif new_index_atom_pair[::-1] in self._new_system_exceptions:
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair[::-1]]
-                chargeProd *= 0.0
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
@@ -1396,7 +1484,6 @@ class HybridTopologyFactory(object):
                 [charge0, sigma0, epsilon0] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[0])
                 [charge1, sigma1, epsilon1] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[1])
                 chargeProd = charge0*charge1
-                chargeProd *= 0.0
                 epsilon = unit.sqrt(epsilon0*epsilon1)
                 sigma = 0.5*(sigma0+sigma1)
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)

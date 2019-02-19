@@ -18,23 +18,19 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - cuda92
-    - openmm ==7.3.0
-    - parmed
+    - openmm >=7.3.0
     - openmoltools
-    - alchemy >=1.2.3
     - openmmtools
     - numba
     - netcdf4
     - matplotlib
     - seaborn
-    - pdbfixer
     - mdtraj
-    - parmed # for testing/debugging
     - pdbfixer
     - lxml
     - networkx >=2.0
     - yank
+    - parmed
 
   run:
     - python
@@ -44,19 +40,15 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - cuda92
-    - openmm ==7.3.0
+    - openmm >=7.3.0
     - parmed
     - openmoltools
-    - alchemy >=1.2.3
     - openmmtools
     - numba
     - netcdf4
     - matplotlib
     - seaborn
-    - pdbfixer
     - mdtraj
-    - parmed # for testing/debugging
     - pdbfixer
     - lxml
     - networkx >=2.0
@@ -65,7 +57,7 @@ requirements:
     - distributed
     - progressbar2
     - yank
-
+    - parmed
 test:
   requires:
     - nose

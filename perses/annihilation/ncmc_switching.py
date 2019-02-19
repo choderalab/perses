@@ -4,41 +4,41 @@ import copy
 import logging
 import traceback
 from simtk import openmm, unit
-from perses.dispersed.feptasks import NonequilibriumSwitchingMove, compute_reduced_potential
+from perses.dispersed.feptasks import NonequilibriumSwitchingMove, compute_reduced_potential, ExternalNonequilibriumSwitchingMove
 from perses.storage import NetCDFStorageView
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
-from openmmtools.cache import LRUCache, ContextCache
+from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
 from openmmtools.alchemy import AlchemicalState
 
 
-default_functions = {
-    'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-    'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-    'lambda_bonds' : '0.9*lambda + 0.1', # don't fully soften bonds
-    'lambda_angles' : '0.9*lambda + 0.1', # don't fully soften angles
-    'lambda_torsions' : 'lambda'
-    }
-
-
-functions_disable_all = {
-    'lambda_sterics' : 'lambda',
-    'lambda_electrostatics' : 'lambda',
-    'lambda_bonds' : 'lambda',
-    'lambda_angles' : 'lambda',
-    'lambda_torsions' : 'lambda'
-    }
-
 # make something hyperbolic or something to go from on to off to on
 default_hybrid_functions = {
-    'lambda_sterics' : 'lambda',
+    'lambda_sterics_core' : 'lambda',
     'lambda_electrostatics' : 'lambda',
+    'lambda_sterics_insert' : 'select(step(lambda-0.5), 1.0, 2*lambda)',
+    'lambda_sterics_delete' : 'select(step(lambda-0.5), 2.0*(lambda - 0.5), 0.0)',
+    'lambda_electrostatics_insert' : 'select(step(lambda-0.5),2.0*(lambda-0.5),0.0)',
+    'lambda_electrostatics_delete' : 'select(step(lambda-0.5), 1.0, 2.0*lambda)',
     'lambda_bonds' : 'lambda',
     'lambda_angles' : 'lambda',
     'lambda_torsions' : 'lambda'
     }
+
+python_hybrid_functions = {
+    'lambda_sterics_core': lambda x: x,
+    'lambda_electrostatics': lambda x: x,
+    'lambda_sterics_insert': lambda x: 2.0*x if x< 0.5 else 1.0,
+    'lambda_sterics_delete': lambda x: 0.0 if x < 0.5 else 2.0*(x-0.5),
+    'lambda_electrostatics_insert': lambda x: 0.0 if x < 0.5 else 2.0*(x-0.5),
+    'lambda_electrostatics_delete': lambda x: 2.0*x if x< 0.5 else 1.0,
+    'lambda_bonds': lambda x: x,
+    'lambda_angles': lambda x: x,
+    'lambda_torsions': lambda x: x
+}
+
 
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
@@ -73,8 +73,8 @@ class NCMCEngine(object):
 
     def __init__(self, temperature=default_temperature, functions=None, nsteps=default_nsteps,
                  steps_per_propagation=default_steps_per_propagation, timestep=default_timestep,
-                 constraint_tolerance=None, platform=None, write_ncmc_interval=None, measure_shadow_work=False,
-                 integrator_splitting='V R O H R V', storage=None, verbose=False, LRUCapacity=10, pressure=None):
+                 constraint_tolerance=None, platform=None, write_ncmc_interval=1, measure_shadow_work=False,
+                 integrator_splitting='V R O H R V', storage=None, verbose=False, LRUCapacity=10, pressure=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
         """
         This is the base class for NCMC switching between two different systems.
 
@@ -113,7 +113,7 @@ class NCMCEngine(object):
         """
         # Handle some defaults.
         if functions == None:
-            functions = default_functions
+            functions = python_hybrid_functions
         if nsteps == None:
             nsteps = default_nsteps
         if timestep == None:
@@ -131,6 +131,8 @@ class NCMCEngine(object):
         self._steps_per_propagation = steps_per_propagation
         self._verbose = verbose
         self._pressure = pressure
+        self._bond_softening_constant = bond_softening_constant
+        self._angle_softening_constant = angle_softening_constant
         self._disable_barostat = False
         self._hybrid_cache = LRUCache(capacity=LRUCapacity)
         self._measure_shadow_work = measure_shadow_work
@@ -146,7 +148,7 @@ class NCMCEngine(object):
         if write_ncmc_interval is not None:
             self._write_ncmc_interval = write_ncmc_interval
         else:
-            self._write_ncmc_interval = self._nsteps
+            self._write_ncmc_interval = 1
         self._work_save_interval = write_ncmc_interval
 
     @property
@@ -239,7 +241,7 @@ class NCMCEngine(object):
             hybrid_factory._compute_hybrid_positions()
         except KeyError:
             try:
-                hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions)
+                hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, bond_softening_constant=self._bond_softening_constant, angle_softening_constant=self._angle_softening_constant)
                 self._hybrid_cache[topology_proposal] = hybrid_factory
             except:
                 hybrid_factory = None
@@ -273,8 +275,10 @@ class NCMCEngine(object):
             The final configurational properties after `nsteps` steps of alchemical switching, and reversion to the nonalchemical system
         logP_work : float
             The NCMC work contribution to the log acceptance probability (Eqs. 62 and 63)
-        logP_energy : float
-            The contribution of transforming to and from the hybrid system to the log acceptance probability (Eqs. 62 and 63)
+        logP_initial : float
+            The initial logP of the hybrid configuration
+        logP_final : float
+            The final logP of the hybrid configuration
         """
 
         assert not initial_sampler_state.has_nan() and not proposed_sampler_state.has_nan()
@@ -284,7 +288,7 @@ class NCMCEngine(object):
 
         if hybrid_factory is None:
             _logger.warning("Unable to construct hybrid system for {} -> {}".format(topology_proposal.old_chemical_state_key, topology_proposal.new_chemical_state_key))
-            return initial_sampler_state, proposed_sampler_state, -np.inf, -np.inf
+            return initial_sampler_state, proposed_sampler_state, -np.inf, 0.0, 0.0
 
 
         topology = hybrid_factory.hybrid_topology
@@ -310,18 +314,47 @@ class NCMCEngine(object):
         final_hybrid_sampler_state = copy.deepcopy(initial_hybrid_sampler_state)
 
         #create the nonequilibrium move:
-        ne_move = NonequilibriumSwitchingMove(self._functions, self._integrator_splitting, self._temperature, self._nsteps, self._timestep, 
-                                              work_save_interval=self._write_ncmc_interval, top=topology,subset_atoms=None,
-                                              save_configuration=self._save_configuration, measure_shadow_work=self._measure_shadow_work)
-        
+        #ne_move = NonequilibriumSwitchingMove(self._functions, self._integrator_splitting, self._temperature, self._nsteps, self._timestep,
+        #                                      work_save_interval=self._write_ncmc_interval, top=topology,subset_atoms=None,
+        #                                      save_configuration=self._save_configuration, measure_shadow_work=self._measure_shadow_work)
+
+        ne_move = ExternalNonequilibriumSwitchingMove(self._functions, nsteps_neq=self._nsteps,
+                                                      timestep=self._timestep, temperature=self._temperature,
+                                                      work_configuration_save_interval=self._work_save_interval,
+                                                      splitting="V R O R V")
+
+
         #run the NCMC protocol
-        ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
+        try:
+            ne_move.apply(compound_thermodynamic_state, final_hybrid_sampler_state)
+        except Exception as e:
+            _logger.warn("NCMC failed because {}; rejecting.".format(str(e)))
+            logP_work = -np.inf
+            return [initial_sampler_state, proposed_sampler_state, -np.inf, 0.0, 0.0]
 
         #get the total work:
-        logP_work = - ne_move.current_total_work
+        logP_work = - ne_move.cumulative_work[-1]
 
         # Compute contribution of transforming to and from the hybrid system:
-        logP_energy = self._compute_energy_contribution(compound_thermodynamic_state, initial_hybrid_sampler_state, final_hybrid_sampler_state)
+        context, integrator = global_context_cache.get_context(hybrid_thermodynamic_state)
+
+        #set all alchemical parameters to zero:
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 0.0)
+
+        initial_hybrid_sampler_state.apply_to_context(context, ignore_velocities=True)
+        initial_reduced_potential = hybrid_thermodynamic_state.reduced_potential(context)
+
+        #set all alchemical parameters to one:
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 1.0)
+
+        final_hybrid_sampler_state.apply_to_context(context, ignore_velocities=True)
+        final_reduced_potential = hybrid_thermodynamic_state.reduced_potential(context)
+
+        #reset the parameters back to zero just in case
+        for parameter in self._functions.keys():
+            context.setParameter(parameter, 0.0)
 
         #compute the output SamplerState, which has the atoms only for the new system post-NCMC:
         new_positions = hybrid_factory.new_positions(final_hybrid_sampler_state.positions)
@@ -333,14 +366,31 @@ class NCMCEngine(object):
         old_box_vectors = copy.deepcopy(new_box_vectors) #these are the same as the new system
         final_old_sampler_state = SamplerState(old_positions, box_vectors=old_box_vectors)
 
-        if self._save_configuration:
-            trajectory = ne_move.trajectory.xyz
-            topology = ne_move.trajectory.topology
-            varname = "ncmcpositions"
-            nframes = ne_move.trajectory.n_frames
+        #extract the trajectory and box vectors from the move:
+        trajectory = ne_move.trajectory[::-self._write_ncmc_interval, :, :][::-1]
+        topology = hybrid_factory.hybrid_topology
+        position_varname = "ncmcpositions"
+        nframes = np.shape(trajectory)[0]
 
+        #extract box vectors:
+        box_vec_varname = "ncmcboxvectors"
+        box_lengths = ne_move.box_lengths[::-self._write_ncmc_interval, :][::-1]
+        box_angles = ne_move.box_angles[::-self._write_ncmc_interval, :][::-1]
+        box_lengths_and_angles = np.stack([box_lengths, box_angles])
+
+        #write out the positions of the topology
+        if self._storage:
             for frame in range(nframes):
-                self._storage.write_configuration(varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
+                self._storage.write_configuration(position_varname, trajectory[frame, :, :], topology, iteration=iteration, frame=frame, nframes=nframes)
+
+        #write out the periodict box vectors:
+        if self._storage:
+            self._storage.write_array(box_vec_varname, box_lengths_and_angles, iteration=iteration)
+
+        #retrieve the protocol work and write that out too:
+        protocol_work = ne_move.cumulative_work
+        if self._storage:
+            self._storage.write_array("protocolwork", protocol_work, iteration=iteration)
 
         # Return
-        return [final_old_sampler_state, final_sampler_state, logP_work, logP_energy]
+        return [final_old_sampler_state, final_sampler_state, logP_work, -initial_reduced_potential, -final_reduced_potential]

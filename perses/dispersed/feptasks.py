@@ -5,16 +5,18 @@ import os
 import copy
 
 #Add the variables specific to the Alchemical langevin integrator
-cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
-     "protocol_work" : 0.0,
-     "Eold" : 0.0,
-     "Enew" : 0.0,
-     "lambda" : 0.0,
-     "nsteps" : 0.0,
-     "step" : 0.0,
-     "n_lambda_steps" : 0.0,
-     "lambda_step" : 0.0
- })
+#only do this if we're not using the DummyContextCache
+if type(cache.global_context_cache) == cache.ContextCache:
+    cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
+         "protocol_work" : 0.0,
+         "Eold" : 0.0,
+         "Enew" : 0.0,
+         "lambda" : 0.0,
+         "nsteps" : 0.0,
+         "step" : 0.0,
+         "n_lambda_steps" : 0.0,
+         "lambda_step" : 0.0
+     })
 
 
 import openmmtools.mcmc as mcmc
@@ -26,7 +28,10 @@ from perses.annihilation.new_relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
 import pickle
 import simtk.unit as unit
+import tqdm
+from perses.tests.utils import compute_potential_components
 from openmmtools.constants import kB
+import pdb
 
 #Make containers for results from tasklets. This allows us to chain tasks together easily.
 EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('reduced_potential', float)])
@@ -34,6 +39,194 @@ NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', n
 
 class NoTrajectoryException(Exception):
     pass
+
+class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
+    """
+    This class performs nonequilibrium switching, but rather than using the AlchemicalNonequilibriumLangevinIntegrator, it uses
+    the ExternalPerturbationLangevinIntegrator and sets context parameters directly. This allows Python functions to be used to define the
+    relationship between the master parameter "lambda" and the individual context parameters.
+
+    Parameters
+    ----------
+    integrator_options : dict
+        The options used to create the integrator
+    alchemical_functions: dict of str: Callable
+        A dictionary of functions specifying how each context parameter
+        will change per-step.
+    work_save_interval : int, default 1
+        The frequency with which to save the cumulative work.
+        If 1, it is saved at every step
+    configuration_save_interval : int, default 1
+        The frequency with which to save the configurations.
+        if 1, it is saved at every step.
+    context_cache : openmmtools.cache.ContextCache, default None
+        The ContextCache to use for context creation. If None,
+        the global cache will be used
+    """
+
+    def __init__(self, alchemical_functions: dict, nsteps_neq: int, timestep: unit.Quantity,
+                 temperature: unit.Quantity, work_configuration_save_interval: int=1, splitting: str = "V R O R V",
+                 **kwargs):
+
+        super(ExternalNonequilibriumSwitchingMove, self).__init__(n_steps=nsteps_neq, **kwargs)
+
+        self._integrator = integrators.ExternalPerturbationLangevinIntegrator(timestep=timestep, temperature=temperature, splitting=splitting)
+        self._work_configuration_save_interval = work_configuration_save_interval
+        self._alchemical_functions = alchemical_functions
+        self._nsteps_neq = nsteps_neq
+        if nsteps_neq % work_configuration_save_interval != 0:
+            raise ValueError("Please use a saving interval that is a divisor of the total number of steps")
+        #self._number_of_step_moves = self._nsteps_neq // self._work_configuration_save_interval
+        self._cumulative_work = np.zeros([self._nsteps_neq + 1])
+        self._current_protocol_work = 0.0
+
+    def _get_integrator(self, thermodynamic_state):
+        """
+        Get the integrator associated with this move. In this case, it is simply the integrator passed in to the constructor.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+            thermodynamic state; unused here.
+
+        Returns
+        -------
+        integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
+            The integrator that is associated with this MCMove
+        """
+        return self._integrator
+
+    def apply(self, thermodynamic_state, sampler_state):
+        """Propagate the state through the integrator.
+        This updates the SamplerState after the integration. It will apply the full NCMC protocol.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to propagate dynamics.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to. This is modified.
+        """
+        """Propagate the state through the integrator.
+        This updates the SamplerState after the integration. It also logs
+        benchmarking information through the utils.Timer class.
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to propagate dynamics.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to. This is modified.
+        See Also
+        --------
+        openmmtools.utils.Timer
+        """
+        # Check if we have to use the global cache.
+        if self.context_cache is None:
+            context_cache = cache.global_context_cache
+        else:
+            context_cache = self.context_cache
+
+        #get the number of atoms:
+        n_atoms = thermodynamic_state.n_particles
+
+        trajectory_positions = np.zeros([self._nsteps_neq, n_atoms, 3])
+        box_lengths = np.zeros([self._nsteps_neq, 3])
+        box_angles = np.zeros([self._nsteps_neq, 3])
+
+        # Create integrator.
+        integrator = self._get_integrator(thermodynamic_state)
+
+        context, integrator = context_cache.get_context(thermodynamic_state, integrator)
+
+        integrator.reset()
+
+        sampler_state.apply_to_context(context, ignore_velocities=False)
+
+        # Subclasses may implement _before_integration().
+        self._before_integration(context, thermodynamic_state)
+
+        self._cumulative_work[0] = integrator.get_protocol_work(dimensionless=True)
+
+        if self._cumulative_work[0] != 0.0:
+            raise RuntimeError("The initial cumulative work after reset was not zero.")
+
+        #set the master parameter to zero:
+        master_lambda = 0.0
+
+        # loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
+        for iteration in tqdm.trange(self._nsteps_neq):
+
+            #update all relevant context parameters
+            for parameter, parameter_function in self._alchemical_functions.items():
+                context.setParameter(parameter, parameter_function(master_lambda/self._nsteps_neq))
+
+            integrator.step(1)
+
+            #increment the master lambda variable
+            master_lambda += 1
+
+            #retrieve the current amount of work and add it to the appropriate array
+            self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)
+            self._cumulative_work[iteration + 1] = self._current_protocol_work
+
+
+            #update the sampler state from the context and retrieve positions and box vectors
+            sampler_state.update_from_context(context)
+            trajectory_positions[iteration, :, :] = sampler_state.positions[:, :].value_in_unit_system(unit.md_unit_system)
+            a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(
+                *sampler_state.box_vectors)
+            box_lengths[iteration, :] = [a, b, c]
+            box_angles[iteration, :] = [alpha, beta, gamma]
+
+
+        self._current_total_work = self._current_protocol_work
+        self._trajectory = trajectory_positions
+        self._box_lengths = box_lengths
+        self._box_angles = box_angles
+
+        # Subclasses can read here info from the context to update internal statistics.
+        self._after_integration(context, thermodynamic_state)
+
+        sampler_state.update_from_context(context)
+
+    def reset(self):
+        """
+        Reset the work statistics on the associated ContextCache integrator.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+            the thermodynamic state for which this integrator is cached.
+        """
+        self._integrator.reset()
+        self._current_total_work = 0
+
+    def _before_integration(self, context: openmm.Context, thermodynamic_state: states.ThermodynamicState):
+        """Execute code after Context creation and before integration."""
+        self.reset()
+
+    @property
+    def cumulative_work(self):
+        return self._cumulative_work
+
+    @property
+    def trajectory(self):
+        return self._trajectory
+
+    @property
+    def box_lengths(self):
+        return self._box_lengths
+
+    @property
+    def box_angles(self):
+        return self._box_angles
+
+    @property
+    def n_frames(self):
+        return self._number_of_step_moves
+
+
+
 
 class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
     """
@@ -175,10 +368,17 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
         for iteration in range(self._number_of_step_moves):
 
-            integrator.step(self._work_save_interval)
+            try:
+                integrator.step(self._work_save_interval)
+            except Exception as e:
+                self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
+                raise e
             self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)
             self._protocol_work[iteration+1] = self._current_protocol_work
             self._cumulative_work[iteration+1] = self._protocol_work [iteration+1]
+
+            #if iteration %100 ==0:
+            #    print(self._current_protocol_work)
 
             #if we have a trajectory, we'll also write to it
             if self._save_configuration:
@@ -224,7 +424,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             the thermodynamic state for which this integrator is cached.
         """
         self._integrator.reset()
-        self._current_total_work = 0
+        self._current_protocol_work = 0.0
 
     def _before_integration(self, context: openmm.Context, thermodynamic_state: states.ThermodynamicState):
         """Execute code after Context creation and before integration."""
@@ -511,7 +711,11 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     reduced_potential : float
         unitless reduced potential (kT)
     """
-    context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
+    if type(cache.global_context_cache) == cache.DummyContextCache:
+        integrator = openmm.VerletIntegrator(1.0) #we won't take any steps, so use a simple integrator
+        context, integrator = cache.global_context_cache.get_context(thermodynamic_state, integrator)
+    else:
+        context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 

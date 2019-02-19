@@ -1,4 +1,4 @@
-# CDK2 protein-ligand example
+# MCL1 protein-ligand example
 
 This folder contains an example setup for a protein-ligand relative free energy calculation.
 
@@ -8,20 +8,20 @@ The input files in this directory are from the Schrodinger JACS dataset, with th
 
 ## File description
 
-* CDK2_fixed_nohet.pdb: PDB file for CDK2 structure from JACS benchmark (cited below) run through PDBFixer and pdb4amber.
+* MCL1_protein_fixed.pdb: PDB file for MCL1 structure from JACS benchmark (cited below) run through PDBFixer.
 
-* CDK2_ligands.sdf: SDF file of CDK2 ligands from JACS structure
+* MCL1_ligands.sdf: SDF file of MCL1 ligands from JACS structure
 
-* cdk2_nonequilibrium.yaml: Example configuration file for running CDK2 relative free energy calculations with nonequilibrium switching
+* mcl1_nonequilibrium.yaml: Example configuration file for running MCL1 relative free energy calculations with nonequilibrium switching
 
-* cdk2_sams.yaml: Example configuration file for running CDK2 relative free energy calculations with SAMS.
+* mcl1_sams.yaml: Example configuration file for running MCL1 relative free energy calculations with SAMS.
 
 ## Running example
 
-The example can be run by calling `python ../../scripts/setup_relative_calculation.py cdk2_sams.yaml`. By default, the included yaml file directs the code to set up and run the solvent phase. 
+The example can be run by calling `python ../../scripts/setup_relative_calculation.py mcl1_sams.yaml`. By default, the included yaml file directs the code to set up and run the solvent phase. 
 
 The options for the run are contained in the `yaml` file passed to the `setup_relative_calculation.py` script. There are two examples provided,
-`cdk2_sams.yaml` and `cdk2_nonequilibrium.yaml`, which allow the user to run either a SAMS or nonequilibrium switching-based free energy calculation, respectively.
+`mcl1_sams.yaml` and `mcl1_nonequilibrium.yaml`, which allow the user to run either a SAMS or nonequilibrium switching-based free energy calculation, respectively.
 ## References
 
 Accurate and Reliable Prediction of Relative Ligand Binding Potency in Prospective Drug Discovery by Way of a Modern Free-Energy Calculation Protocol and Force Field
