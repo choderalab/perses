@@ -106,7 +106,20 @@ def check_result(results, threshold=3.0, neffmin=10):
 
 def test_simple_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='imatinib', proposed_mol_name='nilotinib')
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='propane', proposed_mol_name='butane')
+    results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
+
+    for idx, lambda_result in enumerate(results):
+        try:
+            check_result(lambda_result)
+        except Exception as e:
+            message = "pentane->butane failed at lambda %d \n" % idx
+            message += str(e)
+            raise Exception(message)
+
+def test_hostguest_overlap():
+    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for host-guest system in vacuum"""
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_hostguest_proposal()
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -205,9 +218,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         nonalchemical_context, integrator = cache.global_context_cache.get_context(nonalchemical_thermodynamic_state)
         nonalchemical_sampler_state.apply_to_context(nonalchemical_context, ignore_velocities=True)
         nonalchemical_reduced_potential = nonalchemical_thermodynamic_state.reduced_potential(nonalchemical_context)
-
         w[iteration] = nonalchemical_reduced_potential - hybrid_reduced_potential
-
     [t0, g, Neff_max] = timeseries.detectEquilibration(w)
     print(Neff_max)
     w_burned_in = w[t0:]

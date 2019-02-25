@@ -827,6 +827,10 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     lambda_one_thermodynamic_State : ThermodynamicState
         Alchemical (hybrid) thermodynamic state for lambda one
     """
+    #TODO remove once issues are fixed
+    #uncommenting following two lines turns of non-bonded interactions in the test system
+    #from openmmtools.tests.test_alchemy import turn_off_nonbonded
+    #turn_off_nonbonded(system,sterics=True,electrostatics=True)
     #create the thermodynamic state
     lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(system)
     lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
@@ -958,3 +962,58 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
 
     return topology_proposal, solvated_positions, new_positions
+
+def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
+    """
+    Generate a test vacuum topology proposal, current positions, and new positions triplet
+    from two IUPAC molecule names.
+
+    Parameters
+    ----------
+    current_mol_name : str, optional
+        name of the first molecule
+    proposed_mol_name : str, optional
+        name of the second molecule
+
+    Returns
+    -------
+    topology_proposal : perses.rjmc.topology_proposal
+        The topology proposal representing the transformation
+    current_positions : np.array, unit-bearing
+        The positions of the initial system
+    new_positions : np.array, unit-bearing
+        The positions of the new system
+    """
+    from openmoltools import forcefield_generators
+    from openmmtools import testsystems
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+   
+    host_guest = testsystems.HostGuestVacuum()
+    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology 
+    ligand_topology = [res for res in top_old.residues()]
+    current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
+    proposed_mol = createOEMolFromSMILES('C1CC2(CCC1(CC2)C)C')
+
+    initial_smiles = oechem.OEMolToSmiles(current_mol)
+    final_smiles = oechem.OEMolToSmiles(proposed_mol)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
+
+    gaff_filename = get_data_filename('data/gaff.xml')
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    geometry_engine = geometry.FFAllAngleGeometryEngine()
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
+
+    #generate topology proposal
+    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
+
+    #generate new positions with geometry engine
+    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+
+    return topology_proposal, pos_old, new_positions
