@@ -277,7 +277,7 @@ def compute_rp(system, positions):
 def run_rj_simple_system(configurations_initial, topology_proposal):
     import tqdm
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    n_replicates = 500
+    n_replicates = 5000
     final_positions = []
     logPs = np.zeros([n_replicates, 4])
     geometry_engine = FFAllAngleGeometryEngine()
@@ -371,13 +371,13 @@ def simulate_equilibrium(system, starting_configuration, n_iterations):
 
 def run_simple_transformations():
     """
-    Run all simple transformations (3->4, 4->5)
+    Run all simple transformations (3->4, 4->5, 3->5)
     :return:
     """
     sys_pos_top, configuration_rp = simulate_simple_systems()
     logp_final_positions = {}
 
-    proposals = [[3,4], [4,5]]
+    proposals = [[3,4], [4,5], [3,5]]
 
     for proposal in proposals:
         topology_proposal = create_simple_topology_proposal(sys_pos_top, n_atoms_initial=proposal[0], n_atoms_final=proposal[1])
