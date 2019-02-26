@@ -122,23 +122,19 @@ def check_result(results, threshold=3.0, neffmin=10):
     if ddf > threshold:
         raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
 
-def test_simple_overlap():
-    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    name1 = 'catechol'
-    name2 = 'benzene'
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2)
-    print(name1, name2)
-    results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
-    for idx, lambda_result in enumerate(results):
-        try:
-            check_result(lambda_result)
-        except Exception as e:
-            message = "pentane->butane failed at lambda %d \n" % idx
-            message += str(e)
-            raise Exception(message)
+def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['catechol','adrenaline']]):
+    for pair in pairs:
+        print('{} -> {}'.format(pair[0],pair[1]))
+        print('smaller to larger')
+        test_simple_overlap(pair[0],pair[1])
+        # now running the reverse
+        print('{} -> {}'.format(pair[1],pair[0]))
+        print('larger to smaller')
+        test_simple_overlap(pair[1],pair[0])
 
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name2, proposed_mol_name=name1)
-    print(name2, name1)
+def test_simple_overlap(name1='pentane',name2='butane'):
+    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2)
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
     for idx, lambda_result in enumerate(results):
         try:
