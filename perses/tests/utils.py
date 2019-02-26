@@ -837,7 +837,7 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
 
     #ensure their states are set appropriately
     lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-    lambda_one_alchemical_state.set_alchemical_parameters(0.0)
+    lambda_one_alchemical_state.set_alchemical_parameters(1.0)
 
     #create the base thermodynamic state with the hybrid system
     thermodynamic_state = states.ThermodynamicState(system, temperature=temperature)

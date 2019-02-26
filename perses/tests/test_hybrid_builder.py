@@ -71,15 +71,33 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
     initial_sampler_state = SamplerState(hybrid_factory.hybrid_positions, box_vectors=hybrid_factory.hybrid_system.getDefaultPeriodicBoxVectors())
 
     hybrid_endpoint_results = []
+    all_results = []
     for lambda_state in (0, 1):
-        result = run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
+        result, non, hybrid = run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
                                         nonalchemical_thermodynamic_states[lambda_state], initial_sampler_state,
                                         mc_move, 100, hybrid_factory, lambda_index=lambda_state)
+        all_results.append(non)
+        all_results.append(hybrid)
         print(result)
 
         hybrid_endpoint_results.append(result)
-
+    calculate_cross_variance(all_results)
     return hybrid_endpoint_results
+
+def calculate_cross_variance(all_results):
+    if len(all_results) != 4:
+        return
+    else:
+        non_a = all_results[0]
+        hybrid_a = all_results[1]
+        non_b = all_results[2]
+        hybrid_b = all_results[3]
+    print('CROSS VALIDATION')
+    [df, ddf] = pymbar.EXP(non_a - hybrid_b) 
+    print('df: {}, ddf: {}'.format(df, ddf))
+    [df, ddf] = pymbar.EXP(non_b - hybrid_a) 
+    print('df: {}, ddf: {}'.format(df, ddf))
+    return
 
 def check_result(results, threshold=3.0, neffmin=10):
     """
@@ -106,9 +124,22 @@ def check_result(results, threshold=3.0, neffmin=10):
 
 def test_simple_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='propane', proposed_mol_name='butane')
+    name1 = 'catechol'
+    name2 = 'benzene'
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2)
+    print(name1, name2)
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
+    for idx, lambda_result in enumerate(results):
+        try:
+            check_result(lambda_result)
+        except Exception as e:
+            message = "pentane->butane failed at lambda %d \n" % idx
+            message += str(e)
+            raise Exception(message)
 
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name2, proposed_mol_name=name1)
+    print(name2, name1)
+    results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
     for idx, lambda_result in enumerate(results):
         try:
             check_result(lambda_result)
@@ -194,11 +225,12 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
 
     #initialize work array
     w = np.zeros([n_iterations])
+    non_potential = np.zeros([n_iterations])
+    hybrid_potential = np.zeros([n_iterations])
 
     #run n_iterations of the endpoint perturbation:
     for iteration in range(n_iterations):
         mc_move.apply(lambda_thermodynamic_state, new_sampler_state)
-        print(iteration)
         #compute the reduced potential at the new state
         hybrid_context, integrator = cache.global_context_cache.get_context(lambda_thermodynamic_state)
         new_sampler_state.apply_to_context(hybrid_context, ignore_velocities=True)
@@ -219,14 +251,15 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         nonalchemical_sampler_state.apply_to_context(nonalchemical_context, ignore_velocities=True)
         nonalchemical_reduced_potential = nonalchemical_thermodynamic_state.reduced_potential(nonalchemical_context)
         w[iteration] = nonalchemical_reduced_potential - hybrid_reduced_potential
+        non_potential[iteration] = nonalchemical_reduced_potential
+        hybrid_potential[iteration] = hybrid_reduced_potential
     [t0, g, Neff_max] = timeseries.detectEquilibration(w)
-    print(Neff_max)
     w_burned_in = w[t0:]
 
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
 
-    return [df, ddf_corrected, Neff_max]
+    return [df, ddf_corrected, Neff_max], non_potential, hybrid_potential 
 
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
