@@ -898,6 +898,10 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
 
+    # show atom mapping
+    filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
+    render_atom_mapping(filename,current_mol,proposed_mol,topology_proposal.new_to_old_atom_map)
+
     #generate new positions with geometry engine
     new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
 
