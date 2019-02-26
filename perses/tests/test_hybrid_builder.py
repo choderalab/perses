@@ -123,6 +123,13 @@ def check_result(results, threshold=3.0, neffmin=10):
         raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
 
 def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['catechol','adrenaline']]):
+    """
+    Test to run pairs of small molecule perturbations in vacuum, using test_simple_overlap, both forward and backward.
+    pentane <-> butane is adding a methyl group
+    fluorobenzene <-> chlorobenzene perturbs one halogen to another, with no adding or removing of atoms
+    benzene <-> catechol perturbing molecule in two positions simultaneously
+    catechol <-> adrenaline addition of 5-heavy atom aromatic substituent
+    """
     for pair in pairs:
         print('{} -> {}'.format(pair[0],pair[1]))
         print('smaller to larger')
