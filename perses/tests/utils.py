@@ -832,7 +832,9 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     #from openmmtools.tests.test_alchemy import turn_off_nonbonded
     #turn_off_nonbonded(system,sterics=True,electrostatics=True)
     #create the thermodynamic state
-    lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(system)
+    from perses.annihilation.lambda_protocol import RelativeAlchemicalState
+
+    lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(system)
     lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
 
     #ensure their states are set appropriately
@@ -851,6 +853,7 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     lambda_one_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
+
 
 def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene"):
     """

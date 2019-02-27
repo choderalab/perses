@@ -85,6 +85,10 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
     return hybrid_endpoint_results
 
 def calculate_cross_variance(all_results):
+    """
+    Calculates the overlap (df and ddf) between the non-alchemical state at lambda=0 to the hybrid state at lambda=1 and visa versa
+    These ensembles are not expected to have good overlap, as they are of explicitly different system, but provides a benchmark of appropriate dissimilarity
+    """
     if len(all_results) != 4:
         return
     else:
@@ -122,13 +126,13 @@ def check_result(results, threshold=3.0, neffmin=10):
     if ddf > threshold:
         raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
 
-def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['catechol','adrenaline']]):
+def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol']]):
     """
     Test to run pairs of small molecule perturbations in vacuum, using test_simple_overlap, both forward and backward.
     pentane <-> butane is adding a methyl group
     fluorobenzene <-> chlorobenzene perturbs one halogen to another, with no adding or removing of atoms
     benzene <-> catechol perturbing molecule in two positions simultaneously
-    catechol <-> adrenaline addition of 5-heavy atom aromatic substituent
+    benzene <-> 2-phenyl ethanol addition of 3 heavy atom group 
     """
     for pair in pairs:
         print('{} -> {}'.format(pair[0],pair[1]))
@@ -349,6 +353,22 @@ def test_position_output():
 
     assert np.all(np.isclose(old_positions.in_units_of(unit.nanometers), old_positions_factory.in_units_of(unit.nanometers)))
     assert np.all(np.isclose(new_positions.in_units_of(unit.nanometers), new_positions_factory.in_units_of(unit.nanometers)))
+
+def test_generate_endpoint_thermodynamic_states():
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='propane', proposed_mol_name='pentane')
+    hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
+
+    #get the relevant thermodynamic states:
+    _, _, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(hybrid_factory.hybrid_system, topology_proposal)
+    print(dir(lambda_zero_thermodynamic_state))
+    print(vars(lambda_zero_thermodynamic_state))
+    # check the parameters for each state
+    lambda_protocol = ['lambda_sterics_core','lambda_electrostatics_core','lambda_sterics_insert','lambda_electrostatics_insert','lambda_sterics_delete','lambda_electrostatics_delete']
+    for value in lambda_protocol:
+        if getattr(lambda_zero_thermodynamic_state, value) != 0.: 
+            raise Exception('Interaction {} not set to 0. at lambda = 0. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
+        if getattr(lambda_one_thermodynamic_state, value) != 1.: 
+            raise Exception('Interaction {} not set to 1. at lambda = 1. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
 
 if __name__ == '__main__':
     #test_compare_energies()
