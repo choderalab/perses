@@ -425,6 +425,18 @@ def compute_generalized_work(saved_workfile, initial_num_beads, final_num_beads)
 
     return g_work
 
+def estimate_free_energy(saved_workfile, initial_state, final_state):
+    """
+    Estimate free energies between all of the states that were sampled in the given saved file.
+
+    """
+    import pymbar
+    generalized_work_forward = compute_generalized_work(saved_workfile, initial_state, final_state)
+    generalized_work_reverse = compute_generalized_work(saved_workfile, final_state, initial_state)
+    df, ddf = pymbar.BAR(generalized_work_forward, generalized_work_reverse)
+
+    return df, ddf
+
 
 def test_propose_angle():
     """
