@@ -399,6 +399,33 @@ def run_and_save_tx(outfile="saved_run.npy"):
     sys_pos_top, configuration_rp, logp_final_positions = run_simple_transformations()
     np.save(outfile, (sys_pos_top, configuration_rp, logp_final_positions))
 
+def compute_generalized_work(saved_workfile, initial_num_beads, final_num_beads):
+    """
+    Using the saved workfile, return the generalized work for each attempt:
+
+    (logp_final - logp_initial) + (logp_reverse - logp_forward)
+
+    Parameters
+    ----------
+    saved_workfile : str
+        name of file where quantities were saved
+    initial_num_beads : int
+        number of beads in initial system
+    final_num_beads : int
+        number of beads in final system
+
+    Returns
+    -------
+    g_work : np.array of float
+        Generalized work of each attempt
+    """
+    saved_data = np.load(saved_workfile)[2]
+    logp, final_positions_stacked = saved_data['{}-{}'.format(initial_num_beads, final_num_beads)]
+    g_work = logp[:, 3] - logp[:, 0] + logp[:, 2] - logp[:, 1]
+
+    return g_work
+
+
 def test_propose_angle():
     """
     Test the proposal of angles by GeometryEngine by comparing to proposals from a normal distribution
