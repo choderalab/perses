@@ -318,7 +318,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_placements.append(atom_placement_array)
 
 
-            logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
+            #logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
+            logp_proposal+=logp_r+logp_theta+logp_phi
+            #print('logp_r, logp_theta: ', logp_r, logp_theta)
             growth_parameter_value += 1
 
             # DEBUG: Write PDB file for placed atoms
@@ -1524,7 +1526,7 @@ class GeometrySystemGenerator(object):
             print(e)
 
         # DEBUG: Write mol2 file.
-        debug = True
+        debug = False
         if debug:
             if not hasattr(self, 'omega_index'):
                 self.omega_index = 0
@@ -1938,9 +1940,9 @@ class ProposalOrderTools(object):
         # Handle heavy atoms before hydrogen atoms
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
-        print("adding heavy atoms") ##IVY
+        #print("adding heavy atoms") ##IVY
         logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
-        print("adding hydrogen atoms") ## IVY
+        #print("adding hydrogen atoms") ## IVY
         logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
 
         return atoms_torsions, logp_torsion_choice
