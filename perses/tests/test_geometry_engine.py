@@ -1,5 +1,6 @@
 __author__ = 'Patrick B. Grinaway'
-
+import sys
+sys.path.append('/home/dominic/github/perses/')
 import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openmoltools
@@ -140,6 +141,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         self._default_torsion_periodicity = 2
         self._default_torsion_phase = unit.Quantity(value=np.pi/2.0, unit=unit.radians)
         self._default_torsion_k = unit.Quantity(value=1.0, unit=unit.kilojoule/unit.mole)
+        #self._default_torsion_k = unit.Quantity(value=0.0, unit=unit.kilojoule/unit.mole)
 
         #set up a topology with the appropriate atoms (make them all carbon)
         self._topology = app.Topology()
@@ -247,7 +249,7 @@ def simulate_simple_systems():
     Simulate the 3, 4, and 5 particle simple systems
     :return:
     """
-    system_sizes = [3,4,5]
+    system_sizes = [3,4]
 
     configuration_rp = {}
     sys_pos_top = {}
@@ -262,7 +264,7 @@ def simulate_simple_systems():
 
         sys_pos_top[system_size] = (sys, pos, top)
 
-        configurations, reduced_potentials = simulate_equilibrium(sys, pos, 5000)
+        configurations, reduced_potentials = simulate_equilibrium(sys, pos, 3)
 
         configuration_rp[system_size] = (configurations, reduced_potentials)
 
@@ -277,7 +279,7 @@ def compute_rp(system, positions):
 def run_rj_simple_system(configurations_initial, topology_proposal):
     import tqdm
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    n_replicates = 5000
+    n_replicates = 3
     final_positions = []
     logPs = np.zeros([n_replicates, 4])
     geometry_engine = FFAllAngleGeometryEngine()
@@ -288,11 +290,11 @@ def run_rj_simple_system(configurations_initial, topology_proposal):
         new_positions, lp = geometry_engine.propose(topology_proposal, old_positions, beta)
         lp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, beta)
         initial_rp = compute_rp(topology_proposal.old_system, old_positions)
-        logPs[replicate_idx, 0] = -1 * initial_rp
+        logPs[replicate_idx, 0] = initial_rp
         logPs[replicate_idx, 1] = lp
         logPs[replicate_idx, 2] = lp_reverse
         final_rp = compute_rp(topology_proposal.new_system, new_positions)
-        logPs[replicate_idx, 3] = -1 * final_rp
+        logPs[replicate_idx, 3] = final_rp
         final_positions.append(new_positions)
     return logPs, final_positions
 
@@ -377,7 +379,8 @@ def run_simple_transformations():
     sys_pos_top, configuration_rp = simulate_simple_systems()
     logp_final_positions = {}
 
-    proposals = [[3,4], [4,5], [3,5]]
+    #proposals = [[3,4], [4,5], [3,5]]
+    proposals=[[3,4]]
 
     for proposal in proposals:
         topology_proposal = create_simple_topology_proposal(sys_pos_top, n_atoms_initial=proposal[0], n_atoms_final=proposal[1])
@@ -390,7 +393,7 @@ def run_simple_transformations():
 
     return sys_pos_top, configuration_rp, logp_final_positions
 
-def run_and_save_tx(outfile="saved_run.npy"):
+def run_and_save_tx(outfile="/home/dominic/saved_run.npy"):
     """
 
     :param outfile:

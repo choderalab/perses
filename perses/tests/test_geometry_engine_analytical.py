@@ -323,7 +323,7 @@ def run_rj_simple_system_revised(configurations_initial, topology_proposal, n_re
         final_positions.append(new_positions)
     return logPs, final_positions
 
-def create_simple_topology_proposal(sys_pos_top, n_atoms_initial, n_atoms_final):
+def create_simple_topology_proposal(sys_pos_top, n_atoms_initial, n_atoms_final, direction='forward'):
     """
 
     :param n_atoms_initial:
@@ -333,8 +333,15 @@ def create_simple_topology_proposal(sys_pos_top, n_atoms_initial, n_atoms_final)
     :return:
     """
     from perses.rjmc import topology_proposal as tp
-    initial_system, initial_position, initial_topology = sys_pos_top[n_atoms_initial]
-    final_system, final_positions, final_topology = sys_pos_top[n_atoms_final]
+
+    if direction=='forward' or direction=='forwards':
+        initial_system, initial_position, initial_topology = sys_pos_top['A']
+        final_system, final_positions, final_topology = sys_pos_top['B']
+    elif direction=='backward'or direction=='backwards':
+        initial_system, initial_position, initial_topology = sys_pos_top['B']
+        final_system, final_positions, final_topology = sys_pos_top['A']
+    else:
+        raise ValueError("direction may only be 'forward(s)' or 'backward(s)'!")
 
     if n_atoms_initial == 3 and (n_atoms_final == 4 or n_atoms_final == 5):
         new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
@@ -342,8 +349,12 @@ def create_simple_topology_proposal(sys_pos_top, n_atoms_initial, n_atoms_final)
         new_to_old_atom_map = {0: 0, 1: 1, 2: 2, 3: 3}
     elif n_atoms_initial==4 and n_atoms_final==3:
         new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
+    elif n_atoms_initial==5 and n_atoms_final==4:
+        new_to_old_atom_map = {0:0, 1:1, 2:2, 3:3}
+    elif n_atoms_initial==5 and n_atoms_final==3:
+        new_to_old_atom_map = {0:0, 1:1, 2:2}
     else:
-        raise ValueError("This method only supports going from 3->4, 4->3, 4->5, or 3->5")
+        raise ValueError("This method only supports going from 3->4, 4->3, 4->5, 5->4 3->5, or 5->3")
 
     topology_proposal = tp.TopologyProposal(new_topology=final_topology, new_system=final_system, old_topology=initial_topology,
                                             old_system=initial_system, logp_proposal=0.0,
@@ -470,56 +481,63 @@ class AnalyticalBeadSystems(object):
     It should be noted that the work in either proposal should amount to some constant (consistent with a ratio of partition functions since
     log weights of each distribution being sampled is set to zero)
     """
-    def __init__(self):
+    def __init__(self, transformation):
         from openmmtools import integrators
         import tqdm
         self.num_iterations=10
-        self.testsystem3=FourAtomValenceTestSystem(n_atoms=3)
-        self.testsystem4=FourAtomValenceTestSystem(n_atoms=4)
+        self.transformation=transformation
 
-        sys = self.testsystem3.system
-        top = self.testsystem3.topology
-        initial_pos = self.testsystem3.positions
+        self.testsystemA=FourAtomValenceTestSystem(n_atoms=self.transformation[0])
+        self.testsystemB=FourAtomValenceTestSystem(n_atoms=self.transformation[1])
 
-        sys4 = self.testsystem4.system
-        top4 = self.testsystem4.topology
-        pos4 = self.testsystem4.positions
 
-        pos = minimize(sys, initial_pos)
+        sysA = self.testsystemA.system
+        topA = self.testsystemA.topology
+        initial_posA = self.testsystemA.positions
+
+        sysB = self.testsystemB.system
+        topB = self.testsystemB.topology
+        initial_posB = self.testsystemB.positions
+
+        posA = minimize(sysA, initial_posA)
+        posB=  minimize(sysB, initial_posB)
+
         sys_pos_top=dict()
-        sys_pos_top[3]=(sys,pos,top)
-        sys_pos_top[4]=(sys4, pos4, top4)
-
+        sys_pos_top['A']=(sysA,posA,topA)
+        sys_pos_top['B']=(sysB, posB, topB)
         self.sys_pos_top=sys_pos_top
+
+
         self.platform=openmm.Platform.getPlatformByName("CPU")
-        self.simulated_positions3=unit.Quantity(np.zeros([self.num_iterations, 3,3]), unit=unit.nanometers)
         self.integrator = integrators.LangevinIntegrator()
-        self.ctx=openmm.Context(sys, self.integrator)
-        self.ctx.setPositions(pos)
+        self.ctx=openmm.Context(sysA, self.integrator)
 
+        self.ctx.setPositions(posA)
 
-    def create_iid_3bead_systems(self):
+    def create_iid_bead_systems(self):
+        self.simulated_positions=unit.Quantity(np.zeros([self.num_iterations, self.transformation[0],3]), unit=unit.nanometers)
+
         for iteration in tqdm.trange(self.num_iterations):
             self.integrator.step(1000)
             state=self.ctx.getState(getPositions=True)
-            self.simulated_positions3[iteration,:,:]=state.getPositions(asNumpy=True)
-        #print('simulated_positions_3: ', self.simulated_positions3)
+            self.simulated_positions[iteration,:,:]=state.getPositions(asNumpy=True)
+        #print('simulated_positions: ', self.simulated_positions)
 
-    def _3to4_bead(self):
-        topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=3, n_atoms_final=4)
-        data,proposed_positions4=run_rj_simple_system_revised(self.simulated_positions3, topology_proposal, self.num_iterations)
+    def _forward_transformation(self):
+        topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=self.transformation[0], n_atoms_final=self.transformation[1], direction='forward')
+        data,proposed_positions=run_rj_simple_system_revised(self.simulated_positions, topology_proposal, self.num_iterations)
         self.work_forward = data[:, 3] - data[:, 0] - data[:, 2] + data[:, 1]
 
-        proposed_positions4_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
-                                        proposed_positions4]
-        proposed_positions4_stacked = np.stack(proposed_positions4_no_units)
-        self.proposed_positions4=unit.Quantity(proposed_positions4_stacked, unit=unit.nanometers)
+        proposed_positions_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
+                                        proposed_positions]
+        proposed_positions_stacked = np.stack(proposed_positions_no_units)
+        self.proposed_positions=unit.Quantity(proposed_positions_stacked, unit=unit.nanometers)
 
         #print('proposed_positions_4: ', self.proposed_positions4)
 
-    def _4to3_bead(self):
-        topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=4, n_atoms_final=3)
-        data,reverted_positions=run_rj_simple_system_revised(self.proposed_positions4, topology_proposal, self.num_iterations)
+    def _backward_transformation(self):
+        topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=self.transformation[1], n_atoms_final=self.transformation[0], direction='backward')
+        data,reverted_positions=run_rj_simple_system_revised(self.proposed_positions, topology_proposal, self.num_iterations)
         self.work_reverse = data[:, 3] - data[:, 0] - data[:, 2] + data[:, 1]
 
         reverted_positions_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
@@ -529,163 +547,34 @@ class AnalyticalBeadSystems(object):
 
         #print('reverted_positions: ', self.reverted_positions)
 
+
+
     def assertion(self):
         work_comparison=[i+j for i,j in zip(self.work_forward, self.work_reverse)]
         work_forward_var=np.var(self.work_forward)
         work_reverse_var=np.var(self.work_reverse)
+        #print('work_forward: ', self.work_forward)
+        #print('work_reverse: ', self.work_reverse)
         return work_comparison, work_forward_var, work_reverse_var
-        #assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-4 and work_reverse_var<1e-4
-        #print("work_comparison: ", work_comparison )
-        #print("work_forward_var: ", work_forward_var)
-        #print("work_reverse_var: ", work_reverse_var)
+
 
 def test_AnalyticalBeadSystems():
-    a=AnalyticalBeadSystems()
-    a.create_iid_3bead_systems()
-    a._3to4_bead()
-    a._4to3_bead()
+    a,b,c=(AnalyticalBeadSystems([3,4]), AnalyticalBeadSystems([4,5]), AnalyticalBeadSystems([3,5]))
+    a.create_iid_bead_systems(); a._forward_transformation(); a._backward_transformation()
+    b.create_iid_bead_systems(); b._forward_transformation(); b._backward_transformation()
+    c.create_iid_bead_systems(); c._forward_transformation(); c._backward_transformation()
+
     work_comparison, work_forward_var, work_reverse_var=a.assertion()
-    #print("work_comparison: ", work_comparison )
-    #print("work_forward_var: ", work_forward_var)
-    #print("work_reverse_var: ", work_reverse_var)
-    assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-4 and work_reverse_var<1e-4
+    assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-6 and work_reverse_var<1e-6
+
+    work_comparison, work_forward_var, work_reverse_var=b.assertion()
+    assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-6 and work_reverse_var<1e-6
+
+    work_comparison, work_forward_var, work_reverse_var=c.assertion()
+    assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-6 and work_reverse_var<1e-6
+
     #print("work_comparison: ", work_comparison )
     #print("work_forward_var: ", work_forward_var)
     #print("work_reverse_var: ", work_reverse_var)
 
 test_AnalyticalBeadSystems()
-
-
-# In[2]
-
-
-# testsystem = FourAtomValenceTestSystem(n_atoms=3)
-# sys = testsystem.system
-# top = testsystem.topology
-# initial_pos = testsystem.positions
-#
-#
-# testsystem4 = FourAtomValenceTestSystem(n_atoms=4)
-# sys4 = testsystem4.system
-# top4 = testsystem4.topology
-# pos4 = testsystem4.positions
-#
-# pos = minimize(sys, initial_pos)
-# sys_pos_top=dict()
-# sys_pos_top[3]=(sys,pos,top)
-# sys_pos_top[4]=(sys4, pos4, top4)
-#
-# from openmmtools import integrators
-# import tqdm
-# integrator = integrators.LangevinIntegrator()
-# platform = openmm.Platform.getPlatformByName("CPU")
-# ctx = openmm.Context(sys, integrator)
-# ctx.setPositions(pos)
-# simulated_positions = unit.Quantity(np.zeros([num_iterations, sys.getNumParticles(), 3]), unit=unit.nanometers)
-# # for i in tqdm.trange(num_iterations):
-# #     integrator.step(1000)
-# #     state = ctx.getState(getPositions=True, getEnergy=True)
-# #     simulated_position = state.getPositions(asNumpy=True); simulated_positions[i,:,:]=simulated_position
-# #     #reduced_potential= beta * state.getPotentialEnergy();
-#
-#
-# proposals=[3,4]
-
-# topology_proposal = create_simple_topology_proposal(sys_pos_top, n_atoms_initial=proposals[0], n_atoms_final=proposals[1])
-#
-# data, final_positions = run_rj_simple_system(simulated_positions, topology_proposal, num_iterations)
-#
-#
-# #import mdtraj
-# #final_positions_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
-# #                                    final_positions]
-# #final_positions_stacked = np.stack(final_positions_no_units)
-# #t=mdtraj.Trajectory(final_positions_stacked, top4)
-#
-#
-# #print('dihedrals: ', mdtraj.compute_dihedrals(t,np.array([[0,1,2,3]])))
-# #init_posits=mdtraj.Trajectory(final_positions[0], top4)
-#
-# g_work = data[:, 3] - data[:, 0] - data[:, 2] + data[:, 1]
-# #print(g_work)
-#
-# #return dihedrals:
-#
-# #print(data[0])
-# #print('initial_positions: ', simulated_positions[0])
-# #print('final_positions: ', final_positions[0])
-# #a,b,c,d=parmed.topologyobjects.Atom(name="C1"), parmed.topologyobjects.Atom(name="C2"), parmed.topologyobjects.Atom(name="C3"), parmed.topologyobjects.Atom(name="C4")
-# #torsion=parmed.topologyobjects.Dihedral(a,b,c,d)
-# #print('torsion energy: ',torsion.energy())
-# print('g_work forward: ', g_work)
-# print('g_work std forward: ', np.std(g_work))
-#
-# ############################################
-#
-#
-# # In[2] 4 --> 3 bead system
-# num_iterations=100
-#
-# testsystem = FourAtomValenceTestSystem(n_atoms=4)
-# sys = testsystem.system
-# top = testsystem.topology
-# initial_pos = testsystem.positions
-#
-#
-# testsystem3 = FourAtomValenceTestSystem(n_atoms=3)
-# sys3 = testsystem3.system
-# top3 = testsystem3.topology
-# pos3 = testsystem3.positions
-#
-# pos = minimize(sys, initial_pos)
-# sys_pos_top=dict()
-# sys_pos_top[3]=(sys3,pos3,top3)
-# sys_pos_top[4]=(sys, pos, top)
-#
-# from openmmtools import integrators
-# import tqdm
-# integrator = integrators.LangevinIntegrator()
-# platform = openmm.Platform.getPlatformByName("CPU")
-# ctx = openmm.Context(sys, integrator)
-# ctx.setPositions(pos)
-# simulated_positions = unit.Quantity(np.zeros([num_iterations, sys.getNumParticles(), 3]), unit=unit.nanometers)
-# for i in tqdm.trange(num_iterations):
-#     integrator.step(1000)
-#     state = ctx.getState(getPositions=True, getEnergy=True)
-#     simulated_position = state.getPositions(asNumpy=True); simulated_positions[i,:,:]=simulated_position
-#     #reduced_potential= beta * state.getPotentialEnergy();
-#
-#
-# proposals=[4,3]
-#
-# topology_proposal = create_simple_topology_proposal(sys_pos_top, n_atoms_initial=proposals[0], n_atoms_final=proposals[1])
-#
-# data, final_positions = run_rj_simple_system(simulated_positions, topology_proposal, num_iterations)
-#
-#
-# #import mdtraj
-# #final_positions_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
-# #                                    final_positions]
-# #final_positions_stacked = np.stack(final_positions_no_units)
-# #t=mdtraj.Trajectory(final_positions_stacked, top4)
-#
-#
-# #print('dihedrals: ', mdtraj.compute_dihedrals(t,np.array([[0,1,2,3]])))
-# #init_posits=mdtraj.Trajectory(final_positions[0], top4)
-#
-# g_work = data[:, 3] - data[:, 0] - data[:, 2] + data[:, 1]
-# #print(g_work)
-#
-# #return dihedrals:
-#
-# #print(data[0])
-# #print('initial_positions: ', simulated_positions[0])
-# #print('final_positions: ', final_positions[0])
-# #a,b,c,d=parmed.topologyobjects.Atom(name="C1"), parmed.topologyobjects.Atom(name="C2"), parmed.topologyobjects.Atom(name="C3"), parmed.topologyobjects.Atom(name="C4")
-# #torsion=parmed.topologyobjects.Dihedral(a,b,c,d)
-# #print('torsion energy: ',torsion.energy())
-# print('g_work reverse: ', g_work)
-# print('g_work std reverse: ', np.var(g_work))
-#
-#
-# # In[3]: 4-->5 bead system
