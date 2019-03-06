@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # In[0]
 import sys
-sys.path.append('/home/dominic/github/perses/')
+#sys.path.append('/home/dominic/github/perses/')
 import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openmoltools
@@ -545,9 +545,15 @@ def test_AnalyticalBeadSystems():
     a._3to4_bead()
     a._4to3_bead()
     work_comparison, work_forward_var, work_reverse_var=a.assertion()
+    #print("work_comparison: ", work_comparison )
+    #print("work_forward_var: ", work_forward_var)
+    #print("work_reverse_var: ", work_reverse_var)
     assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-4 and work_reverse_var<1e-4
+    #print("work_comparison: ", work_comparison )
+    #print("work_forward_var: ", work_forward_var)
+    #print("work_reverse_var: ", work_reverse_var)
 
-
+test_AnalyticalBeadSystems()
 
 
 # In[2]

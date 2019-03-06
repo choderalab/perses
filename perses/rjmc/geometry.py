@@ -16,6 +16,7 @@ import simtk.openmm.app as app
 import time
 import logging
 from perses.storage import NetCDFStorage, NetCDFStorageView
+from openmmtools.constants import kB
 _logger = logging.getLogger("geometry")
 
 class GeometryEngine(object):
@@ -318,8 +319,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_placements.append(atom_placement_array)
 
 
-            #logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
-            logp_proposal+=logp_r+logp_theta+logp_phi
+            logp_proposal += logp_r + logp_theta + logp_phi - np.log(detJ)
+            #logp_proposal+=logp_r+logp_theta+logp_phi
             #print('logp_r, logp_theta: ', logp_r, logp_theta)
             growth_parameter_value += 1
 
@@ -644,9 +645,24 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        k_eq = bond.type.k
-        r0 = bond.type.req
-        logq = -beta*0.5*k_eq*(r-r0)**2
+        import scipy.integrate as integrate
+        #print('beta: ', beta)
+
+        k_eq = bond.type.k.in_units_of(units.kilocalorie_per_mole/units.nanometers**2)
+        r0 = bond.type.req.in_units_of(units.nanometers)
+        r_target=r.in_units_of(units.nanometers)
+
+        #exponand=-beta*k_eq*0.5*(r-r0)**2
+        array=np.linspace(0,10,1000)*units.nanometers
+        #exponand=np.exp(-1*beta*k_eq*0.5*(array-r0)**2)
+        #print('exponand: ', -beta*k_eq*0.5*(0*units.nanometers-r0)**2)
+        f=lambda x: np.exp(-beta*k_eq*0.5*(x*units.nanometers-r0)**2)*(x)**2
+        #f=lambda x: (x/units.nanometers)**2*np.exp(-beta*k_eq*0.5*(r-r0)**2)
+
+        integral, integral_err=integrate.quad(f,0,10)
+        logZ_r=np.log(integral)
+
+        logq = np.log(r_target**2/(units.nanometers)**2)-beta*0.5*k_eq*(r_target-r0)**2-logZ_r
         return logq
 
     def _angle_logq(self, theta, angle, beta):
@@ -662,9 +678,23 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        k_eq = angle.type.k
-        theta0 = angle.type.theteq
-        logq = -beta*k_eq*0.5*(theta-theta0)**2
+        import scipy.integrate as integrate
+
+        k_eq = angle.type.k.in_units_of(units.kilocalorie_per_mole/units.radians**2)
+        theta0 = angle.type.theteq.in_units_of(units.radians)
+        theta_target=theta.in_units_of(units.radians)
+
+
+        array=np.linspace(-np.pi, np.pi)
+        #exponand=np.exp(-1*beta*k_eq*0.5*(array-theta0)**2)
+
+        f=lambda x: np.exp(-beta*k_eq*0.5*(x*units.radians-theta0)**2)*np.sin(x)
+
+        integral, integral_err=integrate.quad(f,-np.pi,np.pi)
+        logZ_theta=np.log(integral)
+
+
+        logq = np.log(np.sin(theta_target/units.radians))-beta*0.5*k_eq*(theta_target-theta0)**2-logZ_theta
         return logq
 
     def _propose_bond(self, bond, beta):
@@ -942,7 +972,7 @@ class BootstrapParticleFilter(object):
         angle_position = angle_position.astype(np.float64)
         torsion_position = torsion_position.astype(np.float64)
         xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
-        return xyz, r**2*np.sin(theta)
+        return xyz, (r/units.nanometers)**2*np.sin(theta/units.radians)
 
     def _get_bond_constraint(self, atom1, atom2, system):
         """
