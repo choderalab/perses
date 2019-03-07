@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # In[0]
 import sys
-#sys.path.append('/home/dominic/github/perses/')
 import simtk.openmm as openmm
 import openeye.oechem as oechem
 import openmoltools
@@ -553,8 +552,8 @@ class AnalyticalBeadSystems(object):
         work_comparison=[i+j for i,j in zip(self.work_forward, self.work_reverse)]
         work_forward_var=np.var(self.work_forward)
         work_reverse_var=np.var(self.work_reverse)
-        #print('work_forward: ', self.work_forward)
-        #print('work_reverse: ', self.work_reverse)
+        print('work_forward: ', self.work_forward)
+        print('work_reverse: ', self.work_reverse)
         return work_comparison, work_forward_var, work_reverse_var
 
 

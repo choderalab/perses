@@ -281,7 +281,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 bond_k = bond.type.k * self._bond_softening_constant
                 sigma_r = units.sqrt(1/(beta*bond_k))
                 logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
-                logp_r = self._bond_logq(r, bond, beta) - logZ_r
+                logp_r = self._bond_logq(r, bond, beta) #- logZ_r
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
@@ -297,7 +297,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             angle_k = angle.type.k * self._angle_softening_constant
             sigma_theta = units.sqrt(1/(beta*angle_k))
             logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
-            logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
+            logp_theta = self._angle_logq(theta, angle, beta) #- logZ_theta
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
