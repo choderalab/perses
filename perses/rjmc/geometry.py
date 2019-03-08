@@ -19,6 +19,7 @@ from perses.storage import NetCDFStorage, NetCDFStorageView
 from openmmtools.constants import kB
 _logger = logging.getLogger("geometry")
 
+
 class GeometryEngine(object):
     """
     This is the base class for the geometry engine.
@@ -252,8 +253,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         #now for the main loop:
         logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
         atom_placements = []
+        #atom_number=0
         for atom, torsion in atom_proposal_order.items():
-
             growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
             bond_atom = torsion.atom2
             angle_atom = torsion.atom3
@@ -278,10 +279,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             if bond is not None:
                 if direction=='forward':
                     r = self._propose_bond(bond, beta)
-                bond_k = bond.type.k * self._bond_softening_constant
-                sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
+                #bond_k = bond.type.k * self._bond_softening_constant
+                #sigma_r = units.sqrt(1/(beta*bond_k))
+                #logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
                 logp_r = self._bond_logq(r, bond, beta) #- logZ_r
+                #print('logp_r', logp_r)
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
@@ -294,10 +296,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
             if direction=='forward':
                 theta = self._propose_angle(angle, beta)
-            angle_k = angle.type.k * self._angle_softening_constant
-            sigma_theta = units.sqrt(1/(beta*angle_k))
-            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
+            #angle_k = angle.type.k * self._angle_softening_constant
+            #sigma_theta = units.sqrt(1/(beta*angle_k))
+            #logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
             logp_theta = self._angle_logq(theta, angle, beta) #- logZ_theta
+            #print('logp_theta: ', logp_theta)
 
             #propose a torsion angle and calcualate its probability
             if direction=='forward':
@@ -319,14 +322,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atom_placements.append(atom_placement_array)
 
 
+
             logp_proposal += logp_r + logp_theta + logp_phi - np.log(detJ)
-            #logp_proposal+=logp_r+logp_theta+logp_phi
-            #print('logp_r, logp_theta: ', logp_r, logp_theta)
             growth_parameter_value += 1
 
             # DEBUG: Write PDB file for placed atoms
             atoms_with_positions.append(atom)
-
         total_time = time.time() - initial_time
 
         #use a new array for each placement, since the variable size will be different.
@@ -648,21 +649,17 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         import scipy.integrate as integrate
         #print('beta: ', beta)
 
-        k_eq = bond.type.k.in_units_of(units.kilocalorie_per_mole/units.nanometers**2)
+        k_eq = bond.type.k.in_units_of(units.kilocalorie_per_mole/units.nanometers**2) * self._bond_softening_constant
         r0 = bond.type.req.in_units_of(units.nanometers)
         r_target=r.in_units_of(units.nanometers)
 
-        #exponand=-beta*k_eq*0.5*(r-r0)**2
-        array=np.linspace(0,10,1000)*units.nanometers
-        #exponand=np.exp(-1*beta*k_eq*0.5*(array-r0)**2)
-        #print('exponand: ', -beta*k_eq*0.5*(0*units.nanometers-r0)**2)
-        f=lambda x: np.exp(-beta*k_eq*0.5*(x*units.nanometers-r0)**2)*(x)**2
-        #f=lambda x: (x/units.nanometers)**2*np.exp(-beta*k_eq*0.5*(r-r0)**2)
 
-        integral, integral_err=integrate.quad(f,0,10)
-        logZ_r=np.log(integral)
+        #f=lambda x: np.exp(-beta*k_eq*0.5*(x*units.nanometers-r0)**2)*(x)**2
+        #upper_bound=1
+        #integral, integral_err=integrate.quad(f,0,upper_bound)
+        #logZ_r=np.log(integral)
 
-        logq = np.log(r_target**2/(units.nanometers)**2)-beta*0.5*k_eq*(r_target-r0)**2-logZ_r
+        logq = np.log(r_target**2/((units.nanometers)**2))-beta*0.5*k_eq*(r_target-r0)**2#-logZ_r
         return logq
 
     def _angle_logq(self, theta, angle, beta):
@@ -680,7 +677,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         import scipy.integrate as integrate
 
-        k_eq = angle.type.k.in_units_of(units.kilocalorie_per_mole/units.radians**2)
+        k_eq = angle.type.k.in_units_of(units.kilocalorie_per_mole/units.radians**2) * self._angle_softening_constant
         theta0 = angle.type.theteq.in_units_of(units.radians)
         theta_target=theta.in_units_of(units.radians)
 

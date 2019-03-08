@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# In[0]
 import sys
 import simtk.openmm as openmm
 import openeye.oechem as oechem
@@ -30,8 +29,6 @@ from nose.plugins.attrib import attr
 from openmmtools.constants import kB
 from perses.rjmc import coordinate_numba
 import tqdm
-
-#correct p-value threshold for some multiple hypothesis testing
 pval_base = 0.01
 ntests = 3.0
 ncommits = 10000.0
@@ -308,10 +305,8 @@ def run_rj_simple_system_revised(configurations_initial, topology_proposal, n_re
     logPs = np.zeros([n_replicates, 4])
     geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_torsion_divisions=3600, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
     for replicate_idx in tqdm.trange(n_replicates):
-        #oldpos_idx = np.random.choice(range(len(configurations_initial)))
         old_positions = configurations_initial[replicate_idx, :, :]
         new_positions, lp = geometry_engine.propose(topology_proposal, old_positions, beta)
-        #print('new_positions: ', new_positions)
         lp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, beta)
         initial_rp = compute_rp(topology_proposal.old_system, old_positions)
         logPs[replicate_idx, 0] = initial_rp
@@ -480,100 +475,180 @@ class AnalyticalBeadSystems(object):
     It should be noted that the work in either proposal should amount to some constant (consistent with a ratio of partition functions since
     log weights of each distribution being sampled is set to zero)
     """
-    def __init__(self, transformation):
+    def __init__(self, transformation, num_iterations):
         from openmmtools import integrators
         import tqdm
-        self.num_iterations=10
+        import mdtraj as md
+
+        self.num_iterations=num_iterations
         self.transformation=transformation
 
         self.testsystemA=FourAtomValenceTestSystem(n_atoms=self.transformation[0])
         self.testsystemB=FourAtomValenceTestSystem(n_atoms=self.transformation[1])
 
 
-        sysA = self.testsystemA.system
-        topA = self.testsystemA.topology
+        self.sysA = self.testsystemA.system
+        self.topA = self.testsystemA.topology
         initial_posA = self.testsystemA.positions
 
-        sysB = self.testsystemB.system
-        topB = self.testsystemB.topology
+        self.sysB = self.testsystemB.system
+        self.topB = self.testsystemB.topology
         initial_posB = self.testsystemB.positions
 
-        posA = minimize(sysA, initial_posA)
-        posB=  minimize(sysB, initial_posB)
+        self.posA = minimize(self.sysA, initial_posA)
+        self.posB = minimize(self.sysB, initial_posB)
 
         sys_pos_top=dict()
-        sys_pos_top['A']=(sysA,posA,topA)
-        sys_pos_top['B']=(sysB, posB, topB)
+        sys_pos_top['A']=(self.sysA,self.posA,self.topA)
+        sys_pos_top['B']=(self.sysB, self.posB, self.topB)
         self.sys_pos_top=sys_pos_top
 
 
+
+
+    def convert_to_md(self, openmm_positions):
+        """
+        convert openmm_positions (in units.nanometers) to mdtraj ndarray
+        """
+        openmm_positions_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
+                                        openmm_positions]
+        md_positions_stacked = np.stack(openmm_positions_no_units)
+
+        return md_positions_stacked
+
+
+    def conduct_proposal_system_equilibrium_simulations(filename=None, printer=False):
+        from openmmtools import integrators
         self.platform=openmm.Platform.getPlatformByName("CPU")
         self.integrator = integrators.LangevinIntegrator()
-        self.ctx=openmm.Context(sysA, self.integrator)
+        self.ctx=openmm.Context(self.sysB, self.integrator)
 
-        self.ctx.setPositions(posA)
+        self.ctx.setPositions(self.posB)
 
-    def create_iid_bead_systems(self):
+        self.proposal_system_simulation_positions=unit.Quantity(np.zeros([self.num_iterations, self.transformation[1],3]), unit=unit.nanometers)
+
+        for iteration in tqdm.trange(self.num_iterations):
+            self.integrator.step(1000)
+            state=self.ctx.getState(getPositions=True)
+            self.proposal_system_simulation_positions[iteration,:,:]=state.getPositions(asNumpy=True)
+
+        proposal_system_simulation_positions_stacked=self.convert_to_md(self.proposal_system_simulation_positions)
+        self.proposal_system_simulation_positions=unit.Quantity(proposal_system_simulation_positions_stacked, unit=unit.nanometer)
+
+        if filename!=None:
+            np.save(file=filename, arr=proposal_system_simulation_positions_stacked)
+        if printer:
+            print('proposal_system_simulation_positions: ')
+            print(proposal_system_simulation_positions_stacked)
+
+
+
+    def create_iid_bead_systems(self, filename=None, printer=False):
+        from openmmtools import integrators
+        self.platform=openmm.Platform.getPlatformByName("CPU")
+        self.integrator = integrators.LangevinIntegrator()
+        self.ctx=openmm.Context(self.sysA, self.integrator)
+
+        self.ctx.setPositions(self.posA)
+
         self.simulated_positions=unit.Quantity(np.zeros([self.num_iterations, self.transformation[0],3]), unit=unit.nanometers)
 
         for iteration in tqdm.trange(self.num_iterations):
             self.integrator.step(1000)
             state=self.ctx.getState(getPositions=True)
             self.simulated_positions[iteration,:,:]=state.getPositions(asNumpy=True)
-        #print('simulated_positions: ', self.simulated_positions)
 
-    def _forward_transformation(self):
+        simulated_positions_stacked=self.convert_to_md(self.simulated_positions)
+        self.simulated_positions=unit.Quantity(simulated_positions_stacked, unit=unit.nanometer)
+
+        if filename!=None:
+            np.save(file=filename, arr=simulated_positions_stacked)
+        if printer:
+            print('simulated_positions: ')
+            print(simulated_positions_stacked)
+
+
+
+    def _forward_transformation(self, filename=None, printer=False):
         topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=self.transformation[0], n_atoms_final=self.transformation[1], direction='forward')
-        data,proposed_positions=run_rj_simple_system_revised(self.simulated_positions, topology_proposal, self.num_iterations)
-        self.work_forward = data[:, 3] - data[:, 0] - data[:, 2] + data[:, 1]
+        self.data_forward,self.proposed_positions=run_rj_simple_system_revised(self.simulated_positions, topology_proposal, self.num_iterations)
+        self.work_forward = self.data_forward[:, 3] - self.data_forward[:, 0] - self.data_forward[:, 2] + self.data_forward[:, 1]
 
-        proposed_positions_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
-                                        proposed_positions]
-        proposed_positions_stacked = np.stack(proposed_positions_no_units)
+
+        proposed_positions_stacked=self.convert_to_md(self.proposed_positions)
         self.proposed_positions=unit.Quantity(proposed_positions_stacked, unit=unit.nanometers)
 
-        #print('proposed_positions_4: ', self.proposed_positions4)
 
-    def _backward_transformation(self):
+        if filename!=None:
+            np.save(file=filename, arr=proposed_positions_stacked)
+        if printer:
+            print('proposed_positions: ')
+            print(proposed_positions_stacked)
+
+
+    def _backward_transformation(self, printer=False):
         topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=self.transformation[1], n_atoms_final=self.transformation[0], direction='backward')
-        data,reverted_positions=run_rj_simple_system_revised(self.proposed_positions, topology_proposal, self.num_iterations)
-        self.work_reverse = data[:, 3] - data[:, 0] - data[:, 2] + data[:, 1]
+        self.data_reverted,self.reverted_positions=run_rj_simple_system_revised(self.proposed_positions, topology_proposal, self.num_iterations)
+        self.work_reverse = self.data_reverted[:, 3] - self.data_reverted[:, 0] - self.data_reverted[:, 2] + self.data_reverted[:, 1]
 
-        reverted_positions_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
-                                        reverted_positions]
-        reverted_positions_stacked = np.stack(reverted_positions_no_units)
-        self.reverted_positions=unit.Quantity(reverted_positions_stacked, unit=unit.nanometers)
+        if printer:
+            reverted_positions_stacked=self.convert_to_md(self.reverted_positions)
+            print('reverted_positions (i.e. backward transformation positions: ')
+            print(reverted_positions_stacked)
 
-        #print('reverted_positions: ', self.reverted_positions)
+    # def _rjmc_compute_valence_term_distributions(self, term, save=False, filename=None):
+    #
+    #     #render systems into mdtraj objekts
+    #     sysA, posA, topA=self.sys_pos_top['A']
+    #     sysB, posB, topB=self.sys_pos_top['B']
+    #     simulated_traj=md.Trajectory(self.simulated_positions_stacked, topA )
+    #     proposed_traj=md.Trajectory(self.proposed_positions_stacked, topB )
+    #
+    #     #compute_work_weights
+    #     offset_work=np.min(self.work_forward)
+    #     corrected_work=[i-offset_work for i in self.work_forward]
+    #     Z_work=sum([np.exp(-w) for w in corrected_work])
+    #     weights=np.array([np.exp(-w)/Z_work for w in corrected_work])
+    #
+    #     #compute simulated coordinate
+    #     if len(term)==2: #we are going to compute the bond distribution
+    #         sim_coord=md.compute_distances(simulated_traj,np.array([[term[0], term[1]] for i in range(self.num_iterations)]))
+    #     elif len(term)==3: #compute angle distribution
+    #         sim_coord=md.compute_angles(simulated_traj, np.array([[term[0], term[1], term[2]] for i in range(self.num_iterations)]))
+    #     elif len(term)==4: #compute torsion
+    #         sim_coord=md.compute_dihedrals(simulated_traj, np.array([[term[0], term[1], term[2], term[3]] for i in range(self.num_iterations)]))
+
+        #compute unweighted proposed coordinate
 
 
 
-    def assertion(self):
+
+    def assertion(self, printer=True):
         work_comparison=[i+j for i,j in zip(self.work_forward, self.work_reverse)]
         work_forward_var=np.var(self.work_forward)
         work_reverse_var=np.var(self.work_reverse)
-        print('work_forward: ', self.work_forward)
-        print('work_reverse: ', self.work_reverse)
+        if printer:
+            print('work_forward: ', self.work_forward)
+            print('work_reverse: ', self.work_reverse)
+            print('work_comparison: ',work_comparison)
+            print('work_forward_var: ', work_forward_var)
+            print('work_reverse_var: ', work_reverse_var)
         return work_comparison, work_forward_var, work_reverse_var
 
 
-def test_AnalyticalBeadSystems():
-    a,b,c=(AnalyticalBeadSystems([3,4]), AnalyticalBeadSystems([4,5]), AnalyticalBeadSystems([3,5]))
-    a.create_iid_bead_systems(); a._forward_transformation(); a._backward_transformation()
-    b.create_iid_bead_systems(); b._forward_transformation(); b._backward_transformation()
-    c.create_iid_bead_systems(); c._forward_transformation(); c._backward_transformation()
 
-    work_comparison, work_forward_var, work_reverse_var=a.assertion()
+def test_AnalyticalBeadSystems(transformation=[3,4], num_iterations=10, test_distribution=False, filename_prefix=None):
+
+    test=AnalyticalBeadSystems(transformation, num_iterations)
+    test.create_iid_bead_systems(filename=filename_prefix, printer=False)
+    test._forward_transformation(filename=filename_prefix, printer=False)
+    test._backward_transformation(printer=False)
+    work_comparison, work_forward_var, work_reverse_var=test.assertion()
     assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-6 and work_reverse_var<1e-6
 
-    work_comparison, work_forward_var, work_reverse_var=b.assertion()
-    assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-6 and work_reverse_var<1e-6
+    if test_distribution:
+        test.conduct_proposal_system_equilibrium_simulations(filename=filename_prefix, printer=True)
 
-    work_comparison, work_forward_var, work_reverse_var=c.assertion()
-    assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-6 and work_reverse_var<1e-6
-
-    #print("work_comparison: ", work_comparison )
-    #print("work_forward_var: ", work_forward_var)
-    #print("work_reverse_var: ", work_reverse_var)
-
-test_AnalyticalBeadSystems()
+test_AnalyticalBeadSystems(transformation=[3,5], num_iterations=10, test_distribution=False, filename_prefix=None)
+test_AnalyticalBeadSystems(transformation=[3,4], num_iterations=10, test_distribution=False, filename_prefix=None)
+test_AnalyticalBeadSystems(transformation=[4,5], num_iterations=10, test_distribution=False, filename_prefix=None)
