@@ -39,6 +39,8 @@ kT = kB * temperature
 beta = 1.0/kT
 CARBON_MASS = 12.01
 
+istravis = os.environ.get('TRAVIS', None) == 'true'
+
 proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
 
 class GeometryTestSystem(object):
@@ -281,7 +283,7 @@ def run_rj_simple_system(configurations_initial, topology_proposal, n_replicates
     #n_replicates = 100
     final_positions = []
     logPs = np.zeros([n_replicates, 4])
-    geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_torsion_divisions=3600, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
+    geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
     potential_components_nb = np.zeros([n_replicates, 2, 4])
     for replicate_idx in tqdm.trange(n_replicates):
         oldpos_idx = np.random.choice(range(len(configurations_initial)))
@@ -303,11 +305,15 @@ def run_rj_simple_system_revised(configurations_initial, topology_proposal, n_re
     #n_replicates = 100
     final_positions = []
     logPs = np.zeros([n_replicates, 4])
-    geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_torsion_divisions=3600, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
+    geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=1800, n_torsion_divisions=3600, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
     for replicate_idx in tqdm.trange(n_replicates):
         old_positions = configurations_initial[replicate_idx, :, :]
+        #print('forward transformation... ')
         new_positions, lp = geometry_engine.propose(topology_proposal, old_positions, beta)
+        #print('forward_transformation complete!')
+        #print('reverse transformation...')
         lp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, beta)
+        #print('reverse transformation complete!')
         initial_rp = compute_rp(topology_proposal.old_system, old_positions)
         logPs[replicate_idx, 0] = initial_rp
         logPs[replicate_idx, 1] = lp
@@ -517,7 +523,7 @@ class AnalyticalBeadSystems(object):
         return md_positions_stacked
 
 
-    def conduct_proposal_system_equilibrium_simulations(filename=None, printer=False):
+    def conduct_proposal_system_equilibrium_simulations(self, printer=False):
         from openmmtools import integrators
         self.platform=openmm.Platform.getPlatformByName("CPU")
         self.integrator = integrators.LangevinIntegrator()
@@ -533,17 +539,18 @@ class AnalyticalBeadSystems(object):
             self.proposal_system_simulation_positions[iteration,:,:]=state.getPositions(asNumpy=True)
 
         proposal_system_simulation_positions_stacked=self.convert_to_md(self.proposal_system_simulation_positions)
+        self.proposal_system_simulation_positions_stacked=proposal_system_simulation_positions_stacked
         self.proposal_system_simulation_positions=unit.Quantity(proposal_system_simulation_positions_stacked, unit=unit.nanometer)
 
-        if filename!=None:
-            np.save(file=filename, arr=proposal_system_simulation_positions_stacked)
+        # if filename!=None:
+        #     np.save(file=filename, arr=proposal_system_simulation_positions_stacked)
         if printer:
             print('proposal_system_simulation_positions: ')
             print(proposal_system_simulation_positions_stacked)
 
 
 
-    def create_iid_bead_systems(self, filename=None, printer=False):
+    def create_iid_bead_systems(self, printer=False):
         from openmmtools import integrators
         self.platform=openmm.Platform.getPlatformByName("CPU")
         self.integrator = integrators.LangevinIntegrator()
@@ -559,28 +566,29 @@ class AnalyticalBeadSystems(object):
             self.simulated_positions[iteration,:,:]=state.getPositions(asNumpy=True)
 
         simulated_positions_stacked=self.convert_to_md(self.simulated_positions)
+        self.simulated_positions_stacked=simulated_positions_stacked
         self.simulated_positions=unit.Quantity(simulated_positions_stacked, unit=unit.nanometer)
 
-        if filename!=None:
-            np.save(file=filename, arr=simulated_positions_stacked)
+        # if filename!=None:
+        #     np.save(file=filename, arr=simulated_positions_stacked)
         if printer:
             print('simulated_positions: ')
             print(simulated_positions_stacked)
 
 
 
-    def _forward_transformation(self, filename=None, printer=False):
+    def _forward_transformation(self, printer=False):
         topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=self.transformation[0], n_atoms_final=self.transformation[1], direction='forward')
         self.data_forward,self.proposed_positions=run_rj_simple_system_revised(self.simulated_positions, topology_proposal, self.num_iterations)
         self.work_forward = self.data_forward[:, 3] - self.data_forward[:, 0] - self.data_forward[:, 2] + self.data_forward[:, 1]
 
-
         proposed_positions_stacked=self.convert_to_md(self.proposed_positions)
+        self.proposed_positions_stacked=proposed_positions_stacked
         self.proposed_positions=unit.Quantity(proposed_positions_stacked, unit=unit.nanometers)
 
 
-        if filename!=None:
-            np.save(file=filename, arr=proposed_positions_stacked)
+        # if filename!=None:
+        #     np.save(file=filename, arr=proposed_positions_stacked)
         if printer:
             print('proposed_positions: ')
             print(proposed_positions_stacked)
@@ -596,31 +604,6 @@ class AnalyticalBeadSystems(object):
             print('reverted_positions (i.e. backward transformation positions: ')
             print(reverted_positions_stacked)
 
-    # def _rjmc_compute_valence_term_distributions(self, term, save=False, filename=None):
-    #
-    #     #render systems into mdtraj objekts
-    #     sysA, posA, topA=self.sys_pos_top['A']
-    #     sysB, posB, topB=self.sys_pos_top['B']
-    #     simulated_traj=md.Trajectory(self.simulated_positions_stacked, topA )
-    #     proposed_traj=md.Trajectory(self.proposed_positions_stacked, topB )
-    #
-    #     #compute_work_weights
-    #     offset_work=np.min(self.work_forward)
-    #     corrected_work=[i-offset_work for i in self.work_forward]
-    #     Z_work=sum([np.exp(-w) for w in corrected_work])
-    #     weights=np.array([np.exp(-w)/Z_work for w in corrected_work])
-    #
-    #     #compute simulated coordinate
-    #     if len(term)==2: #we are going to compute the bond distribution
-    #         sim_coord=md.compute_distances(simulated_traj,np.array([[term[0], term[1]] for i in range(self.num_iterations)]))
-    #     elif len(term)==3: #compute angle distribution
-    #         sim_coord=md.compute_angles(simulated_traj, np.array([[term[0], term[1], term[2]] for i in range(self.num_iterations)]))
-    #     elif len(term)==4: #compute torsion
-    #         sim_coord=md.compute_dihedrals(simulated_traj, np.array([[term[0], term[1], term[2], term[3]] for i in range(self.num_iterations)]))
-
-        #compute unweighted proposed coordinate
-
-
 
 
     def assertion(self, printer=True):
@@ -628,27 +611,117 @@ class AnalyticalBeadSystems(object):
         work_forward_var=np.var(self.work_forward)
         work_reverse_var=np.var(self.work_reverse)
         if printer:
+            #print('work decomposition comparison:')
+            #print('data_forward', self.data_forward)
+            #print('data_reverse', self.data_reverted)
+            #print(' ')
             print('work_forward: ', self.work_forward)
             print('work_reverse: ', self.work_reverse)
             print('work_comparison: ',work_comparison)
             print('work_forward_var: ', work_forward_var)
             print('work_reverse_var: ', work_reverse_var)
-        return work_comparison, work_forward_var, work_reverse_var
+        return self.work_forward, self.work_reverse, work_comparison, work_forward_var, work_reverse_var
 
 
 
-def test_AnalyticalBeadSystems(transformation=[3,4], num_iterations=10, test_distribution=False, filename_prefix=None):
 
-    test=AnalyticalBeadSystems(transformation, num_iterations)
-    test.create_iid_bead_systems(filename=filename_prefix, printer=False)
-    test._forward_transformation(filename=filename_prefix, printer=False)
-    test._backward_transformation(printer=False)
-    work_comparison, work_forward_var, work_reverse_var=test.assertion()
-    assert all(item<1e-6 for item in work_comparison) and work_forward_var<1e-6 and work_reverse_var<1e-6
+def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=10):
+    import pickle as pkl
+    import mdtraj as md
 
-    if test_distribution:
-        test.conduct_proposal_system_equilibrium_simulations(filename=filename_prefix, printer=True)
+    for i in transformation:
+        test=AnalyticalBeadSystems(i, num_iterations)
+        test.create_iid_bead_systems(printer=False)
+        test._forward_transformation(printer=False)
+        test._backward_transformation(printer=False)
+        #test.conduct_proposal_system_equilibrium_simulations(printer=False)
+        work_forward, work_reverse, work_comparison, work_forward_var, work_reverse_var=test.assertion()
+        assert all(item<1e-6 for item in work_comparison) and np.abs(work_forward_var/np.average(work_forward))<1e-3 and np.abs(work_reverse_var/np.average(work_reverse))<1e-3, "test passed"
 
-test_AnalyticalBeadSystems(transformation=[3,5], num_iterations=10, test_distribution=False, filename_prefix=None)
-test_AnalyticalBeadSystems(transformation=[3,4], num_iterations=10, test_distribution=False, filename_prefix=None)
-test_AnalyticalBeadSystems(transformation=[4,5], num_iterations=10, test_distribution=False, filename_prefix=None)
+test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=10)
+    # if filename!=None:
+    #     pickling_on=open(filename, "wb")
+    #     pkl.dump(test, pickling_on)
+    #     pickling_on.close()
+    #     np.save()
+
+    # if sample_transform:
+    #     term=[0,1,2,3]
+    #     bins=10
+    #     """
+    #     load a 'test_AnalyticalBeadSystem class'
+    #     Given an input coordinate, we plot the distribution from rjmc (geometry.py) weighted by exp(-work) for each realization
+    #     """
+    #
+    #     #render systems into mdtraj objekts
+    #     topA=test.sys_pos_top['A'][2]
+    #     topB=test.sys_pos_top['B'][2]
+    #     #simulated_traj=md.Trajectory(test.simulated_positions_stacked, topA )
+    #     proposed_traj=md.Trajectory(test.proposed_positions_stacked, topB )
+    #     proposal_system_simulation_traj=md.Trajectory(test.proposal_system_simulation_positions_stacked, topB)
+    #
+    #     #convert generalized works to weights
+    #     offset_work=np.min(test.work_forward)
+    #     corrected_work=[i-offset_work for i in test.work_forward]
+    #     n_weights=np.array([np.exp(-w) for w in corrected_work])
+    #     max_weight=max(n_weights)
+    #     weights=np.array([i/max_weight for i in n_weights])
+    #     print('weights: ', weights)
+    #     max_weight=max(n_weights)
+    #     print('max_weights: ', max_weight)
+    #     N_eff=sum([i/max_weight for i in weights])
+    #
+    #     #compute simulated coordinate
+    #     if len(term)==2: #we are going to compute the bond distribution
+    #         #sim_coord=md.compute_distances(simulated_traj,np.array([[term[0], term[1]] for i in range(test.num_iterations)]))
+    #         proposal_sim_coord=md.compute_distances(proposal_system_simulation_traj,[[term[0], term[1]]]).flatten()
+    #         proposal_coord=md.compute_distances(proposed_traj,[[term[0], term[1]]]).flatten()
+    #         hist_range=(0.,3.)
+    #     elif len(term)==3: #compute angle distribution
+    #         #sim_coord=md.compute_angles(simulated_traj, np.array([[term[0], term[1], term[2]] for i in range(test.num_iterations)]))
+    #         proposal_sim_coord=md.compute_angles(proposal_system_simulation_traj,[[term[0], term[1], term[2]]]).flatten()
+    #         proposal_coord=md.compute_angles(proposed_traj, [[term[0], term[1], term[2]]]).flatten()
+    #         hist_range=(0.,np.pi)
+    #     elif len(term)==4: #compute torsion
+    #         #sim_coord=md.compute_dihedrals(simulated_traj, np.array([[term[0], term[1], term[2], term[3]] for i in range(test.num_iterations)]))
+    #         proposal_sim_coord=md.compute_dihedrals(proposal_system_simulation_traj,  [[term[0], term[1], term[2], term[3]]]).flatten()
+    #         proposal_coord=md.compute_dihedrals(proposed_traj, [[term[0], term[1], term[2], term[3]]]).flatten()
+    #         #print('proposal sim coord: ')
+    #         #print(proposal_sim_coord)
+    #         hist_range=(-np.pi, np.pi)
+    #     elif any(item>=test.transformation[0] for item in term):
+    #         raise ValueError('index out of range')
+    #     else:
+    #         raise ValueError('term only allows for bond, angle, or torsion terms')
+    #
+    #     #compute histogram data
+    #     #simulated_A_hist, edges=np.hist(sim_coord, bins, hist_range)
+    #     simulated_B_hist, edges=np.histogram(proposal_sim_coord, bins, hist_range)
+    #     simulated_proposal_hist, edges=np.histogram(proposal_coord, bins, hist_range)
+    #     simulated_proposal_hist_weighted, edges=np.histogram(proposal_coord, bins, hist_range, weights=weights)
+    #     bin_midpoints=np.linspace(hist_range[0], hist_range[1], bins)
+    #
+    #     #Now we can weigh the proposals and plot all the histograms
+    #     import matplotlib
+    #     matplotlib.use('Qt5Agg')
+    #     import matplotlib.pyplot as plt
+
+        #plt.plot(bin_midpoints, simulated_A_hist, label='equilibrium A distribution')
+
+        # plt.plot(bin_midpoints, simulated_B_hist, label='equilibrium B distribution')
+        # plt.plot(bin_midpoints, simulated_proposal_hist, label='unweighted proposal distribution')
+        # plt.plot(bin_midpoints, simulated_proposal_hist_weighted, label="work-weighted proposal distribution, N_eff/N_tot={}".format(N_eff/float(test.num_iterations)))
+        # plt.legend(loc=0)
+        # plt.show()
+
+# def test_Bead():
+#     test_AnalyticalBeadSystems(transformation=[3,5], num_iterations=10, sample_transform=False, save=False, filename=None)
+#
+#     test_AnalyticalBeadSystems(transformation=[3,4], num_iterations=10, sample_transform=False, save=False, filename=None)
+#     test_AnalyticalBeadSystems(transformation=[4,5], num_iterations=10, sample_transform=False, save=False, filename=None)
+
+#@skipIf(istravis, "Skip expensive test on travis")
+# test_AnalyticalBeadSystems(transformation=[3,5], num_iterations=10, sample_transform=False, save=False, filename=None)
+#
+# test_AnalyticalBeadSystems(transformation=[3,4], num_iterations=10, sample_transform=False, save=False, filename=None)
+# test_AnalyticalBeadSystems(transformation=[4,5], num_iterations=10, sample_transform=False, save=False, filename=None)

@@ -88,7 +88,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
-    def __init__(self, metadata=None, use_sterics=False, n_torsion_divisions=180, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
+    def __init__(self, metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
@@ -98,6 +98,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._position_set_time = 0.0
         self.verbose = verbose
         self.use_sterics = use_sterics
+        self._n_bond_divisions=n_bond_divisions
+        self._n_angle_divisions=n_angle_divisions
         self._n_torsion_divisions = n_torsion_divisions
         self._bond_softening_constant = bond_softening_constant
         self._angle_softening_constant = angle_softening_constant
@@ -271,35 +273,42 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 angle_coords = old_positions[angle_atom.idx]
                 torsion_coords = old_positions[torsion_atom.idx]
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
-                r = internal_coordinates[0]*atom_coords.unit
-                theta = internal_coordinates[1]*units.radian
-                phi = internal_coordinates[2]*units.radian
+                #r = internal_coordinates[0]*atom_coords.unit
+                #theta = internal_coordinates[1]*units.radian
+                #phi = internal_coordinates[2]*units.radian
+                r=internal_coordinates[0]
+                theta=internal_coordinates[1]
+                phi=internal_coordinates[2]
 
             bond = self._get_relevant_bond(atom, bond_atom)
             if bond is not None:
                 if direction=='forward':
-                    r = self._propose_bond(bond, beta)
+                    r = self._propose_bond(bond, beta, n_divisions=self._n_bond_divisions)
+
+                logp_r=self._bond_logq(r, bond, beta, self._n_bond_divisions)
                 #bond_k = bond.type.k * self._bond_softening_constant
                 #sigma_r = units.sqrt(1/(beta*bond_k))
                 #logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
-                logp_r = self._bond_logq(r, bond, beta) #- logZ_r
+                #logp_r = self._bond_logq(r, bond, beta) #- logZ_r
                 #print('logp_r', logp_r)
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
                     if constraint is None:
                         raise ValueError("Structure contains a topological bond [%s - %s] with no constraint or bond information." % (str(atom), str(bond_atom)))
-                    r = constraint #set bond length to exactly constraint
+                    r = constraint.value_in_unit_system(units.md_unit_system) #set bond length to exactly constraint
                 logp_r = 0.0
 
             #propose an angle and calculate its probability
             angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
             if direction=='forward':
-                theta = self._propose_angle(angle, beta)
+                theta = self._propose_angle(angle, beta, n_divisions=self._n_angle_divisions)
+
+            logp_theta=self._angle_logq(theta, angle, beta, self._n_angle_divisions)
             #angle_k = angle.type.k * self._angle_softening_constant
             #sigma_theta = units.sqrt(1/(beta*angle_k))
             #logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
-            logp_theta = self._angle_logq(theta, angle, beta) #- logZ_theta
+            #logp_theta = self._angle_logq(theta, angle, beta) #- logZ_theta
             #print('logp_theta: ', logp_theta)
 
             #propose a torsion angle and calcualate its probability
@@ -315,14 +324,17 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             #if direction == 'reverse':
             if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
 
-            atom_placement_array = np.array([atom.idx, r.value_in_unit_system(units.md_unit_system),
-                                             theta.value_in_unit_system(units.md_unit_system),
-                                             phi.value_in_unit_system(units.md_unit_system),
+            atom_placement_array = np.array([atom.idx,r,
+                                             theta,
+                                             phi,
                                              logp_r, logp_theta, logp_phi, np.log(detJ)])
             atom_placements.append(atom_placement_array)
 
 
-
+            # print('     logp_proposal: ', logp_proposal)
+            # print('     logp_r: ', logp_r)
+            # print('     logp_theta: ', logp_theta)
+            # print('     logp_phi: ', logp_phi)
             logp_proposal += logp_r + logp_theta + logp_phi - np.log(detJ)
             growth_parameter_value += 1
 
@@ -620,9 +632,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         Calculate the cartesian coordinates given the internal, as well as abs(detJ)
         """
         from perses.rjmc import coordinate_numba
-        r = r.value_in_unit(units.nanometers)
-        theta = theta.value_in_unit(units.radians)
-        phi = phi.value_in_unit(units.radians)
+        #r = r.value_in_unit(units.nanometers)
+        #theta = theta.value_in_unit(units.radians)
+        #phi = phi.value_in_unit(units.radians)
         bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
         angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
         torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
@@ -631,7 +643,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         return xyz, np.abs(r**2*np.sin(theta))
 
-    def _bond_logq(self, r, bond, beta):
+    def _bond_logq(self, r, bond, beta, n_divisions):
         """
         Calculate the log-probability of a given bond at a given inverse temperature
 
@@ -646,23 +658,51 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        import scipy.integrate as integrate
         #print('beta: ', beta)
 
-        k_eq = bond.type.k.in_units_of(units.kilocalorie_per_mole/units.nanometers**2) * self._bond_softening_constant
-        r0 = bond.type.req.in_units_of(units.nanometers)
-        r_target=r.in_units_of(units.nanometers)
+        # k_eq = bond.type.k.in_units_of(units.kilocalorie_per_mole/units.nanometers**2) * self._bond_softening_constant
+        # r0 = bond.type.req.in_units_of(units.nanometers)
+        # r_target=r.in_units_of(units.nanometers)
+        #
+        # f=lambda x: np.exp(-beta*k_eq*0.5*(x*units.nanometers-r0)**2)*(x)**2
+        # lower_bound=r0/units.nanometers-5*np.sqrt(1/(beta*k_eq*units.nanometers**2))
+        # upper_bound=r0/units.nanometers+5*np.sqrt(1/(beta*k_eq*units.nanometers**2))
+        #
+        # integral, integral_err=integrate.quad(f,max([0.,lower_bound]),upper_bound)
+        # logZ_r=np.log(integral)
+        #
+        # logq = np.log(r_target**2/((units.nanometers)**2))-beta*0.5*k_eq*(r_target-r0)**2-logZ_r
+        # return logq
 
 
-        #f=lambda x: np.exp(-beta*k_eq*0.5*(x*units.nanometers-r0)**2)*(x)**2
-        #upper_bound=1
-        #integral, integral_err=integrate.quad(f,0,upper_bound)
+        r0 = bond.type.req.value_in_unit_system(units.md_unit_system)
+        k = bond.type.k.value_in_unit_system(units.md_unit_system) * self._bond_softening_constant
+        sigma_r = units.sqrt((1.0/(beta*k)).value_in_unit_system(units.md_unit_system))
+        lower_bound, upper_bound=max(0.,r0-6*sigma_r), r0+6*sigma_r
+
+
+        #'exact' probability
+        f=lambda x: (x)**2*np.exp(-(0.5/sigma_r**2)*(x-r0)**2)
+        division_size=(upper_bound-lower_bound)/n_divisions
+        r_array=np.linspace(lower_bound, upper_bound, n_divisions)
+        r_index=np.argmin(np.abs(r-r_array))
+        Z=sum(f(r_array))
+
+
+        #integral, integral_err=integrate.quad(f,lower_bound,upper_bound)
         #logZ_r=np.log(integral)
 
-        logq = np.log(r_target**2/((units.nanometers)**2))-beta*0.5*k_eq*(r_target-r0)**2#-logZ_r
-        return logq
+        logp = np.log((r_array[r_index])**2*np.exp(-(0.5/sigma_r**2)*(r_array[r_index]-r0)**2))-np.log(division_size)-np.log(Z)
+        #logp=np.log((r)**2*np.exp(-(0.5/sigma_r**2)*(r-r0)**2))#-np.log(division_size)-np.log(Z)
+        #print('r: ', r)
 
-    def _angle_logq(self, theta, angle, beta):
+        #logp = logp_torsions[phi_median_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions
+        return logp
+
+
+
+
+    def _angle_logq(self, theta, angle, beta, n_divisions):
         """
         Calculate the log-probability of a given bond at a given inverse temperature
 
@@ -675,43 +715,130 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         beta : float
             1/kT or inverse temperature
         """
-        import scipy.integrate as integrate
+        # import scipy.integrate as integrate
+        #
+        # k_eq = angle.type.k.in_units_of(units.kilocalorie_per_mole/units.radians**2) * self._angle_softening_constant
+        # theta0 = angle.type.theteq.in_units_of(units.radians)
+        # theta_target=theta.in_units_of(units.radians)
+        #
+        #
+        # array=np.linspace(-np.pi, np.pi)
+        # #exponand=np.exp(-1*beta*k_eq*0.5*(array-theta0)**2)
+        #
+        # f=lambda x: np.exp(-beta*k_eq*0.5*(x*units.radians-theta0)**2)*np.sin(x)
+        #
+        # integral, integral_err=integrate.quad(f,-np.pi,np.pi)
+        # logZ_theta=np.log(integral)
+        #
+        #
+        # logq = np.log(np.sin(theta_target/units.radians))-beta*0.5*k_eq*(theta_target-theta0)**2-logZ_theta
+        # return logq
 
-        k_eq = angle.type.k.in_units_of(units.kilocalorie_per_mole/units.radians**2) * self._angle_softening_constant
-        theta0 = angle.type.theteq.in_units_of(units.radians)
-        theta_target=theta.in_units_of(units.radians)
+        theta0 = angle.type.theteq.value_in_unit_system(units.md_unit_system);
+        #print('theta0: ', theta0)
+        k = angle.type.k.value_in_unit_system(units.md_unit_system) * self._angle_softening_constant
+        sigma_theta = units.sqrt(1.0/(beta*k).value_in_unit_system(units.md_unit_system))
+        #print('sigma_theta', sigma_theta)
+        #theta = sigma_theta*np.random.randn() + theta0
+        lower_bound, upper_bound=0., np.pi
 
 
-        array=np.linspace(-np.pi, np.pi)
-        #exponand=np.exp(-1*beta*k_eq*0.5*(array-theta0)**2)
+        #'exact' probability
+        f=lambda x: np.sin(theta)*np.exp(-(0.5/sigma_theta**2)*(x-theta0)**2)
+        division_size=np.pi/n_divisions
+        theta_array=np.linspace(0,np.pi, n_divisions)
+        theta_index=np.argmin(np.abs(theta-theta_array))
+        Z=sum(f(theta_array))
+        #integral, integral_err=integrate.quad(f,lower_bound,upper_bound)
+        #logZ_theta=np.log(integral)
+        #print('theta: ', theta)
 
-        f=lambda x: np.exp(-beta*k_eq*0.5*(x*units.radians-theta0)**2)*np.sin(x)
+        logp = np.log(np.sin(theta_array[theta_index])*np.exp(-(0.5/sigma_theta**2)*(theta_array[theta_index]-theta0)**2))-np.log(division_size)-np.log(Z)
+        #logp = np.log(np.sin(theta)*np.exp(-(0.5/sigma_theta**2)*(theta-theta0)**2))#-np.log(division_size)-np.log(Z)
 
-        integral, integral_err=integrate.quad(f,-np.pi,np.pi)
-        logZ_theta=np.log(integral)
+        return logp
 
-
-        logq = np.log(np.sin(theta_target/units.radians))-beta*0.5*k_eq*(theta_target-theta0)**2-logZ_theta
-        return logq
-
-    def _propose_bond(self, bond, beta):
+    def _propose_bond(self, bond, beta, n_divisions=1000): #Dominic
         """
         Bond length proposal
         """
-        r0 = bond.type.req
-        k = bond.type.k * self._bond_softening_constant
-        sigma_r = units.sqrt(1.0/(beta*k))
-        r = sigma_r*np.random.randn() + r0
+        import scipy.integrate as integrate
+
+        r0 = bond.type.req.value_in_unit_system(units.md_unit_system)
+        k = bond.type.k.value_in_unit_system(units.md_unit_system) * self._bond_softening_constant
+        sigma_r = units.sqrt((1.0/(beta*k)).value_in_unit_system(units.md_unit_system))
+        lower_bound, upper_bound=max(0.,r0-6*sigma_r), r0+6*sigma_r
+        division_size=(upper_bound-lower_bound)/n_divisions
+        r_array=np.linspace(lower_bound, upper_bound, n_divisions)
+        r_array_indices=range(n_divisions)
+
+
+        r_probability_mass_function=(r_array)**2*np.exp(-(0.5/sigma_r**2)*(r_array-r0)**2)
+        r_probability_mass_function_Z=sum(r_probability_mass_function)
+        r_index=np.random.choice(r_array_indices, p=r_probability_mass_function/r_probability_mass_function_Z)
+
+
+        r_min=max(r_array[r_index]-division_size/2.0, 0.)
+        r_max=r_array[r_index]+division_size/2.0
+
+        r = np.random.uniform(r_min, r_max)
+        #r=r_array[r_index]
+        # #'exact' probability
+        # f=lambda x: (x)**2*np.exp(-(0.5/sigma_r**2)*(x-r0)**2)
+        #
+        # integral, integral_err=integrate.quad(f,lower_bound,upper_bound)
+        # logZ_r=np.log(integral)
+        #
+        # logp = np.log((r)**2*np.exp(-(0.5/sigma_r**2)*(r-r0)**2))-logZ_r
+        #print('r: ', r)
+
+        #logp = logp_torsions[phi_median_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions
         return r
 
-    def _propose_angle(self, angle, beta):
+
+    def _propose_angle(self, angle, beta, n_divisions=180):
         """
         Bond angle proposal
         """
-        theta0 = angle.type.theteq
-        k = angle.type.k * self._angle_softening_constant
-        sigma_theta = units.sqrt(1.0/(beta*k))
-        theta = sigma_theta*np.random.randn() + theta0
+        import scipy.integrate as integrate
+
+        theta0 = angle.type.theteq.value_in_unit_system(units.md_unit_system);
+        #print('theta0: ', theta0)
+        k = angle.type.k.value_in_unit_system(units.md_unit_system) * self._angle_softening_constant
+        sigma_theta = units.sqrt(1.0/(beta*k).value_in_unit_system(units.md_unit_system))
+        #print('sigma_theta', sigma_theta)
+        #theta = sigma_theta*np.random.randn() + theta0
+        lower_bound, upper_bound=0., np.pi
+        division_size=np.pi/n_divisions
+        theta_array=np.linspace(lower_bound, upper_bound,n_divisions)
+        theta_array_indices=range(n_divisions)
+
+
+        theta_probability_mass_function=np.sin(theta_array)*np.exp(-(0.5/sigma_theta**2)*(theta_array-theta0)**2)
+        theta_probability_mass_function_Z=sum(theta_probability_mass_function)
+        theta_index=np.random.choice(theta_array_indices, p=theta_probability_mass_function/theta_probability_mass_function_Z)
+
+        # import matplotlib
+        # matplotlib.use('Qt5Agg')
+        # import matplotlib.pyplot as plt
+        # plt.plot(theta_array, theta_probability_mass_function/theta_probability_mass_function_Z)
+        # plt.show()
+
+        theta_min=max(0.,theta_array[theta_index]-division_size/2.)
+        theta_max=min(theta_array[theta_index]+division_size/2., np.pi)
+
+        theta=np.random.uniform(theta_min, theta_max)
+        #theta=theta_array[theta_index]
+        # #'exact' probability
+        # f=lambda x: np.sin(theta)*np.exp(-(0.5/sigma_theta**2)*(x-theta0)**2)
+        #
+        # integral, integral_err=integrate.quad(f,lower_bound,upper_bound)
+        # logZ_theta=np.log(integral)
+        # #print('theta: ', theta)
+        #
+        # logp = np.log(np.sin(theta)*np.exp(-(0.5/sigma_theta**2)*(theta-theta0)**2))-logZ_theta
+
+
         return theta
 
     def _torsion_scan(self, torsion, positions, r, theta, n_divisions=360):
@@ -740,15 +867,17 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         positions_copy = copy.deepcopy(positions)
         positions_copy = positions_copy.value_in_unit(units.nanometers)
         positions_copy = positions_copy.astype(np.float64)
-        r = r.value_in_unit(units.nanometers)
-        theta = theta.value_in_unit(units.radians)
+
+        #r = r.value_in_unit(units.nanometers)
+        #theta = theta.value_in_unit(units.radians)
         bond_atom = torsion.atom2
         angle_atom = torsion.atom3
         torsion_atom = torsion.atom4
         phis = np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions) # Can't use units here.
-        xyzs = coordinate_numba.torsion_scan(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], np.array([r, theta, 0.0]), phis)
+        xyzs_input_array=np.array([r, theta, 0.0])
+        xyzs = coordinate_numba.torsion_scan(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], xyzs_input_array, phis)
         xyzs_quantity = units.Quantity(xyzs, unit=units.nanometers) #have to put the units back now
-        phis = units.Quantity(phis, unit=units.radians)
+        #phis = units.Quantity(phis, unit=units.radians)
         torsion_scan_time = time.time() - torsion_scan_init
         self._torsion_coordinate_time += torsion_scan_time
         return xyzs_quantity, phis
@@ -855,13 +984,16 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The log probability of the proposal.
         """
         logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
-        division = units.Quantity(2*np.pi/n_divisions, unit=units.radian)
+        #division = units.Quantity(2*np.pi/n_divisions, unit=units.radian)
+        division=2*np.pi/n_divisions
         phi_median_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
         phi_min = phis[phi_median_idx] - division/2.0
         phi_max = phis[phi_median_idx] + division/2.0
-        phi = np.random.uniform(phi_min.value_in_unit(units.radian), phi_max.value_in_unit(units.radian))
+        #phi = np.random.uniform(phi_min.value_in_unit(units.radian), phi_max.value_in_unit(units.radian))
+        phi=np.random.uniform(phi_min, phi_max)
         logp = logp_torsions[phi_median_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions
-        return units.Quantity(phi, unit=units.radian), logp
+        #return units.Quantity(phi, unit=units.radian), logp
+        return phi, logp
 
     def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
         """
