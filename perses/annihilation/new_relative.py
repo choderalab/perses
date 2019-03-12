@@ -1194,10 +1194,13 @@ class HybridTopologyFactory(object):
                 [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics.
-                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, 0.0])
+                check_index = self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, 0.0])
+                assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
-                particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, 0.0)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, 0.0)
+                assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
+
                 # Charge will be turned off at lambda_electrostatics_delete = 0, on at lambda_electrostatics_delete = 1
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_delete', particle_index, -charge, 0, 0)
 
@@ -1207,10 +1210,13 @@ class HybridTopologyFactory(object):
                 [charge, sigma, epsilon] = new_system_nonbonded_force.getParticleParameters(new_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics
-                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, 0.0, sigma, epsilon])
+                check_index = self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, 0.0, sigma, epsilon])
+                assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
-                particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, sigma, 0.0)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, sigma, 0.0)
+                assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
+
                 # Charge will be turned off at lambda_electrostatics_insert = 0, on at lambda_electrostatics_insert = 1
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_insert', particle_index, +charge, 0, 0)
 
@@ -1222,10 +1228,13 @@ class HybridTopologyFactory(object):
                 [charge_new, sigma_new, epsilon_new] = new_system_nonbonded_force.getParticleParameters(new_index)
 
                 #add the particle to the custom forces, interpolating between the two parameters
-                self._hybrid_system_forces['core_sterics_force'].addParticle([sigma_old, epsilon_old, sigma_new, epsilon_new])
+                check_index = self._hybrid_system_forces['core_sterics_force'].addParticle([sigma_old, epsilon_old, sigma_new, epsilon_new])
+                assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 #still add the particle to the regular nonbonded force, but with zeroed out parameters.
-                particle_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge_old, 0.5*(sigma_old+sigma_new), 0.0)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge_old, 0.5*(sigma_old+sigma_new), 0.0)
+                assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
+            
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
                 # TODO: We could also interpolate the Lennard-Jones here instead of core_sterics force so that core_sterics_force could just be softcore
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, (charge_new - charge_old), 0, 0)
