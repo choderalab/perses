@@ -58,6 +58,8 @@ requirements:
     - progressbar2
     - yank
     - parmed
+    - tqdm
+    
 test:
   requires:
     - nose
