@@ -26,6 +26,8 @@ dependencies:
     - pdbfixer
     - lxml
     - networkx >=2.0
+    - progressbar2
     - yank
     - numpydoc
     - openeye-toolkits
+    - tqdm
