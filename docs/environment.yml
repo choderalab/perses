@@ -1,8 +1,6 @@
 name: perses
 channels:
     - omnia
-    - omnia/label/dev
-    - omnia/label/beta
     - openeye
 dependencies:
     - python
@@ -13,7 +11,7 @@ dependencies:
     - autograd
     - pymbar
     - cuda92
-    - openmm ==7.3.0
+    - openmm >=7.3.0
     - parmed
     - openmoltools
     - alchemy >=1.2.3
