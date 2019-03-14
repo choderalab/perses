@@ -271,7 +271,7 @@ def forcefield_directory():
     forcefield_directory_name = resource_filename("perses", "data")
     return forcefield_directory_name
 
-def createSystemFromIUPAC(iupac_name, resname=None):
+def createSystemFromIUPAC(iupac_name, resname='MOL'):
     """
     Create an openmm system out of an oemol
 
@@ -279,6 +279,8 @@ def createSystemFromIUPAC(iupac_name, resname=None):
     ----------
     iupac_name : str
         IUPAC name
+    resname : str, optional, default='MOL'
+        Residue name for small molecule within Topology
 
     Returns
     -------
@@ -295,7 +297,7 @@ def createSystemFromIUPAC(iupac_name, resname=None):
     """
 
     # Create OEMol
-    molecule = createOEMolFromIUPAC(iupac_name, resname=resname)
+    molecule = createOEMolFromIUPAC(iupac_name, title=resname)
 
     # Generate a topology.
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
@@ -323,7 +325,7 @@ def createSystemFromIUPAC(iupac_name, resname=None):
     # Extract positions
     positions = extractPositionsFromOEMOL(molecule)
 
-    return (molecule, system, positions, topology)
+    return molecule, system, positions, topology
 
 def get_atoms_with_undefined_stereocenters(molecule, verbose=False):
     """

@@ -60,3 +60,23 @@ def test_createOEMolFromSMILES():
     # Test setting the title
     oemol = createOEMolFromSMILES('CC', title='XYZ')
     assert oemol.GetTitle() == 'XYZ'
+
+def test_createSystemFromIUPAC():
+    """Test createSystemFromIUPAC"""
+    from perses.tests.utils import createSystemFromIUPAC
+
+    # Create a few molecules
+    iupac_list = [
+        'ethane',
+        'phenol',
+        'aspirin',
+    ]
+    for iupac in iupac_list:
+        oemol, system, positions, topology = createSystemFromIUPAC(iupac)
+        resnames = [ residue.name for residue in topology.residues() ]
+        assert resnames[0] == 'MOL'
+
+    # Test setting the residue name
+    oemol, system, positions, topology = createSystemFromIUPAC('ethane', resname='XYZ')
+    resnames = [ residue.name for residue in topology.residues() ]
+    assert resnames[0] == 'XYZ'
