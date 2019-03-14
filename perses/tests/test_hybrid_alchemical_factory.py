@@ -10,6 +10,7 @@ __author__ = 'John D. Chodera'
 ################################################################################
 
 from nose.plugins.attrib import attr
+from simtk import unit, openmm
 
 ################################################################################
 # Suppress matplotlib logging
@@ -22,6 +23,11 @@ mpl_logger.setLevel(logging.WARNING)
 ################################################################################
 # CONSTANTS
 ################################################################################
+
+from openmmtools.constants import kB
+temperature = 300.0 * unit.kelvin
+kT = kB * temperature
+beta = 1.0/kT
 
 ################################################################################
 # TESTS
@@ -65,16 +71,29 @@ def create_vacuum_hybrid_system(old_iupac_name="styrene", new_iupac_name="2-phen
     forcefield_files = [get_data_filename("data/gaff.xml")]
     system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'constraints': app.HBonds})
 
+    # Add parameters for old and new molecules to the forcefield
+    from openmoltools.forcefield_generators import generateForceFieldFromMolecules
+    from io import StringIO
+    ffxml = generateForceFieldFromMolecules([old_oemol, new_oemol], generateUniqueNames=True)
+    system_generator.forcefield.loadFile(StringIO(ffxml))
+
     # Create a proposal engine to transform from one molecule to the other in vacuum
     from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine
     proposal_engine = TwoMoleculeSetProposalEngine(old_oemol, new_oemol, system_generator, residue_name="MOL")
 
     # Create a topology proposal
-    topology_proposal = proposal_engine.propose(old_system, old_topology)
+    from openeye.oechem import OEMolToSmiles
+    old_smiles = OEMolToSmiles(old_oemol)
+    topology_proposal = proposal_engine.propose(old_system, old_topology, current_mol=old_smiles)
+
+    # Create a geometry proposal
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    geometry_engine = FFAllAngleGeometryEngine()
+    new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
 
     # Create a hybrid topology factory
     from perses.annihilation.new_relative import HybridTopologyFactory
-    hybrid_factory = HybridTopologyFactory(topology_proposal, positions, positions)
+    hybrid_factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
 
     # Return the topology proposal and hybrid factory
     return topology_proposal, hybrid_factory
