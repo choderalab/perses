@@ -90,13 +90,28 @@ def giveOpenmmPositionsToOEMOL(positions, molecule):
         coords[key] = (positions[key][0]/unit.angstrom,positions[key][1]/unit.angstrom,positions[key][2]/unit.angstrom)
     molecule.SetCoords(coords)
 
-def createOEMolFromIUPAC(iupac_name='bosutinib'):
+def createOEMolFromIUPAC(iupac_name='ethane', title='MOL'):
+    """
+    Generate an openeye OEMol with a geometry from an IUPAC name
+
+    Parameters
+    ----------
+    iupac_name : str, optional, default='ethane'
+        IUPAC or common name (parsed by openeye.oeiupac)
+    title : str, optional, default='MOL'
+        Title to assign molecule
+
+    Returns
+    -------
+    oemol : openeye.oechem.OEMol
+        The requested molecule with positions and stereochemistry defined.
+    """
     from openeye import oechem, oeiupac, oeomega
 
     # Create molecule.
     mol = oechem.OEMol()
     oeiupac.OEParseIUPACName(mol, iupac_name)
-    mol.SetTitle(iupac_name)
+    mol.SetTitle(title)
 
     # Assign aromaticity and hydrogens.
     oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
@@ -119,7 +134,19 @@ def createOEMolFromIUPAC(iupac_name='bosutinib'):
 
 def createOEMolFromSMILES(smiles='CC', title='MOL'):
     """
-    Generate an oemol with a geometry
+    Generate an openeye OEMol with a geometry
+
+    Parameters
+    ----------
+    smiles : str, optional, default='CC'
+        The SMILES string to create the OEMol
+    title : str, optional, default='MOL'
+        Title to assign molecule
+
+    Returns
+    -------
+    oemol : openeye.oechem.OEMol
+        The requested molecule with positions and stereochemistry defined.
     """
     from openeye import oechem, oeiupac, oeomega
 
@@ -244,7 +271,7 @@ def forcefield_directory():
     forcefield_directory_name = resource_filename("perses", "data")
     return forcefield_directory_name
 
-def createSystemFromIUPAC(iupac_name):
+def createSystemFromIUPAC(iupac_name, resname=None):
     """
     Create an openmm system out of an oemol
 
@@ -263,10 +290,12 @@ def createSystemFromIUPAC(iupac_name):
         Positions
     topology : openmm.app.Topology object
         Topology
+    resname : str, optional, default=None
+        If not None, set the residue name
     """
 
     # Create OEMol
-    molecule = createOEMolFromIUPAC(iupac_name)
+    molecule = createOEMolFromIUPAC(iupac_name, resname=resname)
 
     # Generate a topology.
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
@@ -995,9 +1024,9 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     from openmmtools import testsystems
 
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-   
+
     host_guest = testsystems.HostGuestVacuum()
-    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology 
+    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology
     ligand_topology = [res for res in top_old.residues()]
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
     proposed_mol = createOEMolFromSMILES('C1CC2(CCC1(CC2)C)C')
