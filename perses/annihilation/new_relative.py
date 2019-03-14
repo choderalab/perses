@@ -669,23 +669,23 @@ class HybridTopologyFactory(object):
         sterics_addition : str
             The common softcore sterics energy expression
         """
-        sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
+        sterics_addition = "epsilon = (1-lambda_sterics_core)*epsilonA + lambda_sterics_core*epsilonB;" #interpolation
         sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
-        sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
+        sterics_addition += "sigma = (1-lambda_sterics_core)*sigmaA + lambda_sterics_core*sigmaB;"
 
         if self._softcore_method == "default":
-            sterics_addition += "lambda_alpha = dummyA*lambda_sterics + dummyB*(1-lambda_sterics) + (1 - dummyA*dummyB)*4*lambda_sterics*(1-lambda_sterics);"
+            sterics_addition += "lambda_alpha = dummyA*lambda_sterics_core + dummyB*(1-lambda_sterics_core) + (1 - dummyA*dummyB)*4*lambda_sterics_core*(1-lambda_sterics_core);"
             sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*(1-lambda_sterics_delete);"
             sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "amber":
-            sterics_addition += "lambda_alpha = dummyA*lambda_sterics + dummyB*(1-lambda_sterics);"
+            sterics_addition += "lambda_alpha = dummyA*lambda_sterics_core + dummyB*(1-lambda_sterics_core);"
             sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*(1-lambda_sterics_delete);"
             sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "classic":
-            sterics_addition += "lambda_sterics = lambda_core"
-            sterics_addition += "lambda_alpha = lambda_sterics*(1-lambda_sterics);"
+            sterics_addition += "lambda_sterics = lambda_sterics_core"
+            sterics_addition += "lambda_alpha = lambda_sterics_core*(1-lambda_sterics_core);"
 
 
         else:
@@ -704,20 +704,20 @@ class HybridTopologyFactory(object):
         electrostatics_addition : str
             The common electrostatics energy expression
         """
-        electrostatics_addition = "chargeprod = (1-lambda_electrostatics)*chargeprodA + lambda_electrostatics*chargeprodB;" #interpolation
+        electrostatics_addition = "chargeprod = (1-lambda_electrostatics_core)*chargeprodA + lambda_electrostatics_core*chargeprodB;" #interpolation
         electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
         electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
 
         if self._softcore_method =="default":
-            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics) + (1- dummyA*dummyB)*4*lambda_electrostatics*(1-lambda_electrostatics);"
+            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics_core) + dummyB*(lambda_electrostatics_core) + (1- dummyA*dummyB)*4*lambda_electrostatics_core*(1-lambda_electrostatics_core);"
             electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "amber":
-            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics) + dummyB*(lambda_electrostatics);"
+            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics_core) + dummyB*(lambda_electrostatics_core);"
             electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "classic":
-            electrostatics_addition += "lambda_beta = lambda_electrostatics*(1-lambda_electrostatics);"
+            electrostatics_addition += "lambda_beta = lambda_electrostatics_core*(1-lambda_electrostatics_core);"
         else:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
 
@@ -1180,8 +1180,8 @@ class HybridTopologyFactory(object):
         hybrid_to_new_map = self._hybrid_to_new_map
 
         # Define new global parameters for NonbondedForce
-        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_electrostatics', 0.0)
-        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_sterics', 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_electrostatics_core', 0.0)
+        self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter('lambda_sterics_core', 0.0)
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_delete", 0.0)
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_insert", 0.0)
 
@@ -1237,7 +1237,7 @@ class HybridTopologyFactory(object):
             
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
                 # TODO: We could also interpolate the Lennard-Jones here instead of core_sterics force so that core_sterics_force could just be softcore
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics', particle_index, (charge_new - charge_old), 0, 0)
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_core', particle_index, (charge_new - charge_old), 0, 0)
 
             #otherwise, the particle is in the environment
             else:
@@ -1454,8 +1454,8 @@ class HybridTopologyFactory(object):
 
                 #interpolate between old and new
                 exception_index = self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
-                self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_electrostatics', exception_index, (chargeProd_new - chargeProd_old), 0, 0)
-                self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_sterics', exception_index, 0, (sigma_new - sigma_old), (epsilon_new - epsilon_old))
+                self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_electrostatics_core', exception_index, (chargeProd_new - chargeProd_old), 0, 0)
+                self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_sterics_core', exception_index, 0, (sigma_new - sigma_old), (epsilon_new - epsilon_old))
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
         #now, loop through the new system to collect remaining interactions. The only that remain here are
@@ -1510,9 +1510,9 @@ class HybridTopologyFactory(object):
                                                                                                           epsilon_old)
 
                     self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset(
-                        'lambda_electrostatics', exception_index, (chargeProd_new - chargeProd_old), 0, 0)
+                        'lambda_electrostatics_core', exception_index, (chargeProd_new - chargeProd_old), 0, 0)
 
-                    self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_sterics',
+                    self._hybrid_system_forces['standard_nonbonded_force'].addExceptionParameterOffset('lambda_sterics_core',
                                                                                                        exception_index,
                                                                                                        0, (sigma_new - sigma_old),
                                                                                                        (epsilon_new - epsilon_old))
