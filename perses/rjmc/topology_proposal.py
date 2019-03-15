@@ -130,12 +130,12 @@ class SmallMoleculeAtomMapper(object):
             self._atom_expr = DEFAULT_ATOM_EXPRESSION
         else:
             self._atom_expr = atom_match_expression
-        
+
         if bond_match_expression is None:
             self._bond_expr = DEFAULT_BOND_EXPRESSION
         else:
             self._bond_expr = bond_match_expression
-        
+
         self._molecules_mapped = False
         self._molecule_maps = {}
         self._failed_molecule_maps = {}
@@ -150,7 +150,7 @@ class SmallMoleculeAtomMapper(object):
         It does not ensure that constraints do not change--use verify_constraints to check that property. This method is idempotent--running it a second
         time will have no effect.
         """
-        
+
         if self._molecules_mapped:
             _logger.info("The molecules have already been mapped. Returning.")
             return
@@ -175,9 +175,9 @@ class SmallMoleculeAtomMapper(object):
 
                 current_index += 1
                 bar.update(current_index)
-            
+
         self._molecules_mapped = True
-    
+
     def get_atom_maps(self, smiles_A: str, smiles_B: str) -> List[Dict]:
         """
         Given two canonical smiles strings, get the atom maps.
@@ -222,10 +222,10 @@ class SmallMoleculeAtomMapper(object):
         proposal_matrix = self._create_proposal_matrix()
         adjacency_matrix = proposal_matrix > 0.0
         graph = nx.from_numpy_array(adjacency_matrix)
-        
+
         if not nx.is_connected(graph):
             _logger.warn("The graph of proposals is not connected! Some molecules will be unreachable.")
-        
+
         self._proposal_matrix = proposal_matrix
 
     def _create_proposal_matrix(self) -> np.array:
@@ -239,17 +239,17 @@ class SmallMoleculeAtomMapper(object):
             The proposal matrix
         """
         proposal_matrix = np.zeros([self._n_molecules, self._n_molecules])
-        
+
         for smiles_pair, atom_maps in self._molecule_maps.items():
 
             #retrieve the smiles strings of these molecules
             molecule_A = smiles_pair[0]
             molecule_B = smiles_pair[1]
-            
+
             #retrieve the indices of these molecules from the list of smiles
             molecule_A_idx = self._unique_smiles_list.index(molecule_A)
             molecule_B_idx = self._unique_smiles_list.index(molecule_B)
-            
+
             #if there are no maps, we can't propose
             if len(atom_maps) == 0:
                 proposal_matrix[molecule_A_idx, molecule_B_idx] = 0.0
@@ -280,11 +280,11 @@ class SmallMoleculeAtomMapper(object):
             print("The following molecules are unproposable:\n")
             print(failed_molecules)
             raise ValueError("Some molecules could not be proposed. Make sure the atom mapping criteria do not completely exclude a molecule.")
-        
+
         normalized_proposal_matrix = proposal_matrix / normalizing_constants[:, np.newaxis]
 
         return normalized_proposal_matrix
-    
+
     @staticmethod
     def _canonicalize_smiles(mol: oechem.OEMol) -> str:
         """
@@ -301,10 +301,10 @@ class SmallMoleculeAtomMapper(object):
         """
         iso_can_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
         return iso_can_smiles
-    
+
     def _map_atoms(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, exhaustive: bool=True) -> List[Dict]:
         """
-        Run the mapping on the two input molecules. This will return a list of atom maps. 
+        Run the mapping on the two input molecules. This will return a list of atom maps.
         This is an internal method that is only intended to be used by other methods of this class.
 
         Arguments
@@ -315,7 +315,7 @@ class SmallMoleculeAtomMapper(object):
             The second oemol of the pair
         exhaustive: bool, default True
             Whether to use an exhaustive procedure for enumerating MCS matches. Default True, but for large molecules,
-            may be prohibitively slow. 
+            may be prohibitively slow.
 
         Returns
         -------
@@ -325,16 +325,16 @@ class SmallMoleculeAtomMapper(object):
             will be returned separately.
         failed_atom_matches : list of dict
             This is a list of atom maps that cannot be used for geometry proposals. It is returned for debugging purposes.
-        """    
+        """
 
         oegraphmol_current = oechem.OEGraphMol(moleculeA) # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(moleculeB) # target molecule
-        
+
         if exhaustive:
             mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
         else:
             mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
-           
+
         mcs.Init(oegraphmol_current, self._atom_expr, self._bond_expr)
 
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
@@ -377,7 +377,7 @@ class SmallMoleculeAtomMapper(object):
                 atom_matches.append(a_to_b_atom_map)
             else:
                 failed_atom_matches.append(a_to_b_atom_map)
-        
+
         return atom_matches, failed_atom_matches
 
     def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, a_to_b_mapping: Dict[int, int]) -> bool:
@@ -409,14 +409,14 @@ class SmallMoleculeAtomMapper(object):
     def _can_make_proposal(self, graph: nx.Graph, mapped_atoms: List) -> bool:
         """
         Check whether a given setup (molecule graph along with mapped atoms) can be proposed.
-        
+
         Arguments
         ---------
         graph: nx.Graph
             The molecule represented as a NetworkX graph
         mapped_atoms : list
             The list of atoms that have been mapped
-        
+
         Returns
         -------
         can_make_proposal : bool
@@ -427,7 +427,7 @@ class SmallMoleculeAtomMapper(object):
         total_atoms = set(range(graph.number_of_nodes()))
         unmapped_atoms = total_atoms - set(mapped_atoms)
         mapped_atoms_set = set(mapped_atoms)
-         
+
         #find the set of atoms that are unmapped, but on the boundary with those that are mapped
         boundary_atoms = nx.algorithms.node_boundary(graph, unmapped_atoms, mapped_atoms)
 
@@ -442,7 +442,7 @@ class SmallMoleculeAtomMapper(object):
                     shortest_path = nx.shortest_path(graph, source=atom, target=other_atom)
                     if len(mapped_atoms_set.intersection(shortest_path)) == 3:
                         proposable = True
-        
+
         return proposable
 
     def _mol_to_graph(self, molecule: oechem.OEMol) -> nx.Graph:
@@ -453,7 +453,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         molecule : oechem.OEMol
             Molecule to convert to a graph
-        
+
         Returns
         -------
         g : nx.Graph
@@ -464,7 +464,7 @@ class SmallMoleculeAtomMapper(object):
             g.add_node(atom.GetIdx())
         for bond in molecule.GetBonds():
             g.add_edge(bond.GetBgnIdx(), bond.GetEndIdx(), bond=bond)
-        
+
         return g
 
     def _initialize_oemols(self, list_of_smiles: List[str]) -> Dict[str, oechem.OEMol]:
@@ -475,7 +475,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         list_of_smiles : list of str
             list of smiles strings to use
-        
+
         Returns
         -------
         dict_of_oemol : dict of oechem.OEmol
@@ -503,7 +503,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         smiles_string : str
             The smiles string for which to retrieve the OEMol. Only pre-existing OEMols are allowed
-        
+
         Returns
         -------
         mol : oechem.OEMol
@@ -519,7 +519,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         smiles : str
             Canonicalized smiles string to retrieve molecule
-        
+
         Returns
         -------
         mol_index : int
@@ -599,7 +599,7 @@ class SmallMoleculeAtomMapper(object):
             JSON string representing this class
         """
         json_dict = {}
-        
+
         #first, save all the things that are not too difficult to put into JSON
         json_dict['molecule_maps'] = {"_".join(smiles_names): maps for smiles_names, maps in self._molecule_maps.items()}
         json_dict['molecules_mapped'] = self._molecules_mapped
@@ -631,7 +631,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         json_string : str
             The JSON string representing the serialized class
-        
+
         Returns
         -------
         atom_mapper : SmallMoleculeAtomMapper
@@ -665,11 +665,11 @@ class SmallMoleculeAtomMapper(object):
     @property
     def proposal_matrix(self):
         return self._proposal_matrix
-    
+
     @property
     def n_molecules(self):
         return self._n_molecules
-    
+
     @property
     def smiles_list(self):
         return self._unique_smiles_list
@@ -2471,7 +2471,7 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         self._proposal_matrix = self._atom_mapper.proposal_matrix
 
         self._n_molecules = self._atom_mapper.n_molecules
-        
+
         super(PremappedSmallMoleculeSetProposalEngine, self).__init__(self._atom_mapper.smiles_list, system_generator, residue_name=residue_name,
                  proposal_metadata=None, storage=storage,
                  always_change=True)

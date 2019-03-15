@@ -27,6 +27,12 @@ mpl_logger.setLevel(logging.WARNING)
 # TESTS
 ################################################################################
 
+def test_generate_vacuum_hostguest_proposal():
+    """Test generate_vacuum_hostguest_proposal"""
+    from perses.tests.utils import generate_vacuum_hostguest_proposal
+    # Create the topology proposal
+    topology_proposal, old_positions, new_positions = generate_vacuum_hostguest_proposal()
+
 def test_createOEMolFromIUPAC():
     """Test createOEMolFromIUPAC"""
     from perses.tests.utils import createOEMolFromIUPAC

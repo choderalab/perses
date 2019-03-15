@@ -1001,57 +1001,50 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
 
     return topology_proposal, solvated_positions, new_positions
 
-def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
+def generate_vacuum_hostguest_proposal():
     """
-    Generate a test vacuum topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
+    Generate a test topology proposal for a small molecule guest transformation in a cucurbit[7]uril (CB7) host-guest system in vacuum.
 
-    Parameters
-    ----------
-    current_mol_name : str, optional
-        name of the first molecule
-    proposed_mol_name : str, optional
-        name of the second molecule
+    The guest is mutated from B2 to 1,4-dimethylbicyclo[2.2.2]octane.
 
     Returns
     -------
     topology_proposal : perses.rjmc.topology_proposal
         The topology proposal representing the transformation
-    current_positions : np.array, unit-bearing
-        The positions of the initial system
-    new_positions : np.array, unit-bearing
+    old_positions : simtk.unit.Quantity wrapped np.array of shape (natoms,3) with units compatible with nanometers
+        The positions of the old system
+    new_positions : simtk.unit.Quantity wrapped np.array of shape (natoms,3) with units compatible with nanometers
         The positions of the new system
+
     """
-    from openmoltools import forcefield_generators
+    # Create host-guest system
     from openmmtools import testsystems
+    host_guest = testsystems.HostGuestVacuum(removeCMMotion=False)
+    old_system, old_positions, old_topology = host_guest.system, host_guest.positions, host_guest.topology
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    host_guest = testsystems.HostGuestVacuum()
-    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology
-    ligand_topology = [res for res in top_old.residues()]
-    current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
+    # Create current and new molecule
+    current_mol = host_guest.guest_oemol
     proposed_mol = createOEMolFromSMILES('C1CC2(CCC1(CC2)C)C')
 
+    # Create initial and final SMILES strings
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
-    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
-
+    # Create system generator
+    from perses.tests.utils import get_data_filename
     gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+
+    # Create geometry engine
     geometry_engine = geometry.FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
 
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
+    # Create proposal engine
+    proposal_engine = SmallMoleculeSetProposalEngine([initial_smiles, final_smiles], system_generator, residue_name='B2')
 
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+    # Generate topology proposal
+    topology_proposal = proposal_engine.propose(old_system, old_topology, current_mol=current_mol, proposed_mol=proposed_mol)
 
-    return topology_proposal, pos_old, new_positions
+    # Generate new positions with geometry engine
+    new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
+
+    return topology_proposal, old_positions, new_positions
