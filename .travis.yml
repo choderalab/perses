@@ -49,7 +49,7 @@ script:
   # Install testing dependencies
   - conda install --yes --quiet nose nose-timer
   # Test the package
-  - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
+  - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a 'travis' && cd ..
 
 env:
   matrix:

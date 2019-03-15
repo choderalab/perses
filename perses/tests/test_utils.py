@@ -27,12 +27,14 @@ mpl_logger.setLevel(logging.WARNING)
 # TESTS
 ################################################################################
 
+@attr('travis')
 def test_generate_vacuum_hostguest_proposal():
     """Test generate_vacuum_hostguest_proposal"""
     from perses.tests.utils import generate_vacuum_hostguest_proposal
     # Create the topology proposal
     topology_proposal, old_positions, new_positions = generate_vacuum_hostguest_proposal()
 
+@attr('travis')
 def test_createOEMolFromIUPAC():
     """Test createOEMolFromIUPAC"""
     from perses.tests.utils import createOEMolFromIUPAC
@@ -50,6 +52,7 @@ def test_createOEMolFromIUPAC():
     oemol = createOEMolFromIUPAC('ethane', title='XYZ')
     assert oemol.GetTitle() == 'XYZ'
 
+@attr('travis')
 def test_createOEMolFromSMILES():
     """Test createOEMolFromSMILES"""
     from perses.tests.utils import createOEMolFromSMILES
@@ -67,6 +70,7 @@ def test_createOEMolFromSMILES():
     oemol = createOEMolFromSMILES('CC', title='XYZ')
     assert oemol.GetTitle() == 'XYZ'
 
+@attr('travis')
 def test_createSystemFromIUPAC():
     """Test createSystemFromIUPAC"""
     from perses.tests.utils import createSystemFromIUPAC
