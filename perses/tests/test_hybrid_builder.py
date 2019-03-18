@@ -78,7 +78,7 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
                                         mc_move, 100, hybrid_factory, lambda_index=lambda_state)
         all_results.append(non)
         all_results.append(hybrid)
-        print(result)
+        print('lambda {} : {}'.format(lambda_state,result))
 
         hybrid_endpoint_results.append(result)
     calculate_cross_variance(all_results)
@@ -134,13 +134,12 @@ def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chl
     benzene <-> catechol perturbing molecule in two positions simultaneously
     benzene <-> 2-phenyl ethanol addition of 3 heavy atom group 
     """
+    pairs = [['2-phenyl ethanol','benzene']]
     for pair in pairs:
         print('{} -> {}'.format(pair[0],pair[1]))
-        print('smaller to larger')
         test_simple_overlap(pair[0],pair[1])
         # now running the reverse
         print('{} -> {}'.format(pair[1],pair[0]))
-        print('larger to smaller')
         test_simple_overlap(pair[1],pair[0])
 
 def test_simple_overlap(name1='pentane',name2='butane'):
@@ -240,6 +239,14 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         mc_move.apply(lambda_thermodynamic_state, new_sampler_state)
         #compute the reduced potential at the new state
         hybrid_context, integrator = cache.global_context_cache.get_context(lambda_thermodynamic_state)
+        state = hybrid_context.getState(getPositions=True, getVelocities=True, getForces=True)
+#        forces = state.getForces(asNumpy=True).value_in_unit_system(unit.md_unit_system) # unitless, in MD unit system
+#        force_magnitudes = np.sqrt(np.sum(forces**2, 1))
+#        for x in force_magnitudes:
+#            print(x)
+        state_xml = openmm.XmlSerializer.serialize(state)
+        with open('state{}.xml'.format(iteration), 'w') as outfile:
+            outfile.write(state_xml)
         new_sampler_state.apply_to_context(hybrid_context, ignore_velocities=True)
         hybrid_reduced_potential = lambda_thermodynamic_state.reduced_potential(hybrid_context)
 
@@ -360,8 +367,6 @@ def test_generate_endpoint_thermodynamic_states():
 
     #get the relevant thermodynamic states:
     _, _, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(hybrid_factory.hybrid_system, topology_proposal)
-    print(dir(lambda_zero_thermodynamic_state))
-    print(vars(lambda_zero_thermodynamic_state))
     # check the parameters for each state
     lambda_protocol = ['lambda_sterics_core','lambda_electrostatics_core','lambda_sterics_insert','lambda_electrostatics_insert','lambda_sterics_delete','lambda_electrostatics_delete']
     for value in lambda_protocol:
