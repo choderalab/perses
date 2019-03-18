@@ -13,24 +13,6 @@ requirements:
   build:
     - python
     - setuptools
-    - numpy
-    - scipy
-    - numexpr
-    - autograd
-    - pymbar
-    - openmm >=7.3.0
-    - openmoltools
-    - openmmtools
-    - numba
-    - netcdf4
-    - matplotlib
-    - seaborn
-    - mdtraj
-    - pdbfixer
-    - lxml
-    - networkx >=2.0
-    - yank
-    - parmed
 
   run:
     - python
