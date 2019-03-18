@@ -1,15 +1,8 @@
 #!/usr/bin/env python
 import sys
 import simtk.openmm as openmm
-import openeye.oechem as oechem
-import openmoltools
-import openeye.oeiupac as oeiupac
-import openeye.oeomega as oeomega
-import simtk.openmm.app as app
 import simtk.unit as unit
-import logging
 import numpy as np
-import parmed
 from collections import namedtuple, OrderedDict
 import copy
 from unittest import skipIf
@@ -27,13 +20,7 @@ except ImportError:
     from commands import getoutput  # If python 2
 from nose.plugins.attrib import attr
 from openmmtools.constants import kB
-from perses.rjmc import coordinate_numba
-import tqdm
-pval_base = 0.01
-ntests = 3.0
-ncommits = 10000.0
 
-pval_threshold = pval_base / (ntests * ncommits)
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
@@ -89,36 +76,39 @@ class GeometryTestSystem(object):
         self._context.setPositions(self._positions)
         return self._context.getState(getEnergy=True).getPotentialEnergy()
 
-class FourAtomValenceTestSystem(GeometryTestSystem):
+class LinearValenceTestSystem(GeometryTestSystem):
     """
-    This testsystem has 4 particles, and the potential for a bond, angle, torsion term.
+    This testsystem has 3 to 5 particles, and the potential for a bond, angle, torsion term.
     The particles are 0-1-2-3 atom-bond-angle-torsion. The positions for the atoms were taken
     from an earlier test for the geometry engine.
-
-    Arguments
-    ---------
-    bond : Boolean, default True
-        Whether to include the bond force term
-    angle : Boolean, default True
-        Whether to include the angle force term
-    torsion : Boolean, default True
-        Whether to include the torsion force term
-    four_atom: Boolean, default True
-        Whether to include a fourth atom
-
-    Properties
-    ----------
-    internal_coordinates : array of floats
-        The r, theta, phi internal coordinates of atom 0
-    bond_parameters : tuple of (Quantity, Quantity)
-        The equilibrium bond length and equilibrium constant, in nanometers and kJ/(mol*nm^2), atoms 0-1
-    angle_parameters : tuple of (Quantity, Quantity)
-        The equilibrium angle and constant, in radians and kJ/(mol*rad^2), atoms 0-1-2
-    torsion_parameters : tuple of (int, Quantity, Quantity)
-        The periodicity, along with the phase and force constant in radians and kJ/mol respectively, atoms 0-1-2-3
     """
 
     def __init__(self, bond=True, angle=True, torsion=True, n_atoms=4, add_extra_angle=False):
+        """
+        Arguments
+        ---------
+        bond : Boolean, default True
+            Whether to include the bond force term
+        angle : Boolean, default True
+            Whether to include the angle force term
+        torsion : Boolean, default True
+            Whether to include the torsion force term
+        four_atom: Boolean, default True
+            Whether to include a fourth atom
+
+        Properties
+        ----------
+        internal_coordinates : array of floats
+            The r, theta, phi internal coordinates of atom 0
+        bond_parameters : tuple of (Quantity, Quantity)
+            The equilibrium bond length and equilibrium constant, in nanometers and kJ/(mol*nm^2), atoms 0-1
+        angle_parameters : tuple of (Quantity, Quantity)
+            The equilibrium angle and constant, in radians and kJ/(mol*rad^2), atoms 0-1-2
+        torsion_parameters : tuple of (int, Quantity, Quantity)
+            The periodicity, along with the phase and force constant in radians and kJ/mol respectively, atoms 0-1-2-3
+        """
+        import simtk.openmm.app as app
+        import parmed
 
         if n_atoms < 3 or n_atoms > 5:
             raise ValueError("Number of atoms must be 3, 4, or 5")
@@ -219,12 +209,14 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
 
     @property
     def internal_coordinates(self):
+        from perses.rjmc import coordinate_numba
         positions_without_units = self._positions.value_in_unit(unit.nanometer)
         internals = coordinate_numba.cartesian_to_internal(positions_without_units[0], positions_without_units[1], positions_without_units[2], positions_without_units[3])
         return internals
 
     @internal_coordinates.setter
     def internal_coordinates(self, internal_coordinates):
+        from perses.rjmc import coordinate_numba
         internals_without_units = np.zeros(3, dtype=np.float64)
         internals_without_units[0] = internal_coordinates[0].value_in_unit(unit.nanometer)
         internals_without_units[1] = internal_coordinates[1].value_in_unit(unit.radians)
@@ -245,483 +237,362 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
     def torsion_parameters(self):
         return (self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
 
-def simulate_simple_systems():
-    """
-    Simulate the 3, 4, and 5 particle simple systems
-    :return:
-    """
-    system_sizes = [3,4]
 
-    configuration_rp = {}
-    sys_pos_top = {}
-
-    for system_size in system_sizes:
-        testsystem = FourAtomValenceTestSystem(n_atoms=system_size)
-        sys = testsystem.system
-        top = testsystem.topology
-        initial_pos = testsystem.positions
-
-        pos = minimize(sys, initial_pos)
-
-        sys_pos_top[system_size] = (sys, pos, top)
-
-        configurations, reduced_potentials = simulate_equilibrium(sys, pos, 3)
-
-        configuration_rp[system_size] = (configurations, reduced_potentials)
-
-    return sys_pos_top, configuration_rp
-
-def compute_rp(system, positions):
-    i = openmm.VerletIntegrator(1.0)
-    ctx = openmm.Context(system, i)
-    ctx.setPositions(positions)
-    return beta*ctx.getState(getEnergy=True).getPotentialEnergy()
-
-def run_rj_simple_system(configurations_initial, topology_proposal, n_replicates):
-    import tqdm
-    from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    #n_replicates = 100
-    final_positions = []
-    logPs = np.zeros([n_replicates, 4])
-    geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
-    potential_components_nb = np.zeros([n_replicates, 2, 4])
-    for replicate_idx in tqdm.trange(n_replicates):
-        oldpos_idx = np.random.choice(range(len(configurations_initial)))
-        old_positions = configurations_initial[oldpos_idx, :, :]
-        new_positions, lp = geometry_engine.propose(topology_proposal, old_positions, beta)
-        lp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, beta)
-        initial_rp = compute_rp(topology_proposal.old_system, old_positions)
-        logPs[replicate_idx, 0] = initial_rp
-        logPs[replicate_idx, 1] = lp
-        logPs[replicate_idx, 2] = lp_reverse
-        final_rp = compute_rp(topology_proposal.new_system, new_positions)
-        logPs[replicate_idx, 3] = final_rp
-        final_positions.append(new_positions)
-    return logPs, final_positions
-
-def run_rj_simple_system_revised(configurations_initial, topology_proposal, n_replicates):
-    import tqdm
-    from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    #n_replicates = 100
-    final_positions = []
-    logPs = np.zeros([n_replicates, 4])
-    geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=1800, n_torsion_divisions=3600, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
-    for replicate_idx in tqdm.trange(n_replicates):
-        old_positions = configurations_initial[replicate_idx, :, :]
-        #print('forward transformation... ')
-        new_positions, lp = geometry_engine.propose(topology_proposal, old_positions, beta)
-        #print('forward_transformation complete!')
-        #print('reverse transformation...')
-        lp_reverse = geometry_engine.logp_reverse(topology_proposal, new_positions, old_positions, beta)
-        #print('reverse transformation complete!')
-        initial_rp = compute_rp(topology_proposal.old_system, old_positions)
-        logPs[replicate_idx, 0] = initial_rp
-        logPs[replicate_idx, 1] = lp
-        logPs[replicate_idx, 2] = lp_reverse
-        final_rp = compute_rp(topology_proposal.new_system, new_positions)
-        logPs[replicate_idx, 3] = final_rp
-        final_positions.append(new_positions)
-    return logPs, final_positions
-
-def create_simple_topology_proposal(sys_pos_top, n_atoms_initial, n_atoms_final, direction='forward'):
-    """
-
-    :param n_atoms_initial:
-    :param n_atoms_final:
-    :param configurations_rp:
-    :param sys_pos_top:
-    :return:
-    """
-    from perses.rjmc import topology_proposal as tp
-
-    if direction=='forward' or direction=='forwards':
-        initial_system, initial_position, initial_topology = sys_pos_top['A']
-        final_system, final_positions, final_topology = sys_pos_top['B']
-    elif direction=='backward'or direction=='backwards':
-        initial_system, initial_position, initial_topology = sys_pos_top['B']
-        final_system, final_positions, final_topology = sys_pos_top['A']
-    else:
-        raise ValueError("direction may only be 'forward(s)' or 'backward(s)'!")
-
-    if n_atoms_initial == 3 and (n_atoms_final == 4 or n_atoms_final == 5):
-        new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
-    elif n_atoms_initial == 4 and n_atoms_final == 5:
-        new_to_old_atom_map = {0: 0, 1: 1, 2: 2, 3: 3}
-    elif n_atoms_initial==4 and n_atoms_final==3:
-        new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
-    elif n_atoms_initial==5 and n_atoms_final==4:
-        new_to_old_atom_map = {0:0, 1:1, 2:2, 3:3}
-    elif n_atoms_initial==5 and n_atoms_final==3:
-        new_to_old_atom_map = {0:0, 1:1, 2:2}
-    else:
-        raise ValueError("This method only supports going from 3->4, 4->3, 4->5, 5->4 3->5, or 5->3")
-
-    topology_proposal = tp.TopologyProposal(new_topology=final_topology, new_system=final_system, old_topology=initial_topology,
-                                            old_system=initial_system, logp_proposal=0.0,
-                                            new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key=str(n_atoms_initial),
-                                            new_chemical_state_key=str(n_atoms_final))
-    return topology_proposal
-
-def minimize(system, positions):
-    """
-    Utility function to minimize a system
-    """
-    ctx = openmm.Context(system, openmm.VerletIntegrator(1.0))
-    ctx.setPositions(positions)
-    openmm.LocalEnergyMinimizer.minimize(ctx)
-
-    return ctx.getState(getPositions=True).getPositions(asNumpy=True)
-
-def simulate_equilibrium(system, starting_configuration, n_iterations):
-    """
-    Simulate equilibrium Langevin dynamics at 300.0 kelvin
-
-    Parameters
-    ----------
-    system : openmm.System
-        The system to simulate
-    starting_configuration : [n, 3] np.array of quantity
-        The initial configuration of the system
-    n_iterations : int
-        The number of times to run 1000 steps of dynamics
-
-    Returns
-    ----------
-    simulated_positions : np.array of quantity
-        The positions from the simulations
-    reduced_potentials : np.array
-        The reduced potentials corresponding to each frame
-    """
-    from openmmtools import integrators
-    import tqdm
-    integrator = integrators.LangevinIntegrator()
-    platform = openmm.Platform.getPlatformByName("CPU")
-    ctx = openmm.Context(system, integrator)
-    ctx.setPositions(starting_configuration)
-    simulated_positions = unit.Quantity(np.zeros([n_iterations, system.getNumParticles(), 3]), unit=unit.nanometers)
-    reduced_potentials = np.zeros([n_iterations])
-    for iteration in tqdm.trange(n_iterations):
-        integrator.step(1000)
-        state = ctx.getState(getPositions=True, getEnergy=True)
-        positions = state.getPositions(asNumpy=True)
-        reduced_potentials[iteration] = beta * state.getPotentialEnergy()
-        simulated_positions[iteration, :, :] = positions
-
-    return simulated_positions, reduced_potentials
-
-def run_simple_transformations():
-    """
-    Run all simple transformations (3->4, 4->5, 3->5)
-    :return:
-    """
-    sys_pos_top, configuration_rp = simulate_simple_systems()
-    logp_final_positions = {}
-
-    #proposals = [[3,4], [4,5], [3,5]]
-    proposals=[[3,4]]
-
-    for proposal in proposals:
-        topology_proposal = create_simple_topology_proposal(sys_pos_top, n_atoms_initial=proposal[0], n_atoms_final=proposal[1])
-        configurations = configuration_rp[proposal[0]][0]
-        logp, final_positions = run_rj_simple_system(configurations, topology_proposal)
-        final_positions_no_units = [pos.value_in_unit_system(unit.md_unit_system) for pos in
-                                    final_positions]
-        final_positions_stacked = np.stack(final_positions_no_units)
-        logp_final_positions['{}-{}'.format(*proposal)] = (logp, final_positions_stacked)
-
-    return sys_pos_top, configuration_rp, logp_final_positions
-
-def run_and_save_tx(outfile="/home/dominic/saved_run.npy"):
-    """
-
-    :param outfile:
-    :return:
-    """
-    sys_pos_top, configuration_rp, logp_final_positions = run_simple_transformations()
-    np.save(outfile, (sys_pos_top, configuration_rp, logp_final_positions))
-
-def compute_generalized_work(saved_workfile, initial_num_beads, final_num_beads):
-    """
-    Using the saved workfile, return the generalized work for each attempt:
-
-    (logp_final - logp_initial) + (logp_reverse - logp_forward)
-
-    Parameters
-    ----------
-    saved_workfile : str
-        name of file where quantities were saved
-    initial_num_beads : int
-        number of beads in initial system
-    final_num_beads : int
-        number of beads in final system
-
-    Returns
-    -------
-    g_work : np.array of float
-        Generalized work of each attempt
-    """
-    saved_data = np.load(saved_workfile)[2]
-    logp, final_positions_stacked = saved_data['{}-{}'.format(initial_num_beads, final_num_beads)]
-    g_work = logp[:, 3] - logp[:, 0] + logp[:, 2] - logp[:, 1]
-
-    return g_work
-
-
-#############################################
-# In[1] 3 --> 4 bead system
 
 
 class AnalyticalBeadSystems(object):
 
     """
-    We conduct tests on the analytical systems of 3-to-4 bead geometry proposals and 4-to-3 bead geometry proposals to determine that
-    the variance is bounded by the numerical distribution being sampled, as well as that the work in the 3-to-4 bead proposal is the
-    negative of the reverse.
-
-    It should be noted that the work in either proposal should amount to some constant (consistent with a ratio of partition functions since
-    log weights of each distribution being sampled is set to zero)
+    Test class for generating work distributions for n_bead systems, for which all rjmc work values should be constant.  It is designed to prepare
+    work distributions (forward and reverse proposals) for 3-to-4, 4-to-5, and 3-to-5 bead systems.
     """
     def __init__(self, transformation, num_iterations):
-        from openmmtools import integrators
-        import tqdm
-        import mdtraj as md
+        """
+        Arguments
+        ---------
+        transformation: list
+            [int, int+1] where int = 3 or 4
+        num_iterations: int
+            number of iid conformations of molecule A to transform into molecule B
 
-        self.num_iterations=num_iterations
-        self.transformation=transformation
+        Properties
+        ----------
+        num_iterations: ''
+        transformation: ''
+        sys_pos_top: dict
+            dict of [molecule A: openmm.system, openmm.positions, openmm.topology, molecule B: openmm.system, openmm.positions, openmm.topology]
+        """
 
-        self.testsystemA=FourAtomValenceTestSystem(n_atoms=self.transformation[0])
-        self.testsystemB=FourAtomValenceTestSystem(n_atoms=self.transformation[1])
+        self.num_iterations = num_iterations
+        self.transformation = transformation
 
-
-        self.sysA = self.testsystemA.system
-        self.topA = self.testsystemA.topology
-        initial_posA = self.testsystemA.positions
-
-        self.sysB = self.testsystemB.system
-        self.topB = self.testsystemB.topology
-        initial_posB = self.testsystemB.positions
-
-        self.posA = minimize(self.sysA, initial_posA)
-        self.posB = minimize(self.sysB, initial_posB)
-
-        sys_pos_top=dict()
-        sys_pos_top['A']=(self.sysA,self.posA,self.topA)
-        sys_pos_top['B']=(self.sysB, self.posB, self.topB)
-        self.sys_pos_top=sys_pos_top
-
-
-
+        self.sys_pos_top = dict()
+        for _atom_number, _letter in zip(self.transformation, ['A', 'B']):
+            _testsystem = LinearValenceTestSystem(n_atoms=_atom_number)
+            _sys, _top, _pos = _testsystem.system, _testsystem.topology, self.minimize(_testsystem.system, _testsystem.positions)
+            self.sys_pos_top[_letter] = (_sys, _pos, _top)
 
     def convert_to_md(self, openmm_positions):
         """
-        convert openmm_positions (in units.nanometers) to mdtraj ndarray
+        Convert openmm position objects into numpy ndarrays
+
+        Arguments
+        ---------
+        openmm_positions: openmm unit.Quantity object
+            Positions generated from openmm simulation
+
+        Returns
+        -------
+        md_positions_stacked: np.ndarray
+            Positions in md_unit_system (nanometers)
         """
-        openmm_positions_no_units = [posits.value_in_unit_system(unit.md_unit_system) for posits in
-                                        openmm_positions]
-        md_positions_stacked = np.stack(openmm_positions_no_units)
+        _openmm_positions_no_units = [_posits.value_in_unit_system(unit.md_unit_system) for _posits in openmm_positions]
+        md_positions_stacked = np.stack(_openmm_positions_no_units)
 
         return md_positions_stacked
 
+    def minimize(self, system, positions):
+        """
+        Utility function to minimize a system
 
-    def conduct_proposal_system_equilibrium_simulations(self, printer=False):
-        from openmmtools import integrators
-        self.platform=openmm.Platform.getPlatformByName("CPU")
-        self.integrator = integrators.LangevinIntegrator()
-        self.ctx=openmm.Context(self.sysB, self.integrator)
+        Arguments
+        ---------
+        system: openmm system object
+        positions: openmm unit.Quantity object
+            openmm position (single frame)
 
-        self.ctx.setPositions(self.posB)
+        Returns
+        -------
+        minimized_positions: openmm unit.Quantity object
+            Minimized positions in md_unit_system (nanometers)
 
-        self.proposal_system_simulation_positions=unit.Quantity(np.zeros([self.num_iterations, self.transformation[1],3]), unit=unit.nanometers)
+        """
+        _ctx = openmm.Context(system, openmm.VerletIntegrator(1.0))
+        _ctx.setPositions(positions)
+        openmm.LocalEnergyMinimizer.minimize(_ctx)
+        minimized_positions = _ctx.getState(getPositions=True).getPositions(asNumpy=True)
 
-        for iteration in tqdm.trange(self.num_iterations):
-            self.integrator.step(1000)
-            state=self.ctx.getState(getPositions=True)
-            self.proposal_system_simulation_positions[iteration,:,:]=state.getPositions(asNumpy=True)
+        return minimized_positions
 
-        proposal_system_simulation_positions_stacked=self.convert_to_md(self.proposal_system_simulation_positions)
-        self.proposal_system_simulation_positions_stacked=proposal_system_simulation_positions_stacked
-        self.proposal_system_simulation_positions=unit.Quantity(proposal_system_simulation_positions_stacked, unit=unit.nanometer)
+    def compute_rp(self, system, positions):
+        """
+        Utility function to compute the reduced potential
 
-        # if filename!=None:
-        #     np.save(file=filename, arr=proposal_system_simulation_positions_stacked)
-        if printer:
-            print('proposal_system_simulation_positions: ')
-            print(proposal_system_simulation_positions_stacked)
+        Arguments
+        ---------
+        system: openmm system object
+        positions: openmm unit.Quantity object
+            openmm position (single frame)
 
+        Returns
+        -------
+        rp: float
+            reduced potential
+        """
+        from simtk.unit.quantity import is_dimensionless
+        _i = openmm.VerletIntegrator(1.0)
+        _ctx = openmm.Context(system, _i)
+        _ctx.setPositions(positions)
+        rp = beta*_ctx.getState(getEnergy=True).getPotentialEnergy()
+        assert is_dimensionless(rp), "reduced potential is not dimensionless"
+        return rp
 
+    def create_simple_topology_proposal(self, sys_pos_top, n_atoms_initial, n_atoms_final, direction='forward'):
+        """
+        Utility function to generate a topology proposal from a linear bead system
+
+        Arguments
+        ---------
+        sys_pos_top: dict
+            dictionary of openmm.system, openmm.positions, openmm.topology for molecules A and B
+        n_atoms_initial: int
+            number of atoms in molecule A
+        n_atoms_final: int
+            number of atoms in molecule B
+        direction: str
+            either the topology proposal is from A --> B or B --> A
+
+        Returns
+        -------
+        rp: dict
+            perses topology proposal dictionary
+        """
+        from perses.rjmc import topology_proposal as tp
+
+        if direction=='forward' or direction=='forwards':
+            _initial_system, _initial_position, _initial_topology = sys_pos_top['A']
+            _final_system, _final_positions, _final_topology = sys_pos_top['B']
+        elif direction=='backward'or direction=='backwards':
+            _initial_system, _initial_position, _initial_topology = sys_pos_top['B']
+            _final_system, _final_positions, _final_topology = sys_pos_top['A']
+        else:
+            raise ValueError("direction may only be 'forward(s)' or 'backward(s)'!")
+
+        if n_atoms_initial == 3 and (n_atoms_final == 4 or n_atoms_final == 5):
+            _new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
+        elif n_atoms_initial == 4 and n_atoms_final == 5:
+            _new_to_old_atom_map = {0: 0, 1: 1, 2: 2, 3: 3}
+        elif n_atoms_initial==4 and n_atoms_final==3:
+            _new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
+        elif n_atoms_initial == 5 and n_atoms_final == 4:
+            _new_to_old_atom_map = {0: 0, 1: 1, 2: 2, 3: 3}
+        elif n_atoms_initial == 5 and n_atoms_final == 3:
+            _new_to_old_atom_map = {0: 0, 1: 1, 2: 2}
+        else:
+            raise ValueError("This method only supports going from 3->4, 4->3, 4->5, 5->4 3->5, or 5->3")
+
+        topology_proposal = tp.TopologyProposal(new_topology=_final_topology, new_system=_final_system, old_topology=_initial_topology,
+                                                old_system=_initial_system, logp_proposal=0.0,
+                                                new_to_old_atom_map=_new_to_old_atom_map, old_chemical_state_key=str(n_atoms_initial),
+                                                new_chemical_state_key=str(n_atoms_final))
+        return topology_proposal
+
+    def run_rj_simple_system(self, configurations_initial, topology_proposal, n_replicates):
+        """
+        Function to execute reversibje jump MC
+
+        Arguments
+        ---------
+        configurations_initial: openmm.Quantity
+            n_replicate frames of equilibrium simulation of initial system
+        topology_proposal: dict
+            perses.topology_proposal object
+        n_replicates: int
+            number of replicates to simulate
+
+        Returns
+        -------
+        logPs: numpy ndarray
+            shape = (n_replicates, 4) where logPs[i] = (reduced potential of initial molecule, log proposal probability, reversed log proposal probability, reduced potential of proposed molecule)
+        final_positions: list
+            list of openmm position objects for final molecule proposal
+        """
+        import tqdm
+        from perses.rjmc.geometry import FFAllAngleGeometryEngine
+        final_positions = []
+        logPs = np.zeros([n_replicates, 4])
+        _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
+        for _replicate_idx in tqdm.trange(n_replicates):
+            _old_positions = configurations_initial[_replicate_idx, :, :]
+            _new_positions, _lp = _geometry_engine.propose(topology_proposal, _old_positions, beta)
+            _lp_reverse = _geometry_engine.logp_reverse(topology_proposal, _new_positions, _old_positions, beta)
+            _initial_rp = self.compute_rp(topology_proposal.old_system, _old_positions)
+            logPs[_replicate_idx, 0] = _initial_rp
+            logPs[_replicate_idx, 1] = _lp
+            logPs[_replicate_idx, 2] = _lp_reverse
+            final_rp = self.compute_rp(topology_proposal.new_system, _new_positions)
+            logPs[_replicate_idx, 3] = final_rp
+            final_positions.append(_new_positions)
+        return logPs, final_positions
 
     def create_iid_bead_systems(self, printer=False):
+        """
+        Function to simulate i.i.d conformations of the initial molecule
+
+        Arguments
+        ---------
+        printer: boolean
+            whether to print the stacked positions of the simulated initial molecule
+
+        Returns
+        -------
+        iid_positions_A: openmm.Quantity
+            num_iterations of independent initial molecule conformations
+        """
         from openmmtools import integrators
-        self.platform=openmm.Platform.getPlatformByName("CPU")
-        self.integrator = integrators.LangevinIntegrator()
-        self.ctx=openmm.Context(self.sysA, self.integrator)
+        import tqdm
 
-        self.ctx.setPositions(self.posA)
+        _sysA, _posA, _topA = self.sys_pos_top['A']
+        _platform = openmm.Platform.getPlatformByName("CPU")
+        _integrator = integrators.LangevinIntegrator()
+        _ctx = openmm.Context(_sysA, _integrator)
+        _ctx.setPositions(_posA)
 
-        self.simulated_positions=unit.Quantity(np.zeros([self.num_iterations, self.transformation[0],3]), unit=unit.nanometers)
+        _iid_positions_A = unit.Quantity(np.zeros([self.num_iterations, self.transformation[0],3]), unit=unit.nanometers)
 
-        for iteration in tqdm.trange(self.num_iterations):
-            self.integrator.step(1000)
-            state=self.ctx.getState(getPositions=True)
-            self.simulated_positions[iteration,:,:]=state.getPositions(asNumpy=True)
+        for _iteration in tqdm.trange(self.num_iterations):
+            _integrator.step(1000)
+            _state=_ctx.getState(getPositions=True)
+            _iid_positions_A[_iteration,:,:]=_state.getPositions(asNumpy=True)
 
-        simulated_positions_stacked=self.convert_to_md(self.simulated_positions)
-        self.simulated_positions_stacked=simulated_positions_stacked
-        self.simulated_positions=unit.Quantity(simulated_positions_stacked, unit=unit.nanometer)
+        _iid_positions_A_stacked=self.convert_to_md(_iid_positions_A)
+        iid_positions_A=unit.Quantity(_iid_positions_A_stacked, unit=unit.nanometer)
 
-        # if filename!=None:
-        #     np.save(file=filename, arr=simulated_positions_stacked)
         if printer:
             print('simulated_positions: ')
-            print(simulated_positions_stacked)
+            print(_iid_positions_A_stacked)
 
+        return iid_positions_A
 
+    def forward_transformation(self, iid_positions_A, printer=False):
+        """
+        Function to conduct run_rj_simple_system RJMC on each conformation of initial molecule (i.e. A --> B)
 
-    def _forward_transformation(self, printer=False):
-        topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=self.transformation[0], n_atoms_final=self.transformation[1], direction='forward')
-        self.data_forward,self.proposed_positions=run_rj_simple_system_revised(self.simulated_positions, topology_proposal, self.num_iterations)
-        self.work_forward = self.data_forward[:, 3] - self.data_forward[:, 0] - self.data_forward[:, 2] + self.data_forward[:, 1]
+        Arguments
+        ---------
+        iid_positions_A: openmm.Quantity
+            ndarray of iid conformations of molecule A
+        printer: boolean
+            whether to print the stacked positions of the proposed molecule
 
-        proposed_positions_stacked=self.convert_to_md(self.proposed_positions)
-        self.proposed_positions_stacked=proposed_positions_stacked
-        self.proposed_positions=unit.Quantity(proposed_positions_stacked, unit=unit.nanometers)
+        Returns
+        -------
+        proposed positions: openmm.Quantity
+            num_iterations of final proposal molecule
+        self.work_forward: ndarray
+            numpy array of forward works
+        """
+        _topology_proposal = self.create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial = self.transformation[0], n_atoms_final = self.transformation[1], direction='forward')
+        _data_forward, _proposed_positions = self.run_rj_simple_system(iid_positions_A, _topology_proposal, self.num_iterations)
+        self.work_forward = _data_forward[:, 3] - _data_forward[:, 0] - _data_forward[:, 2] + _data_forward[:, 1]
 
+        _proposed_positions_stacked=self.convert_to_md(_proposed_positions)
+        proposed_positions=unit.Quantity(_proposed_positions_stacked, unit=unit.nanometers)
 
-        # if filename!=None:
-        #     np.save(file=filename, arr=proposed_positions_stacked)
         if printer:
             print('proposed_positions: ')
-            print(proposed_positions_stacked)
+            print(_proposed_positions_stacked)
+
+        return proposed_positions
 
 
-    def _backward_transformation(self, printer=False):
-        topology_proposal=create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial=self.transformation[1], n_atoms_final=self.transformation[0], direction='backward')
-        self.data_reverted,self.reverted_positions=run_rj_simple_system_revised(self.proposed_positions, topology_proposal, self.num_iterations)
-        self.work_reverse = self.data_reverted[:, 3] - self.data_reverted[:, 0] - self.data_reverted[:, 2] + self.data_reverted[:, 1]
+    def backward_transformation(self, proposed_positions, printer=False):
+        """
+        Function to conduct run_rj_simple_system RJMC on each conformation of proposed molecule (i.e. B --> A)
+        backward_positions should be the same unit.Quantity as iid_positions_A (the test function has an assertion to maintain this)
+
+        Arguments
+        ---------
+        proposed_positions: openmm.Quantity
+            ndarray of proposed conformations of molecule B
+        printer: boolean
+            whether to print the stacked positions of the final proposal molecule positions
+
+        Returns
+        -------
+        backward_positions: openmm.Quantity
+            num_iterations of final proposal molecule
+        self.work_reverse: ndarray
+            numpy array of backward works
+        """
+
+        _topology_proposal = self.create_simple_topology_proposal(self.sys_pos_top, n_atoms_initial = self.transformation[1], n_atoms_final = self.transformation[0], direction='backward')
+        _data_backward, _backward_positions = self.run_rj_simple_system(proposed_positions, _topology_proposal, self.num_iterations)
+        self.work_reverse = _data_backward[:, 3] - _data_backward[:, 0] - _data_backward[:, 2] + _data_backward[:, 1]
+
+        _backward_positions_stacked=self.convert_to_md(_backward_positions)
+        backward_positions=unit.Quantity(_backward_positions_stacked, unit=unit.nanometers)
 
         if printer:
-            reverted_positions_stacked=self.convert_to_md(self.reverted_positions)
-            print('reverted_positions (i.e. backward transformation positions: ')
-            print(reverted_positions_stacked)
+            print('backward positions (i.e. backward transformation positions: ')
+            print(_backward_positions_stacked)
+
+        return backward_positions
 
 
 
-    def assertion(self, printer=True):
+    def work_comparison(self, printer=True):
+        """
+        Function to compute variance of forward and backward works, and to add the work arrays pairwise
+
+        Arguments
+        ---------
+        printer: boolean
+            whether to print the forward, reverse, variance and comparison works
+
+        Returns
+        -------
+        work_comparison: np array
+            array of floats of the pairwise addition of forward and backward works
+        work_forward_var: float
+            variance of forward work
+        work_reverse_var: float
+            variance of backward work
+        """
         work_comparison=[i+j for i,j in zip(self.work_forward, self.work_reverse)]
         work_forward_var=np.var(self.work_forward)
         work_reverse_var=np.var(self.work_reverse)
+
         if printer:
-            #print('work decomposition comparison:')
-            #print('data_forward', self.data_forward)
-            #print('data_reverse', self.data_reverted)
-            #print(' ')
             print('work_forward: ', self.work_forward)
             print('work_reverse: ', self.work_reverse)
             print('work_comparison: ',work_comparison)
             print('work_forward_var: ', work_forward_var)
             print('work_reverse_var: ', work_reverse_var)
-        return self.work_forward, self.work_reverse, work_comparison, work_forward_var, work_reverse_var
+        return work_comparison, work_forward_var, work_reverse_var
 
 
 
 
-def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=10):
-    import pickle as pkl
+def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=100):
+    """
+    Function to assert that the forward and reverse works are equal and opposite, and that the variances of each work distribution is much less
+    than the average work.  This is conducted on all three possible forward and reverse transformations.
+
+    Also asserts that each iid configuration of molecule A is equal (within a threshold) to the final proposal position of B --> A (i.e. the backward_transformation proposal molecule)
+
+    Arguments
+    ---------
+    transformation: list
+        list of pairwise transformation proposals
+    num_iterations: int
+        number of iid conformations from which to conduct rjmc
+    """
     import mdtraj as md
 
-    for i in transformation:
-        test=AnalyticalBeadSystems(i, num_iterations)
-        test.create_iid_bead_systems(printer=False)
-        test._forward_transformation(printer=False)
-        test._backward_transformation(printer=False)
-        #test.conduct_proposal_system_equilibrium_simulations(printer=False)
-        work_forward, work_reverse, work_comparison, work_forward_var, work_reverse_var=test.assertion()
-        assert all(item<1e-6 for item in work_comparison) and np.abs(work_forward_var/np.average(work_forward))<1e-3 and np.abs(work_reverse_var/np.average(work_reverse))<1e-3, "test passed"
+    for pair in transformation:
+        test = AnalyticalBeadSystems(pair, num_iterations)
+        _iid_positions_A = test.create_iid_bead_systems(printer=False)
+        _iid_positions_A_stacked = np.stack([_posits.value_in_unit_system(unit.md_unit_system) for _posits in _iid_positions_A])
+        _proposed_positions = test.forward_transformation(_iid_positions_A, printer=False)
+        _backward_positions = test.backward_transformation(_proposed_positions, printer=False)
+        _backward_positions_stacked = np.stack([_posits.value_in_unit_system(unit.md_unit_system) for _posits in _backward_positions])
 
-test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=10)
-    # if filename!=None:
-    #     pickling_on=open(filename, "wb")
-    #     pkl.dump(test, pickling_on)
-    #     pickling_on.close()
-    #     np.save()
 
-    # if sample_transform:
-    #     term=[0,1,2,3]
-    #     bins=10
-    #     """
-    #     load a 'test_AnalyticalBeadSystem class'
-    #     Given an input coordinate, we plot the distribution from rjmc (geometry.py) weighted by exp(-work) for each realization
-    #     """
-    #
-    #     #render systems into mdtraj objekts
-    #     topA=test.sys_pos_top['A'][2]
-    #     topB=test.sys_pos_top['B'][2]
-    #     #simulated_traj=md.Trajectory(test.simulated_positions_stacked, topA )
-    #     proposed_traj=md.Trajectory(test.proposed_positions_stacked, topB )
-    #     proposal_system_simulation_traj=md.Trajectory(test.proposal_system_simulation_positions_stacked, topB)
-    #
-    #     #convert generalized works to weights
-    #     offset_work=np.min(test.work_forward)
-    #     corrected_work=[i-offset_work for i in test.work_forward]
-    #     n_weights=np.array([np.exp(-w) for w in corrected_work])
-    #     max_weight=max(n_weights)
-    #     weights=np.array([i/max_weight for i in n_weights])
-    #     print('weights: ', weights)
-    #     max_weight=max(n_weights)
-    #     print('max_weights: ', max_weight)
-    #     N_eff=sum([i/max_weight for i in weights])
-    #
-    #     #compute simulated coordinate
-    #     if len(term)==2: #we are going to compute the bond distribution
-    #         #sim_coord=md.compute_distances(simulated_traj,np.array([[term[0], term[1]] for i in range(test.num_iterations)]))
-    #         proposal_sim_coord=md.compute_distances(proposal_system_simulation_traj,[[term[0], term[1]]]).flatten()
-    #         proposal_coord=md.compute_distances(proposed_traj,[[term[0], term[1]]]).flatten()
-    #         hist_range=(0.,3.)
-    #     elif len(term)==3: #compute angle distribution
-    #         #sim_coord=md.compute_angles(simulated_traj, np.array([[term[0], term[1], term[2]] for i in range(test.num_iterations)]))
-    #         proposal_sim_coord=md.compute_angles(proposal_system_simulation_traj,[[term[0], term[1], term[2]]]).flatten()
-    #         proposal_coord=md.compute_angles(proposed_traj, [[term[0], term[1], term[2]]]).flatten()
-    #         hist_range=(0.,np.pi)
-    #     elif len(term)==4: #compute torsion
-    #         #sim_coord=md.compute_dihedrals(simulated_traj, np.array([[term[0], term[1], term[2], term[3]] for i in range(test.num_iterations)]))
-    #         proposal_sim_coord=md.compute_dihedrals(proposal_system_simulation_traj,  [[term[0], term[1], term[2], term[3]]]).flatten()
-    #         proposal_coord=md.compute_dihedrals(proposed_traj, [[term[0], term[1], term[2], term[3]]]).flatten()
-    #         #print('proposal sim coord: ')
-    #         #print(proposal_sim_coord)
-    #         hist_range=(-np.pi, np.pi)
-    #     elif any(item>=test.transformation[0] for item in term):
-    #         raise ValueError('index out of range')
-    #     else:
-    #         raise ValueError('term only allows for bond, angle, or torsion terms')
-    #
-    #     #compute histogram data
-    #     #simulated_A_hist, edges=np.hist(sim_coord, bins, hist_range)
-    #     simulated_B_hist, edges=np.histogram(proposal_sim_coord, bins, hist_range)
-    #     simulated_proposal_hist, edges=np.histogram(proposal_coord, bins, hist_range)
-    #     simulated_proposal_hist_weighted, edges=np.histogram(proposal_coord, bins, hist_range, weights=weights)
-    #     bin_midpoints=np.linspace(hist_range[0], hist_range[1], bins)
-    #
-    #     #Now we can weigh the proposals and plot all the histograms
-    #     import matplotlib
-    #     matplotlib.use('Qt5Agg')
-    #     import matplotlib.pyplot as plt
+        _position_differences = np.array([simulated_frame - final_frame for simulated_frame, final_frame in zip(_iid_positions_A_stacked,_backward_positions_stacked)])
+        assert all(frame.sum() < 1e-6 for frame in _position_differences)
 
-        #plt.plot(bin_midpoints, simulated_A_hist, label='equilibrium A distribution')
+        work_comparison, work_forward_var, work_reverse_var=test.work_comparison()
+        assert all(item<1e-6 for item in work_comparison) and np.abs(work_forward_var / np.average(test.work_forward)) < 1e-3 and np.abs(work_reverse_var / np.average(test.work_reverse)) < 1e-3, "there is a mismatch in the works"
 
-        # plt.plot(bin_midpoints, simulated_B_hist, label='equilibrium B distribution')
-        # plt.plot(bin_midpoints, simulated_proposal_hist, label='unweighted proposal distribution')
-        # plt.plot(bin_midpoints, simulated_proposal_hist_weighted, label="work-weighted proposal distribution, N_eff/N_tot={}".format(N_eff/float(test.num_iterations)))
-        # plt.legend(loc=0)
-        # plt.show()
-
-# def test_Bead():
-#     test_AnalyticalBeadSystems(transformation=[3,5], num_iterations=10, sample_transform=False, save=False, filename=None)
-#
-#     test_AnalyticalBeadSystems(transformation=[3,4], num_iterations=10, sample_transform=False, save=False, filename=None)
-#     test_AnalyticalBeadSystems(transformation=[4,5], num_iterations=10, sample_transform=False, save=False, filename=None)
-
-#@skipIf(istravis, "Skip expensive test on travis")
-# test_AnalyticalBeadSystems(transformation=[3,5], num_iterations=10, sample_transform=False, save=False, filename=None)
-#
-# test_AnalyticalBeadSystems(transformation=[3,4], num_iterations=10, sample_transform=False, save=False, filename=None)
-# test_AnalyticalBeadSystems(transformation=[4,5], num_iterations=10, sample_transform=False, save=False, filename=None)
+#test_AnalyticalBeadSystems()
