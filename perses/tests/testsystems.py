@@ -161,7 +161,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         self.geometry_engine.pdb_filename_prefix = 'geometry'
 
         # Create a system generator for our desired forcefields.
-        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.forcefields import SystemGenerator
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
@@ -177,7 +177,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         # Create peptide in solvent.
         from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
         from pkg_resources import resource_filename
-        pdb_filename = resource_filename('openmmtools', 'data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
+        pdb_filename = resource_filename('openmmtools', 'alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
         from simtk.openmm.app import PDBFile
         topologies = dict()
         positions = dict()
@@ -211,7 +211,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        
+
         thermodynamic_states = dict()
         thermodynamic_states['explicit'] = states.ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
         thermodynamic_states['implicit'] = states.ThermodynamicState(system=systems['implicit'], temperature=temperature)
@@ -235,7 +235,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
              # reduce number of steps for testing
             mcmc_samplers[environment].timestep = 1.0 * unit.femtoseconds
-            
+
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps': 0}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -308,10 +308,10 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         #self.geometry_engine.pdb_filename_prefix = 'geometry2'
 
         # Create a system generator for our desired forcefields.
-        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.forcefields import SystemGenerator
         system_generators = dict()
         from pkg_resources import resource_filename
-        valence_xml_filename = resource_filename('perses', 'data/amber99sbildn-valence-only.xml')
+        valence_xml_filename = resource_filename('perses', 'amber99sbildn-valence-only.xml')
         system_generators['vacuum'] = SystemGenerator([valence_xml_filename],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
             use_antechamber=False)
@@ -319,7 +319,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         # Create peptide in solvent.
         from openmmtools.testsystems import AlanineDipeptideExplicit, AlanineDipeptideImplicit, AlanineDipeptideVacuum
         from pkg_resources import resource_filename
-        pdb_filename = resource_filename('openmmtools', 'data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
+        pdb_filename = resource_filename('openmmtools', 'alanine-dipeptide-gbsa/alanine-dipeptide.pdb')
         from simtk.openmm.app import PDBFile
         topologies = dict()
         positions = dict()
@@ -346,7 +346,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        
+
         thermodynamic_states = dict()
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
@@ -366,7 +366,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
             sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
              # reduce number of steps for testing
-            
+
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':50}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -452,9 +452,9 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         pressure = 1.0*unit.atmospheres
 
         # Create a system generator for our desired forcefields.
-        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.forcefields import SystemGenerator
         from pkg_resources import resource_filename
-        gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
+        gaff_xml_filename = resource_filename('perses', 'gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename,'amber99sbildn.xml', 'tip3p.xml'],
@@ -475,7 +475,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
 
         # Create receptor in solvent.
         from pkg_resources import resource_filename
-        pdb_filename = resource_filename('perses', 'data/181L.pdb')
+        pdb_filename = resource_filename('perses', '181L.pdb')
         import pdbfixer
         from simtk.openmm.app import PDBFile, Modeller
         topologies = dict()
@@ -573,7 +573,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        
+
         thermodynamic_states = dict()
         for component in ['receptor', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = states.ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
@@ -597,7 +597,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
              # reduce number of steps for testing
-            
+
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -674,7 +674,7 @@ class MybTestSystem(PersesTestSystem):
         self.geometry_engine.pdb_filename_prefix = 'geometry'
 
         # Create a system generator for our desired forcefields.
-        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.forcefields import SystemGenerator
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
@@ -695,7 +695,7 @@ class MybTestSystem(PersesTestSystem):
 
         # Create peptide in solvent.
         from pkg_resources import resource_filename
-        pdb_filename = resource_filename('perses', 'data/1sb0.pdb')
+        pdb_filename = resource_filename('perses', '1sb0.pdb')
         import pdbfixer
         from simtk.openmm.app import PDBFile, Modeller
         topologies = dict()
@@ -744,7 +744,7 @@ class MybTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        
+
         thermodynamic_states = dict()
         for component in ['peptide', 'complex']:
             thermodynamic_states['explicit' + '-' + component] = states.ThermodynamicState(system=systems['explicit' + '-' + component], temperature=temperature, pressure=pressure)
@@ -768,7 +768,7 @@ class MybTestSystem(PersesTestSystem):
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
             00 # reduce number of steps for testing
-            
+
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':0}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -851,7 +851,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                 environments.append(environment)
 
         # Create a system generator for desired forcefields
-        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.forcefields import SystemGenerator
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
@@ -917,7 +917,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Create SAMS samplers
-        
+
         from perses.samplers.samplers import ExpandedEnsembleSampler, SAMSSampler
         mcmc_samplers = dict()
         exen_samplers = dict()
@@ -941,7 +941,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
 
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
                  # reduce number of steps for testing
-                
+
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, self.geometry_engine, proposal_engines[environment], options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -1034,7 +1034,7 @@ class AblAffinityTestSystem(PersesTestSystem):
 
         # Read SMILES from CSV file of clinical kinase inhibitors.
         from pkg_resources import resource_filename
-        smiles_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.csv')
+        smiles_filename = resource_filename('perses', 'clinical-kinase-inhibitors.csv')
         import csv
         molecules = list()
         with open(smiles_filename, 'r') as csvfile:
@@ -1051,21 +1051,31 @@ class AblAffinityTestSystem(PersesTestSystem):
         molecules = sanitizeSMILES(self.molecules)
         molecules = canonicalize_SMILES(molecules)
 
+        # Expand to OEMols
+        oemols = list()
+        for smiles in molecules:
+            oemol = oechem.OEMol()
+            oechem.OESmilesToMol(oemol, smiles)
+            oechem.OEAddExplicitHydrogens(oemol)
+            oemols.append(oemol)
+
+        # TODO: Cache molecule parameterization
+
         # Create a system generator for desired forcefields
-        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.forcefields import SystemGenerator
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True, barostat=barostat)
+            use_antechamber=True, barostat=barostat, oemols=oemols)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, oemols=oemols)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, oemols=oemols)
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -1114,7 +1124,7 @@ class AblAffinityTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        
+
         thermodynamic_states = dict()
         for component in components:
             for solvent in solvents:
@@ -1147,7 +1157,7 @@ class AblAffinityTestSystem(PersesTestSystem):
 
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
                  # reduce number of steps for testing
-                
+
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -1260,24 +1270,30 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         # Expand molecules without explicit stereochemistry and make canonical isomeric SMILES.
         molecules = sanitizeSMILES(self.molecules)
 
-        # Create a system generator for desired forcefields
-        # TODO: Debug why we can't ue pregenerated molecule ffxml parameters. This may be an openmoltools issue.
-        molecules_xml_filename = resource_filename('perses', os.path.join(setup_path, 'Imatinib-epik-charged.ffxml'))
+        # Expand to OEMols
+        oemols = list()
+        for smiles in molecules:
+            oemol = oechem.OEMol()
+            oechem.OESmilesToMol(oemol, smiles)
+            oechem.OEAddExplicitHydrogens(oemol)
+            oemols.append(oemol)
+
+        # TODO: Cache molecule parameterization
 
         print('Creating system generators...')
-        from perses.rjmc.topology_proposal import SystemGenerator
+        from perses.forcefields import SystemGenerator
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True, barostat=barostat)
+            use_antechamber=True, barostat=barostat, oemols=oemols)
         system_generators['implicit'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'amber99_obc.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : app.OBC2, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, oemols=oemols)
         system_generators['vacuum'] = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml'],
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : None },
-            use_antechamber=True)
+            use_antechamber=True, oemols=oemols)
         # Copy system generators for all environments
         for solvent in solvents:
             for component in components:
@@ -1330,7 +1346,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
 
         # Define thermodynamic state of interest.
         print('Defining thermodynamic states...')
-        
+
         thermodynamic_states = dict()
         for component in components:
             for solvent in solvents:
@@ -1364,7 +1380,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
 
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
                  # reduce number of steps for testing
-                
+
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -1550,7 +1566,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         # Define thermodynamic state of interest.
         print('Defining thermodynamic states...')
-        
+
         thermodynamic_states = dict()
         for component in components:
             for solvent in solvents:
@@ -1584,7 +1600,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
                 mcmc_samplers[environment] = MCMCSampler(thermodynamic_state, sampler_state, copy.deepcopy(self._move))
                  # reduce number of steps for testing
-                
+
                 exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps, 'mcmc_nsteps':self._mcmc_nsteps}, storage=storage)
                 exen_samplers[environment].verbose = True
                 sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -1766,7 +1782,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        
+
         thermodynamic_states = dict()
         thermodynamic_states['explicit'] = states.ThermodynamicState(system=systems['explicit'], temperature=temperature, pressure=pressure)
         thermodynamic_states['vacuum']   = states.ThermodynamicState(system=systems['vacuum'], temperature=temperature)
@@ -1788,7 +1804,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
              # reduce number of steps for testing
-            
+
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':self._ncmc_nsteps}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)
@@ -1958,7 +1974,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
             systems[environment] = system_generators[environment].build_system(topologies[environment])
 
         # Define thermodynamic state of interest.
-        
+
         thermodynamic_states = dict()
         temperature = 300*unit.kelvin
         pressure = 1.0*unit.atmospheres
@@ -1981,7 +1997,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
                 sampler_state = states.SamplerState(positions=positions[environment])
             mcmc_samplers[environment] = MCMCSampler(thermodynamic_states[environment], sampler_state, copy.deepcopy(self._move))
             00 # reduce number of steps for testing
-            
+
             exen_samplers[environment] = ExpandedEnsembleSampler(mcmc_samplers[environment], topologies[environment], chemical_state_key, proposal_engines[environment], self.geometry_engine, options={'nsteps':0}, storage=storage)
             exen_samplers[environment].verbose = True
             sams_samplers[environment] = SAMSSampler(exen_samplers[environment], storage=storage)

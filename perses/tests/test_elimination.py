@@ -100,7 +100,7 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
 
     refmol = createOEMolFromIUPAC(ref_mol_name)
 
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    gaff_xml_filename = get_data_filename("gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
     #map one of the rings
@@ -140,7 +140,7 @@ def generate_solvated_hybrid_topology(mol_name="naphthalene", ref_mol_name="benz
 
     refmol = createOEMolFromIUPAC(ref_mol_name)
 
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    gaff_xml_filename = get_data_filename("gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
     #map one of the rings

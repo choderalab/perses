@@ -48,6 +48,9 @@ script:
   - conda install --yes --use-local ${PACKAGENAME}-dev
   # Install testing dependencies
   - conda install --yes --quiet nose nose-timer
+  # DEBUG: Reinstall openmmtools until new release
+  - pip uninstall --yes openmmtools
+  - pip install git+https://github.com/choderalab/openmmtools.git
   # Test the package
   - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a 'travis' && cd ..
 

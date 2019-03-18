@@ -66,16 +66,10 @@ def create_vacuum_hybrid_system(old_iupac_name="styrene", new_iupac_name="2-phen
 
     # Create a SystemGenerator for systems in vacuum
     from simtk.openmm import app
-    from perses.rjmc.topology_proposal import SystemGenerator
+    from perses.forcefields import SystemGenerator
     from perses.tests.utils import get_data_filename
-    forcefield_files = [get_data_filename("data/gaff.xml")]
-    system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'constraints': app.HBonds})
-
-    # Add parameters for old and new molecules to the forcefield
-    from openmoltools.forcefield_generators import generateForceFieldFromMolecules
-    from io import StringIO
-    ffxml = generateForceFieldFromMolecules([old_oemol, new_oemol], generateUniqueNames=True)
-    system_generator.forcefield.loadFile(StringIO(ffxml))
+    forcefield_files = [get_data_filename("gaff.xml")]
+    system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'constraints': app.HBonds}, oemols=[old_oemol, new_oemol])
 
     # Create a proposal engine to transform from one molecule to the other in vacuum
     from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine

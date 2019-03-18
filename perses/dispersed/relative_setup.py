@@ -14,11 +14,10 @@ import numpy as np
 from perses.tests.utils import giveOpenmmPositionsToOEMOL, get_data_filename, extractPositionsFromOEMOL
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState
-from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, \
-    SmallMoleculeSetProposalEngine
+from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SmallMoleculeSetProposalEngine
+from perses.forcefields import SystemGenerator, generateTopologyFromOEMol
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import openeye.oechem as oechem
-from openmoltools import forcefield_generators
 import copy
 import mdtraj as md
 from io import StringIO
@@ -84,7 +83,7 @@ class NonequilibriumFEPSetup(object):
             self._receptor_mol = self.load_sdf(self._receptor_mol2_filename)
             mol_list.append(self._receptor_mol)
             self._receptor_positions_old = extractPositionsFromOEMOL(self._receptor_mol)
-            self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
+            self._receptor_topology_old = generateTopologyFromOEMol(self._receptor_mol)
             self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
 
         else:
@@ -109,8 +108,6 @@ class NonequilibriumFEPSetup(object):
 
             self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
 
-            ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
-
             self._old_ligand_oemol.SetTitle("MOL")
             self._new_ligand_oemol.SetTitle("MOL")
 
@@ -122,9 +119,9 @@ class NonequilibriumFEPSetup(object):
             print(self._new_ligand_smiles)
             print(self._old_ligand_smiles)
 
-            self._old_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._old_ligand_oemol)
+            self._old_ligand_topology = generateTopologyFromOEMol(self._old_ligand_oemol)
 
-            self._new_ligand_topology = forcefield_generators.generateTopologyFromOEMol(self._new_ligand_oemol)
+            self._new_ligand_topology = generateTopologyFromOEMol(self._new_ligand_oemol)
         else:
             #self._old_ligand_topology = app.AmberPrmtopFile('%s.parm7' % self._ligand_file[0]).topology
             #self._old_ligand_positions = app.AmberInpcrdFile('%s.rst7' % self._ligand_file[0]).positions
@@ -150,13 +147,6 @@ class NonequilibriumFEPSetup(object):
             mol_list.append(self._new_ligand_oemol)
             self._new_ligand_smiles(oechem.OECreateSmiString(self._new_ligand_oemol,
                                                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens))
-
-            old_ligand_parameter_set = pm.openmm.OpenMMParameterSet.from_structure(old_ligand)
-            new_ligand_parameter_set = pm.openmm.OpenMMParameterSet.from_structure(new_ligand)
-            ffxml = StringIO()
-            old_ligand_parameter_set.write(ffxml)
-            new_ligand_parameter_set.write(ffxml)
-            ffxml = ffxml.getvalue()
 
         self._old_ligand_md_topology = md.Topology.from_openmm(self._old_ligand_topology)
         self._new_liands_md_topology = md.Topology.from_openmm(self._new_ligand_topology)
@@ -186,12 +176,12 @@ class NonequilibriumFEPSetup(object):
                 barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
             else:
                 barostat = None
-            self._system_generator = SystemGenerator(forcefield_files, barostat=barostat,
+            self._system_generator = SystemGenerator(forcefield_files, barostat=barostat, oemols=mol_list,
                                                      forcefield_kwargs={'nonbondedMethod': self._nonbonded_method,
                                                                         'constraints': app.HBonds,
                                                                         'hydrogenMass': 4 * unit.amus})
         else:
-            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'constraints': app.HBonds})
+            self._system_generator = SystemGenerator(forcefield_files, oemols=mol_list, forcefield_kwargs={'constraints': app.HBonds})
 
         self._system_generator._forcefield.loadFile(StringIO(ffxml))
 
@@ -463,11 +453,11 @@ class NonequilibriumSwitchingFEP(object):
 
         # use default functions if none specified
         if forward_functions == None:
-            self._forward_functions = python_hybrid_functions 
+            self._forward_functions = python_hybrid_functions
         else:
             self._forward_functions = forward_functions
 
-        self._reverse_functions = python_reverse_functions 
+        self._reverse_functions = python_reverse_functions
 
         # setup splitting string:
         self._neq_splitting_string = neq_splitting_string
@@ -965,7 +955,7 @@ def run_setup(setup_options):
         except KeyError as e:
             print("If you specify a nonequilibrium splitting string, you must also specify an equilibrium one.")
             raise e
-    
+
     else:
         eq_splitting = "V R O R V"
         neq_splitting = "V R O H R V"
@@ -1067,12 +1057,12 @@ def run_setup(setup_options):
             htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase], softcore_method='amber')
-            
+
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
             else:
                 selection_indices = None
-            
+
             storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
             reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
                                           checkpoint_interval=checkpoint_interval)

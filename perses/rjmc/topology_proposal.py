@@ -20,6 +20,7 @@ from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.storage import NetCDFStorageView
+from perses.forcefields import SystemGenerator
 try:
     from StringIO import StringIO
 except ImportError:
@@ -46,6 +47,7 @@ OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | 
 
 DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
 ################################################################################
 # LOGGER
 ################################################################################
@@ -1749,114 +1751,6 @@ class PeptideLibraryEngine(PolymerProposalEngine):
             'Y' : 'TYR'
         }
         return three_letter_code[residue_one_letter]
-
-class SystemGenerator(object):
-    """
-    This is a utility class to generate OpenMM Systems from
-    topology objects.
-
-    Parameters
-    ----------
-    forcefields_to_use : list of string
-        List of the names of ffxml files that will be used in system creation.
-    forcefield_kwargs : dict of arguments to createSystem, optional
-        Allows specification of various aspects of system creation.
-    metadata : dict, optional
-        Metadata associated with the SystemGenerator.
-    use_antechamber : bool, optional, default=True
-        If True, will add the GAFF residue template generator.
-    barostat : MonteCarloBarostat, optional, default=None
-        If provided, a matching barostat will be added to the generated system.
-    """
-
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None):
-        self._forcefield_xmls = forcefields_to_use
-        self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
-        self._forcefield = app.ForceField(*self._forcefield_xmls)
-        if use_antechamber:
-            self._forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-        if 'removeCMMotion' not in self._forcefield_kwargs:
-            self._forcefield_kwargs['removeCMMotion'] = False
-        self._barostat = None
-        if barostat is not None:
-            pressure = barostat.getDefaultPressure()
-            if hasattr(barostat, 'getDefaultTemperature'):
-                temperature = barostat.getDefaultTemperature()
-            else:
-                temperature = barostat.getTemperature()
-            frequency = barostat.getFrequency()
-            self._barostat = (pressure, temperature, frequency)
-
-    def getForceField(self):
-        """
-        Return the associated ForceField object.
-
-        Returns
-        -------
-        forcefield : simtk.openmm.app.ForceField
-            The current ForceField object.
-        """
-        return self._forcefield
-
-    def build_system(self, new_topology):
-        """
-        Build a system from the new_topology, adding templates
-        for the molecules in oemol_list
-
-        Parameters
-        ----------
-        new_topology : simtk.openmm.app.Topology object
-            The topology of the system
-
-        Returns
-        -------
-        new_system : openmm.System
-            A system object generated from the topology
-        """
-        _logger.info('Generating System...')
-        timer_start = time.time()
-
-        try:
-            system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
-        except Exception as e:
-            from simtk import unit
-            nparticles = sum([1 for atom in new_topology.atoms()])
-            positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.angstroms)
-            # Write PDB file of failed topology
-            from simtk.openmm.app import PDBFile
-            outfile = open('BuildSystem-failure.pdb', 'w')
-            pdbfile = PDBFile.writeFile(new_topology, positions, outfile)
-            outfile.close()
-            msg = str(e)
-            import traceback
-            msg += traceback.format_exc(e)
-            msg += "\n"
-            msg += "PDB file written as 'BuildSystem-failure.pdb'"
-            raise Exception(msg)
-
-        # Add barostat if requested.
-        if self._barostat is not None:
-            MAXINT = np.iinfo(np.int32).max
-            barostat = openmm.MonteCarloBarostat(*self._barostat)
-            seed = np.random.randint(MAXINT)
-            barostat.setRandomNumberSeed(seed)
-            system.addForce(barostat)
-
-        # DEBUG: See if any torsions have duplicate atoms.
-        #from perses.tests.utils import check_system
-        #check_system(system)
-
-        _logger.info('System generation took %.3f s' % (time.time() - timer_start))
-
-        return system
-
-    @property
-    def ffxmls(self):
-        return self._forcefield_xmls
-
-    @property
-    def forcefield(self):
-        return self._forcefield
 
 class SmallMoleculeSetProposalEngine(ProposalEngine):
     """

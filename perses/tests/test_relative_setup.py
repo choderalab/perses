@@ -45,12 +45,12 @@ def test_run_nonequilibrium_switching_move():
     """
     n_iterations = 5
     cpd_thermodynamic_state, sampler_state, topology = generate_example_waterbox_states()
-    
+
     md_topology = md.Topology.from_openmm(topology)
 
     #make the EquilibriumResult object that will be used to initialize the protocol runs:
     eq_result = feptasks.EquilibriumResult(0.0, sampler_state)
-    
+
     #run the NE switching move task n_iterations times, checking that the context is correctly handled.
     for i in range(n_iterations):
         ne_move = feptasks.NonequilibriumSwitchingMove(default_forward_functions, splitting="V R O H R V", temperature=300.0*unit.kelvin, nsteps_neq=10, timestep=1.0*unit.femtoseconds, top=md_topology, work_save_interval=10)
@@ -58,7 +58,7 @@ def test_run_nonequilibrium_switching_move():
         integrator = ne_move._integrator
 
         context, integrator = cache.global_context_cache.get_context(cpd_thermodynamic_state, integrator)
-        
+
         assert context.getParameter("lambda_sterics") == 0.0
         assert integrator.getGlobalVariableByName("lambda") == 0.0
         ne_move.apply(cpd_thermodynamic_state, sampler_state)
@@ -82,7 +82,7 @@ def test_run_cdk2_iterations():
 
     if not os.path.exists(setup_options['trajectory_directory']):
         os.makedirs(setup_options['trajectory_directory'])
-        
+
     setup_options['solvate'] = False
     setup_options['phase'] = 'solvent'
     setup_options['scheduler_address'] = None

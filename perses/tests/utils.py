@@ -42,6 +42,17 @@ beta = 1.0/kT
 
 # TODO: Move some of these utility routines to openmoltools.
 
+class Timer(object):
+    def __enter__(self):
+        import time
+        self.start = time.time()
+        return self
+
+    def __exit__(self, *args):
+        import time
+        self.end = time.time()
+        self.interval = self.end - self.start
+
 class NaNException(Exception):
     pass
 
@@ -176,7 +187,7 @@ def createOEMolFromSMILES(smiles='CC', title='MOL'):
 def oemol_to_omm_ff(oemol, molecule_name):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    gaff_xml_filename = get_data_filename('gaff.xml')
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     topology = forcefield_generators.generateTopologyFromOEMol(oemol)
     system = system_generator.build_system(topology)
@@ -252,7 +263,7 @@ def get_data_filename(relative_path):
 
     """
 
-    fn = resource_filename('perses', relative_path)
+    fn = resource_filename('perses', os.path.join('data', relative_path))
 
     if not os.path.exists(fn):
         raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
@@ -306,7 +317,7 @@ def createSystemFromIUPAC(iupac_name, resname='MOL'):
     # Initialize a forcefield with GAFF.
     # TODO: Fix path for `gaff.xml` since it is not yet distributed with OpenMM
     from simtk.openmm.app import ForceField
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
+    gaff_xml_filename = get_data_filename('gaff.xml')
     forcefield = ForceField(gaff_xml_filename)
 
     # Generate template and parameters.
@@ -917,13 +928,13 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    gaff_xml_filename = get_data_filename("gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
-    gaff_filename = get_data_filename('data/gaff.xml')
+    gaff_filename = get_data_filename('gaff.xml')
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
@@ -973,7 +984,7 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    gaff_xml_filename = get_data_filename("gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
@@ -986,9 +997,12 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
 
     solvated_system.addForce(barostat)
 
-    gaff_filename = get_data_filename('data/gaff.xml')
+    gaff_filename = get_data_filename('gaff.xml')
 
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
+    # TODO: Use JSON 'cache' to speed this up
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat,
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME},
+        oemols=[host_guest.host_oemol, host_guest.guest_oemol])
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
@@ -1032,8 +1046,11 @@ def generate_vacuum_hostguest_proposal():
 
     # Create system generator
     from perses.tests.utils import get_data_filename
-    gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    gaff_filename = get_data_filename('gaff.xml')
+    # TODO: Use JSON 'cache' to speed this up
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml'],
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff},
+        oemols=[host_guest.host_oemol, host_guest.guest_oemol])
 
     # Create geometry engine
     geometry_engine = geometry.FFAllAngleGeometryEngine()

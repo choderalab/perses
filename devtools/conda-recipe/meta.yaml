@@ -23,8 +23,6 @@ requirements:
     - autograd
     - pymbar
     - openmm >=7.3.0
-    - parmed
-    - openmoltools
     - openmmtools
     - numba
     - netcdf4
@@ -39,7 +37,11 @@ requirements:
     - distributed
     - progressbar2
     - yank
+    - ambermini
     - parmed
+    - openmoltools
+    - tinydb
+
 test:
   requires:
     - nose

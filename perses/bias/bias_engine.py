@@ -98,6 +98,7 @@ class MinimizedPotentialBias(BiasEngine):
         positions : np.array, Quantity nm
            array of atomic positions
         """
+        # TODO: Replace this with a SystemGenerator
         molecule_name = oeiupac.OECreateIUPACName(mol)
         openmoltools.openeye.enter_temp_directory()
         _ , tripos_mol2_filename = openmoltools.openeye.molecule_to_mol2(mol, tripos_mol2_filename=molecule_name + '.tripos.mol2', conformer=0, residue_name='MOL')
