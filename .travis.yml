@@ -1,68 +1,69 @@
-language: c
-sudo: false
-addons:
-  apt:
-    sources:
-    - ubuntu-toolchain-r-test
-    packages:
-      #- g++
-      #- gfortran
-      #- valgrind
-      #- csh
-      #- g++-multilib
-      #- gcc-multilib
+language: python
+
+# Run jobs on container-based infrastructure, can be overridden per job
+dist: xenial
+
 branches:
-  except:
-    - /^(?i:notest)-.*$/
+  only:
+    - master
 
-install:
-  #add random sleep from 1-10s to try to prevent overloading the anaconda servers
-  - sleep $[ ( $RANDOM % 10 )  + 1 ]s
-  - env
-  - source devtools/travis-ci/install.sh
-  - export PYTHONUNBUFFERED=true
-  - export CC=gcc
-  - export CXX=g++
-  # Unpack encrypted OpenEye license file
-  - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then openssl aes-256-cbc -K $encrypted_e49582a90fb5_key -iv $encrypted_e49582a90fb5_iv -in devtools/travis-ci/oe_license.txt.enc -out $OE_LICENSE -d; fi
-  - if [ "$TRAVIS_SECURE_ENV_VARS" == false ]; then echo "OpenEye license will not be installed in forks."; fi
+matrix:
+  include:
+    - os: osx
+      language: generic
+      env: PYTHON_VER=3.6 OPENEYE=true
+    - os: osx
+      language: generic
+      env: PYTHON_VER=3.7 OPENEYE=true
 
-script:
-  # Create a test environment
-  - conda create --yes -n test python=$python
-  # Activate the test environment
-  - source activate test
-  # Add omnia
-  - conda config --add channels omnia --add channels conda-forge
-  # Add omnia dev channels
-  - conda config --add channels omnia/label/dev
-  # Add OpenEye channel
-  - conda config --add channels openeye
-  # Update conda
-  - conda update --yes --all
-  # List conda environment
-  - conda list
-  # Build the recipe
-  - conda build devtools/conda-recipe
-  # Install the package
-  - conda install --yes --use-local ${PACKAGENAME}-dev
-  # Install testing dependencies
-  - conda install --yes --quiet nose nose-timer
-  # DEBUG: Reinstall openmmtools until new release
-  - pip uninstall --yes openmmtools
-  - pip install git+https://github.com/choderalab/openmmtools.git
-  # Test the package
-  - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a 'travis' && cd ..
+    - os: linux
+      python: 3.6
+      env: PYTHON_VER=3.6 OPENEYE=true
+    - os: linux
+      sudo: required
+      python: 3.7
+      env: PYTHON_VER=3.7 OPENEYE=true
 
 env:
-  matrix:
-    - python=3.5 CONDA_PY=35 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
-    - python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
-
   global:
-    - ORGNAME="omnia"
     - OE_LICENSE="$HOME/oe_license.txt"
-    - PACKAGENAME="perses"
-    # Location of decrypted OpenEye license file
-    - OE_LICENSE="$HOME/oe_license.txt"
-    - OPENEYE_CHANNEL="-i https://pypi.anaconda.org/OpenEye/simple"
+
+before_install:
+  # Additional info about the build
+  - uname -a
+  - df -h
+  - ulimit -a
+  # Install Conda and dependencies
+  - source devtools/travis-ci/install.sh
+  - python -V
+  # Unpack encrypted OpenEye license file
+  - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then openssl aes-256-cbc -K $encrypted_e49582a90fb5_key -iv $encrypted_e49582a90fb5_iv -in devtools/travis-ci/oe_license.txt.enc -out $OE_LICENSE -d; fi
+  - if [ "$TRAVIS_SECURE_ENV_VARS" == false ] ; then echo "OpenEye license will not be installed in pull request."; fi
+
+install:
+  # Create test environment for package
+  - conda create --yes -n test python=$PYTHON_VER pip pytest pytest-cov
+  - source activate test
+
+  # Use OpenEye toolkits beta version for partial bond orders
+  - if [[ "$OPENEYE" == true ]]; then conda install --yes -c openeye/label/beta openeye-toolkits && python -c "import openeye; print(openeye.__version__)"; fi
+
+  # Install pip only modules
+  - pip install codecov
+  - pip install coverage==4.4
+
+  # Build and install package
+  - conda build --python=$PYTHON_VER devtools/conda-recipe
+  - conda install --yes --use-local perses-dev
+
+  # Report on environment
+  - conda list
+
+script:
+  - pytest -v -s --cov=perses-dev perses-dev/tests/
+
+notifications:
+    email: false
+
+after_success:
+  - codecov
