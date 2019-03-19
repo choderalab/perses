@@ -1759,23 +1759,29 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     for providing a list of smiles that can be interconverted! The class includes
     extra functionality to assist with that (it is slow).
 
-    Parameters
-    ----------
-    list_of_smiles : list of string
-        list of smiles that will be sampled
-    system_generator : SystemGenerator object
-        SystemGenerator initialized with the appropriate forcefields
-    residue_name : str
-        The name that will be used for small molecule residues in the topology
-    proposal_metadata : dict
-        metadata for the proposal engine
-    storage : NetCDFStorageView, optional, default=None
-        If specified, write statistics to this storage
     """
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
                  atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
                  always_change=True, atom_map=None):
+        """
+        Create a SmallMoleculeSetProposalEngine
+
+        Parameters
+        ----------
+        list_of_smiles : list of string
+            list of smiles that will be sampled
+        system_generator : SystemGenerator object
+            SystemGenerator initialized with the appropriate forcefields
+        residue_name : str
+            The name that will be used for small molecule residues in the topology
+        proposal_metadata : dict
+            metadata for the proposal engine
+        storage : NetCDFStorageView, optional, default=None
+            If specified, write statistics to this storage
+
+        .. todo :: Overhaul this to match by residue instead of name.
+        """
 
         # Default atom and bond expressions for MCSS
         self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
@@ -1978,7 +1984,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         resname = self._residue_name
         mol_residues = [res for res in topology.residues() if res.name[:3]==resname[:3]]  # Find the residue by searching for residues with "MOL"
         if len(mol_residues)!=1:
-            raise ValueError("There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'" % (len(mol_residues), resname))
+            msg = "There must be exactly one residue with a specific name in the topology. Found %d residues with name '%s'\n" % (len(mol_residues), resname)
+            msg += 'Residues:\n'
+            msg += str([res.name for res in topology.residues()])
+            raise ValueError(msg)
         mol_residue = mol_residues[0]
         atoms = list(mol_residue.atoms())
         mol_start_idx = atoms[0].index

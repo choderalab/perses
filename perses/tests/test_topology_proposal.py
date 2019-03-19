@@ -44,7 +44,7 @@ def extractPositionsFromOEMOL(molecule):
         positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
     return positions
 
-def generate_initial_molecule(mol_smiles):
+def generate_initial_molecule(mol_smiles, title='MOL'):
     """
     Generate an oemol with a geometry
     """
@@ -52,7 +52,7 @@ def generate_initial_molecule(mol_smiles):
     import openeye.oeomega as oeomega
     mol = oechem.OEMol()
     oechem.OESmilesToMol(mol, mol_smiles)
-    mol.SetTitle("MOL")
+    mol.SetTitle(title)
     oechem.OEAddExplicitHydrogens(mol)
     oechem.OETriposAtomNames(mol)
     oechem.OETriposBondTypeNames(mol)
@@ -61,34 +61,30 @@ def generate_initial_molecule(mol_smiles):
     omega(mol)
     return mol
 
-def oemol_to_omm_ff(oemol, molecule_name):
-    from perses.rjmc import topology_proposal
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    from perses.forcefields import SystemGenerator
-    system_generator = SystemGenerator([gaff_xml_filename], oemols=[oemol])
-    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
-    system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMOL(oemol)
-    return system, positions, topology
-
 def test_small_molecule_proposals():
     """
     Make sure the small molecule proposal engine generates molecules
     """
     from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
     from collections import defaultdict
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     import openeye.oechem as oechem
     list_of_smiles = ['CCCC','CCCCC','CCCCCC']
     oemols = [generate_initial_molecule(smiles) for smiles in list_of_smiles]
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    stats_dict = defaultdict(lambda: 0)
+
+    gaff_filename = get_data_filename('gaff.xml')
+    cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
     from perses.forcefields import SystemGenerator
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename], oemols=oemols)
+    system_generator = SystemGenerator([gaff_filename],
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff},
+        oemols=oemols,
+        cache=cache)
+
+    stats_dict = defaultdict(lambda: 0)
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, system_generator)
-    initial_molecule = generate_initial_molecule('CCCC')
-    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+    initial_molecule = generate_initial_molecule('CCCC', title='MOL')
+    initial_positions, initial_topology = oemol_to_topology_and_positions(initial_molecule)
+    initial_system = system_generator.create_system(initial_topology)
     proposal = proposal_engine.propose(initial_system, initial_topology)
     for i in range(50):
         #positions are ignored here, and we don't want to run the geometry engine
@@ -99,10 +95,7 @@ def test_small_molecule_proposals():
         if len(matching_molecules) != 1:
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
-        # TODO: Check match
-        #oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
-        #smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OEMolToSmiles(oemol))
-        #assert smiles == proposal.new_chemical_state_key
+        # TODO: Add a test to ensure topology matches OEMol
         proposal = new_proposal
 
 def test_no_h_map():
@@ -150,12 +143,19 @@ def test_two_molecule_proposal_engine():
     # Create a proposal engine for butane -> pentane
     old_mol = generate_initial_molecule('CCCC')
     new_mol = generate_initial_molecule('CCCCC')
-    from perses.rjmc import topology_proposal
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+
+    gaff_filename = get_data_filename('gaff.xml')
+    cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
+    from perses.forcefields import SystemGenerator
+    system_generator = SystemGenerator([gaff_filename],
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff},
+        oemols=[old_mol, new_mol],
+        cache=cache)
+
     from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine
     proposal_engine = TwoMoleculeSetProposalEngine(old_mol, new_mol, system_generator)
-    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(old_mol, "MOL")
+    initial_positions, initial_topology = oemol_to_topology_and_positions(initial_molecule)
+    initial_system = system_generator.create_system(initial_topology)
     # Propose a transformation
     proposal = proposal_engine.propose(initial_system, initial_topology)
     # Check proposal
@@ -234,7 +234,7 @@ def test_specify_allowed_mutants():
     allowed_mutations = [[('5','GLU')],[('5','ASN'),('14','PHE')]]
 
     from perses.forcefields import SystemGenerator
-    system_generator = SystemGenerator([ff_filename])
+    system_generator = aerator([ff_filename])
 
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations)
 
@@ -279,8 +279,10 @@ def test_propose_self():
             residues = chain._residues
     mutant_res = np.random.choice(residues)
     allowed_mutations = [[(mutant_res.id,mutant_res.name)]]
+
     from perses.forcefields import SystemGenerator
-    system_generator = SystemGenerator([ff_filename])
+    system_generator = aerator([ff_filename],
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
 
     pm_top_engine = topology_proposal.PointMutationEngine(modeller.topology, system_generator, chain_id, allowed_mutations=allowed_mutations, verbose=True)
     print('Self mutation:')

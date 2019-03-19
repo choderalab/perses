@@ -139,9 +139,6 @@ def generateResidueTemplate(molecule, residue_atoms=None, normalize=True, gaff_v
     smiles = oechem.OEMolToSmiles(molecule)
     oequacpac.OEAssignCharges(molecule, oequacpac.OEAM1BCCELF10Charges())
 
-    # Set title to something that antechamber can handle
-    molecule.SetTitle('MOL')
-
     # Geneate a single conformation
     from openeye import oeomega
     omega = oeomega.OEOmega()
@@ -709,6 +706,7 @@ class OEGAFFTemplateGenerator(object):
 
         # If a database is specified, check against molecules in the database
         if self._cache is not None:
+            print('Opening cache from {}'.format(self._cache))
             from tinydb import TinyDB
             db = TinyDB(self._cache)
             for entry in db:

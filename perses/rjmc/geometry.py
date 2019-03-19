@@ -206,29 +206,28 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The new positions (same as input if direction='reverse')
         """
         initial_time = time.time()
-        proposal_order_tool = NetworkXProposalOrder(top_proposal)
+        proposal_order_tool = NetworkXProposalOrder(top_proposal, direction=direction)
+        torsion_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order()
+        # Render into order in which atoms are to be grown
+        atom_proposal_order = [ torsion[-1] for torsion in torsion_proposal_order ]
         proposal_order_time = time.time() - initial_time
         growth_parameter_name = 'growth_stage'
         if direction=="forward":
-            forward_init = time.time()
-            atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
-            proposal_order_forward = time.time() - forward_init
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
 
             #find and copy known positions
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
             system_init = time.time()
-            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order, growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
             growth_system_time = time.time() - system_init
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
-            atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order, growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -245,7 +244,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*units.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
-        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys())+1, context)
+        growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, context)
         growth_parameter_value = 1
 
         #now for the main loop:
@@ -1224,13 +1223,13 @@ class GeometrySystemGenerator(object):
     _HarmonicAngleForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
     _PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
-    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
+    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=False, add_extra_angles=False, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
         ----------
         reference_system : simtk.openmm.System object
             The system containing the relevant forces and particles
-        growth_indices : list of atom
+        growth_indices : list of int
             The order in which the atom indices will be proposed
         parameter_name : str
             The name of the global context parameter
@@ -1241,7 +1240,15 @@ class GeometrySystemGenerator(object):
         force_parameters : dict
             Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
         verbose : bool, optional, default=False
-            If True, will print verbose output.
+            If True, will print verbose output
+        reference_topology : simtk.openmm.app.Topology
+            New (old) topology if forward (backward)
+
+        .. todo ::
+
+           Provide a mechanism for creating a NetworkX library of residue templates and biasing torsions/angles.
+           We can pre-cache biopolymer residue templates for known biopolymer residues, and then generate new ones from OpenEye OEMols on the fly.
+           Even better would be to use something like openforcefield Topology objects from which capped molecules can be generated and used to generate biases on the fly.
 
         """
         ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
@@ -1271,7 +1278,7 @@ class GeometrySystemGenerator(object):
         self.verbose = verbose
 
         # Get list of particle indices for new and old atoms.
-        new_particle_indices = [ atom.idx for atom in growth_indices ]
+        new_particle_indices = growth_indices
         old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in new_particle_indices]
 
         reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
@@ -1388,14 +1395,15 @@ class GeometrySystemGenerator(object):
             modified_sterics_force.addInteractionGroup(set(new_particle_indices), set(new_particle_indices))
 
         # Add extra ring-closing torsions, if requested.
+        # NOTE: These will not work correctly with polymer residues (yet)
         if add_extra_torsions:
             if reference_topology==None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
-            self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
+            self._determine_extra_torsions(modified_torsion_force, reference_topology, reference_oemol, growth_indices)
         if add_extra_angles:
             if reference_topology==None:
                 raise ValueError("Need to specify topology in order to add extra angles")
-            self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
+            self._determine_extra_angles(modified_angle_force, reference_topology, reference_oemol, growth_indices)
 
         # Store growth system
         self._growth_parameter_name = parameter_name
@@ -1424,10 +1432,20 @@ class GeometrySystemGenerator(object):
 
     def _determine_extra_torsions(self, torsion_force, reference_topology, growth_indices):
         """
-        Determine which atoms need an extra torsion. First figure out which residue is
-        covered by the new atoms, then determine the rotatable bonds. Finally, construct
-        the residue in omega and measure the appropriate torsions, and generate relevant parameters.
-        ONLY ONE RESIDUE SHOULD BE CHANGING!
+        In order to facilitate ring closure and ensure proper bond stereochemistry,
+        we add additional biasing torsions to rings and stereobonds that are then corrected
+        for in the acceptance probability.
+
+        Determine which residue is covered by the new atoms
+        Identify rotatable bonds
+        Construct analogous residue in OpenEye and generate configurations with Omega
+        Measure appropriate torsions and generate relevant parameters
+
+        .. warning :: Only one residue should be changing
+
+        .. warning :: This currently will not work for polymer residues
+
+        .. todo :: Use a database of biasing torsions constructed ahead of time and match to residues by NetworkX
 
         Parameters
         ----------
@@ -1435,48 +1453,20 @@ class GeometrySystemGenerator(object):
             the new/old torsion force if forward/backward
         reference_topology : openmm.app.Topology object
             the new/old topology if forward/backward
-        growth_indices : list of atom
+        oemol : openeye.oechem.OEMol
+            An OEMol representing the new (old) system if forward (backward)
+        growth_indices : list of int
             The list of new atoms and the order in which they will be added.
 
         Returns
         -------
         torsion_force : openmm.CustomTorsionForce
             The torsion force with extra torsions added appropriately.
+
         """
         # Do nothing if there are no atoms to grow.
         if len(growth_indices) == 0:
             return torsion_force
-
-        atoms = list(reference_topology.atoms())
-        growth_indices = list(growth_indices)
-        #get residue from first atom
-        residue = atoms[growth_indices[0].idx].residue
-        try:
-            # TODO: Replace this
-            oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
-        except Exception as e:
-            print("Could not generate an oemol from the residue.")
-            print(e)
-
-        # DEBUG: Write mol2 file.
-        debug = True
-        if debug:
-            if not hasattr(self, 'omega_index'):
-                self.omega_index = 0
-            filename = 'omega-%05d.mol2' % self.omega_index
-            print("Writing %s" % filename)
-            self.omega_index += 1
-            oemol_copy = oechem.OEMol(oemol)
-            ofs = oechem.oemolostream(filename)
-            oechem.OETriposAtomTypeNames(oemol_copy)
-            oechem.OEWriteMol2File(ofs, oemol_copy) # Preserve atom naming
-            ofs.close()
-
-        #get the omega geometry of the molecule:
-        omega = oeomega.OEOmega()
-        omega.SetMaxConfs(1)
-        omega.SetStrictStereo(False) #TODO: fix stereochem
-        omega(oemol)
 
         #get the list of torsions in the molecule that are not about a rotatable bond
         # Note that only torsions involving heavy atoms are enumerated here.
@@ -1534,11 +1524,15 @@ class GeometrySystemGenerator(object):
                 heavy_torsions.append(torsion)
         return heavy_torsions
 
-    def _determine_extra_angles(self, angle_force, reference_topology, growth_indices):
+    def _determine_extra_angles(self, angle_force, reference_topology, oemol, growth_indices):
         """
         Determine extra angles to be placed on aromatic ring members. Sometimes,
         the native angle force is too weak to efficiently close the ring. As with the
         torsion force, this method assumes that only one residue is changing at a time.
+
+        .. todo :: Use a database of biasing torsions constructed ahead of time and match to residues by NetworkX
+
+        .. warning :: This currently will not work for polymer residues
 
         Parameters
         ----------
@@ -1546,7 +1540,10 @@ class GeometrySystemGenerator(object):
             the force to which additional terms will be added
         reference_topology : simtk.openmm.app.Topology
             new/old topology if forward/backward
-        growth_indices : list of parmed.atom
+        oemol : openeye.oechem.OEMol
+            An OEMol representing the new (old) system if forward (backward)
+        growth_indices : list of int
+            The list of new atoms and the order in which they will be added.
 
         Returns
         -------
@@ -1558,20 +1555,6 @@ class GeometrySystemGenerator(object):
             return
         angle_force_constant = 400.0*units.kilojoules_per_mole/units.radians**2
         atoms = list(reference_topology.atoms())
-        growth_indices = list(growth_indices)
-        #get residue from first atom
-        residue = atoms[growth_indices[0].idx].residue
-        try:
-            oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
-        except Exception as e:
-            print("Could not generate an oemol from the residue.")
-            print(e)
-
-        #get the omega geometry of the molecule:
-        omega = oeomega.OEOmega()
-        omega.SetMaxConfs(1)
-        omega.SetStrictStereo(False) #TODO: fix stereochem
-        omega(oemol)
 
         #we now have the residue as an oemol. Time to find the relevant angles.
         #There's no equivalent to OEGetTorsions, so first find atoms that are relevant
@@ -1612,20 +1595,19 @@ class GeometrySystemGenerator(object):
         ----------
         particle_indices : list of int
             The indices of particles involved in this force
-        growth_indices : list of atom
+        growth_indices : list of int
             The ordered list of indices for atom position proposals
         Returns
         -------
         growth_idx : int
             The growth_idx parameter
         """
-        growth_indices_list = [atom.idx for atom in list(growth_indices)]
         particle_indices_set = set(particle_indices)
-        growth_indices_set = set(growth_indices_list)
+        growth_indices_set = set(growth_indices)
         new_atoms_in_force = particle_indices_set.intersection(growth_indices_set)
         if len(new_atoms_in_force) == 0:
             return 0
-        new_atom_growth_order = [growth_indices_list.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
+        new_atom_growth_order = [growth_indices.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
 
 class GeometrySystemGeneratorFast(GeometrySystemGenerator):
@@ -1633,13 +1615,13 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
     Use updateParametersInContext to make energy evaluation fast.
     """
 
-    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=True, add_extra_angles=True, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=True):
+    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=False, add_extra_angles=False, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
         ----------
         reference_system : simtk.openmm.System object
             The system containing the relevant forces and particles
-        growth_indices : list of atom
+        growth_indices : list of int
             The order in which the atom indices will be proposed
         parameter_name : str
             The name of the global context parameter
@@ -1651,6 +1633,16 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
             Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
         verbose : bool, optional, default=False
             If True, will print verbose output.
+        add_extra_torsions : bool, optional, default=False
+            If True, will add biasing torsions to help create well-formed rings
+        add_extra_angles : bool, optional, default=False
+            If True, will add biasing angles to help create well-formed rings
+
+        .. todo ::
+
+           Provide a mechanism for creating a NetworkX library of residue templates and biasing torsions/angles.
+           We can pre-cache biopolymer residue templates for known biopolymer residues, and then generate new ones from OpenEye OEMols on the fly.
+           Even better would be to use something like openforcefield Topology objects from which capped molecules can be generated and used to generate biases on the fly.
 
         NB: We assume `reference_system` remains unmodified
 
@@ -1660,7 +1652,7 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
         self.verbose = verbose
 
         # Get list of particle indices for new and old atoms.
-        self._new_particle_indices = [ atom.idx for atom in growth_indices ]
+        self._new_particle_indices = growth_indices
         self._old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in self._new_particle_indices]
         self._growth_indices = growth_indices
 
@@ -1762,227 +1754,6 @@ class PredHBond(oechem.OEUnaryBondPred):
         else:
             return False
 
-class ProposalOrderTools(object):
-    """
-    This is an internal utility class for determining the order of atomic position proposals.
-    It encapsulates funcionality needed by the geometry engine. Atoms can be proposed without
-    torsions or even angles, though this may not be recommended. Default is to require torsions.
-
-    Hydrogens are added last in growth order.
-
-    .. note ::
-
-       This class sometimes fails to find a viable torsion if some topological torsions
-       do not have corresponding force field parameters.
-
-
-    Parameters
-    ----------
-    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-        The topology proposal containing the relevant move.
-    """
-
-    def __init__(self, topology_proposal, verbose=True):
-        self._topology_proposal = topology_proposal
-        self.verbose = True # DEBUG
-
-    def determine_proposal_order(self, direction='forward'):
-        """
-        Determine the proposal order of this system pair.
-        This includes the choice of a torsion. As such, a logp is returned.
-
-        Parameters
-        ----------
-        direction : str, optional
-            whether to determine the forward or reverse proposal order
-
-        Returns
-        -------
-        atoms_torsions : ordereddict
-            parmed.Atom : parmed.Dihedral
-        logp_torsion_choice : float
-            log probability of the chosen torsions
-        """
-        if direction=='forward':
-            topology = self._topology_proposal.new_topology
-            system = self._topology_proposal.new_system
-            structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
-            unique_atoms = self._topology_proposal.unique_new_atoms
-            #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
-        elif direction=='reverse':
-            topology = self._topology_proposal.old_topology
-            system = self._topology_proposal.old_system
-            structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
-            unique_atoms = self._topology_proposal.unique_old_atoms
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
-        else:
-            raise ValueError("direction parameter must be either forward or reverse.")
-
-        # Determine list of atoms to be added.
-        new_hydrogen_atoms = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number == 1 ]
-        new_heavy_atoms    = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number != 1 ]
-
-        # DEBUG
-        #print('STRUCTURE')
-        #print(structure)
-        #for atom in structure.atoms:
-        #    print(atom, atom.bonds, atom.angles, atom.dihedrals)
-        #print('')
-
-        def add_atoms(new_atoms, atoms_torsions):
-            """
-            Add the specified atoms to the ordered list of torsions to be drawn.
-
-            Parameters
-            ----------
-            new_atoms : list
-                List of atoms to be added.
-            atoms_torsions : OrderedDict
-                List of torsions to be added.
-
-            Returns
-            -------
-            logp_torsion_choice : float
-                The log torsion cchoice probability associated with these added torsions.
-
-            """
-            from scipy import special
-            logp_torsion_choice = 0.0
-            while (len(new_atoms)) > 0:
-                #print("atoms left: ", len(new_atoms)) ## IVY
-                #print("atom order: ", atoms_with_positions) ## IVY
-                eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-                #print("eligible atoms: ", eligible_atoms) ## IVY
-
-                #randomize positions
-                eligible_atoms_in_order = np.random.choice(eligible_atoms, size=len(eligible_atoms), replace=False)
-
-                #the logp of this choice is log(1/n!)
-                #gamma is (n-1)!, log-gamma is more numerically stable.
-                logp_torsion_choice += -special.gammaln(len(eligible_atoms)+1)
-
-                if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
-                    raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
-
-                #choose the torsions
-                for atom in eligible_atoms_in_order:
-                    chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
-                    atoms_torsions[atom] = chosen_torsion
-                    logp_torsion_choice += logp_choice
-                    new_atoms.remove(atom)
-                    atoms_with_positions.append(atom)
-
-            return logp_torsion_choice
-
-        # Handle heavy atoms before hydrogen atoms
-        logp_torsion_choice = 0.0
-        atoms_torsions = collections.OrderedDict()
-        print("adding heavy atoms") ##IVY
-        logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
-        print("adding hydrogen atoms") ## IVY
-        logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
-
-        return atoms_torsions, logp_torsion_choice
-
-
-    def _atoms_eligible_for_proposal(self, new_atoms, atoms_with_positions):
-        """
-        Get the set of atoms currently eligible for proposal
-
-        Parameters
-        ----------
-        new_atoms : list of parmed.Atom
-            the new atoms that need positions
-        atoms_with_positions : list of parmed.Atom
-            the atoms with positions
-        """
-        eligible_atoms = []
-        for atom in new_atoms:
-            #get all topological torsions for the appropriate atom
-            torsions = self._get_topological_torsions(atoms_with_positions, atom)
-
-            #go through the topological torsions (atom1 is always the new atom), and if one of them has
-            #atoms 2, 3, 4 in atoms_with_positions, the atom is eligible.
-            for torsion in torsions:
-                if torsion.atom2 in atoms_with_positions and torsion.atom3 in atoms_with_positions and torsion.atom4 in atoms_with_positions:
-                    eligible_atoms.append(atom)
-
-        return list(set(eligible_atoms))
-
-    def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
-        """
-        Get a torsion from the set of possible topological torsions.
-
-        Parameters
-        ----------
-        atoms_with_positions : list of parmed.Atom
-            list of the atoms that already have positions
-        atom_for_proposal : parmed.Atom
-            atom that is being proposed now
-
-        Returns
-        -------
-        torsion_selected, logp_torsion_choice : parmed.Dihedral, float
-            The torsion that was selected, along with the logp of the choice.
-
-        """
-        eligible_torsions = self._get_topological_torsions(atoms_with_positions, atom_for_proposal)
-        if not eligible_torsions:
-            raise NoTorsionError("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
-        torsion_idx = np.random.randint(0, len(eligible_torsions))
-        torsion_selected = eligible_torsions[torsion_idx]
-        return torsion_selected, np.log(1.0/len(eligible_torsions))
-
-    def _get_topological_torsions(self, atoms_with_positions, new_atom):
-        """
-        Get the topological torsions involving new_atom. This includes
-        torsions which don't have any parameters assigned to them.
-
-        Parameters
-        ----------
-        atoms_with_positions : list
-            list of atoms with a valid position
-        new_atom : parmed.Atom object
-            Atom object for the new atom
-        Returns
-        -------
-        torsions : list of parmed.Dihedral objects with no "type"
-            list of topological torsions including only atoms with positions
-        """
-        # Compute topological torsions beginning with atom `new_atom` in which all other atoms have positions
-        topological_torsions = list()
-        atom1 = new_atom
-        for bond12 in atom1.bonds:
-            atom2 = bond12.atom2 if bond12.atom1==atom1 else bond12.atom1
-            if atom2 not in atoms_with_positions:
-                continue
-            for bond23 in atom2.bonds:
-                atom3 = bond23.atom2 if bond23.atom1==atom2 else bond23.atom1
-                if (atom3 not in atoms_with_positions) or (atom3 in set([atom1, atom2])):
-                    continue
-                for bond34 in atom3.bonds:
-                    atom4 = bond34.atom2 if bond34.atom1==atom3 else bond34.atom1
-                    if (atom4 not in atoms_with_positions) or (atom4 in set([atom1, atom2, atom3])):
-                        continue
-                    topological_torsions.append((atom1, atom2, atom3, atom4))
-
-        if len(topological_torsions) == 0:
-            # Print debug information
-            _logger.debug('No topological torsions found!')
-            _logger.debug('atoms_with_positions: %s' % str(atoms_with_positions))
-            _logger.debug('new_atom: %s' % new_atom)
-            _logger.debug('bonds involving new atom:')
-            _logger.debug(new_atom.bonds)
-            _logger.debug('angles involving new atom:')
-            _logger.debug(new_atom.angles)
-            _logger.debug('dihedrals involving new atom:')
-            _logger.debug(new_atom.dihedrals)
-
-        # Recode topological torsions as parmed Dihedral objects
-        topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
-        return topological_torsions
-
 class NetworkXProposalOrder(object):
     """
     This is a proposal order generating object that uses just networkx and graph traversal for simplicity.
@@ -2031,6 +1802,12 @@ class NetworkXProposalOrder(object):
             else:
                 self._heavy.append(atom.index)
 
+        # Sanity check
+        if len(self._hydrogens)==0 and len(self._heavy)==0:
+            msg = 'NetworkXProposalOrder: No new atoms for direction {}\n'.format(direction)
+            msg += str(topology_proposal)
+            raise Exception(msg)
+
         # Choose the first of the new atoms to find the corresponding residue:
         transforming_residue = self._new_atom_objects[self._new_atoms[0]].residue
 
@@ -2038,19 +1815,28 @@ class NetworkXProposalOrder(object):
 
     def determine_proposal_order(self):
         """
-        Determine the order of atom proposal, the log probability of that proposal, and the torsions associated
-        with the atoms chosen.
+        Determine the proposal order of this system pair.
+        This includes the choice of a torsion. As such, a logp is returned.
+
+        Parameters
+        ----------
+        direction : str, optional
+            whether to determine the forward or reverse proposal order
+
         Returns
         -------
-        atoms_torsions : list of list of int
-            a list of the torsions for proposal in order [proposal atom, bond atom, angle atom, torsion atom]
-        logp : float
-            the logp of the choice
+        atom_torsions : list of list of int
+            A list of torsions, where the first atom in the torsion is the one being proposed
+        logp_torsion_choice : float
+            log probability of the chosen torsions
         """
         heavy_atoms_torsions, heavy_logp = self._propose_atoms_in_order(self._heavy)
         hydrogen_atoms_torsions, hydrogen_logp = self._propose_atoms_in_order(self._hydrogens)
+        proposal_order = heavy_atoms_torsions + hydrogen_atoms_torsions
 
-        proposal_order = heavy_atoms_torsions.extend(hydrogen_atoms_torsions)
+        if proposal_order is None:
+            msg = 'NetworkXProposalOrder: proposal_order is empty\n'
+            raise Exception(msg)
 
         return proposal_order, heavy_logp + hydrogen_logp
 
@@ -2068,6 +1854,7 @@ class NetworkXProposalOrder(object):
         logp : float
             The contribution to the overall proposal log probability
         """
+        import networkx as nx
         from scipy import special
         atom_torsions = []
         logp = 0.0
@@ -2094,8 +1881,10 @@ class NetworkXProposalOrder(object):
 
                 # If there are any eligible torsions, choose one randomly, add it to the atom_torsions,
                 # and mark this atom as having a position
+                ntorsions = len(eligible_torsions_list)
                 if len(eligible_torsions_list) > 0:
-                    atom_torsion = np.random.choice(eligible_torsions_list)
+                    torsion_index = np.random.choice(range(ntorsions))
+                    atom_torsion = eligible_torsions_list[torsion_index]
                     proposal_atoms[atom_idx] = atom_torsion
 
                     # Add the appropriate logP contribution for uniform choice:
@@ -2107,7 +1896,7 @@ class NetworkXProposalOrder(object):
                 atom_group.remove(atom_idx)
 
             # Choose the order in which to add these atoms:
-            atoms_to_order = proposal_atoms.keys()
+            atoms_to_order = list(proposal_atoms.keys())
             atom_order = np.random.choice(atoms_to_order, size=len(atoms_to_order), replace=False)
 
             # Add these atoms to the atom torsion list:
@@ -2131,6 +1920,7 @@ class NetworkXProposalOrder(object):
         residue_graph : nx.Graph
             A graph representation of the residue
         """
+        import networkx as nx
         g = nx.Graph()
 
         for atom in residue.atoms():
