@@ -896,7 +896,6 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
-
 def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene"):
     """
     Generate a test vacuum topology proposal, current positions, and new positions triplet
@@ -935,7 +934,11 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'],
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff},
+        oemols=[current_mol, proposed_mol],
+        cache=cache)
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
@@ -999,10 +1002,11 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
 
     gaff_filename = get_data_filename('gaff.xml')
 
-    # TODO: Use JSON 'cache' to speed this up
+    cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat,
         forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME},
-        oemols=[host_guest.host_oemol, host_guest.guest_oemol])
+        oemols=[host_guest.host_oemol, host_guest.guest_oemol],
+        cache=cache)
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
@@ -1047,10 +1051,11 @@ def generate_vacuum_hostguest_proposal():
     # Create system generator
     from perses.tests.utils import get_data_filename
     gaff_filename = get_data_filename('gaff.xml')
-    # TODO: Use JSON 'cache' to speed this up
+    cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml'],
         forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff},
-        oemols=[host_guest.host_oemol, host_guest.guest_oemol])
+        oemols=[host_guest.host_oemol, host_guest.guest_oemol, proposed_mol],
+        cache=cache)
 
     # Create geometry engine
     geometry_engine = geometry.FFAllAngleGeometryEngine()

@@ -206,7 +206,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The new positions (same as input if direction='reverse')
         """
         initial_time = time.time()
-        proposal_order_tool = ProposalOrderTools(top_proposal)
+        proposal_order_tool = NetworkXProposalOrder(top_proposal)
         proposal_order_time = time.time() - initial_time
         growth_parameter_name = 'growth_stage'
         if direction=="forward":
@@ -336,71 +336,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self._energy_time = 0.0
         self._position_set_time = 0.0
         return logp_proposal, new_positions
-
-    @staticmethod
-    def _oemol_from_residue(res, verbose=True):
-        """
-        Get an OEMol from a residue, even if that residue
-        is polymeric. In the latter case, external bonds
-        are replaced by hydrogens.
-
-        Parameters
-        ----------
-        res : app.Residue
-            The residue in question
-        verbose : bool, optional, default=False
-            If True, will print verbose output.
-
-        Returns
-        -------
-        oemol : openeye.oechem.OEMol
-            an oemol representation of the residue with topology indices
-        """
-        # TODO: This seems to be broken. Can we fix it?
-        from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
-        external_bonds = list(res.external_bonds())
-        for bond in external_bonds:
-            if verbose: print(bond)
-        new_atoms = {}
-        highest_index = 0
-        if external_bonds:
-            new_topology = app.Topology()
-            new_chain = new_topology.addChain(0)
-            new_res = new_topology.addResidue("new_res", new_chain)
-            for atom in res.atoms():
-                new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
-                new_atom.index = atom.index
-                new_atoms[atom] = new_atom
-                highest_index = max(highest_index, atom.index)
-            for bond in res.internal_bonds():
-                new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
-            for bond in res.external_bonds():
-                internal_atom = [atom for atom in bond if atom.residue==res][0]
-                if verbose:
-                    print('internal atom')
-                    print(internal_atom)
-                highest_index += 1
-                if internal_atom.name=='N':
-                    if verbose: print('Adding H to N')
-                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_atom.index = -1
-                    new_topology.addBond(new_atoms[internal_atom], new_atom)
-                if internal_atom.name=='C':
-                    if verbose: print('Adding OH to C')
-                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, -1)
-                    new_atom.index = -1
-                    new_topology.addBond(new_atoms[internal_atom], new_atom)
-                    highest_index += 1
-                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_hydrogen.index = -1
-                    new_topology.addBond(new_hydrogen, new_atom)
-            res_to_use = new_res
-            external_bonds = list(res_to_use.external_bonds())
-        else:
-            res_to_use = res
-        oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
-        oechem.OEAddExplicitHydrogens(oemol)
-        return oemol
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
         """
@@ -1512,12 +1447,12 @@ class GeometrySystemGenerator(object):
         if len(growth_indices) == 0:
             return torsion_force
 
-        import openmoltools.forcefield_generators as forcefield_generators
         atoms = list(reference_topology.atoms())
         growth_indices = list(growth_indices)
         #get residue from first atom
         residue = atoms[growth_indices[0].idx].residue
         try:
+            # TODO: Replace this
             oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
         except Exception as e:
             print("Could not generate an oemol from the residue.")
@@ -1827,7 +1762,6 @@ class PredHBond(oechem.OEUnaryBondPred):
         else:
             return False
 
-
 class ProposalOrderTools(object):
     """
     This is an internal utility class for determining the order of atomic position proposals.
@@ -1835,6 +1769,12 @@ class ProposalOrderTools(object):
     torsions or even angles, though this may not be recommended. Default is to require torsions.
 
     Hydrogens are added last in growth order.
+
+    .. note ::
+
+       This class sometimes fails to find a viable torsion if some topological torsions
+       do not have corresponding force field parameters.
+
 
     Parameters
     ----------
@@ -2043,6 +1983,163 @@ class ProposalOrderTools(object):
         topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
         return topological_torsions
 
+class NetworkXProposalOrder(object):
+    """
+    This is a proposal order generating object that uses just networkx and graph traversal for simplicity.
+    """
+
+    def __init__(self, topology_proposal, direction="forward"):
+        """
+        Create a NetworkXProposalOrder class
+        Parameters
+        ----------
+        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+            Container class for the transformation
+        direction: str, default forward
+            Whether to go forward or in reverse for the proposal.
+        """
+        self._topology_proposal = topology_proposal
+        self._direction = direction
+
+        self._hydrogen = app.Element.getByAtomicNumber(1.0)
+
+        # Set the direction
+        if direction == "forward":
+            self._destination_system = self._topology_proposal.new_system
+            self._new_atoms = self._topology_proposal.unique_new_atoms
+            self._destination_topology = self._topology_proposal.new_topology
+            self._atoms_with_positions = self._topology_proposal.new_to_old_atom_map.keys()
+        elif direction == "reverse":
+            self._destination_system = self._topology_proposal.old_system
+            self._new_atoms = self._topology_proposal.unique_old_atoms
+            self._destination_topology = self._topology_proposal.old_topology
+            self._atoms_with_positions = self._topology_proposal.old_to_new_atom_map.keys()
+        else:
+            raise ValueError("Direction must be either forward or reverse.")
+
+        self._new_atom_objects = list(self._destination_topology.atoms())
+
+        self._atoms_with_positions_set = set(self._atoms_with_positions)
+
+        self._hydrogens = []
+        self._heavy = []
+
+        # Sort the new atoms into hydrogen and heavy atoms:
+        for atom in self._new_atom_objects:
+            if atom.element == self._hydrogen:
+                self._hydrogens.append(atom.index)
+            else:
+                self._heavy.append(atom.index)
+
+        # Choose the first of the new atoms to find the corresponding residue:
+        transforming_residue = self._new_atom_objects[self._new_atoms[0]].residue
+
+        self._residue_graph = self._residue_to_graph(transforming_residue)
+
+    def determine_proposal_order(self):
+        """
+        Determine the order of atom proposal, the log probability of that proposal, and the torsions associated
+        with the atoms chosen.
+        Returns
+        -------
+        atoms_torsions : list of list of int
+            a list of the torsions for proposal in order [proposal atom, bond atom, angle atom, torsion atom]
+        logp : float
+            the logp of the choice
+        """
+        heavy_atoms_torsions, heavy_logp = self._propose_atoms_in_order(self._heavy)
+        hydrogen_atoms_torsions, hydrogen_logp = self._propose_atoms_in_order(self._hydrogens)
+
+        proposal_order = heavy_atoms_torsions.extend(hydrogen_atoms_torsions)
+
+        return proposal_order, heavy_logp + hydrogen_logp
+
+    def _propose_atoms_in_order(self, atom_group):
+        """
+        Propose a group of atoms along with corresponding torsions and a total log probability for the choice
+        Parameters
+        ----------
+        atom_group : list of int
+            The atoms to propose
+        Returns
+        -------
+        atom_torsions : list of list of int
+            A list of torsions, where the first atom in the torsion is the one being proposed
+        logp : float
+            The contribution to the overall proposal log probability
+        """
+        from scipy import special
+        atom_torsions = []
+        logp = 0.0
+        while len(atom_group) > 0:
+            proposal_atoms = {}
+
+            for atom_idx in atom_group:
+                # Find the shortest path up to length four from the atom in question:
+                shortest_paths = nx.algorithms.single_source_shortest_path(self._residue_graph, atom_idx, cutoff=4)
+
+                # Loop through shortest paths to find all paths of length 4 to an atom with positions:
+                eligible_torsions_list = []
+
+                for destination, path in shortest_paths.items():
+
+                    # Check if the path is length 4 (a torsion) and that the destination has a position. Continue if not.
+                    if len(path) != 4 or destination not in self._atoms_with_positions:
+                        continue
+
+                    # If the last atom is in atoms with positions, check to see if the others are also.
+                    # If they are, append the torsion to the list of possible torsions to propose
+                    if set(path[1:3]).issubset(self._atoms_with_positions_set):
+                        eligible_torsions_list.append(path)
+
+                # If there are any eligible torsions, choose one randomly, add it to the atom_torsions,
+                # and mark this atom as having a position
+                if len(eligible_torsions_list) > 0:
+                    atom_torsion = np.random.choice(eligible_torsions_list)
+                    proposal_atoms[atom_idx] = atom_torsion
+
+                    # Add the appropriate logP contribution for uniform choice:
+                    logp += np.log(1/len(eligible_torsions_list))
+                    self._atoms_with_positions_set.add(atom_idx)
+
+            # Remove the newly added atoms from the atom group:
+            for atom_idx in proposal_atoms:
+                atom_group.remove(atom_idx)
+
+            # Choose the order in which to add these atoms:
+            atoms_to_order = proposal_atoms.keys()
+            atom_order = np.random.choice(atoms_to_order, size=len(atoms_to_order), replace=False)
+
+            # Add these atoms to the atom torsion list:
+            for atom in atom_order:
+                atom_torsions.append(proposal_atoms[atom])
+
+            #Add to the logp:
+            logp += -special.gammaln(len(atoms_to_order) + 1)
+
+        return atom_torsions, logp
+
+    def _residue_to_graph(self, residue):
+        """
+        Create a NetworkX graph representing the connectivity of a residue
+        Parameters
+        ----------
+        residue : simtk.openmm.app.Residue
+            The residue to use to create the graph
+        Returns
+        -------
+        residue_graph : nx.Graph
+            A graph representation of the residue
+        """
+        g = nx.Graph()
+
+        for atom in residue.atoms():
+            g.add_node(atom)
+
+        for bond in residue.bonds():
+            g.add_edge(bond[0].index, bond[1].index)
+
+        return g
 
 class NoTorsionError(Exception):
     def __init__(self, message):

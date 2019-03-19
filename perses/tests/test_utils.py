@@ -28,6 +28,13 @@ mpl_logger.setLevel(logging.WARNING)
 ################################################################################
 
 @attr('travis')
+def test_generate_vacuum_topology_proposal():
+    """Test generate_vacuum_topology_proposal"""
+    from perses.tests.utils import generate_vacuum_topology_proposal
+    # Create the topology proposal
+    topology_proposal, old_positions, new_positions = generate_vacuum_topology_proposal()
+
+@attr('travis')
 def test_generate_vacuum_hostguest_proposal():
     """Test generate_vacuum_hostguest_proposal"""
     from perses.tests.utils import generate_vacuum_hostguest_proposal

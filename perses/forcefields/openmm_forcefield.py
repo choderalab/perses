@@ -62,52 +62,6 @@ def generateTopologyFromOEMol(molecule):
 
     return topology
 
-
-def _ensureUniqueAtomNames(molecule):
-    """
-    Ensure all atom names are unique and not blank.
-    If any atom names are degenerate or blank, Tripos atom names are assigned to all atoms.
-
-    Parameters
-    ----------
-    molecule : openeye.oechem.OEMol
-        The molecule to be modified
-
-    """
-    from openeye import oechem
-    atom_names = set()
-    atom_names_are_unique = True
-    for atom in molecule.GetAtoms():
-        atom_name = atom.GetName()
-        if (atom_name in atom_names) or (atom_name == ""):
-            atom_names_are_unique = False
-        atom_names.add(atom_name)
-    if not atom_names_are_unique:
-        oechem.OETriposAtomNames(molecule)
-
-def _computeNetCharge(molecule):
-    """
-    Compute the net formal charge on the molecule.
-    Formal charges are assigned by this function.
-
-    Parameters
-    ----------
-    molecule : openeye.oechem.OEMol
-        The molecule for which a net formal charge is to be computed
-
-    Returns
-    -------
-    net_charge : float
-        The net formal charge on the molecule
-
-    """
-    from openeye import oechem
-    import numpy as np
-    oechem.OEAssignFormalCharges(molecule)
-    charges = [ atom.GetFormalCharge() for atom in molecule.GetAtoms() ]
-    net_charge = np.array(charges).sum()
-    return net_charge
-
 def _writeMolecule(molecule, output_filename, standardize=True):
     """
     Write the molecule to a file.
@@ -160,25 +114,41 @@ def generateResidueTemplate(molecule, residue_atoms=None, normalize=True, gaff_v
     Atom names in molecules will be assigned Tripos atom names if any are blank or not unique.
 
     """
-    # Make a copy of the molecule so we don't modify the original
-    molecule = molecule.CreateCopy()
+    from openeye import oechem
 
-    # Set the template name based on the molecule title plus a globally unique UUID.
+    # Make a copy of the molecule so we don't modify the original
+    molecule = oechem.OEMol(molecule)
+
+    # OpenMM requires every residue have a globally unique (but arbitrary) name, so generate one.
     from uuid import uuid4
     template_name = molecule.GetTitle() + '-' + str(uuid4())
 
-    # If any atom names are not unique, atom names
-    _ensureUniqueAtomNames(molecule)
+    # Perform soem normalization on the molecule.
+    oechem.OEFindRingAtomsAndBonds(molecule)
+    oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+
+    # Generate unique atom names
+    oechem.OETriposAtomNames(molecule)
 
     # Compute net formal charge.
-    net_charge = _computeNetCharge(molecule)
+    oechem.OEAssignFormalCharges(molecule)
+    net_charge = sum([ atom.GetFormalCharge() for atom in molecule.GetAtoms() ])
 
     # Generate canonical AM1-BCC ELF10 charges
     from openeye import oequacpac
+    smiles = oechem.OEMolToSmiles(molecule)
     oequacpac.OEAssignCharges(molecule, oequacpac.OEAM1BCCELF10Charges())
 
     # Set title to something that antechamber can handle
     molecule.SetTitle('MOL')
+
+    # Geneate a single conformation
+    from openeye import oeomega
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(1)
+    omega.SetIncludeInput(False)
+    omega.SetStrictStereo(True)
+    omega(molecule)
 
     # Create temporary directory for running antechamber.
     import tempfile
@@ -189,8 +159,9 @@ def generateResidueTemplate(molecule, residue_atoms=None, normalize=True, gaff_v
     gaff_mol2_filename = os.path.join(tmpdir, prefix + '.gaff.mol2')
     frcmod_filename = os.path.join(tmpdir, prefix + '.frcmod')
 
-    # Write Tripos mol2 file as antechamber input.
-    _writeMolecule(molecule, input_mol2_filename, standardize=normalize)
+    # Write Tripos mol2 file for input into antechamber
+    with oechem.oemolostream(input_mol2_filename) as ofs:
+        oechem.OEWriteMolecule(ofs, molecule)
 
     # Parameterize the molecule with antechamber.
     run_antechamber(template_name, input_mol2_filename, charge_method=None, net_charge=net_charge, gaff_mol2_filename=gaff_mol2_filename, frcmod_filename=frcmod_filename, gaff_version=gaff_version)
@@ -539,8 +510,8 @@ class OEGAFFTemplateGenerator(object):
         oemols : OEMol or list of OEMol, optional, default=None
             If specified, these molecules will be recognized and parameterized with antechamber as needed.
             The parameters will be cached in case they are encountered again the future.
-        cache : str or TinyDB instance, optional, default=None
-            Filename or TinyDB instance for global caching of parameters.
+        cache : str, optional, default=None
+            Filename for global caching of parameters.
             If specified, parameterized molecules will be stored in a TinyDB instance.
             Note that no checking is done to determine this cache was created with the same GAFF version.
         gaff_version : str, default = 'gaff'
@@ -573,16 +544,7 @@ class OEGAFFTemplateGenerator(object):
         self._oemols = dict()
         self.add_oemols(oemols)
 
-        # Open TinyDB instance
-        from tinydb import TinyDB
-        if isinstance(cache, TinyDB):
-            self._db = cache
-        elif isinstance(cache, str):
-            # Open the database instance
-            self._db = TinyDB(cache)
-        else:
-            self._db = None
-
+        self._cache = cache
         self._smiles_added_to_db = set() # set of SMILES added to the database this session
 
     # TODO: Replace this encoder/decoder logic when openmm objects are properly serializable
@@ -746,8 +708,10 @@ class OEGAFFTemplateGenerator(object):
         from io import StringIO
 
         # If a database is specified, check against molecules in the database
-        if self._db is not None:
-            for entry in self._db:
+        if self._cache is not None:
+            from tinydb import TinyDB
+            db = TinyDB(self._cache)
+            for entry in db:
                 # Skip any molecules we've added to the database this session
                 if entry['smiles'] in self._smiles_added_to_db:
                     continue
@@ -777,13 +741,16 @@ class OEGAFFTemplateGenerator(object):
                 # Add the parameters
                 # TODO: Do we have to worry about parameter collisions?
                 forcefield.loadFile(StringIO(ffxml))
-                # Add it to the database, if we have one defined
-                if self._db is not None:
-                    self._db.insert({'smiles' : smiles, 'template' : self._JSONEncoder().encode(template), 'ffxml' : ffxml})
+                # If a cache is specified, add this molecule
+                if self._cache is not None:
+                    print('Writing {} to cache'.format(smiles))
+                    db.insert({'smiles' : smiles, 'template' : self._JSONEncoder().encode(template), 'ffxml' : ffxml})
                     self._smiles_added_to_db.add(smiles)
+                    db.close()
 
                 # Signal success
                 return True
 
         # Report that we have failed to parameterize the residue
+        print("Didn't know how to parameterize residue {}".format(residue.name))
         return False
