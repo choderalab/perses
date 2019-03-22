@@ -126,7 +126,7 @@ def check_result(results, threshold=3.0, neffmin=10):
     if ddf > threshold:
         raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
 
-def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol']]):
+def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol'],['imatinib','nilotinib']]):
     """
     Test to run pairs of small molecule perturbations in vacuum, using test_simple_overlap, both forward and backward.
     pentane <-> butane is adding a methyl group
@@ -134,13 +134,14 @@ def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chl
     benzene <-> catechol perturbing molecule in two positions simultaneously
     benzene <-> 2-phenyl ethanol addition of 3 heavy atom group 
     """
+    # TODO remove line below
     pairs = [['2-phenyl ethanol','benzene']]
     for pair in pairs:
         print('{} -> {}'.format(pair[0],pair[1]))
         test_simple_overlap(pair[0],pair[1])
         # now running the reverse
-        print('{} -> {}'.format(pair[1],pair[0]))
-        test_simple_overlap(pair[1],pair[0])
+#        print('{} -> {}'.format(pair[1],pair[0]))
+#        test_simple_overlap(pair[1],pair[0])
 
 def test_simple_overlap(name1='pentane',name2='butane'):
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
@@ -224,6 +225,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     ddf : float
         Standard deviation of estimate, corrected for correlation, from EXP estimator.
     """
+    from simtk.openmm.app import PDBFile
     #run an initial minimization:
     mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
     mcmc_sampler.minimize(max_iterations=20)
@@ -245,7 +247,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
 #        for x in force_magnitudes:
 #            print(x)
         state_xml = openmm.XmlSerializer.serialize(state)
-        with open('state{}.xml'.format(iteration), 'w') as outfile:
+        with open('state{}_l{}.xml'.format(iteration,lambda_index), 'w') as outfile:
             outfile.write(state_xml)
         new_sampler_state.apply_to_context(hybrid_context, ignore_velocities=True)
         hybrid_reduced_potential = lambda_thermodynamic_state.reduced_potential(hybrid_context)
@@ -257,7 +259,8 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
             nonalchemical_positions = factory.new_positions(new_sampler_state.positions)
         else:
             raise ValueError("The lambda index needs to be either one or zero for this to be meaningful")
-
+        pdbfile = open('state{}_l{}.pdb'.format(iteration,lambda_index),'w')
+        PDBFile.writeModel(factory.hybrid_topology, new_sampler_state.positions, file=pdbfile)
         nonalchemical_sampler_state = SamplerState(nonalchemical_positions, box_vectors=new_sampler_state.box_vectors)
 
         #compute the reduced potential at the nonalchemical system as well:
