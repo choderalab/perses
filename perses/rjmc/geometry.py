@@ -19,6 +19,27 @@ from perses.storage import NetCDFStorage, NetCDFStorageView
 from openmmtools.constants import kB
 _logger = logging.getLogger("geometry")
 
+def check_dimensionality(quantity, expected_units):
+    """
+    Ensure that the specified quantity has units compatible with specified units.
+
+    Parameters
+    ----------
+    quantity : simtk.unit.Quantity or float
+        The quantity to be checked
+    compatible_units : simtk.unit.Quantity or simtk.unit.Unit or float
+        Ensure ``quantity`` is either float (if ``float`` specified) or is compatible with the specified units
+
+    Raises
+    ------
+    ValueError if the specified quantity does not have the appropriate dimensionality or type
+    """
+    if (compatible_units == float) and not isinstance(quantity, float):
+        raise ValueError('{} expected to be a float, but was instead {}'.format(quantity, type(quantity)))
+
+    from simtk.unit.quantity import is_dimensionless
+    if not is_dimensionless(quantity / expected_units):
+        raise ValueError('{} does not have units compatible with expected {}'.format(quantity, expected_units))
 
 class GeometryEngine(object):
     """
@@ -116,6 +137,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
+        current_positions : simtk.unit.Quantity with shape (natoms,3) with units compatible with nanometers
+            The current positions
         beta : float
             The inverse temperature
 
@@ -126,6 +149,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
+        # Ensure positions have units compatible with nanometers
+        check_dimensionality(current_positions, unit.nanometers)
+
+        # TODO: Change this to use md_unit_system instead of hard-coding nanometers
         current_positions = current_positions.in_units_of(units.nanometers)
         if not top_proposal.unique_new_atoms:
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
@@ -281,7 +308,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 if direction=='forward':
                     r = self._propose_bond(bond, beta, n_divisions=self._n_bond_divisions)
 
-                logp_r=self._bond_logq(r, bond, beta, self._n_bond_divisions)
+                logp_r = self._bond_logq(r, bond, beta, self._n_bond_divisions)
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
@@ -512,7 +539,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
     def _add_bond_units(self, bond):
         """
-        Add the correct units to a harmonic bond
+        Attach units to a parmed harmonic bond
 
         Arguments
         ---------
@@ -521,30 +548,37 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         Returns
         -------
+        bond : parmed bond object with units attached
+            The bond with simtk.unit.Quantity units attached and converted to OpenMM style spring constants
 
         """
         if type(bond.type.k)==units.Quantity:
             return bond
+        # Add parmed units
+        # TODO: Get rid of this, and just operate on the OpenMM System instead
         bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
         bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
         return bond
 
     def _add_angle_units(self, angle):
         """
-        Add the correct units to a harmonic angle
+        Attach units to parmed harmonic angle
 
         Arguments
         ----------
         angle : parmed angle object
-             the angle to get unit-ed
+             The angle to have units added
 
         Returns
         -------
         angle_with_units : parmed angle
-            The angle, but with units on its parameters
+            The angle with simtk.unit.Quantity units attached and converted to OpenMM style spring constants
+
         """
         if type(angle.type.k)==units.Quantity:
             return angle
+        # Add parmed units
+        # TODO: Get rid of this, and just operate on the OpenMM System instead
         angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
         angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
         return angle
@@ -555,23 +589,38 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         Arguments
         ---------
-        torsion : parmed.dihedral object
-            The torsion needing units
+        torsion : parmed dihedral object
+            The torsion to have units added
 
         Returns
         -------
-        torsion : parmed.dihedral object
-            Torsion but with units added
+        torsion : parmed dihedral object
+            The torsion with simtk.unit.Quantity units attached and converted to OpenMM style parameters
+
         """
         if type(torsion.type.phi_k) == units.Quantity:
             return torsion
+        # Add parmed units
+        # TODO: Get rid of this, and just operate on the OpenMM System instead
         torsion.type.phi_k = units.Quantity(torsion.type.phi_k, unit=units.kilocalorie_per_mole)
         torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
         return torsion
 
     def _rotation_matrix(self, axis, angle):
         """
-        This method produces a rotation matrix given an axis and an angle.
+        Compute a rotation matrix about the origin given a coordinate axis and an angle.
+
+        Parameters
+        ----------
+        axis : ndarray of shape (3,) without units
+            The axis about which rotation should occur
+        angle : float (implicitly in radians)
+            The angle of rotation about the axis
+
+        Returns
+        -------
+        rotation_matrix : ndarray of shape (3,3) without units
+            The 3x3 rotation matrix
         """
         axis = axis/np.linalg.norm(axis)
         axis_squared = np.square(axis)
@@ -594,19 +643,52 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
     def _cartesian_to_internal(self, atom_position, bond_position, angle_position, torsion_position):
         """
-        Cartesian to internal function
-        """
-        from perses.rjmc import coordinate_numba
-        #ensure we have the correct units, then remove them
-        atom_position = atom_position.value_in_unit(units.nanometers).astype(np.float64)
-        bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
-        angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
-        torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
+        Cartesian to internal coordinate conversion
 
+        Parameters
+        ----------
+        atom_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom whose internal coordinates are to be computed with respect to other atoms
+        bond_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with bond length ``r``
+        angle_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with angle ``theta``
+        torsion_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with torsion ``phi``
+
+        Returns
+        -------
+        internal_coords : tuple of (float, float, float)
+            Tuple representing (r, theta, phi):
+            r : float (implicitly in nanometers)
+                Bond length distance from ``bond_position`` to newly placed atom
+            theta : float (implicitly in radians on domain [0,pi])
+                Angle formed by ``(angle_position, bond_position, new_atom)``
+            phi : float (implicitly in radians on domain [-pi, +pi))
+                Torsion formed by ``(torsion_position, angle_position, bond_position, new_atom)``
+        detJ : float
+            The absolute value of the determinant of the Jacobian transforming from (r,theta,phi) to (x,y,z)
+            .. todo :: Clarify the direction of the Jacobian
+
+        """
+        # TODO: _cartesian_to_internal and _internal_to_cartesian should accept/return units and have matched APIs
+
+        # Ensure we have the correct units, then remove them and ensure we have the correct type
+        length_unit = units.nanometers
+        atom_position = atom_position.value_in_unit(length_unit).astype(np.float64)
+        bond_position = bond_position.value_in_unit(length_unit).astype(np.float64)
+        angle_position = angle_position.value_in_unit(length_unit).astype(np.float64)
+        torsion_position = torsion_position.value_in_unit(length_unit).astype(np.float64)
+
+        # Convert to internal coordinates once everything is dimensionless
+        from perses.rjmc import coordinate_numba
         internal_coords = coordinate_numba.cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
 
+        # Compute absolute value of determinant of Jacobian
+        r, theta, phi = internal_coords
+        detJ = np.abs(r**2*np.sin(theta))
 
-        return internal_coords, np.abs(internal_coords[0]**2*np.sin(internal_coords[1]))
+        return internal_coords, detJ
 
     def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
         """
@@ -637,12 +719,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             .. todo :: Clarify the direction of the Jacobian
 
         """
-        # TODO: Refine API to always use unit-bearing quantities on input and output
+        # TODO: _cartesian_to_internal and _internal_to_cartesian should accept/return units and have matched APIs
 
         # Ensure (r,theta,phi) are already dimensionless
-        assert isinstance
-
-        # Ensure positions all have correct dimensionality
+        assert isinstance(r, float)
+        assert isinstance(theta, float)
+        assert isinstance(phi, float)
 
         # Transform into unitless values in distance units
         length_unit = units.nanometers
@@ -733,132 +815,195 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
     def _propose_bond(self, bond, beta, n_divisions=1000):
         """
-        Bond length proposal
-        """
-        import scipy.integrate as integrate
-        from simtk.unit.quantity import is_dimensionless
+        Propose dimensionless bond length r from distribution
 
+        .. math ::
+
+            r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
+
+        Prameters
+        ---------
+        bond : parmed.Structure.Bond with units modified to kcal/mol/nm^2 and nm
+            Valence bond parameters
+        beta : simtk.unit.Quantity with units dimensions 1/energy
+            Inverse temperature
+        n_divisions : int, optional, default=1000
+            Number of quandrature points for drawing bond length
+
+        Returns
+        -------
+        r : float
+            Dimensionless bond length (in simtk.unit.md_unit_system)
+
+        """
+        # TODO: Overhaul this to accept and return unit-bearing quantities
+
+        # Retrieve relevant quantities for valence bond
         r0 = bond.type.req
         k = bond.type.k * self._bond_softening_constant
         sigma_r = units.sqrt((1.0/(beta*k)))
 
+        # Ensure units are as expected
+        from simtk.unit.quantity import is_dimensionless
         for quant, unit_divisor in zip( [beta, r0, k], [1./units.kilocalories_per_mole, units.nanometers, units.kilocalories_per_mole/(units.nanometers**2)]):
-            assert is_dimensionless(quant / unit_divisor), "{} is not dimensionless".format(quant)
+            assert is_dimensionless(quant / unit_divisor), "{} does not have expecfted units of {}".format(quant, unit_divisor)
 
+        # Convert to dimensionless quantities in MD unit system
         r0, k, sigma_r = r0.value_in_unit_system(units.md_unit_system), k.value_in_unit_system(units.md_unit_system), sigma_r.value_in_unit_system(units.md_unit_system)
 
+        # Determine integration bounds
         lower_bound, upper_bound = max(0., r0-6 * sigma_r), r0+6 * sigma_r
 
+        # Compute integration quadrature points
         r_array = np.linspace(lower_bound, upper_bound, n_divisions)
         division_size = (upper_bound - lower_bound) / (n_divisions - 1)
         r_array_indices = range(n_divisions)
 
-
+        # Draw dimensionless r in md_unit_system
         r_probability_mass_function = (r_array)**2 * np.exp(-(0.5/sigma_r**2) * (r_array-r0)**2)
         r_probability_mass_function_Z = sum(r_probability_mass_function)
         r_index = np.random.choice(r_array_indices, p = r_probability_mass_function/r_probability_mass_function_Z)
-
-
         r_min = max(r_array[r_index]-division_size/2.0, 0.)
         r_max = r_array[r_index]+division_size/2.0
-
         r = np.random.uniform(r_min, r_max)
 
+        # Return dimensionless r in md_unit_system
         return r
-
 
     def _propose_angle(self, angle, beta, n_divisions=180):
         """
-        Bond angle proposal
-        """
-        import scipy.integrate as integrate
-        from simtk.unit.quantity import is_dimensionless
+        Propose dimensionless bond length r from distribution
 
+        .. math ::
+
+            \theta \sim p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
+
+        Prameters
+        ---------
+        angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
+            Valence angle parameters
+        beta : simtk.unit.Quantity with units dimensions 1/energy
+            Inverse temperature
+        n_divisions : int, optional, default=180
+            Number of quandrature points for drawing angle
+
+        Returns
+        -------
+        theta : float
+            Dimensionless valence angle (in simtk.unit.md_unit_system)
+
+        """
+        # TODO: Overhaul this to accept and return unit-bearing quantities
+
+        # Retrieve relevant quantities for valence angle
         theta0 = angle.type.theteq
         k = angle.type.k * self._angle_softening_constant
         sigma_theta = units.sqrt(1.0/(beta * k))
 
+        # Ensure units are as expected
+        from simtk.unit.quantity import is_dimensionless
         for quant, unit_divisor in zip([beta, theta0, k], [1./units.kilocalories_per_mole, units.radians, units.kilocalories_per_mole/units.radians**2]):
             assert is_dimensionless(quant / unit_divisor), "{} is not dimensionless".format(quant)
 
+        # Convert to dimensionless quantities in MD unit system
         theta0, k, sigma_theta = theta0.value_in_unit_system(units.md_unit_system), k.value_in_unit_system(units.md_unit_system), sigma_theta.value_in_unit_system(units.md_unit_system)
 
+        # Determine integration bounds
         lower_bound, upper_bound=0., np.pi
-        theta_array=np.linspace(lower_bound, upper_bound,n_divisions)
-        division_size=theta_array[1] - theta_array[0]
-        theta_array_indices=range(n_divisions)
 
-        theta_probability_mass_function=np.sin(theta_array)*np.exp(-(0.5/sigma_theta**2)*(theta_array-theta0)**2)
-        theta_probability_mass_function_Z=sum(theta_probability_mass_function)
+        # Compute integration quadrature points
+        theta_array = np.linspace(lower_bound, upper_bound, n_divisions)
+        division_size = theta_array[1] - theta_array[0]
+        theta_array_indices = range(n_divisions)
+
+        # Draw dimensionless angle theta in md_unit_system
+        theta_probability_mass_function = np.sin(theta_array)*np.exp(-(0.5/sigma_theta**2)*(theta_array-theta0)**2)
+        theta_probability_mass_function_Z = sum(theta_probability_mass_function)
         theta_index=np.random.choice(theta_array_indices, p=theta_probability_mass_function/theta_probability_mass_function_Z)
+        theta_min = max(0.,theta_array[theta_index]-division_size/2.)
+        theta_max = min(theta_array[theta_index]+division_size/2., np.pi)
+        theta = np.random.uniform(theta_min, theta_max)
 
-
-        theta_min=max(0.,theta_array[theta_index]-division_size/2.)
-        theta_max=min(theta_array[theta_index]+division_size/2., np.pi)
-
-        theta=np.random.uniform(theta_min, theta_max)
-
+        # Return dimensionless angle theta in md_unit_system
         return theta
 
     def _torsion_scan(self, torsion, positions, r, theta, n_divisions=360):
         """
-        Rotate the atom about the
+        Compute unit-bearing Carteisan positions and torsions (dimensionless, in md_unit_system) for a torsion scan
+
         Parameters
         ----------
-        torsion : parmed.Dihedral
-            parmed Dihedral containing relevant atoms
-        positions : [n,3] np.ndarray in nm
-            positions of the atoms in the system
-        r : float in nm
-            bond length
-        theta : float in radians
-            bond angle
+        torsion : parmed.Dihedral modified to use simtk.unit.Quantity
+            Parmed Dihedral containing relevant atoms
+        positions : simtk.unit.Quantity of shape (natoms,3) with units compatible with nanometers
+            Positions of the atoms in the system
+        r : float (implicitly in md_unit_system)
+            Dimensionless bond length (must be in nanometers)
+        theta : float (implicitly in md_unit_system)
+            Dimensionless valence angle (must be in radians)
 
         Returns
         -------
-        xyzs : np.ndarray, in nm
+        xyzs : simtk.unit.Quantity wrapped np.ndarray of shape (n_divisions,3) with dimensions length
             The cartesian coordinates of each
-        phis : np.ndarray, in radians
+        phis : np.ndarray of shape (n_divisions,), implicitly in md_unit_system
             The torsions angles at which a potential will be calculated
-        """
-        from perses.rjmc import coordinate_numba
-        torsion_scan_init = time.time()
-        positions_copy = copy.deepcopy(positions)
-        positions_copy = positions_copy.value_in_unit(units.nanometers)
-        positions_copy = positions_copy.astype(np.float64)
 
-        bond_atom = torsion.atom2
-        angle_atom = torsion.atom3
-        torsion_atom = torsion.atom4
-        phis = np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions) # Can't use units here.
-        xyzs_input_array=np.array([r, theta, 0.0])
-        xyzs = coordinate_numba.torsion_scan(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], xyzs_input_array, phis)
-        xyzs_quantity = units.Quantity(xyzs, unit=units.nanometers) #have to put the units back now
+        """
+        # TODO: Overhaul this to accept and return unit-bearing quantities
+        # TODO: Use context timer?
+
+        # Ensure r and theta are floats, and not Quantity
+        assert isinstance(r, float), "r has units: {}".format(r)
+        assert isinstance(theta, float), "theta has units: {}".format(theta)
+
+        torsion_scan_init = time.time()
+
+        # Compute dimensionless positions in md_unit_system as numba-friendly float64
+        length_unit = unit.nanometers
+        positions_copy = copy.deepcopy(positions)
+        positions_copy = positions_copy.value_in_unit(length_unit).astype(np.float64)
+        bond_positions = positions_copy[torsion.atom2.idx]
+        angle_positions = positions_copy[torsion.atom3.idx]
+        torsion_positions = positions_copy[torsion.atom4.idx]
+
+        # Compute dimensionless torsion values for torsion scan
+        phis = np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions)
+
+        # Compute dimensionless positions for torsion scan
+        from perses.rjmc import coordinate_numba
+        xyzs_input_array = np.array([r, theta, 0.0])
+        xyzs = coordinate_numba.torsion_scan(bond_positions, angle_positions, torsion_positions, xyzs_input_array, phis)
+
+        # Convert positions back into standard md_unit_system length units (nanometers)
+        xyzs_quantity = units.Quantity(xyzs, unit=length_unit) #have to put the units back now
 
         torsion_scan_time = time.time() - torsion_scan_init
         self._torsion_coordinate_time += torsion_scan_time
+
+        # Return unit-bearing positions and dimensionless torsions (in md_unit_system)
         return xyzs_quantity, phis
 
     def _torsion_log_probability_mass_function(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
-        Calculate the torsion logp pmf using OpenMM
+        Calculate the torsion log probability using OpenMM
 
         Parameters
         ----------
-        growth_context : openmm.Context
-            Context containing the modified system and
-        torsion : parmed.Dihedral
+        growth_context : simtk.openmm.Context
+            Context containing the modified system
+        torsion : parmed.Dihedral modified to use simtk.unit.Quantity
             parmed Dihedral containing relevant atoms
-        positions : [n,3] np.ndarray in nm
-            positions of the atoms in the system
-        r : float in nm
-            bond length
-        theta : float in radians
-            bond angle
-        beta : float
-            inverse temperature
-        n_divisions : int, optional
-            number of divisions for the torsion scan
+        positions : simtk.unit.Quantity with shape (natoms,3) with units compatible with nanometers
+            Positions of the atoms in the system
+        r : float (implicitly in nanometers)
+            Dimensionless bond length (must be in nanometers)
+        theta : float (implcitly in radians on domain [0,+pi])
+            Dimensionless valence angle (must be in radians)
+        beta : float (implicitly in 1/(kJ/mol))
+            Dimensionless inverse temperature (must be in 1/(kJ/mol))
+        n_divisions : int, optional, default=360
+            Number of divisions for the torsion scan
 
         Returns
         -------
@@ -867,6 +1012,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         phis : np.ndarray, in radians
             The torsions angles at which a potential was calculated
         """
+        # Check that quantities are unitless
+        assert isinstance(r, float), "r has units: {}".format(r)
+        assert isinstance(theta, float), "theta has units: {}".format(theta)
+        assert isinstance(beta, float), "beta has units: {}".format(beta)
+
         logq = np.zeros(n_divisions)
         atom_idx = torsion.atom1.idx
         xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
@@ -1533,20 +1683,6 @@ class GeometrySystemGeneratorFast(GeometrySystemGenerator):
             if context is not None:
                 growth_force.updateParametersInContext(context)
 
-class PredHBond(oechem.OEUnaryBondPred):
-    """
-    Example elaborating usage on:
-    https://docs.eyesopen.com/toolkits/python/oechemtk/predicates.html#section-predicates-match
-    """
-    def __call__(self, bond):
-        atom1 = bond.GetBgn()
-        atom2 = bond.GetEnd()
-        if atom1.IsHydrogen() or atom2.IsHydrogen():
-            return True
-        else:
-            return False
-
-
 class ProposalOrderTools(object):
     """
     This is an internal utility class for determining the order of atomic position proposals.
@@ -1581,6 +1717,7 @@ class ProposalOrderTools(object):
             parmed.Atom : parmed.Dihedral
         logp_torsion_choice : float
             log probability of the chosen torsions
+
         """
         if direction=='forward':
             topology = self._topology_proposal.new_topology
@@ -1602,13 +1739,6 @@ class ProposalOrderTools(object):
         new_hydrogen_atoms = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number == 1 ]
         new_heavy_atoms    = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number != 1 ]
 
-        # DEBUG
-        #print('STRUCTURE')
-        #print(structure)
-        #for atom in structure.atoms:
-        #    print(atom, atom.bonds, atom.angles, atom.dihedrals)
-        #print('')
-
         def add_atoms(new_atoms, atoms_torsions):
             """
             Add the specified atoms to the ordered list of torsions to be drawn.
@@ -1629,10 +1759,7 @@ class ProposalOrderTools(object):
             from scipy import special
             logp_torsion_choice = 0.0
             while (len(new_atoms)) > 0:
-                #print("atoms left: ", len(new_atoms)) ## IVY
-                #print("atom order: ", atoms_with_positions) ## IVY
                 eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-                #print("eligible atoms: ", eligible_atoms) ## IVY
 
                 #randomize positions
                 eligible_atoms_in_order = np.random.choice(eligible_atoms, size=len(eligible_atoms), replace=False)
@@ -1657,9 +1784,7 @@ class ProposalOrderTools(object):
         # Handle heavy atoms before hydrogen atoms
         logp_torsion_choice = 0.0
         atoms_torsions = collections.OrderedDict()
-        #print("adding heavy atoms") ##IVY
         logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
-        #print("adding hydrogen atoms") ## IVY
         logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
 
         return atoms_torsions, logp_torsion_choice
@@ -1715,19 +1840,22 @@ class ProposalOrderTools(object):
 
     def _get_topological_torsions(self, atoms_with_positions, new_atom):
         """
-        Get the topological torsions involving new_atom. This includes
-        torsions which don't have any parameters assigned to them.
+        Get the topological torsions involving new_atom.
+
+        This includes torsions which don't have any parameters assigned to them.
 
         Parameters
         ----------
-        atoms_with_positions : list
+        atoms_with_positions : list of parmed.Atom
             list of atoms with a valid position
         new_atom : parmed.Atom object
             Atom object for the new atom
+
         Returns
         -------
         torsions : list of parmed.Dihedral objects with no "type"
             list of topological torsions including only atoms with positions
+
         """
         # Compute topological torsions beginning with atom `new_atom` in which all other atoms have positions
         topological_torsions = list()
@@ -1757,11 +1885,12 @@ class ProposalOrderTools(object):
             _logger.debug(new_atom.angles)
             _logger.debug('dihedrals involving new atom:')
             _logger.debug(new_atom.dihedrals)
+            # Throw an exception
+            raise Exception('No topical torsions found.')
 
         # Recode topological torsions as parmed Dihedral objects
         topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
         return topological_torsions
-
 
 class NoTorsionError(Exception):
     def __init__(self, message):

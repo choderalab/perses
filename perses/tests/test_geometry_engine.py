@@ -29,6 +29,18 @@ from nose.plugins.attrib import attr
 from openmmtools.constants import kB
 from perses.rjmc import coordinate_numba
 
+################################################################################
+# Suppress matplotlib logging
+################################################################################
+
+import logging
+mpl_logger = logging.getLogger('matplotlib')
+mpl_logger.setLevel(logging.WARNING)
+
+################################################################################
+# Global parameters
+################################################################################
+
 #correct p-value threshold for some multiple hypothesis testing
 pval_base = 0.01
 ntests = 3.0
@@ -41,6 +53,10 @@ beta = 1.0/kT
 CARBON_MASS = 12.01
 
 proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
+
+################################################################################
+# Tests
+################################################################################
 
 class GeometryTestSystem(object):
     """
@@ -1273,10 +1289,14 @@ def test_coordinate_conversion():
         angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
         torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
         rtp, detJ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
-        r = rtp[0]*unit.nanometers
-        theta = rtp[1]*unit.radians
-        phi = rtp[2]*unit.radians
+        # Check internal coordinates do not have units
+        r, theta, phi = rtp
+        assert isinstance(r, float)
+        assert isinstance(theta, float)
+        assert isinstance(phi, float)
+        # Check that we can reproduce original unit-bearing positions
         xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
+        assert (xyz / unit.nanometers)
         assert np.linalg.norm(xyz-atom_position) < 1.0e-12
 
 def test_openmm_dihedral():
