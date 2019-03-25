@@ -36,10 +36,10 @@ class HybridTopologyFactory(object):
         The mapping of old system atoms to hybrid atoms
     hybrid_positions : [n, 3] np.ndarray
         The positions of the hybrid system
-    hybrid_topology : openmm.app.Topology
+    hybrid_topology : mdtraj.Topology
+        The topology of the hybrid system
+    omm_hybrid_topology : openmm.app.Topology
         The OpenMM topology object corresponding to the hybrid system
-    mdtraj_hybrid_topology : mdtraj.Topology
-        The mdtraj topology of the hybrid system
 
     .. warning :: This API is experimental and subject to change.
 
@@ -1590,13 +1590,13 @@ class HybridTopologyFactory(object):
         hybrid_topology : mdtraj.Topology
         """
         #first, make an md.Topology of the old system:
-        old_topology = self._topology_proposal.old_topology
+        old_topology = md.Topology.from_openmm(self._topology_proposal.old_topology)
 
         #now make a copy for the hybrid:
         hybrid_topology = copy.deepcopy(old_topology)
 
         #next, make a topology of the new system:
-        new_topology = self._topology_proposal.new_topology
+        new_topology = md.Topology.from_openmm(self._topology_proposal.new_topology)
 
         added_atoms = dict()
 
@@ -1605,15 +1605,13 @@ class HybridTopologyFactory(object):
 
         #now, add each unique new atom to the topology (this is the same order as the system)
         for particle_idx in self._topology_proposal.unique_new_atoms:
-            new_system_atom = [x for x in new_topology.atoms() if x.index == particle_idx]
-            assert len(new_system_atom) == 1, "Issue with atom indexing in new topology"
-            new_system_atom = new_system_atom[0]
+            new_system_atom = new_topology.atom(particle_idx)
 
             #first, we get the residue in the new system associated with this atom
             new_system_residue = new_system_atom.residue
 
             #next, we have to enumerate the other atoms in that residue to find mapped atoms
-            new_system_atom_set = {atom.index for atom in new_system_residue.atoms()}
+            new_system_atom_set = {atom.index for atom in new_system_residue.atoms}
 
             #Now, we find the subset of atoms that are mapped. These must be in the "core" category, since they are mapped
             #and part of a changing residue
@@ -1627,18 +1625,16 @@ class HybridTopologyFactory(object):
             first_mapped_old_atom_index = mapped_old_atom_indices[0]
 
             #get the atom object corresponding to this index from the hybrid (which is a deepcopy of the old)
-            mapped_hybrid_system_atom = [x for x in hybrid_topology.atoms() if x.index == first_mapped_old_atom_index]
-            assert len(mapped_hybrid_system_atom) == 1, "Issue with atom indexing in new topology"
-            mapped_hybrid_system_atom =  mapped_hybrid_system_atom[0]
+            mapped_hybrid_system_atom = hybrid_topology.atom(first_mapped_old_atom_index)
 
             #get the residue that is relevant to this atom
             mapped_residue = mapped_hybrid_system_atom.residue
 
             #add the atom using the mapped residue
-            added_atoms[particle_idx] = hybrid_topology.addAtom(new_system_atom.name, new_system_atom.element, mapped_residue)
+            added_atoms[particle_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
 
         #now loop through the bonds in the new system, and if the bond contains a unique new atom, then add it to the hybrid topology
-        for (atom1, atom2) in new_topology.bonds():
+        for (atom1, atom2) in new_topology.bonds:
             atom1_index_in_hybrid = self._new_to_hybrid_map[atom1.index]
             atom2_index_in_hybrid = self._new_to_hybrid_map[atom2.index]
 
@@ -1654,7 +1650,7 @@ class HybridTopologyFactory(object):
                 else:
                     atom2_to_bond = atom2
 
-                hybrid_topology.addBond(atom1_to_bond, atom2_to_bond)
+                hybrid_topology.add_bond(atom1_to_bond, atom2_to_bond)
 
         return hybrid_topology
 
@@ -1750,7 +1746,7 @@ class HybridTopologyFactory(object):
     @property
     def hybrid_topology(self):
         """
-        An openmm hybrid topology for the purpose of writing out trajectories. Note that we do not expect this to be
+        An MDTraj hybrid topology for the purpose of writing out trajectories. Note that we do not expect this to be
         able to be parameterized by the openmm forcefield class.
 
         Returns
@@ -1760,12 +1756,12 @@ class HybridTopologyFactory(object):
         return self._hybrid_topology
 
     @property
-    def mdtraj_hybrid_topology(self):
+    def omm_hybrid_topology(self):
         """
-        An mdtraj format of the hybrid topology. Also cannot be used to parameterize system, only to write out trajectories.
+        An OpenMM format of the hybrid topology. Also cannot be used to parameterize system, only to write out trajectories.
 
         Returns
         -------
         hybrid_topology : simtk.openmm.app.Topology
         """
-        return md.Topology.from_openmm(self._hybrid_topology)
+        return md.Topology.to_openmm(self._hybrid_topology)
