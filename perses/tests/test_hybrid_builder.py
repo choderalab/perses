@@ -259,8 +259,8 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
             nonalchemical_positions = factory.new_positions(new_sampler_state.positions)
         else:
             raise ValueError("The lambda index needs to be either one or zero for this to be meaningful")
-        pdbfile = open('state{}_l{}.pdb'.format(iteration,lambda_index),'w')
-        PDBFile.writeModel(factory.hybrid_topology, new_sampler_state.positions, file=pdbfile)
+        #pdbfile = open('state{}_l{}.pdb'.format(iteration,lambda_index),'w')
+        #PDBFile.writeModel(factory.hybrid_topology, new_sampler_state.positions, file=pdbfile)
         nonalchemical_sampler_state = SamplerState(nonalchemical_positions, box_vectors=new_sampler_state.box_vectors)
 
         #compute the reduced potential at the nonalchemical system as well:
