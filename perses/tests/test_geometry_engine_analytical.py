@@ -28,6 +28,8 @@ CARBON_MASS = 12.01
 
 istravis = os.environ.get('TRAVIS', None) == 'true'
 
+REFERENCE_PLATFORM = openmm.Platform.getPlatformByName("Reference")
+
 proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
 
 class GeometryTestSystem(object):
@@ -75,6 +77,10 @@ class GeometryTestSystem(object):
     def energy(self):
         self._context.setPositions(self._positions)
         return self._context.getState(getEnergy=True).getPotentialEnergy()
+
+    def __del__(self):
+        if hasattr(self, '_context'):
+            del self._context
 
 class LinearValenceTestSystem(GeometryTestSystem):
     """
@@ -200,7 +206,7 @@ class LinearValenceTestSystem(GeometryTestSystem):
         #initialize class memers with the appropriate values
         self._positions = self._default_positions
         self._integrator = openmm.VerletIntegrator(1)
-        self._platform = openmm.Platform.getPlatformByName("Reference") #use reference for stability
+        self._platform = REFERENCE_PLATFORM #use reference for stability
 
         #create a context and set positions so we can get potential energies
         self._context = openmm.Context(self._system, self._integrator, self._platform)
@@ -311,6 +317,7 @@ class AnalyticalBeadSystems(object):
         _ctx.setPositions(positions)
         openmm.LocalEnergyMinimizer.minimize(_ctx)
         minimized_positions = _ctx.getState(getPositions=True).getPositions(asNumpy=True)
+        del _ctx
 
         return minimized_positions
 
@@ -331,10 +338,11 @@ class AnalyticalBeadSystems(object):
         """
         from simtk.unit.quantity import is_dimensionless
         _i = openmm.VerletIntegrator(1.0)
-        _ctx = openmm.Context(system, _i)
+        _ctx = openmm.Context(system, _i, REFERENCE_PLATFORM)
         _ctx.setPositions(positions)
         rp = beta*_ctx.getState(getEnergy=True).getPotentialEnergy()
         assert is_dimensionless(rp), "reduced potential is not dimensionless"
+        del _ctx
         return rp
 
     def create_simple_topology_proposal(self, sys_pos_top, n_atoms_initial, n_atoms_final, direction='forward'):
@@ -443,9 +451,8 @@ class AnalyticalBeadSystems(object):
         import tqdm
 
         _sysA, _posA, _topA = self.sys_pos_top['A']
-        _platform = openmm.Platform.getPlatformByName("CPU")
         _integrator = integrators.LangevinIntegrator()
-        _ctx = openmm.Context(_sysA, _integrator)
+        _ctx = openmm.Context(_sysA, _integrator, REFERENCE_PLATFORM)
         _ctx.setPositions(_posA)
 
         _iid_positions_A = unit.Quantity(np.zeros([self.num_iterations, self.transformation[0],3]), unit=unit.nanometers)
@@ -461,6 +468,8 @@ class AnalyticalBeadSystems(object):
         if printer:
             print('simulated_positions: ')
             print(_iid_positions_A_stacked)
+
+        del _ctx
 
         return iid_positions_A
 
@@ -542,24 +551,24 @@ class AnalyticalBeadSystems(object):
 
         Returns
         -------
-        work_comparison: np array
+        work_sum : np array
             array of floats of the pairwise addition of forward and backward works
-        work_forward_var: float
-            variance of forward work
-        work_reverse_var: float
-            variance of backward work
+        work_forward_stddev : float
+            Standard deviation of forward work, implicitly in units of kT
+        work_reverse_stddev : float
+            Standard deviation of backward work, implicitly in units of kT
         """
-        work_comparison=[i+j for i,j in zip(self.work_forward, self.work_reverse)]
-        work_forward_var=np.var(self.work_forward)
-        work_reverse_var=np.var(self.work_reverse)
+        work_sum = self.work_forward + self.work_reverse
+        work_forward_stddev = self.work_forward.std()
+        work_reverse_stddev = self.work_reverse.std()
 
         if printer:
             print('work_forward: ', self.work_forward)
             print('work_reverse: ', self.work_reverse)
-            print('work_comparison: ',work_comparison)
-            print('work_forward_var: ', work_forward_var)
-            print('work_reverse_var: ', work_reverse_var)
-        return work_comparison, work_forward_var, work_reverse_var
+            print('work_sum: ', work_sum)
+            print('work_forward_stddev: ', work_forward_stddev)
+            print('work_reverse_stddev: ', work_reverse_stddev)
+        return work_sum, work_forward_stddev, work_reverse_stddev
 
 
 
@@ -589,10 +598,15 @@ def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterati
         _backward_positions_stacked = np.stack([_posits.value_in_unit_system(unit.md_unit_system) for _posits in _backward_positions])
 
 
+        POSITION_THRESHOLD = 1.0e-6
         _position_differences = np.array([simulated_frame - final_frame for simulated_frame, final_frame in zip(_iid_positions_A_stacked,_backward_positions_stacked)])
-        assert all(frame.sum() < 1e-6 for frame in _position_differences)
+        assert all(frame.sum() < POSITION_THRESHOLD for frame in _position_differences)
 
-        work_comparison, work_forward_var, work_reverse_var=test.work_comparison()
-        assert all(item<1e-6 for item in work_comparison) and np.abs(work_forward_var / np.average(test.work_forward)) < 1e-3 and np.abs(work_reverse_var / np.average(test.work_reverse)) < 1e-3, "there is a mismatch in the works"
+        WORK_STDDEV_THRESHOLD = 0.1
+        WORK_SUM_THRESHOLD = 0.1
+        work_sum, work_forward_stddev, work_reverse_stddev = test.work_comparison()
+        assert (work_forward_stddev <= WORK_STDDEV_THRESHOLD), "forward work stddev {} exceeds threshold {}".format(work_forward_stddev, WORK_STDDEV_THRESHOLD)
+        assert (work_reverse_stddev <= WORK_STDDEV_THRESHOLD), "reverse work stddev {} exceeds threshold {}".format(work_reverse_stddev, WORK_STDDEV_THRESHOLD)
+        assert np.all(abs(work_sum) <= WORK_SUM_THRESHOLD), "sum of works {} exceeds threshold {}".format(work_sum, WORK_SUM_THRESHOLD)
 
 #test_AnalyticalBeadSystems()

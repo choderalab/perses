@@ -217,7 +217,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The log probability of the proposal for the given transformation
         """
         check_dimensionality(new_coordinates, unit.nanometers)
-        check_dimensionality(old_coordiantes, unit.nanometers)
+        check_dimensionality(old_coordinates, unit.nanometers)
         check_dimensionality(beta, unit.kilojoules_per_mole**(-1))
 
         # If there are no unique old atoms, the log probability is zero.
@@ -557,8 +557,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             return None
         relevant_bond_with_units = self._add_bond_units(relevant_bond)
 
-        check_dimensionality(bond.r0, unit.nanometers)
-        check_dimensionality(bond.k, unit.kilojoules_per_mole/unit.radians**2)
+        check_dimensionality(relevant_bond_with_units.type.req, unit.nanometers)
+        check_dimensionality(relevant_bond_with_units.type.k, unit.kilojoules_per_mole/unit.nanometers**2)
         return relevant_bond_with_units
 
     def _get_bond_constraint(self, atom1, atom2, system):
@@ -635,7 +635,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         else:
             relevant_angle_with_units = relevant_angle
 
-        check_dimensionality(relevant_angle.type.theta0, unit.radians)
+        check_dimensionality(relevant_angle.type.theteq, unit.radians)
         check_dimensionality(relevant_angle.type.k, unit.kilojoules_per_mole/unit.radians**2)
         return relevant_angle_with_units
 
@@ -1448,7 +1448,7 @@ class GeometrySystemGenerator(object):
     Only valence terms involving newly placed atoms will be computed; valence terms between fixed atoms will be omitted.
     """
 
-    def __init__(self, reference_system, growth_indices, global_parameter_name='growth_index', add_extra_torsions=True, add_extra_angles=True,
+    def __init__(self, reference_system, growth_indices, global_parameter_name='growth_index', add_extra_torsions=False, add_extra_angles=False,
                        reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
         """
         Parameters
@@ -1695,7 +1695,7 @@ class GeometrySystemGenerator(object):
             oemol = FFAllAngleGeometryEngine._oemol_from_residue(residue)
         except Exception as e:
             print("Could not generate an oemol from the residue.")
-            print(e)
+            raise e
 
         # DEBUG: Write mol2 file.
         debug = False
@@ -1915,6 +1915,7 @@ class ProposalOrderTools(object):
             log probability of the chosen torsions
 
         """
+        import parmed
         if direction=='forward':
             topology = self._topology_proposal.new_topology
             system = self._topology_proposal.new_system
@@ -2085,6 +2086,7 @@ class ProposalOrderTools(object):
             raise Exception('No topical torsions found.')
 
         # Recode topological torsions as parmed Dihedral objects
+        import parmed
         topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
         return topological_torsions
 
