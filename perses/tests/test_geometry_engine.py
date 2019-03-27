@@ -277,9 +277,9 @@ def test_propose_bond():
     assert np.isclose(np.exp(log_p_i).sum(), 1.0), 'bond probability mass function is not normalized'
     def cdf(rs):
         cdfs = np.zeros(rs.shape)
+        pdf = np.exp(log_p_i)
         for i, r in enumerate(rs):
             index = int((r-r_i[0])/bin_width)
-            pdf = np.exp(log_p_i)
             cdfs[i] = np.sum(pdf[:index]) + (r - r_i[index]) / bin_width * pdf[index]
         return cdfs
 
@@ -327,9 +327,9 @@ def test_propose_angle():
     assert np.isclose(np.exp(log_p_i).sum(), 1.0), 'angle probability mass function is not normalized'
     def cdf(thetas):
         cdfs = np.zeros(thetas.shape)
+        pdf = np.exp(log_p_i)
         for i, theta in enumerate(thetas):
             index = int((theta - theta_i[0]) / bin_width)
-            pdf = np.exp(log_p_i)
             cdfs[i] = np.sum(pdf[:index]) + (theta - theta_i[index]) / bin_width * pdf[index]
         return cdfs
 
@@ -716,7 +716,7 @@ def test_propose_torsion():
     import scipy.stats as stats
 
     #choose a reasonable number of divisions and samples
-    n_divisions = 96
+    n_divisions = 360
     n_samples = 1000
 
     #instantiate the geometry engine and a test system with a bond, angle, and torsion
@@ -732,92 +732,30 @@ def test_propose_torsion():
 
     #calculate the log probability mass function for an array of phis
     # phis are numpy floats, with implied units of radians
-    logp_phis, phis, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions)
+    log_p_i, phi_i, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions)
+    assert np.isclose(np.exp(log_p_i).sum(), 1.0), 'torsion probability mass function is not normalized'
 
-    #create a cumulative distribution function for use in the ks test
-    cdf_func = create_cdf(logp_phis, phis, n_divisions)
+    # Compute the CDF
+    def cdf(phis):
+        pdf = np.exp(log_p_i)
+        cdfs = np.zeros(phis.shape)
+        for i, phi in enumerate(phis):
+            index = int((phi - phi_i[0]) / bin_width)
+            cdfs[i] = np.sum(pdf[:index]) + (phi - phi_i[index]) / bin_width * pdf[index]
+        return cdfs
 
     #Draw a set of samples from the torsion distribution using the GeometryEngine
     torsion_samples = np.zeros(n_samples)
     for i in range(n_samples):
-        torsion_samples[i], logp = geometry_engine._propose_torsion(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions)
+        phi, logp = geometry_engine._propose_torsion(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions)
+        assert (phi >= -np.pi) and (phi < +np.pi), "sampled phi of {} is outside allowed bounds of [-pi,+pi)".format(phi)
+        torsion_samples[i] = phi
 
     #now check if the samples match the logp using the Kolmogorov-Smirnov test
-    (dval, pval) = stats.kstest(torsion_samples, cdf_func)
+    (dval, pval) = stats.kstest(torsion_samples, cdf)
     if pval < pval_threshold:
-        raise Exception("Torsion may not have been drawn from the correct distribution.")
-
-def create_cdf(log_probability_mass_function, phis, n_divisions):
-    """
-    Create a callable CDF function for the scipy KS test
-
-    Arguments
-    ---------
-    log_probability_mass_function : array of float
-        The log probability mass function of the torsion angles
-    phis : array of float
-        Corresponding angles for the log pmf above
-    n_divisions : int
-        Number of divisions of the [-pi,pi) interval
-
-    Returns
-    ------
-    torsion_cdf : function
-        A function that, given a set of samples, will calculate the CDF and return as an array of floats
-    """
-
-    #exponentiate the log probability mass function and integrate it to get the normalizing constant
-    p_phis = np.exp(log_probability_mass_function)
-    dphi = 2.0*np.pi/n_divisions
-    normalizing_constant = 0.0
-    for idx, phi in enumerate(phis):
-        normalizing_constant += p_phis[idx]*dphi
-
-    #create a function that, given a set of phi points, will calcualate the CDF of each point
-    def torsion_cdf(phi_array):
-        """
-        Given a set of phi points, will calcualate the CDF of each point. Since the probability density function
-        is a histogram, this involves adding up all prior bin areas, plus whatever fraction of a bin is left until the
-        sample point.
-
-        Arguments
-        ----------
-        phi_array : array of floats
-            array of phis whose CDF we are interested in
-
-        Returns
-        -------
-        cdf_vals : array of floats
-            value of the CDF at each ofthe corresponding input phis
-        """
-        #initialize an array of zeros
-        cdf_vals = np.zeros_like(phi_array)
-
-        #loop through each phi in the input set of phis
-        for idx, phi in enumerate(phi_array):
-
-            #initialize the cdf value to 0
-            cdfval = 0.0
-
-            #find the nearest phi index in the set of phis
-            nearest_phi_idx = np.argmin(np.abs(phi-phis))
-
-            #take the value of that phi
-            nearest_phi = phis[nearest_phi_idx]
-
-            #for each full bin before the sample value, add its area
-            for i in range(nearest_phi_idx):
-                cdfval += p_phis[i]*dphi
-
-            #find the width of the last partial bin in the CDF before the sample value and add it to the cdf value
-            final_bin_dphi = phi - (nearest_phi - dphi / 2.0)
-            cdfval += p_phis[nearest_phi_idx]*final_bin_dphi
-
-            #normalize the cdf value
-            cdf_vals[idx] = cdfval / normalizing_constant
-        return cdf_vals
-
-    return torsion_cdf
+        msg = "Torsion may not have been drawn from the correct distribution: pval = {} (threshold {})".format(pval, pval_threshold)
+        raise Exception(msg)
 
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
     #master system, will be used for all three

@@ -6,6 +6,7 @@ from simtk import unit
 
 import numpy as np
 import collections
+import functools
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
 
@@ -1177,7 +1178,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(theta, float)
         return theta
 
-    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=360):
+    def _torsion_scan(self, torsion, positions, r, theta, n_divisions):
         """
         Compute unit-bearing Carteisan positions and torsions (dimensionless, in md_unit_system) for a torsion scan
 
@@ -1191,13 +1192,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             Dimensionless bond length (must be in nanometers)
         theta : float (implicitly in md_unit_system)
             Dimensionless valence angle (must be in radians)
+        n_divisions : int
+            The number of divisions for the torsion scan
 
         Returns
         -------
         xyzs : simtk.unit.Quantity wrapped np.ndarray of shape (n_divisions,3) with dimensions length
             The cartesian coordinates of each
         phis : np.ndarray of shape (n_divisions,), implicitly in radians
-            The torsions angles at which a potential will be calculated
+            The torsions angles representing the left bin edge at which a potential will be calculated
         bin_width : float, implicitly in radians
             The bin width of torsion scan increment
 
@@ -1219,8 +1222,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         torsion_positions = positions_copy[torsion.atom4.idx]
 
         # Compute dimensionless torsion values for torsion scan
-        bin_width = (2.0*np.pi)/n_divisions
-        phis = np.arange(-np.pi, +np.pi, bin_width)
+        phis, bin_width = np.linspace(-np.pi, +np.pi, num=n_divisions, retstep=True, endpoint=False)
 
         # Compute dimensionless positions for torsion scan
         from perses.rjmc import coordinate_numba
@@ -1271,6 +1273,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
 
         """
+        # TODO: This method could benefit from memoization to speed up tests and particle filtering
         # TODO: Overhaul this method to accept and return unit-bearing quantities
         # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
 
@@ -1379,7 +1382,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp = logp_torsions[index]
 
         # Draw uniformly within the bin
-        phi = np.random.uniform(phi, bin_width)
+        phi = np.random.uniform(phi, phi+bin_width)
         logp -= np.log(bin_width)
 
         assert check_dimensionality(phi, float)
