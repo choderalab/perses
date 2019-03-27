@@ -310,7 +310,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
 
             # Create modified System object
-            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), global_parameter_name=growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
 
         elif direction=='reverse':
@@ -325,7 +325,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
 
             # Create modified System object
-            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
+            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(), global_parameter_name=growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
@@ -1634,7 +1634,7 @@ class GeometrySystemGenerator(object):
             self._determine_extra_angles(modified_angle_force, reference_topology, growth_indices)
 
         # Store growth system
-        self._growth_parameter_name = parameter_name
+        self._growth_parameter_name = global_parameter_name
         self._growth_system = growth_system
 
     def set_growth_parameter_index(self, growth_parameter_index, context=None):
