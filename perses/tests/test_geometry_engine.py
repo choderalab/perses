@@ -47,10 +47,10 @@ ntests = 3.0
 ncommits = 10000.0
 
 pval_threshold = pval_base / (ntests * ncommits)
-temperature = 300.0 * unit.kelvin
-kT = kB * temperature
-beta = 1.0/kT
-CARBON_MASS = 12.01
+temperature = 300.0 * unit.kelvin # unit-bearing temperature
+kT = kB * temperature # unit-bearing thermal energy
+beta = 1.0/kT # unit-bearing inverse thermal energy
+CARBON_MASS = 12.01 # float (implicitly in units of AMU)
 
 proposal_test = namedtuple("proposal_test", ["topology_proposal", "current_positions"])
 
@@ -202,12 +202,16 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
 
     @property
     def internal_coordinates(self):
+        """Internal coordinates (r, theta, phi) as tuple of floats (implicitly in simtk.unit.md_unit_system)"""
+        # TODO: Why does getting the internal coordinates return floats while setting the internal coordinates requires unit-bearing quantities?
         positions_without_units = self._positions.value_in_unit(unit.nanometer)
         internals = coordinate_numba.cartesian_to_internal(positions_without_units[0], positions_without_units[1], positions_without_units[2], positions_without_units[3])
         return internals
 
     @internal_coordinates.setter
     def internal_coordinates(self, internal_coordinates):
+        """Set positions given unit-bearing internal coordinates (r, theta, phi)"""
+        # TODO: Why does getting the internal coordinates return floats while setting the internal coordinates requires unit-bearing quantities?
         internals_without_units = np.zeros(3, dtype=np.float64)
         internals_without_units[0] = internal_coordinates[0].value_in_unit(unit.nanometer)
         internals_without_units[1] = internal_coordinates[1].value_in_unit(unit.radians)
@@ -218,14 +222,17 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
 
     @property
     def bond_parameters(self):
+        """Bond parameters (r0, k) as tuple of unit-bearing quantities"""
         return (self._default_r0, self._default_bond_k)
 
     @property
     def angle_parameters(self):
+        """Angle parmeters (theta0, k) as tuple of unit-bearing quantities"""
         return (self._default_angle_theta0, self._default_angle_k)
 
     @property
     def torsion_parameters(self):
+        """Torsion parameters (periodicity, phase, k) as tuple of unit-bearing quantities"""
         return (self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
 
 def test_propose_angle():
@@ -248,9 +255,9 @@ def test_propose_angle():
     #extract the parameters and convert them to the equivalents for a normal distribution
     #without units
     (theta0, k) = testsystem.angle_parameters
-    sigma = unit.sqrt(1.0/(beta*k))
-    sigma_without_units = sigma.value_in_unit(unit.radian)
-    theta0_without_units = theta0.value_in_unit(unit.radian)
+    sigma = unit.sqrt(1.0/(beta*k)) # standard deviation, in unit-bearing quantities
+    sigma_without_units = sigma.value_in_unit(unit.radian) # standard deviation in float (implicitly in md_unit_system)
+    theta0_without_units = theta0.value_in_unit(unit.radian) # reference angle in float (implicitly in md_unit_system)
 
     #allocate an array for proposing angles from the appropriate distribution
     angle_array = np.zeros(1000)
@@ -1296,7 +1303,8 @@ def test_coordinate_conversion():
         assert isinstance(phi, float)
         # Check that we can reproduce original unit-bearing positions
         xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
-        assert (xyz / unit.nanometers)
+        from perses.geometry import check_dimensionality
+        assert check_dimensionality(xyz, unit.nanometers)
         assert np.linalg.norm(xyz-atom_position) < 1.0e-12
 
 def test_openmm_dihedral():
@@ -1327,10 +1335,12 @@ def test_openmm_dihedral():
     phis = unit.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=unit.radians)
     omm_phis = np.zeros(n_divisions)
     for i, phi in enumerate(phis):
-        xyz_atom1, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, rtp[0]*unit.nanometers, rtp[1]*unit.radians, phi)
+        xyz_atom1, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, rtp[0], rtp[1], phi)
         context.setPositions([xyz_atom1, bond_position, angle_position, torsion_position])
         state = context.getState(getEnergy=True)
         omm_phis[i] = state.getPotentialEnergy()/unit.kilojoule_per_mole
+
+# TODO: Test resulting omm_phis vs input phis
 
     return 0
 
@@ -1353,9 +1363,6 @@ def test_try_random_itoc():
     for i in range(1000):
         atom_position += unit.Quantity(np.random.normal(size=3), unit=unit.nanometers)
         r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
-        r = r*unit.nanometers
-        theta = theta*unit.radians
-        phi = phi*unit.radians
         recomputed_xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         new_r, new_theta, new_phi = _get_internal_from_omm(recomputed_xyz,bond_position, angle_position, torsion_position)
         crtp = geometry_engine._cartesian_to_internal(recomputed_xyz,bond_position, angle_position, torsion_position)
