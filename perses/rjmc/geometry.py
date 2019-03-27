@@ -23,6 +23,13 @@ _logger = logging.getLogger("geometry")
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
 
+
+################################################################################
+# Constants
+################################################################################
+
+LOG_ZERO = -1e-6
+
 ################################################################################
 # Utility methods
 ################################################################################
@@ -36,7 +43,7 @@ def check_dimensionality(quantity, compatible_units):
     quantity : simtk.unit.Quantity or float
         The quantity to be checked
     compatible_units : simtk.unit.Quantity or simtk.unit.Unit or float
-        Ensure ``quantity`` is either float (if ``float`` specified) or is compatible with the specified units
+        Ensure ``quantity`` is either float or numpy array (if ``float`` specified) or is compatible with the specified units
 
     Raises
     ------
@@ -49,11 +56,12 @@ def check_dimensionality(quantity, compatible_units):
 
     """
     if unit.is_quantity(compatible_units) or unit.is_unit(compatible_units):
-        if isinstance(quantity / compatible_units, unit.Quantity):
+        from simtk.unit.quantity import is_dimensionless
+        if not is_dimensionless(quantity / compatible_units):
             raise ValueError('{} does not have units compatible with expected {}'.format(quantity, compatible_units))
     elif compatible_units == float:
-        if not isinstance(quantity, float):
-            raise ValueError('{} expected to be a float, but was instead {}'.format(quantity, type(quantity)))
+        if not (isinstance(quantity, float) or isinstance(quantity, np.ndarray)):
+            raise ValueError("'{}' expected to be a float, but was instead {}".format(quantity, type(quantity)))
     else:
         raise ValueError("Don't know how to handle compatible_units of {}".format(compatible_units))
 
@@ -294,7 +302,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if direction=="forward":
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
 
-            # Find and copy known positions
+            # Find and copy known positions to match new topology
             import parmed
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
@@ -307,24 +315,31 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
+
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
+
+            # Find and copy known positions to match old topology
             import parmed
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
+
+            # Create modified System object
             growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         logp_proposal = logp_choice
+
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
 
         if self.use_sterics:
-            platform_name = 'CPU'
+            platform_name = 'CPU' # faster when sterics are in use
         else:
-            platform_name = 'Reference'
+            platform_name = 'Reference' # faster when only valence terms are in use
 
+        # Create an OpenMM context
         from simtk import openmm
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
@@ -332,75 +347,80 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order.keys())+1, context)
         growth_parameter_value = 1
 
-        #now for the main loop:
+        # Place each atom in predetermined order
         logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
-        atom_placements = []
-        #atom_number=0
+        atom_placements = list()
         for atom, torsion in atom_proposal_order.items():
+            bond_atom, angle_atom, torsion_atom = torsion.atom2, torsion.atom3, torsion.atom4
+
+            # Activate the new atom interactions
             growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
-            bond_atom = torsion.atom2
-            angle_atom = torsion.atom3
-            torsion_atom = torsion.atom4
             if self.verbose: _logger.info("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
 
             if atom != torsion.atom1:
                 raise Exception('atom != torsion.atom1')
 
-            #get internal coordinates if direction is reverse
+            # Get internal coordinates if direction is reverse
             if direction=='reverse':
                 atom_coords = old_positions[atom.idx]
                 bond_coords = old_positions[bond_atom.idx]
                 angle_coords = old_positions[angle_atom.idx]
                 torsion_coords = old_positions[torsion_atom.idx]
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
-                r, theta, phi = internal_coordinates[0], internal_coordinates[1], internal_coordinates[2]
+                # Extract dimensionless internal coordinates
+                r, theta, phi = internal_coordinates[0], internal_coordinates[1], internal_coordinates[2] # dimensionless
 
             bond = self._get_relevant_bond(atom, bond_atom)
             if bond is not None:
                 if direction=='forward':
                     r = self._propose_bond(bond, beta, n_divisions=self._n_bond_divisions)
 
-                logp_r = self._bond_logq(r, bond, beta, self._n_bond_divisions)
+                logp_r = self._bond_logp(r, bond, beta, self._n_bond_divisions)
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
                     if constraint is None:
                         raise ValueError("Structure contains a topological bond [%s - %s] with no constraint or bond information." % (str(atom), str(bond_atom)))
+
                     r = constraint.value_in_unit_system(unit.md_unit_system) #set bond length to exactly constraint
                 logp_r = 0.0
 
-            #propose an angle and calculate its probability
+            # Propose an angle and calculate its log probability
             angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
             if direction=='forward':
                 theta = self._propose_angle(angle, beta, n_divisions=self._n_angle_divisions)
 
-            logp_theta=self._angle_logq(theta, angle, beta, self._n_angle_divisions)
+            logp_theta = self._angle_logp(theta, angle, beta, self._n_angle_divisions)
 
-            #propose a torsion angle and calcualate its probability
+            # Propose a torsion angle and calcualate its log probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=self._n_torsion_divisions)
+                # Note that (r, theta) are dimensionless here
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, self._n_torsion_divisions)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 import copy
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=self._n_torsion_divisions)
+                # Note that (r, theta, phi) are dimensionless here
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions)
 
             #accumulate logp
             #if direction == 'reverse':
             if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
 
-            atom_placement_array = np.array([atom.idx,r,
-                                             theta,
-                                             phi,
+            atom_placement_array = np.array([atom.idx,
+                                             r, theta, phi,
                                              logp_r, logp_theta, logp_phi, np.log(detJ)])
             atom_placements.append(atom_placement_array)
 
-            logp_proposal += logp_r + logp_theta + logp_phi - np.log(detJ)
+            logp_proposal += logp_r + logp_theta + logp_phi - np.log(detJ) # TODO: Check sign of detJ
             growth_parameter_value += 1
 
             # DEBUG: Write PDB file for placed atoms
             atoms_with_positions.append(atom)
+
+        # Clean up OpenMM Context since garbage collector is sometimes slow
+        del context
 
         #use a new array for each placement, since the variable size will be different.
         if self._storage:
@@ -848,102 +868,34 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(detJ, float)
         return xyz, detJ
 
-    def _bond_logq(self, r, bond, beta, n_divisions):
+    def _bond_log_pmf(self, bond, beta, n_divisions):
         """
-        Calculate the log-probability of a given bond at a given inverse temperature
-
-        Arguments
-        ---------
-        r : nanometers
-            bond length, in nanometers
-        r0 : nanometers
-            equilibrium bond length, in nanometers
-        k_eq : kcal / (mol * nanometers**2)
-            Spring constant of bond
-        beta : mol/kcal
-            1/kT or inverse temperature
-        n_divisions : int
-            number of discretizations of space
-        """
-        from simtk.unit.quantity import is_dimensionless
-
-        r0 = bond.type.req
-        k = bond.type.k * self._bond_softening_constant
-        sigma_r = unit.sqrt((1.0/(beta*k)))
-
-        for quant, unit_divisor in zip( [beta, r0, k], [1./unit.kilocalories_per_mole, unit.nanometers, unit.kilocalories_per_mole/(unit.nanometers**2)]):
-            assert is_dimensionless(quant / unit_divisor), "{} is not dimensionless".format(quant)
-
-        r0, k, sigma_r = r0.value_in_unit_system(unit.md_unit_system), k.value_in_unit_system(unit.md_unit_system), sigma_r.value_in_unit_system(unit.md_unit_system)
-        lower_bound, upper_bound = max(0.,r0-6*sigma_r), r0+6*sigma_r
-
-        f = lambda x: (x)**2 * np.exp(-(0.5/sigma_r**2)*(x-r0)**2)
-        r_array = np.linspace(lower_bound, upper_bound, n_divisions)
-        division_size = (upper_bound - lower_bound) / (n_divisions - 1)
-        r_index = np.argmin(np.abs(r - r_array))
-        Z = sum(f(r_array))
-        logp = 2 * np.log((r_array[r_index])) - (0.5/sigma_r**2)*(r_array[r_index]-r0)**2 - np.log(division_size) - np.log(Z)
-
-        return logp
-
-    def _angle_logq(self, theta, angle, beta, n_divisions):
-        """
-        Calculate the log-probability of a given bond at a given inverse temperature
-
-        Arguments
-        ---------
-        theta : radians
-            bond angle, in radians
-        angle : radians
-            Bond angle object containing parameters
-        beta : mol / kcal
-            1/kT or inverse temperature
-        """
-        from simtk.unit.quantity import is_dimensionless
-
-        theta0 = angle.type.theteq
-        k = angle.type.k * self._angle_softening_constant
-        sigma_theta = unit.sqrt(1.0/(beta * k))
-
-        for quant, unit_divisor in zip([beta, theta0, k], [1./unit.kilocalories_per_mole, unit.radians, unit.kilocalories_per_mole/unit.radians**2]):
-            assert is_dimensionless(quant / unit_divisor), "{} is not dimensionless".format(quant)
-
-        theta0, k, sigma_theta = theta0.value_in_unit_system(unit.md_unit_system), k.value_in_unit_system(unit.md_unit_system), sigma_theta.value_in_unit_system(unit.md_unit_system)
-        lower_bound, upper_bound=0., np.pi
-
-        #'exact' probability
-        f = lambda x: np.sin(x) * np.exp(-(0.5/sigma_theta**2) * (x-theta0)**2)
-        theta_array = np.linspace(0, np.pi, n_divisions)
-        division_size = np.pi/(n_divisions-1)
-        theta_index = np.argmin(np.abs(theta-theta_array))
-        Z = sum(f(theta_array))
-        logp = np.log(np.sin(theta_array[theta_index])) - (0.5/sigma_theta**2) * (theta_array[theta_index]-theta0)**2-np.log(division_size)-np.log(Z)
-        return logp
-
-    def _propose_bond(self, bond, beta, n_divisions=1000):
-        """
-        Propose dimensionless bond length r from distribution
+        Calculate the log probability mass function (PMF) of drawing a bond.
 
         .. math ::
 
-            r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
+            p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
 
         Prameters
         ---------
         bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
             Valence bond parameters
-        beta : simtk.unit.Quantity with units dimensions 1/energy
-            Inverse temperature
-        n_divisions : int, optional, default=1000
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
             Number of quandrature points for drawing bond length
 
         Returns
         -------
-        r : float
-            Dimensionless bond length (in simtk.unit.md_unit_system)
-
+        r_i : np.ndarray of shape (n_divisions,) implicitly in units of nanometers
+            r_i[i] is the bond length leftmost bin edge with corresponding log probability mass function p_i[i]
+        log_p_i : np.ndarray of shape (n_divisions,)
+            log_p_i[i] is the corresponding log probability mass of bond length r_i[i]
+        bin_width : float implicitly in units of nanometers
+            The bin width for individual PMF bins
         """
-        # TODO: Overhaul this method to accept and return unit-bearing quantities
+
+        # TODO: We end up computing the discretized PMF over and over again; we can speed this up by caching
 
         # Check input argument dimensions
         assert check_dimensionality(bond.type.req, unit.angstroms)
@@ -964,49 +916,131 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         lower_bound, upper_bound = max(0., r0 - 6*sigma_r), (r0 + 6*sigma_r)
 
         # Compute integration quadrature points
-        r_array = np.linspace(lower_bound, upper_bound, n_divisions)
-        division_size = (upper_bound - lower_bound) / (n_divisions - 1)
-        r_array_indices = range(n_divisions)
+        r_i, bin_width = np.linspace(lower_bound, upper_bound, num=n_divisions, retstep=True, endpoint=False)
 
-        # Draw dimensionless r in md_unit_system
-        r_probability_mass_function = (r_array)**2 * np.exp(-(0.5/sigma_r**2) * (r_array-r0)**2)
-        r_probability_mass_function_Z = sum(r_probability_mass_function)
-        r_index = np.random.choice(r_array_indices, p = r_probability_mass_function/r_probability_mass_function_Z)
-        r_min = max(r_array[r_index]-division_size/2.0, 0.)
-        r_max = r_array[r_index]+division_size/2.0
-        r = np.random.uniform(r_min, r_max)
+        # Form log probability
+        from scipy.special import logsumexp
+        log_p_i = 2*np.log(r_i) - 0.5 * ((r_i-r0)/sigma_r)**2
+        log_p_i -= logsumexp(log_p_i)
 
-        # Return dimensionless r, implicitly in md_unit_system
-        assert check_dimensionality(r, float)
-        return r
+        check_dimensionality(r_i, float)
+        check_dimensionality(log_p_i, float)
+        check_dimensionality(bin_width, float)
 
-    def _propose_angle(self, angle, beta, n_divisions=180):
+        return r_i, log_p_i, bin_width
+
+    def _bond_logp(self, r, bond, beta, n_divisions):
+        """
+        Calculate the log-probability of a given bond at a given inverse temperature
+
+        Propose dimensionless bond length r from distribution
+
+        .. math ::
+
+            r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
+
+        Prameters
+        ---------
+        r : float
+            bond length, implicitly in nanometers
+        bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
+            Valence bond parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing bond length
+
+        """
+        check_dimensionality(r, float)
+        check_dimensionality(beta, 1/unit.kilojoules_per_mole)
+
+        r_i, log_p_i, bin_width = self._bond_log_pmf(bond, beta, n_divisions)
+
+        if (r < r_i[0]) or (r >= r_i[-1] + bin_width):
+            return LOG_ZERO
+
+        # Determine index that r falls within
+        index = int((r - r_i[0])/bin_width)
+        assert (index >= 0) and (index < n_divisions)
+
+        # Correct for division size
+        logp = log_p_i[index] - np.log(bin_width)
+
+        return logp
+
+    def _propose_bond(self, bond, beta, n_divisions):
         """
         Propose dimensionless bond length r from distribution
 
         .. math ::
 
-            \theta \sim p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
+            r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
 
         Prameters
         ---------
-        angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
-            Valence angle parameters
-        beta : simtk.unit.Quantity with units dimensions 1/energy
-            Inverse temperature
-        n_divisions : int, optional, default=180
-            Number of quandrature points for drawing angle
+        bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
+            Valence bond parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing bond length
 
         Returns
         -------
-        theta : float
-            Dimensionless valence angle (in simtk.unit.md_unit_system)
+        r : float
+            Dimensionless bond length, implicitly in nanometers
 
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
 
+        check_dimensionality(beta, 1/unit.kilojoules_per_mole)
+
+        r_i, log_p_i, bin_width = self._bond_log_pmf(bond, beta, n_divisions)
+
+        # Draw an index
+        index = np.random.choice(range(n_divisions), p=np.exp(log_p_i))
+        r = r_i[index]
+
+        # Draw uniformly in that bin
+        r = np.random.uniform(r, r+bin_width)
+
+        # Return dimensionless r, implicitly in nanometers
+        assert check_dimensionality(r, float)
+        assert (r > 0)
+        return r
+
+    def _angle_log_pmf(self, angle, beta, n_divisions):
+        """
+        Calculate the log probability mass function (PMF) of drawing a angle.
+
+        .. math ::
+
+            p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
+
+        Prameters
+        ---------
+        angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
+            Valence bond parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing bond length
+
+        Returns
+        -------
+        theta_i : np.ndarray of shape (n_divisions,) implicitly in units of radians
+            theta_i[i] is the angle with corresponding log probability mass function p_i[i]
+        log_p_i : np.ndarray of shape (n_divisions,)
+            log_p_i[i] is the corresponding log probability mass of angle theta_i[i]
+        bin_width : float implicitly in units of radians
+            The bin width for individual PMF bins
+        """
+        # TODO: Overhaul this method to accept unit-bearing quantities
+
+        # TODO: We end up computing the discretized PMF over and over again; we can speed this up by caching
+
         # Check input argument dimensions
-        assert check_dimensionality(angle.type.thetaeq, unit.radians)
+        assert check_dimensionality(angle.type.theteq, unit.radians)
         assert check_dimensionality(angle.type.k, unit.kilojoules_per_mole/unit.radians**2)
         assert check_dimensionality(beta, unit.kilojoules_per_mole**(-1))
 
@@ -1021,22 +1055,101 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         sigma_theta = sigma_theta.value_in_unit_system(unit.md_unit_system)
 
         # Determine integration bounds
-        lower_bound, upper_bound=0., np.pi
+        # We can't compute log(0) so we have to avoid sin(theta) = 0 near theta = {0, pi}
+        EPSILON = 1.0e-3
+        lower_bound, upper_bound = EPSILON, np.pi-EPSILON
 
-        # Compute integration quadrature points
-        theta_array = np.linspace(lower_bound, upper_bound, n_divisions)
-        division_size = theta_array[1] - theta_array[0]
-        theta_array_indices = range(n_divisions)
+        # Compute left bin edges
+        theta_i, bin_width = np.linspace(lower_bound, upper_bound, num=n_divisions, retstep=True, endpoint=False)
 
-        # Draw dimensionless angle theta in md_unit_system
-        theta_probability_mass_function = np.sin(theta_array)*np.exp(-(0.5/sigma_theta**2)*(theta_array-theta0)**2)
-        theta_probability_mass_function_Z = sum(theta_probability_mass_function)
-        theta_index = np.random.choice(theta_array_indices, p=theta_probability_mass_function/theta_probability_mass_function_Z)
-        theta_min = max(0.,theta_array[theta_index]-division_size/2.)
-        theta_max = min(theta_array[theta_index]+division_size/2., np.pi)
-        theta = np.random.uniform(theta_min, theta_max)
+        # Compute log probability
+        from scipy.special import logsumexp
+        log_p_i = np.log(np.sin(theta_i)) - 0.5*((theta_i-theta0)/sigma_theta)**2
+        log_p_i -= logsumexp(log_p_i)
 
-        # Return dimensionless angle theta (implicitly in md_unit_system)
+        check_dimensionality(theta_i, float)
+        check_dimensionality(log_p_i, float)
+        check_dimensionality(bin_width, float)
+
+        return theta_i, log_p_i, bin_width
+
+    def _angle_logp(self, theta, angle, beta, n_divisions):
+        """
+        Calculate the log-probability of a given angle at a given inverse temperature
+
+        Propose dimensionless bond length r from distribution
+
+        .. math ::
+
+            p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
+
+        Prameters
+        ---------
+        theta : float
+            angle, implicitly in radians
+        angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
+            Valence angle parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing angle
+
+        """
+        # TODO: Overhaul this method to accept unit-bearing quantities
+
+        check_dimensionality(theta, float)
+        check_dimensionality(beta, 1/unit.kilojoules_per_mole)
+
+        if (theta <= 0) or (theta >= np.pi):
+            return LOG_ZERO
+
+        theta_i, log_p_i, bin_width = self._angle_log_pmf(angle, beta, n_divisions)
+
+        # Determine index that r falls within
+        index = int((theta - theta_i[0]) / bin_width)
+        assert (index >= 0) and (index < n_divisions)
+
+        # Correct for division size
+        logp = log_p_i[index] - np.log(bin_width)
+
+        return logp
+
+    def _propose_angle(self, angle, beta, n_divisions):
+        """
+        Propose dimensionless angle from distribution
+
+        .. math ::
+
+            \theta \sim p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
+
+        Prameters
+        ---------
+        angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
+            Valence angle parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse temperature
+        n_divisions : int
+            Number of quandrature points for drawing angle
+
+        Returns
+        -------
+        theta : float
+            Dimensionless valence angle, implicitly in radians
+
+        """
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        check_dimensionality(beta, 1/unit.kilojoules_per_mole)
+
+        theta_i, log_p_i, bin_width = self._angle_log_pmf(angle, beta, n_divisions)
+
+        # Draw an index
+        index = np.random.choice(range(n_divisions), p=np.exp(log_p_i))
+        theta = theta_i[index]
+
+        # Draw uniformly in that bin
+        theta = np.random.uniform(theta, theta+bin_width)
+
+        # Return dimensionless theta, implicitly in nanometers
         assert check_dimensionality(theta, float)
         return theta
 
@@ -1059,8 +1172,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         -------
         xyzs : simtk.unit.Quantity wrapped np.ndarray of shape (n_divisions,3) with dimensions length
             The cartesian coordinates of each
-        phis : np.ndarray of shape (n_divisions,), implicitly in md_unit_system
+        phis : np.ndarray of shape (n_divisions,), implicitly in radians
             The torsions angles at which a potential will be calculated
+        bin_width : float, implicitly in radians
+            The bin width of torsion scan increment
 
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
@@ -1080,7 +1195,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         torsion_positions = positions_copy[torsion.atom4.idx]
 
         # Compute dimensionless torsion values for torsion scan
-        phis = np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions)
+        bin_width = (2.0*np.pi)/n_divisions
+        phis = np.arange(-np.pi, +np.pi, bin_width)
 
         # Compute dimensionless positions for torsion scan
         from perses.rjmc import coordinate_numba
@@ -1088,14 +1204,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         xyzs = coordinate_numba.torsion_scan(bond_positions, angle_positions, torsion_positions, internal_coordinates, phis)
 
         # Convert positions back into standard md_unit_system length units (nanometers)
-        xyzs_quantity = unit.Quantity(xyzs, unit=length_unit) #have to put the units back now
+        xyzs_quantity = unit.Quantity(xyzs, unit=unit.nanometers)
 
         # Return unit-bearing positions and dimensionless torsions (implicitly in md_unit_system)
-        check_dimensionality(xyzs_quantity, float)
+        check_dimensionality(xyzs_quantity, unit.nanometers)
         check_dimensionality(phis, float)
-        return xyzs_quantity, phis
+        return xyzs_quantity, phis, bin_width
 
-    def _torsion_log_probability_mass_function(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions):
         """
         Calculate the torsion log probability using OpenMM, including all energetic contributions for the atom being driven
 
@@ -1116,7 +1232,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             Dimensionless valence angle (must be in radians)
         beta : simtk.unit.Quantity with units compatible with1/(kJ/mol)
             Inverse thermal energy
-        n_divisions : int, optional, default=360
+        n_divisions : int
             Number of divisions for the torsion scan
 
         Returns
@@ -1124,7 +1240,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_torsions : np.ndarray of float with shape (n_divisions,)
             logp_torsions[i] is the normalized probability density at phis[i]
         phis : np.ndarray of float with shape (n_divisions,), implicitly in radians
-            phis[i] is the torsion angles at which the log probability logp_torsions[i] was calculated
+            phis[i] is the torsion angle left bin edges at which the log probability logp_torsions[i] was calculated
+        bin_width : float implicitly in radian
+            The bin width for torsions
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
 
@@ -1137,7 +1255,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # Compute energies for all torsions
         logq = np.zeros(n_divisions) # logq[i] is the log unnormalized torsion probability density
         atom_idx = torsion.atom1.idx
-        xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
+        xyzs, phis, bin_width = self._torsion_scan(torsion, positions, r, theta, n_divisions)
         xyzs = xyzs.value_in_unit_system(unit.md_unit_system) # make positions dimensionless again
         positions = positions.value_in_unit_system(unit.md_unit_system)
         for i, xyz in enumerate(xyzs):
@@ -1183,9 +1301,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         assert check_dimensionality(logp_torsions, float)
         assert check_dimensionality(phis, float)
-        return logp_torsions, phis
+        assert check_dimensionality(bin_width, float)
+        return logp_torsions, phis, bin_width
 
-    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions):
         """
         Propose a torsion angle using OpenMM
 
@@ -1203,7 +1322,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             Dimensionless valence angle (must be in radians)
         beta : simtk.unit.Quantity with units compatible with1/(kJ/mol)
             Inverse thermal energy
-        n_divisions : int, optional, default=360
+        n_divisions : int
             Number of divisions for the torsion scan
 
         Returns
@@ -1222,24 +1341,22 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute probability mass function for all possible proposed torsions
-        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions)
 
         # Draw a torsion bin and a torsion uniformly within that bin
-        bin_width = 2*np.pi / n_divisions
-        phi_median_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
-        phi_min = phis[phi_median_idx] - bin_width/2.0
-        phi_max = phis[phi_median_idx] + bin_width/2.0
-        phi = np.random.uniform(phi_min, phi_max)
+        index = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
+        phi = phis[index]
+        logp = logp_torsions[index]
 
-        # Compute the log probability of that torsion
-        # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions
-        logp = logp_torsions[phi_median_idx] - np.log(bin_width)
+        # Draw uniformly within the bin
+        phi = np.random.uniform(phi, phi_bin_width)
+        logp -= np.log(bin_width)
 
         assert check_dimensionality(phi, float)
         assert check_dimensionality(logp, float)
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
+    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -1259,7 +1376,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             Dimensionless torsion angle (must be in radians)
         beta : simtk.unit.Quantity with units compatible with1/(kJ/mol)
             Inverse thermal energy
-        n_divisions : int, optional, default=360
+        n_divisions : int
             Number of divisions for the torsion scan
 
         Returns
@@ -1277,15 +1394,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute torsion probability mass function
-        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions)
 
         # Determine which bin the torsion falls within
-        phi_idx = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
+        index = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
 
-        # Compute log probability
-        bin_width = 2*np.pi / n_divisions
         # Convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
-        torsion_logp = logp_torsions[phi_idx] - np.log(bin_width)
+        torsion_logp = logp_torsions[index] - np.log(bin_width)
 
         assert check_dimensionality(torsion_logp, float)
         return torsion_logp

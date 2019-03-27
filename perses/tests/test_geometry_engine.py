@@ -29,6 +29,8 @@ from nose.plugins.attrib import attr
 from openmmtools.constants import kB
 from perses.rjmc import coordinate_numba
 
+from perses.rjmc.geometry import check_dimensionality
+
 ################################################################################
 # Suppress matplotlib logging
 ################################################################################
@@ -210,14 +212,11 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
 
     @internal_coordinates.setter
     def internal_coordinates(self, internal_coordinates):
-        """Set positions given unit-bearing internal coordinates (r, theta, phi)"""
+        """Set positions given dimensionless internal coordinates (r, theta, phi), implicitly in simtk.unit.md_system units"""
         # TODO: Why does getting the internal coordinates return floats while setting the internal coordinates requires unit-bearing quantities?
-        internals_without_units = np.zeros(3, dtype=np.float64)
-        internals_without_units[0] = internal_coordinates[0].value_in_unit(unit.nanometer)
-        internals_without_units[1] = internal_coordinates[1].value_in_unit(unit.radians)
-        internals_without_units[2] = internal_coordinates[2].value_in_unit(unit.radians)
-        positions_without_units = self._positions.value_in_unit(unit.nanometer)
-        new_cartesian_coordinates = coordinate_numba.internal_to_cartesian(positions_without_units[1], positions_without_units[2], positions_without_units[3], internals_without_units)
+        internals_without_units = np.array(internal_coordinates, dtype=np.float64)
+        positions_without_units = self._positions.value_in_unit(unit.nanometer).astype(np.float64)
+        new_cartesian_coordinates = coordinate_numba.internal_to_cartesian(positions_without_units[1], positions_without_units[2], positions_without_units[3], internal_coordinates)
         self._positions[0] = unit.Quantity(new_cartesian_coordinates, unit=unit.nanometer)
 
     @property
@@ -235,12 +234,64 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
         """Torsion parameters (periodicity, phase, k) as tuple of unit-bearing quantities"""
         return (self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
 
+def test_propose_bond():
+    """
+    Test the proposal of bonds by GeometryEngine by comparing to proposals from a normal distribution
+    with mean r0 (equilibrium bond length) and variance sigma = sqrt(1.0/(k*beta)), where k is the force
+    constant and beta is the inverse temperature. A Kolmogorov-Smirnov test is used for that comparison.
+    """
+    NSAMPLES = 1000 # number of samples to draw
+    NDIVISIONS = 1000 # number of bond divisions
+
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    import scipy.stats as stats
+    geometry_engine = FFAllAngleGeometryEngine()
+
+    #create a test system with just a bond from the 1-2 atoms
+    testsystem = FourAtomValenceTestSystem(bond=True, angle=False, torsion=False)
+
+    #Retrive this bond force's parameters
+    bond = testsystem.structure.bonds[0] #this bond has parameters
+    bond_with_units = geometry_engine._add_bond_units(bond)
+    (r0, k) = testsystem.bond_parameters
+
+    #compute the equivalent parameters for a normal distribution
+    sigma = unit.sqrt(1.0/(beta*k))
+    r0_without_units = r0.value_in_unit(unit.nanometers)
+    sigma_without_units = sigma.value_in_unit(unit.nanometers)
+
+    #Allocate an array for sampled bond lengths and propose from the geometry engine
+    bond_array = np.zeros(NSAMPLES, np.float64)
+    for i in range(NSAMPLES):
+        bond_array[i] = geometry_engine._propose_bond(bond_with_units, beta, NDIVISIONS)
+
+    # Compute the CDF
+    r_i, log_p_i, bin_width = geometry_engine._bond_log_pmf(bond_with_units, beta, NDIVISIONS)
+    assert np.isclose(np.exp(log_p_i).sum(), 1.0), 'bond probability mass function is not normalized'
+    def cdf(rs):
+        cdfs = np.zeros(rs.shape)
+        for i, r in enumerate(rs):
+            index = int((r-r_i[0])/bin_width)
+            pdf = np.exp(log_p_i)
+            cdfs[i] = np.sum(pdf[:index]) + (r - r_i[index]) / bin_width * pdf[index]
+        return cdfs
+
+    #compare the sampled angles to a normal cdf with the appropriate parameters using
+    #the Kolomogorov-Smirnov test. The null hypothesis is that they are drawn from the same
+    #distribution (the test passes).
+    (dval, pval) = stats.kstest(bond_array, cdf)
+    if pval < pval_threshold:
+        raise Exception("The bond may be drawn from the wrong distribution. p = %f" % pval)
+
 def test_propose_angle():
     """
     Test the proposal of angles by GeometryEngine by comparing to proposals from a normal distribution
     with mean theta0 (equilibrium angle) and variance sigma = sqrt(1.0/(k*beta)), where k is the force
     constant and beta is the inverse temperature. A Kolmogorov-Smirnov test is used for that comparison.
     """
+    NSAMPLES = 1000 # number of samples to draw
+    NDIVISIONS = 180 # number of divisions for angle
+
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     import scipy.stats as stats
     geometry_engine = FFAllAngleGeometryEngine()
@@ -256,63 +307,40 @@ def test_propose_angle():
     #without units
     (theta0, k) = testsystem.angle_parameters
     sigma = unit.sqrt(1.0/(beta*k)) # standard deviation, in unit-bearing quantities
-    sigma_without_units = sigma.value_in_unit(unit.radian) # standard deviation in float (implicitly in md_unit_system)
     theta0_without_units = theta0.value_in_unit(unit.radian) # reference angle in float (implicitly in md_unit_system)
+    sigma_without_units = sigma.value_in_unit(unit.radian) # standard deviation in float (implicitly in md_unit_system)
 
     #allocate an array for proposing angles from the appropriate distribution
-    angle_array = np.zeros(1000)
-    for i in range(1000):
-        proposed_angle_with_units = geometry_engine._propose_angle(angle_with_units, beta)
-        angle_array[i] = proposed_angle_with_units.value_in_unit(unit.radians)
+    angle_array = np.zeros(NSAMPLES)
+    for i in range(NSAMPLES):
+        angle_array[i] = geometry_engine._propose_angle(angle_with_units, beta, NDIVISIONS)
+
+    # Compute the CDF
+    theta_i, log_p_i, bin_width = geometry_engine._angle_log_pmf(angle_with_units, beta, NDIVISIONS)
+    assert np.isclose(np.exp(log_p_i).sum(), 1.0), 'angle probability mass function is not normalized'
+    def cdf(thetas):
+        cdfs = np.zeros(thetas.shape)
+        for i, theta in enumerate(thetas):
+            index = int((theta - theta_i[0]) / bin_width)
+            pdf = np.exp(log_p_i)
+            cdfs[i] = np.sum(pdf[:index]) + (theta - theta_i[index]) / bin_width * pdf[index]
+        return cdfs
 
     #compare the sampled angles to a normal cdf with the appropriate parameters using
     #the Kolomogorov-Smirnov test. The null hypothesis is that they are drawn from the same
     #distribution (the test passes).
-    (dval, pval) = stats.kstest(angle_array,'norm', args=(theta0_without_units, sigma_without_units))
+    (dval, pval) = stats.kstest(angle_array, cdf)
     if pval < pval_threshold:
-        raise Exception("The angle may be drawn from the wrong distribution. p= %f" % pval)
-
-def test_propose_bond():
-    """
-    Test the proposal of bonds by GeometryEngine by comparing to proposals from a normal distribution
-    with mean r0 (equilibrium bond length) and variance sigma = sqrt(1.0/(k*beta)), where k is the force
-    constant and beta is the inverse temperature. A Kolmogorov-Smirnov test is used for that comparison.
-    """
-    from perses.rjmc.geometry import FFAllAngleGeometryEngine
-    import scipy.stats as stats
-    geometry_engine = FFAllAngleGeometryEngine()
-
-    #create a test system with just a bond from the 1-2 atoms
-    testsystem = FourAtomValenceTestSystem(bond=True, angle=False, torsion=False)
-
-    #Retrive this bond force's parameters
-    bond = testsystem.structure.bonds[0] #this bond has parameters
-    bond_with_units = geometry_engine._add_bond_units(bond)
-    (r0, k) = testsystem.bond_parameters
-
-    #compute the equivalent parameters for a normal distribution
-    sigma = unit.sqrt(1.0/(beta*k))
-    sigma_without_units = sigma.value_in_unit(unit.nanometers)
-    r0_without_units = r0.value_in_unit(unit.nanometers)
-
-    #Allocate an array for sampled bond lengths and propose from the geometry engine
-    bond_array = np.zeros(1000)
-    for i in range(1000):
-        proposed_bond_with_units = geometry_engine._propose_bond(bond_with_units, beta)
-        bond_array[i] = proposed_bond_with_units.value_in_unit(unit.nanometer)
-
-    #compare the sampled angles to a normal cdf with the appropriate parameters using
-    #the Kolomogorov-Smirnov test. The null hypothesis is that they are drawn from the same
-    #distribution (the test passes).
-    (dval, pval) = stats.kstest(bond_array, 'norm', args=(r0_without_units, sigma_without_units))
-    if pval < pval_threshold:
-        raise Exception("The bond may be drawn from the wrong distribution. p= %f" % pval)
+        raise Exception("The angle may be drawn from the wrong distribution. p = %f" % pval)
 
 def test_bond_logq():
     """
     Compare the bond logq (log unnormalized probability) calculated by the geometry engine to the log-unnormalized
     probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature).
     """
+    NDIVISIONS = 1000 # number of divisions to test
+    TOLERANCE = 1.0e-2 # logP deviation tolerance
+
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
 
@@ -331,37 +359,47 @@ def test_bond_logq():
     sigma_without_units = sigma.value_in_unit(unit.nanometer)
     r0_without_units = r0.value_in_unit(unit.nanometer)
 
-    #Create a set of bond lengths to test from r0 - sigma to r0 + sigma
-    bond_range = np.linspace(r0_without_units - sigma_without_units, r0_without_units + sigma_without_units, 100)
+    #Create a set of bond lengths to test from r0 - 6*sigma to r0 + 6*sigma
+    r_min = max(0, r0_without_units - 5.0*sigma_without_units)
+    r_max = r0_without_units + 5.9*sigma_without_units
+    bond_range = np.linspace(r_min, r_max, NDIVISIONS)
 
     #Extract the internal coordinates and add units.
     #r - bond length
     #theta - bond angle
     #phi - torsion angle
     internal_coordinates = testsystem.internal_coordinates
-    r = unit.Quantity(internal_coordinates[0], unit=unit.nanometer)
-    theta = unit.Quantity(internal_coordinates[1], unit=unit.radians)
-    phi = unit.Quantity(internal_coordinates[2], unit=unit.radians)
-    internals_with_units = [r, theta, phi]
-
-    #Add units to the set of bond lengths
-    bond_range_with_units = unit.Quantity(bond_range, unit=unit.nanometer)
+    r, theta, phi = internal_coordinates # dimensionless, implicitly in md_unit_system
 
     #Loop through the bond lengths and make sure the unnormalized log probability calculated by the geometry engine (logq)
-    #matches that calculated by openmm (-beta*potential_energy) within 1.0e-6 tolerance
-    for bond_length in bond_range_with_units:
-        bond_logq_ge = geometry_engine._bond_logq(bond_length, bond_with_units, beta)
-        internals_with_units[0] = bond_length
-        testsystem.internal_coordinates = internals_with_units
-        bond_logq_omm = -beta*testsystem.energy
-        if (np.abs(bond_logq_omm-bond_logq_ge)) > 1.0e-6:
-            raise Exception("Bond logq did not match openmm")
+    #matches that calculated by openmm (-beta*potential_energy) after normalization within 1.0e-6 tolerance
+    bond_logp_openmm = np.zeros(bond_range.shape)
+    bond_logp_ge = np.zeros(bond_range.shape)
+    for i, bond_length in enumerate(bond_range):
+        bond_logp_ge[i] = geometry_engine._bond_logp(bond_length, bond_with_units, beta, NDIVISIONS)
+        internal_coordinates[0] = bond_length
+        testsystem.internal_coordinates = internal_coordinates
+        bond_logp_openmm[i] = 2.0*np.log(bond_length) - beta*testsystem.energy
+
+    # Normalize OpenMM logp
+    from scipy.special import logsumexp
+    bond_logp_openmm -= logsumexp(bond_logp_openmm)
+    bond_logp_ge -= logsumexp(bond_logp_ge)
+
+    if not np.allclose(bond_logp_openmm, bond_logp_ge, atol=TOLERANCE):
+        msg  = "Bond logq did not match openmm:\n"
+        msg += "OpenMM: {}\n".format(bond_logp_openmm)
+        msg += "logq  : {}\n".format(bond_logp_ge)
+        raise Exception(msg)
 
 def test_angle_logq():
     """
     Compare the angle logq (log unnormalized probability) calculated by the geometry engine to the log-unnormalized
     probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature).
     """
+    NDIVISIONS = 360
+    TOLERANCE = 1.0e-2 # logP deviation tolerance
+
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
 
@@ -377,25 +415,33 @@ def test_angle_logq():
     #theta - bond angle
     #phi - torsion angle
     internal_coordinates = testsystem.internal_coordinates
-    r = unit.Quantity(internal_coordinates[0], unit=unit.nanometer)
-    theta = unit.Quantity(internal_coordinates[1], unit=unit.radians)
-    phi = unit.Quantity(internal_coordinates[2], unit=unit.radians)
-    internals_with_units = [r, theta, phi]
+    r, theta, phi = internal_coordinates # float, implicitly in md_unit_system
 
     #Get a range of test points for the angle from 0 to pi, and add units
-    angle_test_range = np.linspace(0.0, np.pi, num=100)
-    angle_test_range_with_units = unit.Quantity(angle_test_range, unit=unit.radians)
+    EPSILON = 1.0e-3 # we can't exactly have 0 or pi
+    angle_test_range = np.linspace(EPSILON, np.pi-EPSILON, num=NDIVISIONS, endpoint=False)
 
     #Loop through the test points for the angle and calculate the log-unnormalized probability of each using
     #geometry engine and openmm (-beta*potential_energy) where beta is inverse temperature. Tolerance 1.0e-4,
     #because this tries a range of angles well outside what one would typically see.
-    for test_angle in angle_test_range_with_units:
-        angle_logq_ge = geometry_engine._angle_logq(test_angle, angle_with_units, beta)
-        internals_with_units[1] = test_angle
-        testsystem.internal_coordinates = internals_with_units
-        angle_logq_omm = -beta*testsystem.energy
-        if (np.abs(angle_logq_ge - angle_logq_omm)) > 1.0e-4:
-            raise Exception("Angle logq did not match openmm")
+    angle_logp_openmm = np.zeros(angle_test_range.shape)
+    angle_logp_ge = np.zeros(angle_test_range.shape)
+    for i, test_angle in enumerate(angle_test_range):
+        angle_logp_ge[i] = geometry_engine._angle_logp(test_angle, angle_with_units, beta, NDIVISIONS)
+        internal_coordinates[1] = test_angle
+        testsystem.internal_coordinates = internal_coordinates
+        angle_logp_openmm[i] = np.log(np.sin(test_angle)) - beta*testsystem.energy
+
+    # Normalize OpenMM logp
+    from scipy.special import logsumexp
+    angle_logp_openmm -= logsumexp(angle_logp_openmm)
+    angle_logp_ge -= logsumexp(angle_logp_ge)
+
+    if not np.allclose(angle_logp_openmm, angle_logp_ge, atol=TOLERANCE):
+        msg  = "Angle logq did not match openmm:\n"
+        msg += "OpenMM: {}\n".format(angle_logp_openmm)
+        msg += "logq  : {}\n".format(angle_logp_ge)
+        raise Exception(msg)
 
 def test_add_bond_units():
     """
@@ -493,6 +539,8 @@ def test_torsion_scan():
     have the correct torsion angle according to OpenMM. The OpenMM check is achieved via a function that creates a system with
     a torsion force that is just "phi" allowing us to read out the internal value of the torsion.
     """
+    TOLERANCE = 1.0e-6
+
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
     #do 360 test points
@@ -504,23 +552,24 @@ def test_torsion_scan():
 
     #get the internal coordinates of the testsystem
     internals = testsystem.internal_coordinates
-    r = unit.Quantity(internals[0], unit=unit.nanometer)
-    theta = unit.Quantity(internals[1], unit=unit.radian)
+    r = internals[0] # float, implicitly in units of nanometers
+    theta = internals[1] # float, implicitly in units of radians
 
     #get the torsion that we're going to rotate
     torsion = testsystem.structure.dihedrals[0]
 
     #perform the torsion scan with the genometry engine, which returns cartesian coordinates
-    xyzs, phis = geometry_engine._torsion_scan(torsion, testsystem.positions, r, theta, n_divisions=n_divisions)
-    phis_without_units = phis.value_in_unit(unit.radians)
+    # phis are returned as float array, implicitly in units of radians
+    # xyzs are returned as unit-bearing quantities
+    xyzs, phis, bin_width = geometry_engine._torsion_scan(torsion, testsystem.positions, r, theta, n_divisions)
 
-    #check that the values of phi that OpenMM calculates matches the ones created by the GeometryEngine within 1.0e-6
-    for i in range(n_divisions):
+    # Check that the values of phi that OpenMM calculates matches the ones created by the GeometryEngine within 1.0e-6
+    for i, phi in enumerate(phis):
         xyz_ge = xyzs[i]
-        r_new, theta_new, phi = _get_internal_from_omm(xyz_ge, testsystem.positions[1], testsystem.positions[2], testsystem.positions[3])
-        if np.abs(phis_without_units[i] - phi) >1.0e-6:
+        r_new, theta_new, phi_new = _get_internal_from_omm(xyz_ge, testsystem.positions[1], testsystem.positions[2], testsystem.positions[3])
+        if np.abs(phi_new - phi) > TOLERANCE:
             raise Exception("Torsion scan did not match OpenMM torsion")
-        if np.abs(r_new - internals[0]) >1.0e-6 or np.abs(theta_new - internals[1]) > 1.0e-6:
+        if np.abs(r_new - r) > TOLERANCE or np.abs(theta_new - theta) > TOLERANCE:
             raise Exception("Theta or r was disturbed in torsion scan.")
 
 def test_torsion_log_discrete_pdf():
@@ -538,15 +587,14 @@ def test_torsion_log_discrete_pdf():
 
     #Extract the internal coordinates in appropriate units
     internals = testsystem.internal_coordinates
-    r = unit.Quantity(internals[0], unit=unit.nanometer)
-    theta = unit.Quantity(internals[1], unit=unit.radian)
+    r, theta, phi = internals # float, implicitly in md_unit_system
 
     #Get the relevant torsion and add units to it
     torsion = testsystem.structure.dihedrals[0]
     torsion_with_units = geometry_engine._add_torsion_units(torsion)
 
     #Calculate the torsion log pmf according to the geometry engine
-    torsion_log_discrete_pdf, phis = geometry_engine._torsion_log_probability_mass_function(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+    torsion_log_discrete_pdf, phis, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions)
 
     #Calculate the torsion potential manually using Python
     manual_torsion_log_discrete_pdf = calculate_torsion_discrete_log_pdf_manually(beta, torsion_with_units, phis)
@@ -568,7 +616,7 @@ def calculate_torsion_discrete_log_pdf_manually(beta, torsion, phis):
         inverse temperature
     torsion : parmed.Dihedral object
         the torsion of interest
-    phis : array of float
+    phis : array of float, implicitly in units of radians
         the series of torsion angles at which to evaluate the torsion probability
     """
     #initialize array for the log unnormalized probabilities
@@ -579,9 +627,12 @@ def calculate_torsion_discrete_log_pdf_manually(beta, torsion, phis):
     torsion_per = torsion.type.per
     torsion_phase = torsion.type.phase
 
+    check_dimensionality(torsion_k, unit.kilojoule_per_mole)
+    check_dimensionality(torsion_phase, unit.radians)
+
     #loop through the phis and calculate the log unnormalized probability at each
-    for i in range(len(phis)):
-        torsion_logq[i] = -1.0*beta*torsion_k*(1+unit.cos(torsion_per*phis[i] - torsion_phase))
+    for i, phi in enumerate(phis):
+        torsion_logq[i] = -1.0*beta*torsion_k*(1+unit.cos(torsion_per*phi*unit.radians - torsion_phase))
 
     #get the unnormalized probabilities and the normalizing constant
     q = np.exp(torsion_logq)
@@ -593,13 +644,14 @@ def calculate_torsion_discrete_log_pdf_manually(beta, torsion, phis):
 
 def test_torsion_logp():
     """
-    Test that the continuous torsion log pdf integrates to one
+    Test that the continuous torsion probability density function integrates to unit
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
     #take typical numbers for the number of divisions and the number of test points
     n_divisions = 360
     n_divisions_test = 740
+    TOLERANCE = 1.0e-3 # probability deviation tolerance
 
     #instantiate the geometry engine
     geometry_engine = FFAllAngleGeometryEngine()
@@ -609,28 +661,28 @@ def test_torsion_logp():
 
     #Extract the internal coordinates from this, and wrap them in units
     internals = testsystem.internal_coordinates
-    r = unit.Quantity(internals[0], unit=unit.nanometer)
-    theta = unit.Quantity(internals[1], unit=unit.radian)
+    r, theta, phi = internals # float, dimensionless, implicitly in md_unit_system
 
     #Extract the torsion from the parmed structure representation (there's only one, so index 0)
     torsion = testsystem.structure.dihedrals[0]
 
     #Create a set of n_divisions_test phis evenly spaced from -pi to pi
-    phis = unit.Quantity(np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions_test), unit=unit.radians)
+    bin_width = (2.0*np.pi)/n_divisions_test
+    phis = np.arange(-np.pi, +np.pi, bin_width) # dimensionless, implicitly in units of radians
 
-    #initialize an array for the continuous torsion log pdf
+    # Initialize an array for the continuous torsion log pdf
     log_pdf = np.zeros(n_divisions_test)
 
     #calculate the continuous log pdf of the torsion at each test point using the geometry engine with n_divisions
     for i in range(n_divisions_test):
-        log_pdf[i] = geometry_engine._torsion_logp(testsystem._context, torsion, testsystem.positions, r, theta, phis[i], beta, n_divisions=n_divisions)
+        log_pdf[i] = geometry_engine._torsion_logp(testsystem._context, torsion, testsystem.positions, r, theta, phis[i], beta, n_divisions)
 
     #exponentiate and integrate the continuous torsion log pdf
     pdf = np.exp(log_pdf)
     torsion_sum = np.trapz(pdf, phis)
 
     #Ensure that the absolute difference between the integral and one is less than 0.001 (accounting for numerical issues)
-    if np.abs(1.0 - torsion_sum) > 1.0e-3:
+    if np.abs(1.0 - torsion_sum) > TOLERANCE:
         raise Exception("The torsion continuous distribution does not integrate to one.")
 
 def test_propose_torsion():
@@ -651,25 +703,22 @@ def test_propose_torsion():
 
     #Retrieve the internal coordinates and assign the appropriate units
     internals = testsystem.internal_coordinates
-    r = unit.Quantity(internals[0], unit=unit.nanometer)
-    theta = unit.Quantity(internals[1], unit=unit.radian)
+    r, theta, phi = internals # float, dimensionless, with implied md_unit_system units
 
     #retrieve the torsion of interest (0--there is only one) from the parmed structure
     torsion = testsystem.structure.dihedrals[0]
 
     #calculate the log probability mass function for an array of phis
-    logp_phis, phis = geometry_engine._torsion_log_probability_mass_function(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
-
-    #remove units from phis
-    phis_without_units = phis.value_in_unit(unit.radians)
+    # phis are numpy floats, with implied units of radians
+    logp_phis, phis, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions)
 
     #create a cumulative distribution function for use in the ks test
-    cdf_func = create_cdf(logp_phis, phis_without_units, n_divisions)
+    cdf_func = create_cdf(logp_phis, phis, n_divisions)
 
     #Draw a set of samples from the torsion distribution using the GeometryEngine
-    torsion_samples = unit.Quantity(np.zeros(n_samples), unit=unit.radian)
+    torsion_samples = np.zeros(n_samples)
     for i in range(n_samples):
-        torsion_samples[i], logp = geometry_engine._propose_torsion(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions=n_divisions)
+        torsion_samples[i], logp = geometry_engine._propose_torsion(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions)
 
     #now check if the samples match the logp using the Kolmogorov-Smirnov test
     (dval, pval) = stats.kstest(torsion_samples, cdf_func)
@@ -905,6 +954,7 @@ def align_molecules(mol1, mol2):
     return new_to_old_atom_mapping
 
 @attr('advanced')
+# TODO: Fix this
 def test_mutate_quick():
     """
     Abbreviated version of test_mutate_all for travis.
@@ -967,6 +1017,7 @@ def test_mutate_quick():
                 raise Exception("Energy after proposal is NaN")
 
 @attr('advanced')
+# TODO: Fix this
 def test_mutate_from_all_to_all():
     """
     Make sure mutations are successful between every possible pair of before-and-after residues
@@ -1303,13 +1354,19 @@ def test_coordinate_conversion():
         assert isinstance(phi, float)
         # Check that we can reproduce original unit-bearing positions
         xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
-        from perses.geometry import check_dimensionality
         assert check_dimensionality(xyz, unit.nanometers)
         assert np.linalg.norm(xyz-atom_position) < 1.0e-12
 
 def test_openmm_dihedral():
-    import perses.rjmc.geometry as geometry
+    """Test FFAllAngleGeometryEngine _internal_to_cartesian and _cartesian_to_internal are consistent with OpenMM torsion angles.
+    """
+    TORSION_TOLERANCE = 1.0e-4 # permitted disagreement in torsions
+
+    # Create geometry engine
+    from perses.rjmc import geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
+
+    # Create a four-bead test system with a single custom force that measures the OpenMM torsion
     import simtk.openmm as openmm
     integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
     sys = openmm.System()
@@ -1318,31 +1375,54 @@ def test_openmm_dihedral():
         sys.addParticle(1.0*unit.amu)
     force.addTorsion(0,1,2,3,[])
     sys.addForce(force)
-    atom_position = unit.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
-    bond_position = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
-    angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
-    torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
+    positions = unit.Quantity(np.array([
+            [0.10557722, -1.10424644, -1.08578826],
+            [0.0765,  0.1,  -0.4005],
+            [0.0829, 0.0952, -0.2479],
+            [-0.057,  0.0951, -0.1863],
+            ]), unit.nanometers)
+    atom_position = positions[0,:]
+    bond_position = positions[1,:]
+    angle_position = positions[2,:]
+    torsion_position = positions[3,:]
+
+    #atom_position = unit.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
+    #bond_position = unit.Quantity(np.array([ 0.0765,  0.1  ,  -0.4005]), unit=unit.nanometers)
+    #angle_position = unit.Quantity(np.array([ 0.0829 , 0.0952 ,-0.2479]) ,unit=unit.nanometers)
+    #torsion_position = unit.Quantity(np.array([-0.057 ,  0.0951 ,-0.1863] ) ,unit=unit.nanometers)
+
+    # Compute the dimensionless internal coordinates consistent with this geometry
     rtp, detJ = geometry_engine._cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
+    (r, theta, phi) = rtp # dimensionless internal coordinates
+
+    # Create a reference context
     platform = openmm.Platform.getPlatformByName("Reference")
     context = openmm.Context(sys, integrator, platform)
-    positions = [atom_position, bond_position, angle_position, torsion_position]
-    context.setPositions(positions)
-    state = context.getState(getEnergy=True)
-    potential = state.getPotentialEnergy()
+    context.setPositions([atom_position, bond_position, angle_position, torsion_position])
+    openmm_phi = context.getState(getEnergy=True).getPotentialEnergy()/unit.kilojoule_per_mole # this system converts torsion radians -> kJ/mol
+    assert np.linalg.norm(openmm_phi - phi) < TORSION_TOLERANCE, '_cartesian_to_internal and OpenMM disagree on torsions'
 
-    #rotate about the torsion:
+    # Test _internal_to_cartesian by rotating around the torsion
     n_divisions = 100
-    phis = unit.Quantity(np.arange(0, 2.0*np.pi, (2.0*np.pi)/n_divisions), unit=unit.radians)
-    omm_phis = np.zeros(n_divisions)
+    phis = np.arange(-np.pi, np.pi, (2.0*np.pi)/n_divisions) # _internal_to_cartesian only accepts dimensionless quantities
     for i, phi in enumerate(phis):
-        xyz_atom1, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, rtp[0], rtp[1], phi)
-        context.setPositions([xyz_atom1, bond_position, angle_position, torsion_position])
-        state = context.getState(getEnergy=True)
-        omm_phis[i] = state.getPotentialEnergy()/unit.kilojoule_per_mole
+        # Note that (r, theta, phi) are dimensionless here
+        xyz_atom1, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
+        positions[0,:] = xyz_atom1
+        context.setPositions(positions)
+        openmm_phi = context.getState(getEnergy=True).getPotentialEnergy()/unit.kilojoule_per_mole # this system converts torsion radians -> kJ/mol
+        msg  = '_internal_to_cartesian and OpenMM disagree on torsions: \n'
+        msg += '_internal_to_cartesian generated positions for: {}\n'.format(phi)
+        msg += 'OpenMM: {}\n'.format(openmm_phi)
+        msg += 'positions: {}'.format(positions)
+        assert np.linalg.norm(openmm_phi - phi) < TORSION_TOLERANCE, msg
 
-# TODO: Test resulting omm_phis vs input phis
+        # Check that _cartesian_to_internal agrees
+        rtp, detJ = geometry_engine._cartesian_to_internal(xyz_atom1, bond_position, angle_position, torsion_position)
+        assert np.linalg.norm(phi - rtp[2]) < TORSION_TOLERANCE, '_internal_to_cartesian disagrees with _cartesian_to_internal'
 
-    return 0
+    # Clean up
+    del context
 
 def test_try_random_itoc():
 
