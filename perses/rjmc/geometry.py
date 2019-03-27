@@ -1553,7 +1553,7 @@ class GeometrySystemGenerator(object):
         reference_angle_force = reference_forces['HarmonicAngleForce']
         for angle in range(reference_angle_force.getNumAngles()):
             p1, p2, p3, theta0, K = reference_angle_force.getAngleParameters(angle)
-            growth_idx = self._calculate_growth_idx([particle1, particle2, particle3], growth_indices)
+            growth_idx = self._calculate_growth_idx([p1, p2, p3], growth_indices)
             if growth_idx > 0:
                 modified_angle_force.addAngle(p1, p2, p3, [theta0, K, growth_idx])
 
