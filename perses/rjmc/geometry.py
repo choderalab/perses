@@ -48,13 +48,16 @@ def check_dimensionality(quantity, compatible_units):
         Returns True if dimensionality is as requested
 
     """
-    if (compatible_units == float) and not isinstance(quantity, float):
-        raise ValueError('{} expected to be a float, but was instead {}'.format(quantity, type(quantity)))
+    if unit.is_quantity(compatible_units) or unit.is_unit(compatible_units):
+        if isinstance(quantity / compatible_units, unit.Quantity):
+            raise ValueError('{} does not have units compatible with expected {}'.format(quantity, compatible_units))
+    elif compatible_units == float:
+        if not isinstance(quantity, float):
+            raise ValueError('{} expected to be a float, but was instead {}'.format(quantity, type(quantity)))
+    else:
+        raise ValueError("Don't know how to handle compatible_units of {}".format(compatible_units))
 
-    from simtk.unit.quantity import is_dimensionless
-    if not is_dimensionless(quantity / compatible_units):
-        raise ValueError('{} does not have units compatible with expected {}'.format(quantity, compatible_units))
-
+    # Units are compatible if they pass this point
     return True
 
 class GeometryEngine(object):
@@ -130,9 +133,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
         self.nproposed = 0 # number of times self.propose() has been called
-        self._energy_time = 0.0
-        self._torsion_coordinate_time = 0.0
-        self._position_set_time = 0.0
         self.verbose = verbose
         self.use_sterics = use_sterics
         self._n_bond_divisions = n_bond_divisions
@@ -287,18 +287,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if new_positions is not None:
             check_dimensionality(new_positions, unit.angstroms)
 
-        # TODO: Use context timer?
-        import time
-        initial_time = time.time()
-
         # TODO: Overhaul the use of ProposalOrderTools to instead use ValenceProposalOrderTools
         proposal_order_tool = ProposalOrderTools(top_proposal)
-        proposal_order_time = time.time() - initial_time
+
         growth_parameter_name = 'growth_stage'
         if direction=="forward":
-            forward_init = time.time()
             atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
-            proposal_order_forward = time.time() - forward_init
 
             # Find and copy known positions
             import parmed
@@ -307,11 +301,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
 
             # Create modified System object
-            system_init = time.time()
             growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
-            growth_system_time = time.time() - system_init
-            
+
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
@@ -409,17 +401,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             # DEBUG: Write PDB file for placed atoms
             atoms_with_positions.append(atom)
-        total_time = time.time() - initial_time
 
         #use a new array for each placement, since the variable size will be different.
         if self._storage:
             self._storage.write_array("atom_placement_logp_{}_{}".format(direction, self.nproposed), np.stack(atom_placements))
-
-        if direction=='forward':
-            logging.log(logging.DEBUG, "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
-        self._torsion_coordinate_time = 0.0
-        self._energy_time = 0.0
-        self._position_set_time = 0.0
 
         check_dimensionality(logp_proposal, float)
         check_dimensionality(new_positions, unit.nanometers)
@@ -791,7 +776,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from perses.rjmc import coordinate_numba
         internal_coords = coordinate_numba.cartesian_to_internal(
             atom_position.value_in_unit(unit.nanometers).astype(np.float64),
-            bond_position.value_in_unit(lunit.nanometers).astype(np.float64),
+            bond_position.value_in_unit(unit.nanometers).astype(np.float64),
             angle_position.value_in_unit(unit.nanometers).astype(np.float64),
             torsion_position.value_in_unit(unit.nanometers).astype(np.float64))
         # Return values are also in floating point implicitly in nanometers and radians
@@ -1080,10 +1065,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
 
-        # TODO: Use context timer?
-        import time
-        torsion_scan_init = time.time()
-
         # Check input argument dimensions
         assert check_dimensionality(positions, unit.angstroms)
         assert check_dimensionality(r, float)
@@ -1108,11 +1089,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # Convert positions back into standard md_unit_system length units (nanometers)
         xyzs_quantity = unit.Quantity(xyzs, unit=length_unit) #have to put the units back now
-
-        # Store timing
-        # TODO: Use context timer?
-        torsion_scan_time = time.time() - torsion_scan_init
-        self._torsion_coordinate_time += torsion_scan_time
 
         # Return unit-bearing positions and dimensionless torsions (implicitly in md_unit_system)
         check_dimensionality(xyzs_quantity, float)
@@ -1164,28 +1140,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
         xyzs = xyzs.value_in_unit_system(unit.md_unit_system) # make positions dimensionless again
         positions = positions.value_in_unit_system(unit.md_unit_system)
-        import time
         for i, xyz in enumerate(xyzs):
-            # Compute potential energy
-            # TODO: Use a context timer?
-            position_set = time.time()
-
             # Set positions
             positions[atom_idx,:] = xyz
             growth_context.setPositions(positions)
 
-            # TODO: Use a context timer?
-            position_time = time.time() - position_set
-            self._position_set_time += position_time
-            energy_computation_init = time.time()
-
             # Compute potential energy
             state = growth_context.getState(getEnergy=True)
             potential_energy = state.getPotentialEnergy()
-
-            # TODO: Use a context timer?
-            energy_computation_time = time.time() - energy_computation_init
-            self._energy_time += energy_computation_time
 
             # Store unnormalized log probabilities
             logq_i = -beta*potential_energy
