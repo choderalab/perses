@@ -925,7 +925,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # Form log probability
         from scipy.special import logsumexp
-        log_p_i = 2*np.log(r_i) - 0.5 * ((r_i-r0)/sigma_r)**2
+        log_p_i = 2*np.log(r_i+(bin_width/2.0)) - 0.5*((r_i+(bin_width/2.0)-r0)/sigma_r)**2
         log_p_i -= logsumexp(log_p_i)
 
         check_dimensionality(r_i, float)
@@ -1081,7 +1081,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # Compute log probability
         from scipy.special import logsumexp
-        log_p_i = np.log(np.sin(theta_i)) - 0.5*((theta_i-theta0)/sigma_theta)**2
+        log_p_i = np.log(np.sin(theta_i+(bin_width/2.0))) - 0.5*((theta_i+(bin_width/2.0)-theta0)/sigma_theta)**2
         log_p_i -= logsumexp(log_p_i)
 
         check_dimensionality(theta_i, float)
@@ -1120,10 +1120,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(theta, float)
         check_dimensionality(beta, 1/unit.kilojoules_per_mole)
 
-        if (theta <= 0) or (theta >= np.pi):
-            return LOG_ZERO
-
         theta_i, log_p_i, bin_width = self._angle_log_pmf(angle, beta, n_divisions)
+
+        if (theta < theta_i[0]) or (theta >= theta_i[-1] + bin_width):
+            return LOG_ZERO
 
         # Determine index that r falls within
         index = int((theta - theta_i[0]) / bin_width)

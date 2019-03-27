@@ -340,14 +340,14 @@ def test_propose_angle():
     if pval < pval_threshold:
         raise Exception("The angle may be drawn from the wrong distribution. p = %f" % pval)
 
-def test_bond_logq():
+def test_bond_logp():
     """
-    Compare the bond logq (log probability) calculated by the geometry engine to the log-unnormalized
+    Compare the bond log probability calculated by the geometry engine to the log-unnormalized
     probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature)
     including the r^2 Jacobian term.
     """
     NDIVISIONS = 1000 # number of divisions to test
-    TOLERANCE = 1.0e-2 # logP deviation tolerance
+    TOLERANCE = 0.05 # logP deviation tolerance
 
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
@@ -368,7 +368,8 @@ def test_bond_logq():
     r0_without_units = r0.value_in_unit(unit.nanometer)
 
     #Create a set of bond lengths to test from r0 - 6*sigma to r0 + 2*sigma
-    r_min = max(0, r0_without_units - 2.0*sigma_without_units)
+    EPSILON = 1.0e-3 # we can't have zero bond lengths
+    r_min = max(EPSILON, r0_without_units - 2.0*sigma_without_units)
     r_max = r0_without_units + 2.0*sigma_without_units
     bond_range = np.linspace(r_min, r_max, NDIVISIONS)
 
@@ -390,7 +391,7 @@ def test_bond_logq():
         logp_openmm[i] = 2.0*np.log(bond_length) - beta*testsystem.energy # Jacobian is included
 
     # Because we don't know the normalizing constant for the OpenMM logp, find optimal additive constant
-    logp_openmm += logp_ge.mean() - logp_openmm.mean()
+    logp_openmm += logp_ge.max() - logp_openmm.max()
 
     # Check that all values in computed range are close
     max_deviation = (abs(logp_openmm - logp_ge)).max()
@@ -400,12 +401,12 @@ def test_bond_logq():
 
 def test_angle_logp():
     """
-    Compare the angle logp (log probability) calculated by the geometry engine to the log-unnormalized
+    Compare the angle log probability calculated by the geometry engine to the log-unnormalized
     probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature)
     including the sin(theta) Jacobian term.
     """
-    NDIVISIONS = 360
-    TOLERANCE = 1.0e-2 # logP deviation tolerance
+    NDIVISIONS = 3600
+    TOLERANCE = 0.05 # logP deviation tolerance
 
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
     geometry_engine = FFAllAngleGeometryEngine()
@@ -416,6 +417,12 @@ def test_angle_logp():
     #Retrieve that angle and add units to it
     angle = testsystem.structure.angles[0]
     angle_with_units = geometry_engine._add_angle_units(angle)
+    (theta0, k) = testsystem.angle_parameters
+
+    #Convert the bond parameters to the normal distribution `sigma` (variance) and use r0 as mean
+    sigma = unit.sqrt(1.0/(beta*k))
+    sigma_without_units = sigma.value_in_unit(unit.radians)
+    theta0_without_units = theta0.value_in_unit(unit.radians)
 
     #Retrieve internal coordinates and add units
     #r - bond length
@@ -426,7 +433,9 @@ def test_angle_logp():
 
     #Get a range of test points for the angle from 0 to pi, and add units
     EPSILON = 0.1 # we can't exactly have 0 or pi
-    angle_test_range = np.linspace(EPSILON, np.pi-EPSILON, num=NDIVISIONS, endpoint=False)
+    theta_min = max(EPSILON, theta0_without_units - 2.0*sigma_without_units)
+    theta_max = min(np.pi-EPSILON, theta0_without_units + 2.0*sigma_without_units)
+    angle_test_range = np.linspace(theta_min, theta_max, NDIVISIONS)
 
     #Loop through the test points for the angle and calculate the log-unnormalized probability of each using
     #geometry engine and openmm (-beta*potential_energy) where beta is inverse temperature. Tolerance 1.0e-4,
@@ -440,11 +449,20 @@ def test_angle_logp():
         logp_openmm[i] = np.log(np.sin(test_angle)) - beta*testsystem.energy # Jacobian is included
 
     # Because we don't know the normalizing constant for the OpenMM logp, find optimal additive constant
-    logp_openmm += logp_ge.mean() - logp_openmm.mean()
+    logp_openmm += logp_ge.max() - logp_openmm.max()
 
     max_deviation = (abs(logp_openmm - logp_ge)).max()
     if max_deviation > TOLERANCE:
         msg  = "Max deviation exceeded: {} (tolerance {})".format(max_deviation, TOLERANCE)
+        # Plot discrepancies
+        filename = 'angle_logp_discrepancies.png'
+        msg += '\nWriting plot to {}'.format(filename)
+        from matplotlib import pyplot as plt
+        plt.plot(angle_test_range, logp_openmm, '.')
+        plt.plot(angle_test_range, logp_ge, '.')
+        plt.legend(['OpenMM', 'geometry engine'])
+        plt.savefig(filename, dpi=300)
+        # Raise exception
         raise Exception(msg)
 
 def test_add_bond_units():
