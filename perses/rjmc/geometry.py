@@ -28,7 +28,7 @@ mpl_logger.setLevel(logging.WARNING)
 # Constants
 ################################################################################
 
-LOG_ZERO = -1e-6
+LOG_ZERO = -1.0e+6
 
 ################################################################################
 # Utility methods
@@ -373,7 +373,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             bond = self._get_relevant_bond(atom, bond_atom)
             if bond is not None:
                 if direction=='forward':
-                    r = self._propose_bond(bond, beta, n_divisions=self._n_bond_divisions)
+                    r = self._propose_bond(bond, beta, self._n_bond_divisions)
 
                 logp_r = self._bond_logp(r, bond, beta, self._n_bond_divisions)
             else:
@@ -388,7 +388,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # Propose an angle and calculate its log probability
             angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
             if direction=='forward':
-                theta = self._propose_angle(angle, beta, n_divisions=self._n_angle_divisions)
+                theta = self._propose_angle(angle, beta, self._n_angle_divisions)
 
             logp_theta = self._angle_logp(theta, angle, beta, self._n_angle_divisions)
 
@@ -893,9 +893,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             log_p_i[i] is the corresponding log probability mass of bond length r_i[i]
         bin_width : float implicitly in units of nanometers
             The bin width for individual PMF bins
-        """
 
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
+        """
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
         # TODO: We end up computing the discretized PMF over and over again; we can speed this up by caching
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
 
         # Check input argument dimensions
         assert check_dimensionality(bond.type.req, unit.angstroms)
@@ -950,7 +955,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         n_divisions : int
             Number of quandrature points for drawing bond length
 
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
         check_dimensionality(r, float)
         check_dimensionality(beta, 1/unit.kilojoules_per_mole)
 
@@ -990,8 +1000,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         r : float
             Dimensionless bond length, implicitly in nanometers
 
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
 
         check_dimensionality(beta, 1/unit.kilojoules_per_mole)
 
@@ -1034,8 +1047,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             log_p_i[i] is the corresponding log probability mass of angle theta_i[i]
         bin_width : float implicitly in units of radians
             The bin width for individual PMF bins
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
         # TODO: Overhaul this method to accept unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
 
         # TODO: We end up computing the discretized PMF over and over again; we can speed this up by caching
 
@@ -1094,8 +1111,11 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         n_divisions : int
             Number of quandrature points for drawing angle
 
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
         # TODO: Overhaul this method to accept unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
 
         check_dimensionality(theta, float)
         check_dimensionality(beta, 1/unit.kilojoules_per_mole)
@@ -1136,8 +1156,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         theta : float
             Dimensionless valence angle, implicitly in radians
 
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
         check_dimensionality(beta, 1/unit.kilojoules_per_mole)
 
         theta_i, log_p_i, bin_width = self._angle_log_pmf(angle, beta, n_divisions)
@@ -1179,8 +1203,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
 
-        # Check input argument dimensions
         assert check_dimensionality(positions, unit.angstroms)
         assert check_dimensionality(r, float)
         assert check_dimensionality(theta, float)
@@ -1243,10 +1267,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             phis[i] is the torsion angle left bin edges at which the log probability logp_torsions[i] was calculated
         bin_width : float implicitly in radian
             The bin width for torsions
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
 
-        # Check that quantities are unitless
         check_dimensionality(positions, unit.angstroms)
         check_dimensionality(r, float)
         check_dimensionality(theta, float)
@@ -1331,10 +1358,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             The proposed torsion angle
         logp : float
             The log probability of the proposal
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
         # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
 
-        # Check that quantities are unitless
         check_dimensionality(positions, unit.angstroms)
         check_dimensionality(r, float)
         check_dimensionality(theta, float)
@@ -1349,7 +1379,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp = logp_torsions[index]
 
         # Draw uniformly within the bin
-        phi = np.random.uniform(phi, phi_bin_width)
+        phi = np.random.uniform(phi, bin_width)
         logp -= np.log(bin_width)
 
         assert check_dimensionality(phi, float)

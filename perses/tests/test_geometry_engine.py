@@ -108,33 +108,40 @@ class GeometryTestSystem(object):
 
 class FourAtomValenceTestSystem(GeometryTestSystem):
     """
-    This testsystem has 4 particles, and the potential for a bond, angle, torsion term.
-    The particles are 0-1-2-3 atom-bond-angle-torsion. The positions for the atoms were taken
-    from an earlier test for the geometry engine.
+    Test system containing four particles, including a bond, angle, and torsion term in the potential.
 
-    Arguments
-    ---------
-    bond : Boolean, default True
-        Whether to include the bond force term
-    angle : Boolean, default True
-        Whether to include the angle force term
-    torsion : Boolean, default True
-        Whether to include the torsion force term
+    The particles are 0-1-2-3 atom-bond-angle-torsion.
+
+    The positions for the atoms were taken from an earlier test for the geometry engine.
 
     Properties
     ----------
     internal_coordinates : array of floats
-        The r, theta, phi internal coordinates of atom 0
+        The [r, theta, phi] internal coordinates of atom 0, implicitly in units of nanometers, radians, and radians
     bond_parameters : tuple of (Quantity, Quantity)
-        The equilibrium bond length and equilibrium constant, in nanometers and kJ/(mol*nm^2), atoms 0-1
+        The (equilibrium bond length, equilibrium force constant) in units compatible with nanometers and kJ/(mol*nm^2), atoms 0-1
     angle_parameters : tuple of (Quantity, Quantity)
-        The equilibrium angle and constant, in radians and kJ/(mol*rad^2), atoms 0-1-2
+        The (equilibrium angle, force constant) in units compatible with radians and kJ/(mol*rad^2), atoms 0-1-2
     torsion_parameters : tuple of (int, Quantity, Quantity)
-        The periodicity, along with the phase and force constant in radians and kJ/mol respectively, atoms 0-1-2-3
+        The (periodicity, phase, force constant) in units compatible with radians and kJ/mol respectively, atoms 0-1-2-3
     """
-
+    # TODO: Change everything to always work in unit-bearing quantities
     def __init__(self, bond=True, angle=True, torsion=True):
+        """
+        Create a test system with four particles, including the potential for a bond, angle, torsion term.
 
+        The particles are 0-1-2-3 atom-bond-angle-torsion.
+        The positions for the atoms were taken from an earlier test for the geometry engine.
+
+        Parameters
+        ---------
+        bond : Boolean, default True
+            Whether to include the bond force term
+        angle : Boolean, default True
+            Whether to include the angle force term
+        torsion : Boolean, default True
+            Whether to include the torsion force term
+        """
         #make a simple set of positions. These are taken from another test used for testing the torsions in GeometryEngine
         self._default_positions = unit.Quantity(np.zeros([4,3]), unit=unit.nanometer)
         self._default_positions[0] = unit.Quantity(np.array([ 0.10557722 ,-1.10424644 ,-1.08578826]), unit=unit.nanometers)
@@ -144,12 +151,12 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
 
         #use parameters taken from various parts of the AlanineDipeptideTestSystem
         self._default_r0 = unit.Quantity(value=0.1522, unit=unit.nanometer)
-        self._default_bond_k = unit.Quantity(value=265265.60000000003, unit=unit.kilojoule/(unit.nanometer**2*unit.mole))
+        self._default_bond_k = unit.Quantity(value=265265.60000000003, unit=unit.kilojoules_per_mole/unit.nanometer**2)
         self._default_angle_theta0 = unit.Quantity(value=1.91113635, unit=unit.radian)
-        self._default_angle_k = unit.Quantity(value=418.40000000000003, unit=unit.kilojoule/(unit.mole*unit.radian**2))
+        self._default_angle_k = unit.Quantity(value=418.40000000000003, unit=unit.kilojoules_per_mole/unit.radian**2)
         self._default_torsion_periodicity = 2
         self._default_torsion_phase = unit.Quantity(value=np.pi/2.0, unit=unit.radians)
-        self._default_torsion_k = unit.Quantity(value=20.0, unit=unit.kilojoule/unit.mole)
+        self._default_torsion_k = unit.Quantity(value=20.0, unit=unit.kilojoules_per_mole)
 
         #set up a topology with the appropriate atoms (make them all carbon)
         self._topology = app.Topology()
@@ -195,7 +202,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
 
         #initialize class memers with the appropriate values
         self._positions = self._default_positions
-        self._integrator = openmm.VerletIntegrator(1)
+        self._integrator = openmm.VerletIntegrator(0.0)
         self._platform = openmm.Platform.getPlatformByName("Reference") #use reference for stability
 
         #create a context and set positions so we can get potential energies
@@ -206,7 +213,7 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
     def internal_coordinates(self):
         """Internal coordinates (r, theta, phi) as tuple of floats (implicitly in simtk.unit.md_unit_system)"""
         # TODO: Why does getting the internal coordinates return floats while setting the internal coordinates requires unit-bearing quantities?
-        positions_without_units = self._positions.value_in_unit(unit.nanometer)
+        positions_without_units = self._positions.value_in_unit(unit.nanometer).astype(np.float64)
         internals = coordinate_numba.cartesian_to_internal(positions_without_units[0], positions_without_units[1], positions_without_units[2], positions_without_units[3])
         return internals
 
@@ -221,17 +228,17 @@ class FourAtomValenceTestSystem(GeometryTestSystem):
 
     @property
     def bond_parameters(self):
-        """Bond parameters (r0, k) as tuple of unit-bearing quantities"""
+        """Bond parameters (r0, k) as tuple of (Quantity, Quantity) unit-bearing quantities"""
         return (self._default_r0, self._default_bond_k)
 
     @property
     def angle_parameters(self):
-        """Angle parmeters (theta0, k) as tuple of unit-bearing quantities"""
+        """Angle parmeters (theta0, k) as tuple of (Quantity, Quantity) unit-bearing quantities"""
         return (self._default_angle_theta0, self._default_angle_k)
 
     @property
     def torsion_parameters(self):
-        """Torsion parameters (periodicity, phase, k) as tuple of unit-bearing quantities"""
+        """Torsion parameters (periodicity, phase, k) as tuple of (Quantity, int, Quantity) unit-bearing quantities"""
         return (self._default_torsion_periodicity, self._default_torsion_phase, self._default_torsion_k)
 
 def test_propose_bond():
@@ -335,8 +342,9 @@ def test_propose_angle():
 
 def test_bond_logq():
     """
-    Compare the bond logq (log unnormalized probability) calculated by the geometry engine to the log-unnormalized
-    probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature).
+    Compare the bond logq (log probability) calculated by the geometry engine to the log-unnormalized
+    probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature)
+    including the r^2 Jacobian term.
     """
     NDIVISIONS = 1000 # number of divisions to test
     TOLERANCE = 1.0e-2 # logP deviation tolerance
@@ -359,9 +367,9 @@ def test_bond_logq():
     sigma_without_units = sigma.value_in_unit(unit.nanometer)
     r0_without_units = r0.value_in_unit(unit.nanometer)
 
-    #Create a set of bond lengths to test from r0 - 6*sigma to r0 + 6*sigma
-    r_min = max(0, r0_without_units - 5.0*sigma_without_units)
-    r_max = r0_without_units + 5.9*sigma_without_units
+    #Create a set of bond lengths to test from r0 - 6*sigma to r0 + 2*sigma
+    r_min = max(0, r0_without_units - 2.0*sigma_without_units)
+    r_max = r0_without_units + 2.0*sigma_without_units
     bond_range = np.linspace(r_min, r_max, NDIVISIONS)
 
     #Extract the internal coordinates and add units.
@@ -373,29 +381,28 @@ def test_bond_logq():
 
     #Loop through the bond lengths and make sure the unnormalized log probability calculated by the geometry engine (logq)
     #matches that calculated by openmm (-beta*potential_energy) after normalization within 1.0e-6 tolerance
-    bond_logp_openmm = np.zeros(bond_range.shape)
-    bond_logp_ge = np.zeros(bond_range.shape)
+    logp_openmm = np.zeros(bond_range.shape)
+    logp_ge = np.zeros(bond_range.shape)
     for i, bond_length in enumerate(bond_range):
-        bond_logp_ge[i] = geometry_engine._bond_logp(bond_length, bond_with_units, beta, NDIVISIONS)
+        logp_ge[i] = geometry_engine._bond_logp(bond_length, bond_with_units, beta, NDIVISIONS)
         internal_coordinates[0] = bond_length
         testsystem.internal_coordinates = internal_coordinates
-        bond_logp_openmm[i] = 2.0*np.log(bond_length) - beta*testsystem.energy
+        logp_openmm[i] = 2.0*np.log(bond_length) - beta*testsystem.energy # Jacobian is included
 
-    # Normalize OpenMM logp
-    from scipy.special import logsumexp
-    bond_logp_openmm -= logsumexp(bond_logp_openmm)
-    bond_logp_ge -= logsumexp(bond_logp_ge)
+    # Because we don't know the normalizing constant for the OpenMM logp, find optimal additive constant
+    logp_openmm += logp_ge.mean() - logp_openmm.mean()
 
-    if not np.allclose(bond_logp_openmm, bond_logp_ge, atol=TOLERANCE):
-        msg  = "Bond logq did not match openmm:\n"
-        msg += "OpenMM: {}\n".format(bond_logp_openmm)
-        msg += "logq  : {}\n".format(bond_logp_ge)
+    # Check that all values in computed range are close
+    max_deviation = (abs(logp_openmm - logp_ge)).max()
+    if max_deviation > TOLERANCE:
+        msg  = "Max deviation exceeded: {} (tolerance {})".format(max_deviation, TOLERANCE)
         raise Exception(msg)
 
-def test_angle_logq():
+def test_angle_logp():
     """
-    Compare the angle logq (log unnormalized probability) calculated by the geometry engine to the log-unnormalized
-    probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature).
+    Compare the angle logp (log probability) calculated by the geometry engine to the log-unnormalized
+    probability calculated by openmm (-beta*potential_energy, where beta is inverse temperature)
+    including the sin(theta) Jacobian term.
     """
     NDIVISIONS = 360
     TOLERANCE = 1.0e-2 # logP deviation tolerance
@@ -418,29 +425,26 @@ def test_angle_logq():
     r, theta, phi = internal_coordinates # float, implicitly in md_unit_system
 
     #Get a range of test points for the angle from 0 to pi, and add units
-    EPSILON = 1.0e-3 # we can't exactly have 0 or pi
+    EPSILON = 0.1 # we can't exactly have 0 or pi
     angle_test_range = np.linspace(EPSILON, np.pi-EPSILON, num=NDIVISIONS, endpoint=False)
 
     #Loop through the test points for the angle and calculate the log-unnormalized probability of each using
     #geometry engine and openmm (-beta*potential_energy) where beta is inverse temperature. Tolerance 1.0e-4,
     #because this tries a range of angles well outside what one would typically see.
-    angle_logp_openmm = np.zeros(angle_test_range.shape)
-    angle_logp_ge = np.zeros(angle_test_range.shape)
+    logp_openmm = np.zeros(angle_test_range.shape)
+    logp_ge = np.zeros(angle_test_range.shape)
     for i, test_angle in enumerate(angle_test_range):
-        angle_logp_ge[i] = geometry_engine._angle_logp(test_angle, angle_with_units, beta, NDIVISIONS)
+        logp_ge[i] = geometry_engine._angle_logp(test_angle, angle_with_units, beta, NDIVISIONS)
         internal_coordinates[1] = test_angle
         testsystem.internal_coordinates = internal_coordinates
-        angle_logp_openmm[i] = np.log(np.sin(test_angle)) - beta*testsystem.energy
+        logp_openmm[i] = np.log(np.sin(test_angle)) - beta*testsystem.energy # Jacobian is included
 
-    # Normalize OpenMM logp
-    from scipy.special import logsumexp
-    angle_logp_openmm -= logsumexp(angle_logp_openmm)
-    angle_logp_ge -= logsumexp(angle_logp_ge)
+    # Because we don't know the normalizing constant for the OpenMM logp, find optimal additive constant
+    logp_openmm += logp_ge.mean() - logp_openmm.mean()
 
-    if not np.allclose(angle_logp_openmm, angle_logp_ge, atol=TOLERANCE):
-        msg  = "Angle logq did not match openmm:\n"
-        msg += "OpenMM: {}\n".format(angle_logp_openmm)
-        msg += "logq  : {}\n".format(angle_logp_ge)
+    max_deviation = (abs(logp_openmm - logp_ge)).max()
+    if max_deviation > TOLERANCE:
+        msg  = "Max deviation exceeded: {} (tolerance {})".format(max_deviation, TOLERANCE)
         raise Exception(msg)
 
 def test_add_bond_units():
