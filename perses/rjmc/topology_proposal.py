@@ -27,7 +27,6 @@ from io import StringIO
 import openmoltools
 import base64
 import logging
-import time
 import progressbar
 from typing import List, Dict
 try:
@@ -1885,26 +1884,23 @@ class SystemGenerator(object):
         new_system : openmm.System
             A system object generated from the topology
         """
-        _logger.info('Generating System...')
-        timer_start = time.time()
+        # TODO: Write some debug info if exception is raised
+        system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
 
-        try:
-            system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
-        except Exception as e:
-            from simtk import unit
-            nparticles = sum([1 for atom in new_topology.atoms()])
-            positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.angstroms)
-            # Write PDB file of failed topology
-            from simtk.openmm.app import PDBFile
-            outfile = open('BuildSystem-failure.pdb', 'w')
-            pdbfile = PDBFile.writeFile(new_topology, positions, outfile)
-            outfile.close()
-            msg = str(e)
-            import traceback
-            msg += traceback.format_exc(e)
-            msg += "\n"
-            msg += "PDB file written as 'BuildSystem-failure.pdb'"
-            raise Exception(msg)
+            #from simtk import unit
+            #nparticles = sum([1 for atom in new_topology.atoms()])
+            #positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.angstroms)
+            ## Write PDB file of failed topology
+            #from simtk.openmm.app import PDBFile
+            #outfile = open('BuildSystem-failure.pdb', 'w')
+            #pdbfile = PDBFile.writeFile(new_topology, positions, outfile)
+            #outfile.close()
+            #msg = str(e)
+            #import traceback
+            #msg += traceback.format_exc(e)
+            #msg += "\n"
+            #msg += "PDB file written as 'BuildSystem-failure.pdb'"
+            #raise Exception(msg)
 
         # Add barostat if requested.
         if self._barostat is not None:
@@ -1917,8 +1913,6 @@ class SystemGenerator(object):
         # DEBUG: See if any torsions have duplicate atoms.
         #from perses.tests.utils import check_system
         #check_system(system)
-
-        _logger.info('System generation took %.3f s' % (time.time() - timer_start))
 
         return system
 
@@ -2180,7 +2174,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             The first index of the small molecule
         """
         _logger.info('Building new Topology object...')
-        timer_start = time.time()
 
         oemol_proposed.SetTitle(oemol_proposed.GetTitle())
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
@@ -2190,8 +2183,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Copy periodic box vectors.
         if current_receptor_topology._periodicBoxVectors != None:
             new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
-
-        _logger.info('Topology generation took %.3f s' % (time.time() - timer_start))
 
         return new_topology
 
@@ -2237,9 +2228,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         matches : list of match
             list of the matches between the molecules
         """
-        _logger.info('Generating atom map...')
-        timer_start = time.time()
-
         atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
 
@@ -2375,7 +2363,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
             new_to_old_atom_map[new_index] = old_index
 
-        _logger.info('Atom map took %.3f s' % (time.time() - timer_start))
         return new_to_old_atom_map
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):

@@ -1284,8 +1284,7 @@ def test_existing_coordinates():
         atom2_position = pos[torsion.atom2.idx]
         atom3_position = pos[torsion.atom3.idx]
         atom4_position = pos[torsion.atom4.idx]
-        _internal_coordinates, _ = geometry_engine._cartesian_to_internal(atom1_position, atom2_position, atom3_position, atom4_position)
-        internal_coordinates = internal_in_unit(_internal_coordinates)
+        internal_coordinates, _ = geometry_engine._cartesian_to_internal(atom1_position, atom2_position, atom3_position, atom4_position)
         recalculated_atom1_position, _ = geometry_engine._internal_to_cartesian(atom2_position, atom3_position, atom4_position, internal_coordinates[0], internal_coordinates[1], internal_coordinates[2])
         n = np.linalg.norm(atom1_position-recalculated_atom1_position)
         print(n)
