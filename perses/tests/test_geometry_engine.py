@@ -1449,6 +1449,7 @@ def _get_capped_amino_acid(amino_acid='ALA'):
     source oldff/leaprc.ff99SBildn
     system = sequence {{ ACE {amino_acid} NME }}
     saveamberparm system {amino_acid}.prmtop {amino_acid}.inpcrd
+    quit
     """.format(amino_acid=amino_acid)
     cwd = os.getcwd()
     temp_dir = tempfile.mkdtemp()

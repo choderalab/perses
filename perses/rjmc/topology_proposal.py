@@ -2,8 +2,11 @@
 This file contains the base classes for topology proposals
 """
 
-import simtk.openmm as openmm
-import simtk.openmm.app as app
+from simtk import unit
+
+from simtk import openmm
+from simtk.openmm import app
+
 from collections import namedtuple
 import copy
 import warnings
@@ -20,10 +23,7 @@ from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.storage import NetCDFStorageView
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import StringIO
+from io import StringIO
 import openmoltools
 import base64
 import logging
@@ -40,6 +40,7 @@ except ImportError:
 ################################################################################
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
+#OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
 #DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
 #DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
@@ -74,19 +75,20 @@ def append_topology(destination_topology, source_topology, exclude_residue_name=
         exclude_residue_name = "   " #something with 3 characters that is never a residue name
     newAtoms = {}
     for chain in source_topology.chains():
-        newChain = destination_topology.addChain(chain.id)
+        new_chain = destination_topology.addChain(chain.id)
         for residue in chain.residues():
+            # TODO: should we use complete residue names?
             if (residue.name[:3] == exclude_residue_name[:3]):
                 continue
-            newResidue = destination_topology.addResidue(residue.name, newChain, residue.id)
+            new_residue = destination_topology.addResidue(residue.name, new_chain, residue.id)
             for atom in residue.atoms():
-                newAtom = destination_topology.addAtom(atom.name, atom.element, newResidue, atom.id)
-                newAtoms[atom] = newAtom
+                new_atom = destination_topology.addAtom(atom.name, atom.element, new_residue, atom.id)
+                new_atoms[atom] = new_atom
     for bond in source_topology.bonds():
-        if (bond[0].residue.name[:3]==exclude_residue_name[:3]) or (bond[1].residue.name[:3]==exclude_residue_name[:3]):
+        if (bond[0].residue.name[:3] == exclude_residue_name[:3]) or (bond[1].residue.name[:3] == exclude_residue_name[:3]):
             continue
-        # TODO: Preserve bond order info using extended OpenMM API
-        destination_topology.addBond(newAtoms[bond[0]], newAtoms[bond[1]])
+        order = bond.order
+        destination_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]], order=order)
 
 def deepcopy_topology(source_topology):
     """
@@ -130,12 +132,12 @@ class SmallMoleculeAtomMapper(object):
             self._atom_expr = DEFAULT_ATOM_EXPRESSION
         else:
             self._atom_expr = atom_match_expression
-        
+
         if bond_match_expression is None:
             self._bond_expr = DEFAULT_BOND_EXPRESSION
         else:
             self._bond_expr = bond_match_expression
-        
+
         self._molecules_mapped = False
         self._molecule_maps = {}
         self._failed_molecule_maps = {}
@@ -150,7 +152,7 @@ class SmallMoleculeAtomMapper(object):
         It does not ensure that constraints do not change--use verify_constraints to check that property. This method is idempotent--running it a second
         time will have no effect.
         """
-        
+
         if self._molecules_mapped:
             _logger.info("The molecules have already been mapped. Returning.")
             return
@@ -175,9 +177,9 @@ class SmallMoleculeAtomMapper(object):
 
                 current_index += 1
                 bar.update(current_index)
-            
+
         self._molecules_mapped = True
-    
+
     def get_atom_maps(self, smiles_A: str, smiles_B: str) -> List[Dict]:
         """
         Given two canonical smiles strings, get the atom maps.
@@ -222,10 +224,10 @@ class SmallMoleculeAtomMapper(object):
         proposal_matrix = self._create_proposal_matrix()
         adjacency_matrix = proposal_matrix > 0.0
         graph = nx.from_numpy_array(adjacency_matrix)
-        
+
         if not nx.is_connected(graph):
             _logger.warn("The graph of proposals is not connected! Some molecules will be unreachable.")
-        
+
         self._proposal_matrix = proposal_matrix
 
     def _create_proposal_matrix(self) -> np.array:
@@ -239,17 +241,17 @@ class SmallMoleculeAtomMapper(object):
             The proposal matrix
         """
         proposal_matrix = np.zeros([self._n_molecules, self._n_molecules])
-        
+
         for smiles_pair, atom_maps in self._molecule_maps.items():
 
             #retrieve the smiles strings of these molecules
             molecule_A = smiles_pair[0]
             molecule_B = smiles_pair[1]
-            
+
             #retrieve the indices of these molecules from the list of smiles
             molecule_A_idx = self._unique_smiles_list.index(molecule_A)
             molecule_B_idx = self._unique_smiles_list.index(molecule_B)
-            
+
             #if there are no maps, we can't propose
             if len(atom_maps) == 0:
                 proposal_matrix[molecule_A_idx, molecule_B_idx] = 0.0
@@ -280,11 +282,11 @@ class SmallMoleculeAtomMapper(object):
             print("The following molecules are unproposable:\n")
             print(failed_molecules)
             raise ValueError("Some molecules could not be proposed. Make sure the atom mapping criteria do not completely exclude a molecule.")
-        
+
         normalized_proposal_matrix = proposal_matrix / normalizing_constants[:, np.newaxis]
 
         return normalized_proposal_matrix
-    
+
     @staticmethod
     def _canonicalize_smiles(mol: oechem.OEMol) -> str:
         """
@@ -301,10 +303,10 @@ class SmallMoleculeAtomMapper(object):
         """
         iso_can_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
         return iso_can_smiles
-    
+
     def _map_atoms(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, exhaustive: bool=True) -> List[Dict]:
         """
-        Run the mapping on the two input molecules. This will return a list of atom maps. 
+        Run the mapping on the two input molecules. This will return a list of atom maps.
         This is an internal method that is only intended to be used by other methods of this class.
 
         Arguments
@@ -315,7 +317,7 @@ class SmallMoleculeAtomMapper(object):
             The second oemol of the pair
         exhaustive: bool, default True
             Whether to use an exhaustive procedure for enumerating MCS matches. Default True, but for large molecules,
-            may be prohibitively slow. 
+            may be prohibitively slow.
 
         Returns
         -------
@@ -325,16 +327,16 @@ class SmallMoleculeAtomMapper(object):
             will be returned separately.
         failed_atom_matches : list of dict
             This is a list of atom maps that cannot be used for geometry proposals. It is returned for debugging purposes.
-        """    
+        """
 
         oegraphmol_current = oechem.OEGraphMol(moleculeA) # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(moleculeB) # target molecule
-        
+
         if exhaustive:
             mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
         else:
             mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
-           
+
         mcs.Init(oegraphmol_current, self._atom_expr, self._bond_expr)
 
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
@@ -377,7 +379,7 @@ class SmallMoleculeAtomMapper(object):
                 atom_matches.append(a_to_b_atom_map)
             else:
                 failed_atom_matches.append(a_to_b_atom_map)
-        
+
         return atom_matches, failed_atom_matches
 
     def _valid_match(self, moleculeA: oechem.OEMol, moleculeB: oechem.OEMol, a_to_b_mapping: Dict[int, int]) -> bool:
@@ -409,14 +411,14 @@ class SmallMoleculeAtomMapper(object):
     def _can_make_proposal(self, graph: nx.Graph, mapped_atoms: List) -> bool:
         """
         Check whether a given setup (molecule graph along with mapped atoms) can be proposed.
-        
+
         Arguments
         ---------
         graph: nx.Graph
             The molecule represented as a NetworkX graph
         mapped_atoms : list
             The list of atoms that have been mapped
-        
+
         Returns
         -------
         can_make_proposal : bool
@@ -427,7 +429,7 @@ class SmallMoleculeAtomMapper(object):
         total_atoms = set(range(graph.number_of_nodes()))
         unmapped_atoms = total_atoms - set(mapped_atoms)
         mapped_atoms_set = set(mapped_atoms)
-         
+
         #find the set of atoms that are unmapped, but on the boundary with those that are mapped
         boundary_atoms = nx.algorithms.node_boundary(graph, unmapped_atoms, mapped_atoms)
 
@@ -442,7 +444,7 @@ class SmallMoleculeAtomMapper(object):
                     shortest_path = nx.shortest_path(graph, source=atom, target=other_atom)
                     if len(mapped_atoms_set.intersection(shortest_path)) == 3:
                         proposable = True
-        
+
         return proposable
 
     def _mol_to_graph(self, molecule: oechem.OEMol) -> nx.Graph:
@@ -453,7 +455,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         molecule : oechem.OEMol
             Molecule to convert to a graph
-        
+
         Returns
         -------
         g : nx.Graph
@@ -464,7 +466,7 @@ class SmallMoleculeAtomMapper(object):
             g.add_node(atom.GetIdx())
         for bond in molecule.GetBonds():
             g.add_edge(bond.GetBgnIdx(), bond.GetEndIdx(), bond=bond)
-        
+
         return g
 
     def _initialize_oemols(self, list_of_smiles: List[str]) -> Dict[str, oechem.OEMol]:
@@ -475,7 +477,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         list_of_smiles : list of str
             list of smiles strings to use
-        
+
         Returns
         -------
         dict_of_oemol : dict of oechem.OEmol
@@ -503,7 +505,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         smiles_string : str
             The smiles string for which to retrieve the OEMol. Only pre-existing OEMols are allowed
-        
+
         Returns
         -------
         mol : oechem.OEMol
@@ -519,7 +521,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         smiles : str
             Canonicalized smiles string to retrieve molecule
-        
+
         Returns
         -------
         mol_index : int
@@ -599,7 +601,7 @@ class SmallMoleculeAtomMapper(object):
             JSON string representing this class
         """
         json_dict = {}
-        
+
         #first, save all the things that are not too difficult to put into JSON
         json_dict['molecule_maps'] = {"_".join(smiles_names): maps for smiles_names, maps in self._molecule_maps.items()}
         json_dict['molecules_mapped'] = self._molecules_mapped
@@ -631,7 +633,7 @@ class SmallMoleculeAtomMapper(object):
         ---------
         json_string : str
             The JSON string representing the serialized class
-        
+
         Returns
         -------
         atom_mapper : SmallMoleculeAtomMapper
@@ -665,11 +667,11 @@ class SmallMoleculeAtomMapper(object):
     @property
     def proposal_matrix(self):
         return self._proposal_matrix
-    
+
     @property
     def n_molecules(self):
         return self._n_molecules
-    
+
     @property
     def smiles_list(self):
         return self._unique_smiles_list
@@ -765,8 +767,8 @@ class TopologyProposal(object):
         self._old_chemical_state_key = old_chemical_state_key
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
-        self._unique_new_atoms = list(set(range(self._new_topology._numAtoms))-set(self._new_to_old_atom_map.keys()))
-        self._unique_old_atoms = list(set(range(self._old_topology._numAtoms))-set(self._new_to_old_atom_map.values()))
+        self._unique_new_atoms = list(set(range(self._new_topology.getNumAtoms()))-set(self._new_to_old_atom_map.keys()))
+        self._unique_old_atoms = list(set(range(self._old_topology.getNumAtoms()))-set(self._new_to_old_atom_map.values()))
         self._old_alchemical_atoms = set(old_alchemical_atoms) if (old_alchemical_atoms is not None) else {atom for atom in range(old_system.getNumParticles())}
         self._new_alchemical_atoms = set(self._old_to_new_atom_map.values()).union(self._unique_new_atoms)
         self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
@@ -896,12 +898,40 @@ class ProposalEngine(object):
         raise NotImplementedError("This ProposalEngine does not expose a list of possible chemical states.")
 
 class PolymerProposalEngine(ProposalEngine):
-    def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True):
+    """
+    """
+
+    # TODO: Eliminate 'verbose' option in favor of logging
+
+    def __init__(self, system_generator, chain_id, proposal_metadata=None, verbose=False, always_change=True, aggregate=False):
+        """
+        Create a polymer proposal engine
+
+        Parameters
+        ----------
+        system_generator : SystemGenerator
+            The SystemGenerator to use to generate perturbed systems
+        chain_id : str
+            The chain identifier in the Topology object to be mutated
+        proposal_metadata : dict, optional, default=None
+            Any metadata to be maintained
+        verbose : bool, optional, default=False
+            If True, will generate verbose output
+        always_change : bool, optional, default=True
+            If True, will not propose self transitions
+        aggregate : bool, optional, default=False
+            ???????
+
+        """
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
-        self._chain_id = chain_id
+        self._chain_id = chain_id # Chain ID to be mutated
+        self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
+                        'SER', 'THR', 'TRP', 'TYR', 'VAL']  # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
+        self._aggregate = aggregate # ?????????
 
     def propose(self, current_system, current_topology, current_metadata=None):
         """
+        Generate a TopologyProposal
 
         Arguments
         ---------
@@ -928,7 +958,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Check that old_topology and old_system have same number of atoms.
         old_system = current_system
-        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_topology_natoms = old_topology.getNumAtoms()  # number of topology atoms
         old_system_natoms = old_system.getNumParticles()
         if old_topology_natoms != old_system_natoms:
             msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
@@ -936,71 +966,95 @@ class PolymerProposalEngine(ProposalEngine):
 
         # metadata : dict, key = 'chain_id' , value : str
         metadata = current_metadata
-        if metadata == None:
+        if metadata is None:
             metadata = dict()
         # old_chemical_state_key : str
         old_chemical_state_key = self.compute_state_key(old_topology)
 
-        # chain_id : str
-        chain_id = self._chain_id
-        # save old indices for mapping -- could just directly save positions instead
+        # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
+        index_to_new_residues, metadata = self._choose_mutant(old_topology, metadata)
 
-        # EDITING new_topology
-        # atom : simtk.openmm.app.topology.Atom
-        for atom in new_topology.atoms():
-            # atom.old_index : int
-            atom.old_index = atom.index
+        # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter name of proposed residue))
+        residue_map = self._generate_residue_map(old_topology, index_to_new_residues)
 
-        index_to_new_residues, metadata = self._choose_mutant(new_topology, metadata)
-        # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue))
-        residue_map = self._generate_residue_map(new_topology, index_to_new_residues)
+
         for (res, new_name) in residue_map:
             if res.name == new_name:
                 del(index_to_new_residues[res.index])
         if len(index_to_new_residues) == 0:
             atom_map = dict()
-            for atom in new_topology.atoms():
+            for atom in old_topology.atoms():
                 atom_map[atom.index] = atom.index
             if self.verbose: print('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
             topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
             return topology_proposal
 
+        elif len(index_to_new_residues) > 1:
+            raise Exception("Attempting to mutate more than one residue at once: ", index_to_new_residues, " The geometry engine cannot handle this.")
 
-        # new_topology : simtk.openmm.app.Topology extra atoms from old residue have been deleted, missing atoms in new residue not yet added
-        # missing_atoms : dict, key : simtk.openmm.app.topology.Residue, value : list(simtk.openmm.app.topology._TemplateAtomData)
-        new_topology, missing_atoms = self._delete_excess_atoms(new_topology, residue_map)
-        # new_topology : simtk.openmm.app.Topology new residue has all correct atoms for desired mutation
-        new_topology = self._add_new_atoms(new_topology, missing_atoms, residue_map)
+        # Add modified_aa property to residues in old topology
+        for res in old_topology.residues():
+            res.modified_aa = True if res.index in index_to_new_residues.keys() else False
 
+        # Identify differences between old topology and proposed changes
+        # excess_atoms : list(simtk.openmm.app.topology.Atom) atoms from existing residue not in new residue
+        # excess_bonds : list(tuple (simtk.openmm.app.topology.Atom, simtk.openmm.app.topology.Atom)) bonds from existing residue not in new residue
+        # missing_bonds : list(tuple (simtk.openmm.app.topology._TemplateAtomData, simtk.openmm.app.topology._TemplateAtomData)) bonds from new residue not in existing residue
+        excess_atoms, excess_bonds, missing_atoms, missing_bonds = self._identify_differences(old_topology, residue_map)
+
+        # Delete excess atoms and bonds from old topology
+        excess_atoms_bonds = excess_atoms + excess_bonds
+        new_topology = self._delete_atoms(old_topology, excess_atoms_bonds)
+
+        # Add missing atoms and bonds to new topology
+        new_topology = self._add_new_atoms(new_topology, missing_atoms, missing_bonds, residue_map)
+
+        # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         atom_map = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
 
         # new_chemical_state_key : str
         new_chemical_state_key = self.compute_state_key(new_topology)
         # new_system : simtk.openmm.System
+
+        # Copy periodic box vectors from current topology
+        new_topology.setPeriodicBoxVectors(current_topology.getPeriodicBoxVectors())
+
+        # Build system
         new_system = self._system_generator.build_system(new_topology)
 
+        # Adjust logp_propose based on HIS presence
+        his_residues = ['HID', 'HIE']
+        old_residue = residue_map[0][0]
+        proposed_residue = residue_map[0][1]
+        if old_residue.name in his_residues and proposed_residue not in his_residues:
+            logp_propose = math.log(2)
+        elif old_residue.name not in his_residues and proposed_residue in his_residues:
+            logp_propose = math.log(0.5)
+        else:
+            logp_propose = 0.0
+
         # Create TopologyProposal.
-        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
+        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=logp_propose, new_to_old_atom_map=atom_map)
 
         # Check that old_topology and old_system have same number of atoms.
-#        old_system = current_system
-        old_topology_natoms = sum([1 for atom in old_topology.atoms()]) # number of topology atoms
+        old_topology_natoms = old_topology.getNumAtoms()  # number of topology atoms
         old_system_natoms = old_system.getNumParticles()
         if old_topology_natoms != old_system_natoms:
             msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
             raise Exception(msg)
 
         # Check that new_topology and new_system have same number of atoms.
-        new_topology_natoms = sum([1 for atom in new_topology.atoms()]) # number of topology atoms
+        new_topology_natoms = new_topology.getNumAtoms()  # number of topology atoms
         new_system_natoms = new_system.getNumParticles()
         if new_topology_natoms != new_system_natoms:
             msg = 'PolymerProposalEngine: new_topology has %d atoms, while new_system has %d atoms' % (new_topology_natoms, new_system_natoms)
             raise Exception(msg)
-                    # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
+
+        # Check to make sure no out-of-bounds atoms are present in new_to_old_atom_map
         natoms_old = topology_proposal.old_system.getNumParticles()
         natoms_new = topology_proposal.new_system.getNumParticles()
         if not set(topology_proposal.new_to_old_atom_map.values()).issubset(range(natoms_old)):
-            msg = "Some old atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_old
+            msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of new atoms (1..%d):\n" % natoms_new
             msg += str(topology_proposal.new_to_old_atom_map)
             raise Exception(msg)
         if not set(topology_proposal.new_to_old_atom_map.keys()).issubset(range(natoms_new)):
@@ -1374,10 +1428,18 @@ class PolymerProposalEngine(ProposalEngine):
 
 class PointMutationEngine(PolymerProposalEngine):
     """
-    Arguments
-    --------
+    A ProposalEngine for allowing point mutations of a biopolymer component of the system to be specified.
+
+    Note: When instantiating this class, be sure to include cap residues ('ACE', 'NME') in the input topology.
+    Otherwise, mutating the first residue will result in a residue template mismatch.
+    See openmmtools/data/alanine-dipeptide-gbsa/alanine-dipeptide.pdb for reference.
+
+    Parameters
+    ----------
     wildtype_topology : openmm.app.Topology
+        OpenMM Topology containing wild-type biopolymer
     system_generator : SystemGenerator
+        System generator to use for generating parameterized System objects
     chain_id : str
         id of the chain to mutate
         (using the first chain with the id, if there are multiple)
@@ -1387,15 +1449,18 @@ class PointMutationEngine(PolymerProposalEngine):
         default = None
     residues_allowed_to_mutate : list(str) -- OPTIONAL
         default = None
-    allowed_mutations : list(list(tuple)) -- OPTIONAL
+        Contains residue ids
+        If not specified, engine assumes all residues (except ACE and NME caps) may be mutated.
+    allowed_mutations : list(tuple) -- OPTIONAL
         default = None
         ('residue id to mutate','desired mutant residue name (3-letter code)')
         Example:
             Desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q
             allowed_mutations = [
-                [('99','ALA')],
-                [('99','ALA'),('102','GLN')]
+                ('99','ALA'),
+                ('102','GLN')
             ]
+        If this is not specified, the engine will propose a random amino acid at a random location.
     always_change : Boolean -- OPTIONAL, default True
         Have the proposal engine always propose another mutation
         If allowed_mutations is not specified, always_change will require ALL
@@ -1405,6 +1470,13 @@ class PointMutationEngine(PolymerProposalEngine):
         eg: if old topology included L99A and M102Q, the new proposal cannot
             include L99A OR M102Q
         (This is only relevant in cases where max_point_mutants > 1)
+    aggregate : Boolean -- OPTIONAL
+        default = False
+        Have the proposal engine aggregate mutations.
+        If aggregate is set to False, the engine will undo mutants in the current topology such that the next proposal
+        if the WT state
+        If aggregate is set to True, the engine will not undo the mutants from the current topology, thereby allowing
+        each proposal to contain multiple mutations.
     """
 
     def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=None, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True):
@@ -2471,7 +2543,7 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         self._proposal_matrix = self._atom_mapper.proposal_matrix
 
         self._n_molecules = self._atom_mapper.n_molecules
-        
+
         super(PremappedSmallMoleculeSetProposalEngine, self).__init__(self._atom_mapper.smiles_list, system_generator, residue_name=residue_name,
                  proposal_metadata=None, storage=storage,
                  always_change=True)
