@@ -1813,9 +1813,6 @@ class SystemGenerator(object):
         new_system : openmm.System
             A system object generated from the topology
         """
-        _logger.info('Generating System...')
-        timer_start = time.time()
-
         try:
             system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
         except Exception as e:
@@ -1845,8 +1842,6 @@ class SystemGenerator(object):
         # DEBUG: See if any torsions have duplicate atoms.
         #from perses.tests.utils import check_system
         #check_system(system)
-
-        _logger.info('System generation took %.3f s' % (time.time() - timer_start))
 
         return system
 
@@ -2303,7 +2298,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
             new_to_old_atom_map[new_index] = old_index
 
-        _logger.info('Atom map took %.3f s' % (time.time() - timer_start))
         return new_to_old_atom_map
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
