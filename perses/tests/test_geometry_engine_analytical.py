@@ -540,7 +540,7 @@ class AnalyticalBeadSystems(object):
 
 
 
-    def work_comparison(self, printer=True):
+    def work_comparison(self, printer=False):
         """
         Function to compute variance of forward and backward works, and to add the work arrays pairwise
 
