@@ -48,7 +48,7 @@ class HybridTopologyFactory(object):
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
     _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, softcore_beta=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False):
         """
         Initialize the Hybrid topology factory.
 
@@ -74,9 +74,6 @@ class HybridTopologyFactory(object):
             classic: original scheme used by this code. All alchemical atoms interpolate to 0.25 * softcore at lambda=0.5, but don't use softcore at endpoints.
         softcore_alpha: float, default None
             "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
-        softcore_beta: unit, default None
-            "beta" parameter of softcore electrostatics. If None is provided, value will be set to 12*unit.angstrom**2
-            Must have dimension distance^2 if provided.
         bond_softening_constant : float
             For bonds between unique atoms and unique-core atoms, soften the force constant at the "dummy" endpoint by this factor.
             If 1.0, do not soften
@@ -116,13 +113,6 @@ class HybridTopologyFactory(object):
         else:
             # TODO: Check that softcore_alpha is in a valid range
             self.softcore_alpha = softcore_alpha
-
-        if softcore_beta is None:
-            # TODO: Refactor so that softcore_beta is unitless to match softcore_alpha
-            self.softcore_beta = 12*unit.angstrom**2
-        else:
-            # TODO: Check that softcore_beta is in a valid range and has correct units
-            self.softcore_beta = softcore_beta
 
         if softcore_method not in self._known_softcore_methods:
             raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
@@ -179,10 +169,6 @@ class HybridTopologyFactory(object):
         if "MonteCarloBarostat" in self._old_system_forces.keys():
             barostat = copy.deepcopy(self._old_system_forces["MonteCarloBarostat"])
             self._hybrid_system.addForce(barostat)
-
-        #initialize unitless softcore beta
-        # TODO: We should instead use a dimensionless definition of softcore_beta
-        self.softcore_beta = self.softcore_beta.value_in_unit_system(unit.md_unit_system)
 
         #Copy over the box vectors:
         box_vectors = self._old_system.getDefaultPeriodicBoxVectors()
@@ -586,18 +572,18 @@ class HybridTopologyFactory(object):
         # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
         # Select functional form based on nonbonded method.
         if self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
-            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_nocutoff()
+            sterics_energy_expression = self._nonbonded_custom_nocutoff()
         elif self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
             epsilon_solvent = self._old_system_forces['NonbondedForce'].getReactionFieldDielectric()
             r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_cutoff(epsilon_solvent, r_cutoff)
+            sterics_energy_expression = self._nonbonded_custom_cutoff(epsilon_solvent, r_cutoff)
             standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
             delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
             r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-            sterics_energy_expression, electrostatics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
+            sterics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
             standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
             standard_nonbonded_force.setEwaldErrorTolerance(delta)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
@@ -606,9 +592,8 @@ class HybridTopologyFactory(object):
 
         standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
         sterics_energy_expression += self._nonbonded_custom_sterics_common()
-        electrostatics_energy_expression += self._nonbonded_custom_electrostatics_common()
 
-        sterics_mixing_rules, electrostatics_mixing_rules = self._nonbonded_custom_mixing_rules()
+        sterics_mixing_rules = self._nonbonded_custom_mixing_rules()
 
         custom_nonbonded_method = self._translate_nonbonded_method_to_custom(self._nonbonded_method)
 
@@ -695,37 +680,6 @@ class HybridTopologyFactory(object):
 
         return sterics_addition
 
-    def _nonbonded_custom_electrostatics_common(self):
-        """
-        Get a custom electrostatics expression that is common to all nonbonded methods
-
-        Returns
-        -------
-        electrostatics_addition : str
-            The common electrostatics energy expression
-        """
-        electrostatics_addition = "chargeprod = (1-lambda_electrostatics_core)*chargeprodA + lambda_electrostatics_core*chargeprodB;" #interpolation
-        electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
-        electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-
-        # lambda_electrostatics_core linearly follows master_lambda.
-        # dummyA particles are unique_new and should be off at lambda=0
-        # dummyB particles are unique_old and should be on at lambda=0
-        if self._softcore_method =="default":
-            electrostatics_addition += "lambda_beta = dummyA*lambda_electrostatics_core + dummyB*(1-lambda_electrostatics_core) + (1- dummyA*dummyB)*4*lambda_electrostatics_core*(1-lambda_electrostatics_core);"
-            electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
-
-        elif self._softcore_method == "amber":
-            electrostatics_addition += "lambda_beta = dummyA*lambda_electrostatics_core + dummyB*(1-lambda_electrostatics_core);"
-            electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
-
-        elif self._softcore_method == "classic":
-            electrostatics_addition += "lambda_beta = lambda_electrostatics_core*(1-lambda_electrostatics_core);"
-        else:
-            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
-
-        return electrostatics_addition
-
     def _nonbonded_custom_nocutoff(self):
         """
         Get a part of the nonbonded energy expression when there is no cutoff.
@@ -739,9 +693,7 @@ class HybridTopologyFactory(object):
         """
         # soft-core Lennard-Jones
         sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
-        # soft-core Coulomb
-        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
-        return sterics_energy_expression, electrostatics_energy_expression
+        return sterics_energy_expression
 
     def _nonbonded_custom_cutoff(self, epsilon_solvent, r_cutoff):
         """
@@ -764,12 +716,7 @@ class HybridTopologyFactory(object):
         # soft-core Lennard-Jones
         sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
 
-        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);"
-        k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
-        c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
-        electrostatics_energy_expression += "k_rf = %f;" % (k_rf / k_rf.in_unit_system(unit.md_unit_system).unit)
-        electrostatics_energy_expression += "c_rf = 0;"
-        return sterics_energy_expression, electrostatics_energy_expression
+        return sterics_energy_expression
 
     def _nonbonded_custom_ewald(self, alpha_ewald, delta, r_cutoff):
         """
@@ -799,9 +746,7 @@ class HybridTopologyFactory(object):
             # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
             alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
             alpha_ewald = alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit
-        electrostatics_energy_expression = "U_electrostatics = ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
-        electrostatics_energy_expression += "alpha_ewald = %f;" % alpha_ewald
-        return sterics_energy_expression, electrostatics_energy_expression
+        return sterics_energy_expression
 
     def _nonbonded_custom_mixing_rules(self):
         """
@@ -819,9 +764,7 @@ class HybridTopologyFactory(object):
         sterics_mixing_rules += "epsilonB = sqrt(epsilonB1*epsilonB2);" # mixing rule for epsilon
         sterics_mixing_rules += "sigmaA = 0.5*(sigmaA1 + sigmaA2);" # mixing rule for sigma
         sterics_mixing_rules += "sigmaB = 0.5*(sigmaB1 + sigmaB2);" # mixing rule for sigma
-        electrostatics_mixing_rules = "chargeprodA = chargeA1*chargeA2;" # mixing rule for charges
-        electrostatics_mixing_rules += "chargeprodB = chargeB1*chargeB2;" # mixing rule for charges
-        return sterics_mixing_rules, electrostatics_mixing_rules
+        return sterics_mixing_rules
 
     def _find_bond_parameters(self, bond_force, index1, index2):
         """
