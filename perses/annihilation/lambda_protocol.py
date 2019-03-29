@@ -12,6 +12,12 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda = 1 refers to ON, i.e. fully interacting while
     lambda = 0 refers to OFF, i.e. non-interacting with the system 
 
+    all lambda functions will follow from 0 -> 1 following the master lambda
+
+    lambda*core parameters perturb linearly
+    lambda_sterics_insert and lambda_electrostatics_delete perturb in the first half of the protocol 0 -> 0.5
+    lambda_sterics_delete and lambda_electrostatics_insert perturb in the second half of the protocol 0.5 -> 1
+
     Attributes
     ----------
     lambda_sterics_core
@@ -22,7 +28,7 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_electrostatics_delete
     """
     
-
+    # lambda components for each component, all run from 0 -> 1 following master lambda
     lambda_functions = {
         'lambda_sterics_core': lambda x: x,
         'lambda_electrostatics_core': lambda x: x,
