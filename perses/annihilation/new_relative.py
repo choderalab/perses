@@ -708,12 +708,15 @@ class HybridTopologyFactory(object):
         electrostatics_addition += "reff_electrostatics = sqrt(softcore_beta*lambda_beta + r^2);" # effective softcore distance for electrostatics
         electrostatics_addition += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
 
+        # lambda_electrostatics_core linearly follows master_lambda.
+        # dummyA particles are unique_new and should be off at lambda=0
+        # dummyB particles are unique_old and should be on at lambda=0
         if self._softcore_method =="default":
-            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics_core) + dummyB*(lambda_electrostatics_core) + (1- dummyA*dummyB)*4*lambda_electrostatics_core*(1-lambda_electrostatics_core);"
+            electrostatics_addition += "lambda_beta = dummyA*lambda_electrostatics_core + dummyB*(1-lambda_electrostatics_core) + (1- dummyA*dummyB)*4*lambda_electrostatics_core*(1-lambda_electrostatics_core);"
             electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "amber":
-            electrostatics_addition += "lambda_beta = dummyA*(1-lambda_electrostatics_core) + dummyB*(lambda_electrostatics_core);"
+            electrostatics_addition += "lambda_beta = dummyA*lambda_electrostatics_core + dummyB*(1-lambda_electrostatics_core);"
             electrostatics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         elif self._softcore_method == "classic":
