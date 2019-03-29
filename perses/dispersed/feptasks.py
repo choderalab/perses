@@ -261,11 +261,11 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             measure_heat = True
         else:
             measure_heat = False
-        
-        self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions, nsteps_neq=nsteps_neq, 
+
+        self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions, nsteps_neq=nsteps_neq,
                                                                                   temperature=temperature, splitting=splitting, timestep=timestep, measure_heat=measure_heat)
         self._ncmc_nsteps = nsteps_neq
-        
+
         self._beta = 1.0 / (kB*temperature)
         self._work_save_interval = work_save_interval
 
@@ -350,19 +350,19 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         integrator = self._get_integrator(thermodynamic_state)
 
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
-        
+
         integrator.reset()
 
         sampler_state.apply_to_context(context, ignore_velocities=False)
 
         # Subclasses may implement _before_integration().
         self._before_integration(context, thermodynamic_state)
-        
+
         self._cumulative_work[0] = integrator.get_protocol_work(dimensionless=True)
 
         if self._cumulative_work[0] != 0.0:
             raise RuntimeError("The initial cumulative work after reset was not zero.")
-        
+
         if self._measure_shadow_work:
             initial_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
@@ -383,7 +383,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             #if we have a trajectory, we'll also write to it
             if self._save_configuration:
                 sampler_state.update_from_context(context)
-                
+
                 #record positions for writing to trajectory
                 #we need to check whether the user has requested to subset atoms (excluding water, for instance)
 
@@ -396,10 +396,10 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
                 a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
                 self._trajectory_box_lengths[iteration, :] = [a, b, c]
                 self._trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
-        
+
         if self._save_configuration:
             self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
-        
+
         self._current_total_work = self._current_protocol_work
 
         if self._measure_shadow_work:
@@ -450,7 +450,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
             raise NoTrajectoryException("Tried to access a trajectory on a move that hasn't been used yet.")
         else:
             return self._trajectory
-    
+
     @property
     def cumulative_work(self):
         return self._cumulative_work
@@ -460,7 +460,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         if not self._measure_shadow_work:
             raise ValueError("Can't return shadow work if it isn't being measured")
         return self._shadow_work
-    
+
     @property
     def protocol_work(self):
         return self._protocol_work
@@ -525,7 +525,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     #get the sampler state needed for the simulation
     sampler_state = equilibrium_result.sampler_state
     temperature = thermodynamic_state.temperature
-    
+
     #get the atom indices we need to subset the topology and positions
     if atom_indices_to_save is None:
         atom_indices = list(range(topology.n_atoms))
@@ -533,7 +533,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
     else:
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
-    
+
     ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions, splitting, temperature, nstep_neq, timestep, work_save_interval, subset_topology, atom_indices, save_configuration=write_configuration, measure_shadow_work=measure_shadow_work)
 
     ne_mc_move.reset()
@@ -572,7 +572,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
 
         cum_work_filepath = ".".join(cw_filepath_parts)
         prot_work_filepath = ".".join(pw_filepath_parts)
-        
+
         #if writing configurations was requested, get the trajectory
         if write_configuration:
             try:
@@ -580,7 +580,7 @@ def run_protocol(equilibrium_result: EquilibriumResult, thermodynamic_state: sta
                 write_nonequilibrium_trajectory(nonequilibrium_result, trajectory, trajectory_filename)
             except NoTrajectoryException:
                 pass
-        
+
         np.save(cum_work_filepath, nonequilibrium_result.cumulative_work)
         np.save(prot_work_filepath, nonequilibrium_result.protocol_work)
 

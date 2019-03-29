@@ -1582,13 +1582,10 @@ class GeometrySystemGenerator(object):
             reference_nonbonded_force = reference_forces['NonbondedForce']
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
                 p1, p2, chargeprod, sigma, epsilon = reference_nonbonded_force.getExceptionParameters(exception_index)
-                #growth_idx_1 = new_particle_indices.index(particle_index_1) + 1 if particle_index_1 in new_particle_indices else 0
-                #growth_idx_2 = new_particle_indices.index(particle_index_2) + 1 if particle_index_2 in new_particle_indices else 0
-                #growth_idx = max(growth_idx_1, growth_idx_2)
                 growth_idx = self._calculate_growth_idx([p1, p2], growth_indices)
                 # Only need to add terms that are nonzero and involve newly added atoms.
                 if (growth_idx > 0) and ((chargeprod.value_in_unit_system(unit.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(unit.md_unit_system) != 0.0)):
-                    if self.verbose: _logger.info('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index_1, particle_index_2, chargeprod/unit.elementary_charge**2, sigma/unit.angstrom, epsilon/unit.kilocalorie_per_mole, growth_idx))
+                    if self.verbose: _logger.info('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (p1, p2, chargeprod/unit.elementary_charge**2, sigma/unit.angstrom, epsilon/unit.kilocalorie_per_mole, growth_idx))
                     custom_bond_force.addBond(p1, p2, [chargeprod, sigma, epsilon, growth_idx])
 
         # Copy parameters for local sterics parameters in nonbonded force
@@ -1608,7 +1605,6 @@ class GeometrySystemGenerator(object):
             # Add particle parameters.
             for particle_index in range(reference_nonbonded_force.getNumParticles()):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
-                #growth_idx = new_particle_indices.index(particle_index) + 1 if particle_index in new_particle_indices else 0
                 growth_idx = self._calculate_growth_idx([particle_index], growth_indices)
                 modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
                 if self.verbose and (growth_idx > 0):
