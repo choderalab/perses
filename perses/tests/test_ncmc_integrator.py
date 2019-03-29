@@ -24,7 +24,6 @@ istravis = os.environ.get('TRAVIS', None) == 'true'
 
 from openmmtools.constants import kB
 
-
 ################################################################################
 # TESTS
 ################################################################################
@@ -119,7 +118,7 @@ def check_harmonic_oscillator_ncmc(ncmc_nsteps=50, ncmc_integrator="VV"):
     positions = unit.Quantity(np.zeros([1, 3], np.float32), unit.angstroms)
     functions = { 'x0' : 'lambda' } # drag spring center x0
 
-    from perses.annihilation import NCMCVVAlchemicalIntegrator, NCMCGHMCAlchemicalIntegrator
+    from perses.annihilation.ncmc_integrator import NCMCVVAlchemicalIntegrator, NCMCGHMCAlchemicalIntegrator
     if ncmc_integrator=="VV":
         ncmc_insert = NCMCVVAlchemicalIntegrator(temperature, system, functions, direction='insert', nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
         ncmc_delete = NCMCVVAlchemicalIntegrator(temperature, system, functions, direction='delete', nsteps=ncmc_nsteps, timestep=timestep) # 'insert' drags lambda from 0 -> 1
