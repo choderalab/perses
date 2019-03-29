@@ -44,6 +44,7 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
 from openmmtools.constants import kB
+from perses.rjmc.topology_proposal import SystemGenerator
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
