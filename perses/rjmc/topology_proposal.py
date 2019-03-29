@@ -2684,7 +2684,7 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
                  proposal_metadata=None, storage=storage,
                  always_change=True)
 
-    def propose(self, current_system, current_topology, proposed_mol=None, map_index=None, current_metadata=None):
+    def propose(self, current_system, current_topology, current_smiles=None, proposed_mol=None, map_index=None, current_metadata=None):
         """
         Propose the next state, given the current state
 
@@ -2694,6 +2694,8 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
             the system of the current state
         current_topology : app.Topology object
             the topology of the current state
+        current_smiles : str, default None
+            Specify the current SMILES string to avoid perceiving it from the topology. If None, perceive from topology.
         proposed_mol : oechem.OEMol, optional
             the molecule to propose. If None, choose randomly based on the current molecule
         map_index : int, default None
@@ -2706,8 +2708,11 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
-        # Determine SMILES string for current small molecule
-        current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+        # Determine SMILES string for current small molecule if the SMILES isn't specified
+        if current_smiles is None:
+            current_mol_smiles, _ = self._topology_to_smiles(current_topology)
+        else:
+            current_mol_smiles = current_smiles
 
         # Remove the small molecule from the current Topology object
         current_receptor_topology = self._remove_small_molecule(current_topology)

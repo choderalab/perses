@@ -1027,7 +1027,6 @@ def run_setup(setup_options):
     else:
         top_prop = np.load(setup_options['topology_proposal']).item()
 
-    n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
     n_steps_per_move_application = setup_options['n_steps_per_move_application']
     trajectory_directory = setup_options['trajectory_directory']
     trajectory_prefix = setup_options['trajectory_prefix']
@@ -1042,6 +1041,8 @@ def run_setup(setup_options):
     else:
         phases = ['complex', 'solvent']
     if setup_options['fe_type'] == 'nonequilibrium':
+        n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+
         forward_functions = setup_options['forward_functions']
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
         scheduler_address = setup_options['scheduler_address']
@@ -1070,6 +1071,7 @@ def run_setup(setup_options):
 
     else:
         n_states = setup_options['n_states']
+        checkpoint_interval = setup_options['checkpoint_interval']
         htf = dict()
         hss = dict()
         for phase in phases:
@@ -1084,9 +1086,9 @@ def run_setup(setup_options):
             
             storage_name = "-".join([trajectory_prefix, '%s.nc' % phase])
             reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
-                                          checkpoint_interval=10)
+                                          checkpoint_interval=checkpoint_interval)
 
-            hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=4.0 * unit.femtosecond,
+            hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                          collision_rate=5.0 / unit.picosecond,
                                                                                          n_steps=n_steps_per_move_application,
                                                                                          reassign_velocities=False,
@@ -1094,6 +1096,6 @@ def run_setup(setup_options):
                                                                                          splitting="V R R R O R R R V"),
                                            hybrid_factory=htf[phase], online_analysis_interval=10,
                                            online_analysis_target_error=0.2, online_analysis_minimum_iterations=10)
-            hss[phase].setup(n_states=n_states, temperature=300.0 * unit.kelvin, storage_file=reporter)
+            hss[phase].setup(n_states=n_states, temperature=temperature, storage_file=reporter)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_sams_samplers': hss}

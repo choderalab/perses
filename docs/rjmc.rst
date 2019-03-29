@@ -15,6 +15,8 @@ Topology proposal engines
 
     TopologyProposal
     ProposalEngine
+    SmallMoleculeAtomMapper
+    PremappedSmallMoleculeSetProposalEngine
     SmallMoleculeSetProposalEngine
     PolymerProposalEngine
     PointMutationEngine
