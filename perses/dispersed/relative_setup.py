@@ -881,8 +881,8 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
 
         thermodynamic_state_list = [compound_thermodynamic_state]
 
-        for idx in range(n_states):
-            lambda_val = (1.0 + idx) / n_states
+        lambda_values = np.linspace(0.,1.,n_states)
+        for lambda_val in lambda_values:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
