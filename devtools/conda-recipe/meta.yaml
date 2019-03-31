@@ -14,23 +14,6 @@ requirements:
     - python
     - setuptools
     - numpy
-    - scipy
-    - numexpr
-    - autograd
-    - pymbar
-    - openmm >=7.3.0
-    - openmoltools
-    - openmmtools
-    - numba
-    - netcdf4
-    - matplotlib
-    - seaborn
-    - mdtraj
-    - pdbfixer
-    - lxml
-    - networkx >=2.0
-    - yank
-    - parmed
 
   run:
     - python
@@ -40,7 +23,7 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.3.0
+    - openmm >=7.3.1
     - parmed
     - openmoltools
     - openmmtools
@@ -58,6 +41,8 @@ requirements:
     - progressbar2
     - yank
     - parmed
+    - tqdm
+
 test:
   requires:
     - nose
