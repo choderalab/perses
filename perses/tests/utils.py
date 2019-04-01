@@ -830,10 +830,6 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     lambda_one_thermodynamic_State : ThermodynamicState
         Alchemical (hybrid) thermodynamic state for lambda one
     """
-    #TODO remove once issues are fixed
-    #uncommenting following two lines turns of non-bonded interactions in the test system
-    from openmmtools.tests.test_alchemy import turn_off_nonbonded
-    turn_off_nonbonded(system,sterics=False,electrostatics=True)
     #create the thermodynamic state
     from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 

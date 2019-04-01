@@ -46,9 +46,8 @@ class HybridTopologyFactory(object):
     """
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
-    _known_softcore_methods = ['default', 'amber', 'classic']
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_method='amber', softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False):
         """
         Initialize the Hybrid topology factory.
 
@@ -67,11 +66,6 @@ class HybridTopologyFactory(object):
             names beginning with lambda_ and ending with each of bonds, angles, torsions, sterics, electrostatics.
             If functions is none, then the integrator will need to set each of these and parameter derivatives will be unavailable.
             If functions is not None, all lambdas must be specified.
-        softcore_method : str, default 'default'
-            The softcore method to use. The options are:
-            default: as an atom is being disappeared, increase softcore strength. For core atoms, don't use softcore at endpoints, but interpolate to full softcore at lambda=0.5
-            amber: same as default, but core is excluded from softcore
-            classic: original scheme used by this code. All alchemical atoms interpolate to 0.25 * softcore at lambda=0.5, but don't use softcore at endpoints.
         softcore_alpha: float, default None
             "alpha" parameter of softcore sterics. If None is provided, value will be set to 0.5
         bond_softening_constant : float
@@ -114,10 +108,6 @@ class HybridTopologyFactory(object):
             # TODO: Check that softcore_alpha is in a valid range
             self.softcore_alpha = softcore_alpha
 
-        if softcore_method not in self._known_softcore_methods:
-            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(softcore_method))
-
-        self._softcore_method = softcore_method
 
         if functions:
             self._functions = functions
@@ -647,36 +637,21 @@ class HybridTopologyFactory(object):
 
     def _nonbonded_custom_sterics_common(self):
         """
-        Get a custom sterics expression that is common to all nonbonded methods
+        Get a custom sterics expression using amber softcore expression 
 
         Returns
         -------
         sterics_addition : str
             The common softcore sterics energy expression
         """
-        sterics_addition = "epsilon = (1-lambda_sterics_core)*epsilonA + lambda_sterics_core*epsilonB;" #interpolation
+        sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
         sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
-        sterics_addition += "sigma = (1-lambda_sterics_core)*sigmaA + lambda_sterics_core*sigmaB;"
-
-        if self._softcore_method == "default":
-            sterics_addition += "lambda_alpha = dummyA*lambda_sterics_core + dummyB*(1-lambda_sterics_core) + (1 - dummyA*dummyB)*4*lambda_sterics_core*(1-lambda_sterics_core);"
-            sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*(1-lambda_sterics_delete);"
-            sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
-
-        elif self._softcore_method == "amber":
-            sterics_addition += "lambda_alpha = dummyA*lambda_sterics_core + dummyB*(1-lambda_sterics_core);"
-            sterics_addition += "lambda_sterics = (1 - (dummyA*dummyB + dummyA + dummyB))*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*(1-lambda_sterics_delete);"
-            sterics_addition += "dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
-
-        elif self._softcore_method == "classic":
-            sterics_addition += "lambda_sterics = lambda_sterics_core"
-            sterics_addition += "lambda_alpha = lambda_sterics_core*(1-lambda_sterics_core);"
+        sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
 
 
-        else:
-            raise ValueError("Softcore method {} is not a valid method. Acceptable options are default, amber, and classic".format(self._softcore_method))
-
-
+        sterics_addition += "lambda_alpha = dummyA*(1-lambda_sterics_insert) + dummyB*lambda_sterics_delete;"
+        sterics_addition += "lambda_sterics = core*lambda_sterics_core + dummyA*lambda_sterics_insert + dummyB*(1-lambda_sterics_delete);"
+        sterics_addition += "core = 1-dummyA*dummyB; dummyA = delta(epsilonA); dummyB = delta(epsilonB);"
 
         return sterics_addition
 
