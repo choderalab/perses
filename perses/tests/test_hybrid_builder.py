@@ -135,13 +135,13 @@ def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chl
     benzene <-> 2-phenyl ethanol addition of 3 heavy atom group 
     """
     # TODO remove line below
-    pairs = [['2-phenyl ethanol','benzene']]
+    pairs = [['propane','pentane']]
     for pair in pairs:
         print('{} -> {}'.format(pair[0],pair[1]))
         test_simple_overlap(pair[0],pair[1])
         # now running the reverse
-#        print('{} -> {}'.format(pair[1],pair[0]))
-#        test_simple_overlap(pair[1],pair[0])
+        print('{} -> {}'.format(pair[1],pair[0]))
+        test_simple_overlap(pair[1],pair[0])
 
 def test_simple_overlap(name1='pentane',name2='butane'):
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
