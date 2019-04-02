@@ -296,13 +296,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if new_positions is not None:
             check_dimensionality(new_positions, unit.angstroms)
 
-        # TODO: Overhaul the use of ProposalOrderTools to instead use ValenceProposalOrderTools
-        proposal_order_tool = ProposalOrderTools(top_proposal)
+        # Determine order in which atoms (and the torsions they are involved in) will be proposed
+        proposal_order_tool = NetworkXProposalOrder(top_proposal, direction=direction)
+        torsion_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order()
+        atom_proposal_order = [ torsion[-1] for torsion in torsion_proposal_order ]
 
         growth_parameter_name = 'growth_stage'
         if direction=="forward":
-            atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
-
             # Find and copy known positions to match new topology
             import parmed
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
@@ -316,8 +316,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
-
-            atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
 
             # Find and copy known positions to match old topology
             import parmed
@@ -1875,25 +1873,66 @@ class GeometrySystemGenerator(object):
 
         return growth_idx
 
-class ProposalOrderTools(object):
+class NetworkXProposalOrder(object):
     """
-    This is an internal utility class for determining the order of atomic position proposals.
-    It encapsulates funcionality needed by the geometry engine. Atoms can be proposed without
-    torsions or even angles, though this may not be recommended. Default is to require torsions.
-
-    Hydrogens are added last in growth order.
-
-    Parameters
-    ----------
-    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-        The topology proposal containing the relevant move.
+    This is a proposal order generating object that uses just networkx and graph traversal for simplicity.
     """
 
-    def __init__(self, topology_proposal, verbose=True):
+    def __init__(self, topology_proposal, direction="forward"):
+        """
+        Create a NetworkXProposalOrder class
+        Parameters
+        ----------
+        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+            Container class for the transformation
+        direction: str, default forward
+            Whether to go forward or in reverse for the proposal.
+        """
         self._topology_proposal = topology_proposal
-        self.verbose = True # DEBUG
+        self._direction = direction
 
-    def determine_proposal_order(self, direction='forward'):
+        self._hydrogen = app.Element.getByAtomicNumber(1.0)
+
+        # Set the direction
+        if direction == "forward":
+            self._destination_system = self._topology_proposal.new_system
+            self._new_atoms = self._topology_proposal.unique_new_atoms
+            self._destination_topology = self._topology_proposal.new_topology
+            self._atoms_with_positions = self._topology_proposal.new_to_old_atom_map.keys()
+        elif direction == "reverse":
+            self._destination_system = self._topology_proposal.old_system
+            self._new_atoms = self._topology_proposal.unique_old_atoms
+            self._destination_topology = self._topology_proposal.old_topology
+            self._atoms_with_positions = self._topology_proposal.old_to_new_atom_map.keys()
+        else:
+            raise ValueError("Direction must be either forward or reverse.")
+
+        self._new_atom_objects = list(self._destination_topology.atoms())
+
+        self._atoms_with_positions_set = set(self._atoms_with_positions)
+
+        self._hydrogens = []
+        self._heavy = []
+
+        # Sort the new atoms into hydrogen and heavy atoms:
+        for atom in self._new_atom_objects:
+            if atom.element == self._hydrogen:
+                self._hydrogens.append(atom.index)
+            else:
+                self._heavy.append(atom.index)
+
+        # Sanity check
+        if len(self._hydrogens)==0 and len(self._heavy)==0:
+            msg = 'NetworkXProposalOrder: No new atoms for direction {}\n'.format(direction)
+            msg += str(topology_proposal)
+            raise Exception(msg)
+
+        # Choose the first of the new atoms to find the corresponding residue:
+        transforming_residue = self._new_atom_objects[self._new_atoms[0]].residue
+
+        self._residue_graph = self._residue_to_graph(transforming_residue)
+
+    def determine_proposal_order(self):
         """
         Determine the proposal order of this system pair.
         This includes the choice of a torsion. As such, a logp is returned.
@@ -1905,186 +1944,111 @@ class ProposalOrderTools(object):
 
         Returns
         -------
-        atoms_torsions : ordereddict
-            parmed.Atom : parmed.Dihedral
+        atom_torsions : list of list of int
+            A list of torsions, where the first atom in the torsion is the one being proposed
         logp_torsion_choice : float
             log probability of the chosen torsions
-
         """
-        import parmed
-        if direction=='forward':
-            topology = self._topology_proposal.new_topology
-            system = self._topology_proposal.new_system
-            structure = parmed.openmm.load_topology(self._topology_proposal.new_topology, self._topology_proposal.new_system)
-            unique_atoms = self._topology_proposal.unique_new_atoms
-            #atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in range(self._topology_proposal.n_atoms_new) if atom_idx not in self._topology_proposal.unique_new_atoms]
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.new_to_old_atom_map.keys()]
-        elif direction=='reverse':
-            topology = self._topology_proposal.old_topology
-            system = self._topology_proposal.old_system
-            structure = parmed.openmm.load_topology(self._topology_proposal.old_topology, self._topology_proposal.old_system)
-            unique_atoms = self._topology_proposal.unique_old_atoms
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in self._topology_proposal.old_to_new_atom_map.keys()]
-        else:
-            raise ValueError("direction parameter must be either forward or reverse.")
+        heavy_atoms_torsions, heavy_logp = self._propose_atoms_in_order(self._heavy)
+        hydrogen_atoms_torsions, hydrogen_logp = self._propose_atoms_in_order(self._hydrogens)
+        proposal_order = heavy_atoms_torsions + hydrogen_atoms_torsions
 
-        # Determine list of atoms to be added.
-        new_hydrogen_atoms = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number == 1 ]
-        new_heavy_atoms    = [ structure.atoms[idx] for idx in unique_atoms if structure.atoms[idx].atomic_number != 1 ]
+        if proposal_order is None:
+            msg = 'NetworkXProposalOrder: proposal_order is empty\n'
+            raise Exception(msg)
 
-        def add_atoms(new_atoms, atoms_torsions):
-            """
-            Add the specified atoms to the ordered list of torsions to be drawn.
+        return proposal_order, heavy_logp + hydrogen_logp
 
-            Parameters
-            ----------
-            new_atoms : list
-                List of atoms to be added.
-            atoms_torsions : OrderedDict
-                List of torsions to be added.
-
-            Returns
-            -------
-            logp_torsion_choice : float
-                The log torsion cchoice probability associated with these added torsions.
-
-            """
-            from scipy import special
-            logp_torsion_choice = 0.0
-            while (len(new_atoms)) > 0:
-                eligible_atoms = self._atoms_eligible_for_proposal(new_atoms, atoms_with_positions)
-
-                #randomize positions
-                eligible_atoms_in_order = np.random.choice(eligible_atoms, size=len(eligible_atoms), replace=False)
-
-                #the logp of this choice is log(1/n!)
-                #gamma is (n-1)!, log-gamma is more numerically stable.
-                logp_torsion_choice += -special.gammaln(len(eligible_atoms)+1)
-
-                if (len(new_atoms) > 0) and (len(eligible_atoms) == 0):
-                    raise Exception('new_atoms (%s) has remaining atoms to place, but eligible_atoms is empty.' % str(new_atoms))
-
-                #choose the torsions
-                for atom in eligible_atoms_in_order:
-                    chosen_torsion, logp_choice = self._choose_torsion(atoms_with_positions, atom)
-                    atoms_torsions[atom] = chosen_torsion
-                    logp_torsion_choice += logp_choice
-                    new_atoms.remove(atom)
-                    atoms_with_positions.append(atom)
-
-            return logp_torsion_choice
-
-        # Handle heavy atoms before hydrogen atoms
-        logp_torsion_choice = 0.0
-        atoms_torsions = collections.OrderedDict()
-        logp_torsion_choice += add_atoms(new_heavy_atoms, atoms_torsions)
-        logp_torsion_choice += add_atoms(new_hydrogen_atoms, atoms_torsions)
-
-        return atoms_torsions, logp_torsion_choice
-
-
-    def _atoms_eligible_for_proposal(self, new_atoms, atoms_with_positions):
+    def _propose_atoms_in_order(self, atom_group):
         """
-        Get the set of atoms currently eligible for proposal
-
+        Propose a group of atoms along with corresponding torsions and a total log probability for the choice
         Parameters
         ----------
-        new_atoms : list of parmed.Atom
-            the new atoms that need positions
-        atoms_with_positions : list of parmed.Atom
-            the atoms with positions
-        """
-        eligible_atoms = []
-        for atom in new_atoms:
-            #get all topological torsions for the appropriate atom
-            torsions = self._get_topological_torsions(atoms_with_positions, atom)
-
-            #go through the topological torsions (atom1 is always the new atom), and if one of them has
-            #atoms 2, 3, 4 in atoms_with_positions, the atom is eligible.
-            for torsion in torsions:
-                if torsion.atom2 in atoms_with_positions and torsion.atom3 in atoms_with_positions and torsion.atom4 in atoms_with_positions:
-                    eligible_atoms.append(atom)
-
-        return list(set(eligible_atoms))
-
-    def _choose_torsion(self, atoms_with_positions, atom_for_proposal):
-        """
-        Get a torsion from the set of possible topological torsions.
-
-        Parameters
-        ----------
-        atoms_with_positions : list of parmed.Atom
-            list of the atoms that already have positions
-        atom_for_proposal : parmed.Atom
-            atom that is being proposed now
-
+        atom_group : list of int
+            The atoms to propose
         Returns
         -------
-        torsion_selected, logp_torsion_choice : parmed.Dihedral, float
-            The torsion that was selected, along with the logp of the choice.
-
+        atom_torsions : list of list of int
+            A list of torsions, where the first atom in the torsion is the one being proposed
+        logp : float
+            The contribution to the overall proposal log probability
         """
-        eligible_torsions = self._get_topological_torsions(atoms_with_positions, atom_for_proposal)
-        if not eligible_torsions:
-            raise NoTorsionError("No eligible torsions found for placing atom %s." % str(atom_for_proposal))
-        torsion_idx = np.random.randint(0, len(eligible_torsions))
-        torsion_selected = eligible_torsions[torsion_idx]
-        return torsion_selected, np.log(1.0/len(eligible_torsions))
+        import networkx as nx
+        from scipy import special
+        atom_torsions = []
+        logp = 0.0
+        while len(atom_group) > 0:
+            proposal_atoms = {}
 
-    def _get_topological_torsions(self, atoms_with_positions, new_atom):
-        """
-        Get the topological torsions involving new_atom.
+            for atom_idx in atom_group:
+                # Find the shortest path up to length four from the atom in question:
+                shortest_paths = nx.algorithms.single_source_shortest_path(self._residue_graph, atom_idx, cutoff=4)
 
-        This includes torsions which don't have any parameters assigned to them.
+                # Loop through shortest paths to find all paths of length 4 to an atom with positions:
+                eligible_torsions_list = []
 
-        Parameters
-        ----------
-        atoms_with_positions : list of parmed.Atom
-            list of atoms with a valid position
-        new_atom : parmed.Atom object
-            Atom object for the new atom
+                for destination, path in shortest_paths.items():
 
-        Returns
-        -------
-        torsions : list of parmed.Dihedral objects with no "type"
-            list of topological torsions including only atoms with positions
-
-        """
-        # Compute topological torsions beginning with atom `new_atom` in which all other atoms have positions
-        topological_torsions = list()
-        atom1 = new_atom
-        for bond12 in atom1.bonds:
-            atom2 = bond12.atom2 if bond12.atom1==atom1 else bond12.atom1
-            if atom2 not in atoms_with_positions:
-                continue
-            for bond23 in atom2.bonds:
-                atom3 = bond23.atom2 if bond23.atom1==atom2 else bond23.atom1
-                if (atom3 not in atoms_with_positions) or (atom3 in set([atom1, atom2])):
-                    continue
-                for bond34 in atom3.bonds:
-                    atom4 = bond34.atom2 if bond34.atom1==atom3 else bond34.atom1
-                    if (atom4 not in atoms_with_positions) or (atom4 in set([atom1, atom2, atom3])):
+                    # Check if the path is length 4 (a torsion) and that the destination has a position. Continue if not.
+                    if len(path) != 4 or destination not in self._atoms_with_positions:
                         continue
-                    topological_torsions.append((atom1, atom2, atom3, atom4))
 
-        if len(topological_torsions) == 0:
-            # Print debug information
-            _logger.debug('No topological torsions found!')
-            _logger.debug('atoms_with_positions: %s' % str(atoms_with_positions))
-            _logger.debug('new_atom: %s' % new_atom)
-            _logger.debug('bonds involving new atom:')
-            _logger.debug(new_atom.bonds)
-            _logger.debug('angles involving new atom:')
-            _logger.debug(new_atom.angles)
-            _logger.debug('dihedrals involving new atom:')
-            _logger.debug(new_atom.dihedrals)
-            # Throw an exception
-            raise Exception('No topical torsions found.')
+                    # If the last atom is in atoms with positions, check to see if the others are also.
+                    # If they are, append the torsion to the list of possible torsions to propose
+                    if set(path[1:3]).issubset(self._atoms_with_positions_set):
+                        eligible_torsions_list.append(path)
 
-        # Recode topological torsions as parmed Dihedral objects
-        import parmed
-        topological_torsions = [ parmed.Dihedral(atoms[0], atoms[1], atoms[2], atoms[3]) for atoms in topological_torsions ]
-        return topological_torsions
+                # If there are any eligible torsions, choose one randomly, add it to the atom_torsions,
+                # and mark this atom as having a position
+                ntorsions = len(eligible_torsions_list)
+                if len(eligible_torsions_list) > 0:
+                    torsion_index = np.random.choice(range(ntorsions))
+                    atom_torsion = eligible_torsions_list[torsion_index]
+                    proposal_atoms[atom_idx] = atom_torsion
+
+                    # Add the appropriate logP contribution for uniform choice:
+                    logp += np.log(1/len(eligible_torsions_list))
+                    self._atoms_with_positions_set.add(atom_idx)
+
+            # Remove the newly added atoms from the atom group:
+            for atom_idx in proposal_atoms:
+                atom_group.remove(atom_idx)
+
+            # Choose the order in which to add these atoms:
+            atoms_to_order = list(proposal_atoms.keys())
+            atom_order = np.random.choice(atoms_to_order, size=len(atoms_to_order), replace=False)
+
+            # Add these atoms to the atom torsion list:
+            for atom in atom_order:
+                atom_torsions.append(proposal_atoms[atom])
+
+            #Add to the logp:
+            logp += -special.gammaln(len(atoms_to_order) + 1)
+
+        return atom_torsions, logp
+
+    def _residue_to_graph(self, residue):
+        """
+        Create a NetworkX graph representing the connectivity of a residue
+        Parameters
+        ----------
+        residue : simtk.openmm.app.Residue
+            The residue to use to create the graph
+        Returns
+        -------
+        residue_graph : nx.Graph
+            A graph representation of the residue
+        """
+        import networkx as nx
+        g = nx.Graph()
+
+        for atom in residue.atoms():
+            g.add_node(atom)
+
+        for bond in residue.bonds():
+            g.add_edge(bond[0].index, bond[1].index)
+
+        return g
 
 class NoTorsionError(Exception):
     def __init__(self, message):
