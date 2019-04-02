@@ -44,6 +44,7 @@ install:
   # Create test environment for package
   - conda create --yes -n test python=$PYTHON_VER pip pytest pytest-cov
   - source activate test
+<<<<<<< HEAD
 
   # Use OpenEye toolkits beta version for partial bond orders
   - if [[ "$OPENEYE" == true ]]; then conda install --yes -c openeye/label/beta openeye-toolkits && python -c "import openeye; print(openeye.__version__)"; fi
@@ -57,6 +58,18 @@ install:
   - conda install --yes --use-local perses-dev
 
   # Report on environment
+=======
+  # Add omnia
+  - conda config --add channels omnia --add channels conda-forge
+  # Add omnia beta and dev channels
+  - conda config --add channels omnia/label/beta
+  - conda config --add channels omnia/label/dev
+  # Add OpenEye channel
+  - conda config --add channels openeye
+  # Update conda
+  - conda update --yes --all
+  # List conda environment
+>>>>>>> origin/master
   - conda list
 
 script:

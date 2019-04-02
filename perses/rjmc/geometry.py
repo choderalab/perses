@@ -2,21 +2,72 @@
 This contains the base class for the geometry engine, which proposes new positions
 for each additional atom that must be added.
 """
-import parmed
-import simtk.unit as units
-import logging
+from simtk import unit
+
 import numpy as np
-import copy
-#from perses.rjmc import coordinate_numba
-import simtk.openmm as openmm
 import collections
-import openeye.oechem as oechem
-import openeye.oeomega as oeomega
-import simtk.openmm.app as app
-import time
-import logging
+import functools
+
 from perses.storage import NetCDFStorage, NetCDFStorageView
+
+################################################################################
+# Initialize logging
+################################################################################
+
+import logging
 _logger = logging.getLogger("geometry")
+
+################################################################################
+# Suppress matplotlib logging
+################################################################################
+
+mpl_logger = logging.getLogger('matplotlib')
+mpl_logger.setLevel(logging.WARNING)
+
+
+################################################################################
+# Constants
+################################################################################
+
+LOG_ZERO = -1.0e+6
+
+################################################################################
+# Utility methods
+################################################################################
+
+def check_dimensionality(quantity, compatible_units):
+    """
+    Ensure that the specified quantity has units compatible with specified unit.
+
+    Parameters
+    ----------
+    quantity : simtk.unit.Quantity or float
+        The quantity to be checked
+    compatible_units : simtk.unit.Quantity or simtk.unit.Unit or float
+        Ensure ``quantity`` is either float or numpy array (if ``float`` specified) or is compatible with the specified units
+
+    Raises
+    ------
+    ValueError if the specified quantity does not have the appropriate dimensionality or type
+
+    Returns
+    -------
+    is_compatible : bool
+        Returns True if dimensionality is as requested
+
+    """
+    if unit.is_quantity(compatible_units) or unit.is_unit(compatible_units):
+        from simtk.unit.quantity import is_dimensionless
+        if not is_dimensionless(quantity / compatible_units):
+            raise ValueError('{} does not have units compatible with expected {}'.format(quantity, compatible_units))
+    elif compatible_units == float:
+        if not (isinstance(quantity, float) or isinstance(quantity, np.ndarray)):
+            raise ValueError("'{}' expected to be a float, but was instead {}".format(quantity, type(quantity)))
+    else:
+        raise ValueError("Don't know how to handle compatible_units of {}".format(compatible_units))
+
+    # Units are compatible if they pass this point
+    return True
 
 class GeometryEngine(object):
     """
@@ -86,16 +137,15 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         This may significantly slow down the simulation, however.
 
     """
-    def __init__(self, metadata=None, use_sterics=False, n_torsion_divisions=180, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
+    def __init__(self, metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0):
         self._metadata = metadata
         self.write_proposal_pdb = False # if True, will write PDB for sequential atom placements
         self.pdb_filename_prefix = 'geometry-proposal' # PDB file prefix for writing sequential atom placements
         self.nproposed = 0 # number of times self.propose() has been called
-        self._energy_time = 0.0
-        self._torsion_coordinate_time = 0.0
-        self._position_set_time = 0.0
         self.verbose = verbose
         self.use_sterics = use_sterics
+        self._n_bond_divisions = n_bond_divisions
+        self._n_angle_divisions = n_angle_divisions
         self._n_torsion_divisions = n_torsion_divisions
         self._bond_softening_constant = bond_softening_constant
         self._angle_softening_constant = angle_softening_constant
@@ -112,8 +162,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
-        beta : float
-            The inverse temperature
+        current_positions : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers
+            The current positions
+        beta : simtk.unit.Quantity with units compatible with 1/(kilojoules_per_mole)
+            The inverse thermal energy
 
         Returns
         -------
@@ -122,14 +174,25 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         logp_proposal : float
             The log probability of the forward-only proposal
         """
-        current_positions = current_positions.in_units_of(units.nanometers)
+        # Ensure positions have units compatible with nanometers
+        check_dimensionality(current_positions, unit.nanometers)
+        check_dimensionality(beta, unit.kilojoules_per_mole**(-1))
+
+        # TODO: Change this to use md_unit_system instead of hard-coding nanometers
         if not top_proposal.unique_new_atoms:
+            # If there are no unique new atoms, return new positions in correct order for new topology object and log probability of zero
+            # TODO: Carefully check this
+            import parmed
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
-            atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
+            atoms_with_positions = [ structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys() ]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, current_positions)
-            return new_positions, 0.0
-        logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
-        self.nproposed += 1
+            logp_proposal = 0.0
+        else:
+            logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
+            self.nproposed += 1
+
+        check_dimensionality(new_positions, unit.nanometers)
+        check_dimensionality(logp_proposal, float)
         return new_positions, logp_proposal
 
 
@@ -141,30 +204,52 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         top_proposal : TopologyProposal object
             Object containing the relevant results of a topology proposal
-        new_coordinates : [n, 3] np.ndarray
+        new_coordinates : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers
             The coordinates of the system after the proposal
-        old_coordiantes : [n, 3] np.ndarray
+        old_coordiantes : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers
             The coordinates of the system before the proposal
-        beta : float
-            The inverse temperature
+        beta : simtk.unit.Quantity with units compatible with 1/(kilojoules_per_mole)
+            The inverse thermal energy
 
         Returns
         -------
         logp : float
             The log probability of the proposal for the given transformation
         """
+        check_dimensionality(new_coordinates, unit.nanometers)
+        check_dimensionality(old_coordinates, unit.nanometers)
+        check_dimensionality(beta, unit.kilojoules_per_mole**(-1))
+
+        # If there are no unique old atoms, the log probability is zero.
         if not top_proposal.unique_old_atoms:
             return 0.0
-        new_coordinates = new_coordinates.in_units_of(units.nanometers)
-        old_coordinates = old_coordinates.in_units_of(units.nanometers)
+
+        # Compute log proposal probability for reverse direction
         logp_proposal, _ = self._logp_propose(top_proposal, old_coordinates, beta, new_positions=new_coordinates, direction='reverse')
+
+        check_dimensionality(logp_proposal, float)
         return logp_proposal
 
     def _write_partial_pdb(self, pdbfile, topology, positions, atoms_with_positions, model_index):
         """
         Write the subset of the molecule for which positions are defined.
 
+        Parameters
+        ----------
+        pdbfile : file-like object
+            The open file-like object for the PDB file being written
+        topology : simtk.openmm.Topology
+            The OpenMM Topology object
+        positions : simtk.unit.Quantity of shape (n_atoms, 3) with units compatible with nanometers
+            The positions
+        atoms_with_positions : list of parmed.Atom
+            parmed Atom objects for which positions have been defined
+        model_index : int
+            The MODEL index for the PDB file to use
+
         """
+        check_dimensionality(positions, unit.nanometers)
+
         from simtk.openmm.app import Modeller
         modeller = Modeller(topology, positions)
         atom_indices_with_positions = [ atom.idx for atom in atoms_with_positions ]
@@ -189,151 +274,163 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         top_proposal : topology_proposal.TopologyProposal object
             topology proposal containing the relevant information
-        old_positions : np.ndarray [n,3] in nm
-            The old coordinates.
-        beta : float
-            Inverse temperature
-        new_positions : np.ndarray [n,3] in nm, optional for forward
-            The new coordinates, if any. For proposal this is none
+        old_positions : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers
+            The coordinates of the system before the proposal
+        beta : simtk.unit.Quantity with units compatible with 1/(kilojoules_per_mole)
+            The inverse thermal energy
+        new_positions : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers, optional, default=None
+            The coordinates of the system after the proposal, or None for forward proposals
         direction : str
-            Whether to make a proposal (forward) or just calculate logp (reverse)
+            Whether to make a proposal ('forward') or just calculate logp ('reverse')
 
         Returns
         -------
         logp_proposal : float
             the logp of the proposal
-        new_positions : [n,3] np.ndarray
+        new_positions : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers
             The new positions (same as input if direction='reverse')
         """
-        initial_time = time.time()
+        # Ensure all parameters have the expected units
+        check_dimensionality(old_positions, unit.angstroms)
+        if new_positions is not None:
+            check_dimensionality(new_positions, unit.angstroms)
+
+        # TODO: Overhaul the use of ProposalOrderTools to instead use ValenceProposalOrderTools
         proposal_order_tool = NetworkXProposalOrder(top_proposal, direction=direction)
-        torsion_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order()
+
         # Render into order in which atoms are to be grown
         atom_proposal_order = [ torsion[-1] for torsion in torsion_proposal_order ]
-        proposal_order_time = time.time() - initial_time
+
         growth_parameter_name = 'growth_stage'
         if direction=="forward":
-            structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
+            atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='forward')
 
-            #find and copy known positions
+            # Find and copy known positions to match new topology
+            import parmed
+            structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
-            system_init = time.time()
-            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order, growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
+
+            # Create modified System object
+            growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order.keys(), global_parameter_name=growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
-            growth_system_time = time.time() - system_init
+
         elif direction=='reverse':
             if new_positions is None:
                 raise ValueError("For reverse proposals, new_positions must not be none.")
+
+            atom_proposal_order, logp_choice = proposal_order_tool.determine_proposal_order(direction='reverse')
+
+            # Find and copy known positions to match old topology
+            import parmed
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal.old_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.old_to_new_atom_map.keys()]
-            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order, growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
+
+            # Create modified System object
+            growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order.keys(), global_parameter_name=growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         logp_proposal = logp_choice
+
         if self._storage:
             self._storage.write_object("{}_proposal_order".format(direction), proposal_order_tool, iteration=self.nproposed)
 
         if self.use_sterics:
-            platform_name = 'CPU'
+            platform_name = 'CPU' # faster when sterics are in use
         else:
-            platform_name = 'Reference'
+            platform_name = 'Reference' # faster when only valence terms are in use
 
+        # Create an OpenMM context
+        from simtk import openmm
         platform = openmm.Platform.getPlatformByName(platform_name)
-        integrator = openmm.VerletIntegrator(1*units.femtoseconds)
+        integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, context)
         growth_parameter_value = 1
 
-        #now for the main loop:
+        # Place each atom in predetermined order
         logging.debug("There are %d new atoms" % len(atom_proposal_order.items()))
-        atom_placements = []
+        atom_placements = list()
         for atom, torsion in atom_proposal_order.items():
+            bond_atom, angle_atom, torsion_atom = torsion.atom2, torsion.atom3, torsion.atom4
 
+            # Activate the new atom interactions
             growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
-            bond_atom = torsion.atom2
-            angle_atom = torsion.atom3
-            torsion_atom = torsion.atom4
             if self.verbose: _logger.info("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
 
             if atom != torsion.atom1:
                 raise Exception('atom != torsion.atom1')
 
-            #get internal coordinates if direction is reverse
+            # Get internal coordinates if direction is reverse
             if direction=='reverse':
                 atom_coords = old_positions[atom.idx]
                 bond_coords = old_positions[bond_atom.idx]
                 angle_coords = old_positions[angle_atom.idx]
                 torsion_coords = old_positions[torsion_atom.idx]
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
-                r = internal_coordinates[0]*atom_coords.unit
-                theta = internal_coordinates[1]*units.radian
-                phi = internal_coordinates[2]*units.radian
+                # Extract dimensionless internal coordinates
+                r, theta, phi = internal_coordinates[0], internal_coordinates[1], internal_coordinates[2] # dimensionless
 
             bond = self._get_relevant_bond(atom, bond_atom)
             if bond is not None:
                 if direction=='forward':
-                    r = self._propose_bond(bond, beta)
-                bond_k = bond.type.k * self._bond_softening_constant
-                sigma_r = units.sqrt(1/(beta*bond_k))
-                logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r.value_in_unit(units.angstrom))))
-                logp_r = self._bond_logq(r, bond, beta) - logZ_r
+                    r = self._propose_bond(bond, beta, self._n_bond_divisions)
+
+                logp_r = self._bond_logp(r, bond, beta, self._n_bond_divisions)
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
                     if constraint is None:
                         raise ValueError("Structure contains a topological bond [%s - %s] with no constraint or bond information." % (str(atom), str(bond_atom)))
-                    r = constraint #set bond length to exactly constraint
+
+                    r = constraint.value_in_unit_system(unit.md_unit_system) #set bond length to exactly constraint
                 logp_r = 0.0
 
-            #propose an angle and calculate its probability
+            # Propose an angle and calculate its log probability
             angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
             if direction=='forward':
-                theta = self._propose_angle(angle, beta)
-            angle_k = angle.type.k * self._angle_softening_constant
-            sigma_theta = units.sqrt(1/(beta*angle_k))
-            logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta.value_in_unit(units.radians))))
-            logp_theta = self._angle_logq(theta, angle, beta) - logZ_theta
+                theta = self._propose_angle(angle, beta, self._n_angle_divisions)
 
-            #propose a torsion angle and calcualate its probability
+            logp_theta = self._angle_logp(theta, angle, beta, self._n_angle_divisions)
+
+            # Propose a torsion angle and calcualate its log probability
             if direction=='forward':
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, n_divisions=self._n_torsion_divisions)
+                # Note that (r, theta) are dimensionless here
+                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, self._n_torsion_divisions)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
+                import copy
                 old_positions_for_torsion = copy.deepcopy(old_positions)
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, n_divisions=self._n_torsion_divisions)
+                # Note that (r, theta, phi) are dimensionless here
+                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions)
 
             #accumulate logp
             #if direction == 'reverse':
             if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
 
-            atom_placement_array = np.array([atom.idx, r.value_in_unit_system(units.md_unit_system),
-                                             theta.value_in_unit_system(units.md_unit_system),
-                                             phi.value_in_unit_system(units.md_unit_system),
+            atom_placement_array = np.array([atom.idx,
+                                             r, theta, phi,
                                              logp_r, logp_theta, logp_phi, np.log(detJ)])
             atom_placements.append(atom_placement_array)
 
-
-            logp_proposal += logp_r + logp_theta + logp_phi + np.log(detJ)
+            logp_proposal += logp_r + logp_theta + logp_phi - np.log(detJ) # TODO: Check sign of detJ
             growth_parameter_value += 1
 
             # DEBUG: Write PDB file for placed atoms
             atoms_with_positions.append(atom)
 
-        total_time = time.time() - initial_time
+        # Clean up OpenMM Context since garbage collector is sometimes slow
+        del context
 
         #use a new array for each placement, since the variable size will be different.
         if self._storage:
             self._storage.write_array("atom_placement_logp_{}_{}".format(direction, self.nproposed), np.stack(atom_placements))
 
-        if direction=='forward':
-            logging.log(logging.DEBUG, "Proposal order time: %f s | Growth system generation: %f s | Total torsion scan time %f s | Total energy computation time %f s | Position set time %f s| Total time %f s" % (proposal_order_time, growth_system_time , self._torsion_coordinate_time, self._energy_time, self._position_set_time, total_time))
-        self._torsion_coordinate_time = 0.0
-        self._energy_time = 0.0
-        self._position_set_time = 0.0
+        check_dimensionality(logp_proposal, float)
+        check_dimensionality(new_positions, unit.nanometers)
         return logp_proposal, new_positions
 
     def _copy_positions(self, atoms_with_positions, top_proposal, current_positions):
@@ -342,46 +439,48 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         Parameters
         ----------
         atoms_with_positions : list of parmed.Atom
-            atoms that currently have positions
+            parmed Atom objects denoting atoms that currently have positions
         top_proposal : topology_proposal.TopologyProposal
             topology proposal object
-        current_positions : [n, 3] np.ndarray in nm
+        current_positions : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers
             Positions of the current system
 
         Returns
         -------
-        new_positions : np.ndarray in nm
-            Array for new positions with known positions filled in
+        new_positions : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers
+            New positions for new topology object with known positions filled in
         """
-        new_positions = units.Quantity(np.zeros([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
-        # Workaround for CustomAngleForce NaNs: Create random non-zero positions for new atoms.
-        new_positions = units.Quantity(np.random.random([top_proposal.n_atoms_new, 3]), unit=units.nanometers)
+        check_dimensionality(current_positions, unit.nanometers)
 
-        current_positions = current_positions.in_units_of(units.nanometers)
-        #copy positions
+        # Create new positions
+        new_shape = [top_proposal.n_atoms_new, 3]
+        # Workaround for CustomAngleForce NaNs: Create random non-zero positions for new atoms.
+        new_positions = unit.Quantity(np.random.random(new_shape), unit=unit.nanometers)
+
+        # Copy positions for atoms that have them defined
         for atom in atoms_with_positions:
             old_index = top_proposal.new_to_old_atom_map[atom.idx]
             new_positions[atom.idx] = current_positions[old_index]
+
+        check_dimensionality(new_positions, unit.nanometers)
         return new_positions
 
     def _get_relevant_bond(self, atom1, atom2):
         """
-        utility function to get the bond connecting atoms 1 and 2.
-        Returns either a bond object or None
-        (since there is no constraint class)
+        Get parmaeters defining the bond connecting two atoms
 
-        Arguments
-        ---------
-        atom1 : parmed atom object
+        Parameters
+        ----------
+        atom1 : parmed.Atom
              One of the atoms in the bond
-        atom2 : parmed.atom object
+        atom2 : parmed.Atom object
              The other atom in the bond
 
         Returns
         -------
-        bond : bond object
-            Bond connecting the two atoms, if there is one. None if constrained or
-            no bond.
+        bond : parmed.Bond with units modified to simtk.unit.Quantity
+            Bond connecting the two atoms, or None if constrained or no bond term exists.
+            Parameters representing unit-bearing quantities have been converted to simtk.unit.Quantity with units attached.
         """
         bonds_1 = set(atom1.bonds)
         bonds_2 = set(atom2.bonds)
@@ -390,40 +489,63 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if relevant_bond.type is None:
             return None
         relevant_bond_with_units = self._add_bond_units(relevant_bond)
+
+        check_dimensionality(relevant_bond_with_units.type.req, unit.nanometers)
+        check_dimensionality(relevant_bond_with_units.type.k, unit.kilojoules_per_mole/unit.nanometers**2)
         return relevant_bond_with_units
 
     def _get_bond_constraint(self, atom1, atom2, system):
         """
-        Get the constraint parameters corresponding to the bond
-        between the given atoms
+        Get constraint parameters corresponding to the bond between the given atoms
 
         Parameters
         ----------
-        atom1 : parmed.Atom object
-           the first atom of the constrained bond
-        atom2 : parmed.Atom object
-           the second atom of the constrained bond
-        system : openmm.System object
+        atom1 : parmed.Atom
+           The first atom of the constrained bond
+        atom2 : parmed.Atom
+           The second atom of the constrained bond
+        system : openmm.System
            The system containing the constraint
 
         Returns
         -------
-        constraint : float, quantity nm
-            the parameters of the bond constraint
+        constraint : simtk.unit.Quantity or None
+            If a constraint is defined between the two atoms, the length is returned; otherwise None
         """
-        atom_indices = {atom1.idx, atom2.idx}
+        # TODO: This algorithm is incredibly inefficient.
+        # Instead, generate a dictionary lookup of constrained distances.
+
+        atom_indices = set([atom1.idx, atom2.idx])
         n_constraints = system.getNumConstraints()
         constraint = None
         for i in range(n_constraints):
-            constraint_parameters = system.getConstraintParameters(i)
-            constraint_atoms = set(constraint_parameters[:2])
+            p1, p2, length = system.getConstraintParameters(i)
+            constraint_atoms = set([p1, p2])
             if len(constraint_atoms.intersection(atom_indices))==2:
-                constraint = constraint_parameters[2]
+                constraint = length
+
+        if constraint is not None:
+            check_dimensionality(constraint, unit.nanometers)
         return constraint
 
     def _get_relevant_angle(self, atom1, atom2, atom3):
         """
         Get the angle containing the 3 given atoms
+
+        Parameters
+        ----------
+        atom1 : parmed.Atom
+            The first atom defining the angle
+        atom2 : parmed.Atom
+            The second atom defining the angle
+        atom3 : parmed.Atom
+            The third atom in the angle
+
+        Returns
+        -------
+        relevant_angle_with_units : parmed.Angle with parmeters modified to be simtk.unit.Quantity
+            Angle connecting the three atoms
+            Parameters representing unit-bearing quantities have been converted to simtk.unit.Quantity with units attached.
         """
         atom1_angles = set(atom1.angles)
         atom2_angles = set(atom2.angles)
@@ -441,74 +563,111 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             raise Exception('Atoms %s-%s-%s do not share a parmed Angle term' % (atom1, atom2, atom3))
 
         relevant_angle = relevant_angle_set.pop()
-        if type(relevant_angle.type.k) != units.Quantity:
+        if type(relevant_angle.type.k) != unit.Quantity:
             relevant_angle_with_units = self._add_angle_units(relevant_angle)
         else:
             relevant_angle_with_units = relevant_angle
+
+        check_dimensionality(relevant_angle.type.theteq, unit.radians)
+        check_dimensionality(relevant_angle.type.k, unit.kilojoules_per_mole/unit.radians**2)
         return relevant_angle_with_units
 
     def _add_bond_units(self, bond):
         """
-        Add the correct units to a harmonic bond
+        Attach units to a parmed harmonic bond
 
-        Arguments
-        ---------
-        bond : parmed bond object
-            The bond to get units
+        Parameters
+        ----------
+        bond : parmed.Bond
+            The bond object whose paramters will be converted to unit-bearing quantities
 
         Returns
         -------
+        bond : parmed.Bond with units modified to simtk.unit.Quantity
+            The same modified Bond object that was passed in
+            Parameters representing unit-bearing quantities have been converted to simtk.unit.Quantity with units attached.
 
         """
-        if type(bond.type.k)==units.Quantity:
+        # TODO: Shouldn't we be making a deep copy?
+
+        # If already promoted to unit-bearing quantities, return the object
+        if type(bond.type.k)==unit.Quantity:
             return bond
-        bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
-        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
+        # Add parmed units
+        # TODO: Get rid of this, and just operate on the OpenMM System instead
+        bond.type.req = unit.Quantity(bond.type.req, unit=unit.angstrom)
+        bond.type.k = unit.Quantity(2.0*bond.type.k, unit=unit.kilocalorie_per_mole/unit.angstrom**2)
         return bond
 
     def _add_angle_units(self, angle):
         """
-        Add the correct units to a harmonic angle
+        Attach units to parmed harmonic angle
 
-        Arguments
+        Parameters
         ----------
-        angle : parmed angle object
-             the angle to get unit-ed
+        angle : parmed.Angle
+            The angle object whose paramters will be converted to unit-bearing quantities
 
         Returns
         -------
-        angle_with_units : parmed angle
-            The angle, but with units on its parameters
+        angle : parmed.Angle with units modified to simtk.unit.Quantity
+            The same modified Angle object that was passed in
+            Parameters representing unit-bearing quantities have been converted to simtk.unit.Quantity with units attached.
+
         """
-        if type(angle.type.k)==units.Quantity:
+        # TODO: Shouldn't we be making a deep copy?
+
+        # If already promoted to unit-bearing quantities, return the object
+        if type(angle.type.k)==unit.Quantity:
             return angle
-        angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
-        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
+        # Add parmed units
+        # TODO: Get rid of this, and just operate on the OpenMM System instead
+        angle.type.theteq = unit.Quantity(angle.type.theteq, unit=unit.degree)
+        angle.type.k = unit.Quantity(2.0*angle.type.k, unit=unit.kilocalorie_per_mole/unit.radian**2)
         return angle
 
     def _add_torsion_units(self, torsion):
         """
         Add the correct units to a torsion
 
-        Arguments
-        ---------
-        torsion : parmed.dihedral object
-            The torsion needing units
+        Parameters
+        ----------
+        torsion : parmed.Torsion
+            The angle object whose paramters will be converted to unit-bearing quantities
 
         Returns
         -------
-        torsion : parmed.dihedral object
-            Torsion but with units added
+        torsion : parmed.Torsion with units modified to simtk.unit.Quantity
+            The same modified Torsion object that was passed in
+            Parameters representing unit-bearing quantities have been converted to simtk.unit.Quantity with units attached.
+
         """
-        if type(torsion.type.phi_k) == units.Quantity:
+        # TODO: Shouldn't we be making a deep copy?
+
+        # If already promoted to unit-bearing quantities, return the object
+        if type(torsion.type.phi_k) == unit.Quantity:
             return torsion
-        torsion.type.phi_k = units.Quantity(torsion.type.phi_k, unit=units.kilocalorie_per_mole)
-        torsion.type.phase = units.Quantity(torsion.type.phase, unit=units.degree)
+        # Add parmed units
+        # TODO: Get rid of this, and just operate on the OpenMM System instead
+        torsion.type.phi_k = unit.Quantity(torsion.type.phi_k, unit=unit.kilocalorie_per_mole)
+        torsion.type.phase = unit.Quantity(torsion.type.phase, unit=unit.degree)
         return torsion
 
     def _rotation_matrix(self, axis, angle):
         """
-        This method produces a rotation matrix given an axis and an angle.
+        Compute a rotation matrix about the origin given a coordinate axis and an angle.
+
+        Parameters
+        ----------
+        axis : ndarray of shape (3,) without units
+            The axis about which rotation should occur
+        angle : float (implicitly in radians)
+            The angle of rotation about the axis
+
+        Returns
+        -------
+        rotation_matrix : ndarray of shape (3,3) without units
+            The 3x3 rotation matrix
         """
         axis = axis/np.linalg.norm(axis)
         axis_squared = np.square(axis)
@@ -531,188 +690,563 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
     def _cartesian_to_internal(self, atom_position, bond_position, angle_position, torsion_position):
         """
-        Cartesian to internal function
+        Cartesian to internal coordinate conversion
+
+        Parameters
+        ----------
+        atom_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom whose internal coordinates are to be computed with respect to other atoms
+        bond_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with bond length ``r``
+        angle_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with angle ``theta``
+        torsion_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with torsion ``phi``
+
+        Returns
+        -------
+        internal_coords : tuple of (float, float, float)
+            Tuple representing (r, theta, phi):
+            r : float (implicitly in nanometers)
+                Bond length distance from ``bond_position`` to newly placed atom
+            theta : float (implicitly in radians on domain [0,pi])
+                Angle formed by ``(angle_position, bond_position, new_atom)``
+            phi : float (implicitly in radians on domain [-pi, +pi))
+                Torsion formed by ``(torsion_position, angle_position, bond_position, new_atom)``
+        detJ : float
+            The absolute value of the determinant of the Jacobian transforming from (r,theta,phi) to (x,y,z)
+            .. todo :: Clarify the direction of the Jacobian
+
         """
+        # TODO: _cartesian_to_internal and _internal_to_cartesian should accept/return units and have matched APIs
+
+        check_dimensionality(atom_position, unit.nanometers)
+        check_dimensionality(bond_position, unit.nanometers)
+        check_dimensionality(angle_position, unit.nanometers)
+        check_dimensionality(torsion_position, unit.nanometers)
+
+        # Convert to internal coordinates once everything is dimensionless
+        # Make sure positions are float64 arrays implicitly in units of nanometers for numba
         from perses.rjmc import coordinate_numba
-        #ensure we have the correct units, then remove them
-        atom_position = atom_position.value_in_unit(units.nanometers).astype(np.float64)
-        bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
-        angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
-        torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
+        internal_coords = coordinate_numba.cartesian_to_internal(
+            atom_position.value_in_unit(unit.nanometers).astype(np.float64),
+            bond_position.value_in_unit(unit.nanometers).astype(np.float64),
+            angle_position.value_in_unit(unit.nanometers).astype(np.float64),
+            torsion_position.value_in_unit(unit.nanometers).astype(np.float64))
+        # Return values are also in floating point implicitly in nanometers and radians
+        r, theta, phi = internal_coords
 
-        internal_coords = coordinate_numba.cartesian_to_internal(atom_position, bond_position, angle_position, torsion_position)
+        # Compute absolute value of determinant of Jacobian
+        detJ = np.abs(r**2*np.sin(theta))
 
+        check_dimensionality(r, float)
+        check_dimensionality(theta, float)
+        check_dimensionality(phi, float)
+        check_dimensionality(detJ, float)
 
-        return internal_coords, np.abs(internal_coords[0]**2*np.sin(internal_coords[1]))
+        return internal_coords, detJ
 
     def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
         """
-        Calculate the cartesian coordinates given the internal, as well as abs(detJ)
+        Calculate the cartesian coordinates of a newly placed atom in terms of internal coordinates,
+        along with the absolute value of the determinant of the Jacobian.
+
+        Parameters
+        ----------
+        bond_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with bond length ``r``
+        angle_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with angle ``theta``
+        torsion_position : simtk.unit.Quantity wrapped numpy array of shape (natoms,) with units compatible with nanometers
+            Position of atom separated from newly placed atom with torsion ``phi``
+        r : simtk.unit.Quantity with units compatible with nanometers
+            Bond length distance from ``bond_position`` to newly placed atom
+        theta : simtk.unit.Quantity with units compatible with radians
+            Angle formed by ``(angle_position, bond_position, new_atom)``
+        phi : simtk.unit.Quantity with units compatible with radians
+            Torsion formed by ``(torsion_position, angle_position, bond_position, new_atom)``
+
+        Returns
+        -------
+        xyz : simtk.unit.Quantity wrapped numpy array of shape (3,) with units compatible with nanometers
+            The position of the newly placed atom
+        detJ : float
+            The absolute value of the determinant of the Jacobian transforming from (r,theta,phi) to (x,y,z)
+            .. todo :: Clarify the direction of the Jacobian
+
         """
+        # TODO: _cartesian_to_internal and _internal_to_cartesian should accept/return units and have matched APIs
+
+        check_dimensionality(bond_position, unit.nanometers)
+        check_dimensionality(angle_position, unit.nanometers)
+        check_dimensionality(torsion_position, unit.nanometers)
+        check_dimensionality(r, float)
+        check_dimensionality(theta, float)
+        check_dimensionality(phi, float)
+
+        # Compute Cartesian coordinates from internal coordinates using all-dimensionless quantities
+        # All inputs to numba must be in float64 arrays implicitly in md_unit_syste units of nanometers and radians
         from perses.rjmc import coordinate_numba
-        r = r.value_in_unit(units.nanometers)
-        theta = theta.value_in_unit(units.radians)
-        phi = phi.value_in_unit(units.radians)
-        bond_position = bond_position.value_in_unit(units.nanometers).astype(np.float64)
-        angle_position = angle_position.value_in_unit(units.nanometers).astype(np.float64)
-        torsion_position = torsion_position.value_in_unit(units.nanometers).astype(np.float64)
-        xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
-        xyz = units.Quantity(xyz, unit=units.nanometers)
+        xyz = coordinate_numba.internal_to_cartesian(
+            bond_position.value_in_unit(unit.nanometers).astype(np.float64),
+            angle_position.value_in_unit(unit.nanometers).astype(np.float64),
+            torsion_position.value_in_unit(unit.nanometers).astype(np.float64),
+            np.array([r, theta, phi], np.float64))
+        # Transform position of new atom back into unit-bearing Quantity
+        xyz = unit.Quantity(xyz, unit=unit.nanometers)
 
-        return xyz, np.abs(r**2*np.sin(theta))
+        # Compute abs det Jacobian using unitless values
+        detJ = np.abs(r**2*np.sin(theta))
 
-    def _bond_logq(self, r, bond, beta):
+        check_dimensionality(xyz, unit.nanometers)
+        check_dimensionality(detJ, float)
+        return xyz, detJ
+
+    def _bond_log_pmf(self, bond, beta, n_divisions):
+        """
+        Calculate the log probability mass function (PMF) of drawing a bond.
+
+        .. math ::
+
+            p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
+
+        Prameters
+        ---------
+        bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
+            Valence bond parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing bond length
+
+        Returns
+        -------
+        r_i : np.ndarray of shape (n_divisions,) implicitly in units of nanometers
+            r_i[i] is the bond length leftmost bin edge with corresponding log probability mass function p_i[i]
+        log_p_i : np.ndarray of shape (n_divisions,)
+            log_p_i[i] is the corresponding log probability mass of bond length r_i[i]
+        bin_width : float implicitly in units of nanometers
+            The bin width for individual PMF bins
+
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
+        """
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: We end up computing the discretized PMF over and over again; we can speed this up by caching
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        # Check input argument dimensions
+        assert check_dimensionality(bond.type.req, unit.angstroms)
+        assert check_dimensionality(bond.type.k, unit.kilojoules_per_mole/unit.nanometers**2)
+        assert check_dimensionality(beta, unit.kilojoules_per_mole**(-1))
+
+        # Retrieve relevant quantities for valence bond
+        r0 = bond.type.req # equilibrium bond distance, unit-bearing quantity
+        k = bond.type.k * self._bond_softening_constant # force constant, unit-bearing quantity
+        sigma_r = unit.sqrt((1.0/(beta*k))) # standard deviation, unit-bearing quantity
+
+        # Convert to dimensionless quantities in MD unit system
+        r0 = r0.value_in_unit_system(unit.md_unit_system)
+        k = k.value_in_unit_system(unit.md_unit_system)
+        sigma_r = sigma_r.value_in_unit_system(unit.md_unit_system)
+
+        # Determine integration bounds
+        lower_bound, upper_bound = max(0., r0 - 6*sigma_r), (r0 + 6*sigma_r)
+
+        # Compute integration quadrature points
+        r_i, bin_width = np.linspace(lower_bound, upper_bound, num=n_divisions, retstep=True, endpoint=False)
+
+        # Form log probability
+        from scipy.special import logsumexp
+        log_p_i = 2*np.log(r_i+(bin_width/2.0)) - 0.5*((r_i+(bin_width/2.0)-r0)/sigma_r)**2
+        log_p_i -= logsumexp(log_p_i)
+
+        check_dimensionality(r_i, float)
+        check_dimensionality(log_p_i, float)
+        check_dimensionality(bin_width, float)
+
+        return r_i, log_p_i, bin_width
+
+    def _bond_logp(self, r, bond, beta, n_divisions):
         """
         Calculate the log-probability of a given bond at a given inverse temperature
 
-        Arguments
+        Propose dimensionless bond length r from distribution
+
+        .. math ::
+
+            r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
+
+        Prameters
         ---------
         r : float
-            bond length, in nanometers
-        r0 : float
-            equilibrium bond length, in nanometers
-        k_eq : float
-            Spring constant of bond
-        beta : float
-            1/kT or inverse temperature
-        """
-        k_eq = bond.type.k
-        r0 = bond.type.req
-        logq = -beta*0.5*k_eq*(r-r0)**2
-        return logq
+            bond length, implicitly in nanometers
+        bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
+            Valence bond parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing bond length
 
-    def _angle_logq(self, theta, angle, beta):
-        """
-        Calculate the log-probability of a given bond at a given inverse temperature
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
 
-        Arguments
+        """
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        check_dimensionality(r, float)
+        check_dimensionality(beta, 1/unit.kilojoules_per_mole)
+
+        r_i, log_p_i, bin_width = self._bond_log_pmf(bond, beta, n_divisions)
+
+        if (r < r_i[0]) or (r >= r_i[-1] + bin_width):
+            return LOG_ZERO
+
+        # Determine index that r falls within
+        index = int((r - r_i[0])/bin_width)
+        assert (index >= 0) and (index < n_divisions)
+
+        # Correct for division size
+        logp = log_p_i[index] - np.log(bin_width)
+
+        return logp
+
+    def _propose_bond(self, bond, beta, n_divisions):
+        """
+        Propose dimensionless bond length r from distribution
+
+        .. math ::
+
+            r \sim p(r; \beta, K_r, r_0) \propto r^2 e^{-\frac{\beta K_r}{2} (r - r_0)^2 }
+
+        Prameters
         ---------
-        theta : float
-            bond angle, in randians
-        angle : parmed angle object
-            Bond angle object containing parameters
-        beta : float
-            1/kT or inverse temperature
-        """
-        k_eq = angle.type.k
-        theta0 = angle.type.theteq
-        logq = -beta*k_eq*0.5*(theta-theta0)**2
-        return logq
+        bond : parmed.Structure.Bond modified to use simtk.unit.Quantity
+            Valence bond parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing bond length
 
-    def _propose_bond(self, bond, beta):
+        Returns
+        -------
+        r : float
+            Dimensionless bond length, implicitly in nanometers
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
-        Bond length proposal
-        """
-        r0 = bond.type.req
-        k = bond.type.k * self._bond_softening_constant
-        sigma_r = units.sqrt(1.0/(beta*k))
-        r = sigma_r*np.random.randn() + r0
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        check_dimensionality(beta, 1/unit.kilojoules_per_mole)
+
+        r_i, log_p_i, bin_width = self._bond_log_pmf(bond, beta, n_divisions)
+
+        # Draw an index
+        index = np.random.choice(range(n_divisions), p=np.exp(log_p_i))
+        r = r_i[index]
+
+        # Draw uniformly in that bin
+        r = np.random.uniform(r, r+bin_width)
+
+        # Return dimensionless r, implicitly in nanometers
+        assert check_dimensionality(r, float)
+        assert (r > 0)
         return r
 
-    def _propose_angle(self, angle, beta):
+    def _angle_log_pmf(self, angle, beta, n_divisions):
         """
-        Bond angle proposal
+        Calculate the log probability mass function (PMF) of drawing a angle.
+
+        .. math ::
+
+            p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
+
+        Prameters
+        ---------
+        angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
+            Valence bond parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing bond length
+
+        Returns
+        -------
+        theta_i : np.ndarray of shape (n_divisions,) implicitly in units of radians
+            theta_i[i] is the angle with corresponding log probability mass function p_i[i]
+        log_p_i : np.ndarray of shape (n_divisions,)
+            log_p_i[i] is the corresponding log probability mass of angle theta_i[i]
+        bin_width : float implicitly in units of radians
+            The bin width for individual PMF bins
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
+        # TODO: Overhaul this method to accept unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        # TODO: We end up computing the discretized PMF over and over again; we can speed this up by caching
+
+        # Check input argument dimensions
+        assert check_dimensionality(angle.type.theteq, unit.radians)
+        assert check_dimensionality(angle.type.k, unit.kilojoules_per_mole/unit.radians**2)
+        assert check_dimensionality(beta, unit.kilojoules_per_mole**(-1))
+
+        # Retrieve relevant quantities for valence angle
         theta0 = angle.type.theteq
         k = angle.type.k * self._angle_softening_constant
-        sigma_theta = units.sqrt(1.0/(beta*k))
-        theta = sigma_theta*np.random.randn() + theta0
+        sigma_theta = unit.sqrt(1.0/(beta * k)) # standard deviation, unit-bearing quantity
+
+        # Convert to dimensionless quantities in MD unit system
+        theta0 = theta0.value_in_unit_system(unit.md_unit_system)
+        k = k.value_in_unit_system(unit.md_unit_system)
+        sigma_theta = sigma_theta.value_in_unit_system(unit.md_unit_system)
+
+        # Determine integration bounds
+        # We can't compute log(0) so we have to avoid sin(theta) = 0 near theta = {0, pi}
+        EPSILON = 1.0e-3
+        lower_bound, upper_bound = EPSILON, np.pi-EPSILON
+
+        # Compute left bin edges
+        theta_i, bin_width = np.linspace(lower_bound, upper_bound, num=n_divisions, retstep=True, endpoint=False)
+
+        # Compute log probability
+        from scipy.special import logsumexp
+        log_p_i = np.log(np.sin(theta_i+(bin_width/2.0))) - 0.5*((theta_i+(bin_width/2.0)-theta0)/sigma_theta)**2
+        log_p_i -= logsumexp(log_p_i)
+
+        check_dimensionality(theta_i, float)
+        check_dimensionality(log_p_i, float)
+        check_dimensionality(bin_width, float)
+
+        return theta_i, log_p_i, bin_width
+
+    def _angle_logp(self, theta, angle, beta, n_divisions):
+        """
+        Calculate the log-probability of a given angle at a given inverse temperature
+
+        Propose dimensionless bond length r from distribution
+
+        .. math ::
+
+            p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
+
+        Prameters
+        ---------
+        theta : float
+            angle, implicitly in radians
+        angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
+            Valence angle parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse thermal energy
+        n_divisions : int
+            Number of quandrature points for drawing angle
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
+        """
+        # TODO: Overhaul this method to accept unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        check_dimensionality(theta, float)
+        check_dimensionality(beta, 1/unit.kilojoules_per_mole)
+
+        theta_i, log_p_i, bin_width = self._angle_log_pmf(angle, beta, n_divisions)
+
+        if (theta < theta_i[0]) or (theta >= theta_i[-1] + bin_width):
+            return LOG_ZERO
+
+        # Determine index that r falls within
+        index = int((theta - theta_i[0]) / bin_width)
+        assert (index >= 0) and (index < n_divisions)
+
+        # Correct for division size
+        logp = log_p_i[index] - np.log(bin_width)
+
+        return logp
+
+    def _propose_angle(self, angle, beta, n_divisions):
+        """
+        Propose dimensionless angle from distribution
+
+        .. math ::
+
+            \theta \sim p(\theta; \beta, K_\theta, \theta_0) \propto \sin(\theta) e^{-\frac{\beta K_\theta}{2} (\theta - \theta_0)^2 }
+
+        Prameters
+        ---------
+        angle : parmed.Structure.Angle modified to use simtk.unit.Quantity
+            Valence angle parameters
+        beta : simtk.unit.Quantity with units compatible with 1/kilojoules_per_mole
+            Inverse temperature
+        n_divisions : int
+            Number of quandrature points for drawing angle
+
+        Returns
+        -------
+        theta : float
+            Dimensionless valence angle, implicitly in radians
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
+        """
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        check_dimensionality(beta, 1/unit.kilojoules_per_mole)
+
+        theta_i, log_p_i, bin_width = self._angle_log_pmf(angle, beta, n_divisions)
+
+        # Draw an index
+        index = np.random.choice(range(n_divisions), p=np.exp(log_p_i))
+        theta = theta_i[index]
+
+        # Draw uniformly in that bin
+        theta = np.random.uniform(theta, theta+bin_width)
+
+        # Return dimensionless theta, implicitly in nanometers
+        assert check_dimensionality(theta, float)
         return theta
 
-    def _torsion_scan(self, torsion, positions, r, theta, n_divisions=360):
+    def _torsion_scan(self, torsion, positions, r, theta, n_divisions):
         """
-        Rotate the atom about the
+        Compute unit-bearing Carteisan positions and torsions (dimensionless, in md_unit_system) for a torsion scan
+
         Parameters
         ----------
         torsion : parmed.Dihedral
-            parmed Dihedral containing relevant atoms
-        positions : [n,3] np.ndarray in nm
-            positions of the atoms in the system
-        r : float in nm
-            bond length
-        theta : float in radians
-            bond angle
+            Parmed Dihedral containing relevant atoms defining torsion
+        positions : simtk.unit.Quantity of shape (natoms,3) with units compatible with nanometers
+            Positions of the atoms in the system
+        r : float (implicitly in md_unit_system)
+            Dimensionless bond length (must be in nanometers)
+        theta : float (implicitly in md_unit_system)
+            Dimensionless valence angle (must be in radians)
+        n_divisions : int
+            The number of divisions for the torsion scan
 
         Returns
         -------
-        xyzs : np.ndarray, in nm
+        xyzs : simtk.unit.Quantity wrapped np.ndarray of shape (n_divisions,3) with dimensions length
             The cartesian coordinates of each
-        phis : np.ndarray, in radians
-            The torsions angles at which a potential will be calculated
-        """
-        from perses.rjmc import coordinate_numba
-        torsion_scan_init = time.time()
-        positions_copy = copy.deepcopy(positions)
-        positions_copy = positions_copy.value_in_unit(units.nanometers)
-        positions_copy = positions_copy.astype(np.float64)
-        r = r.value_in_unit(units.nanometers)
-        theta = theta.value_in_unit(units.radians)
-        bond_atom = torsion.atom2
-        angle_atom = torsion.atom3
-        torsion_atom = torsion.atom4
-        phis = np.arange(-np.pi, +np.pi, (2.0*np.pi)/n_divisions) # Can't use units here.
-        xyzs = coordinate_numba.torsion_scan(positions_copy[bond_atom.idx], positions_copy[angle_atom.idx], positions_copy[torsion_atom.idx], np.array([r, theta, 0.0]), phis)
-        xyzs_quantity = units.Quantity(xyzs, unit=units.nanometers) #have to put the units back now
-        phis = units.Quantity(phis, unit=units.radians)
-        torsion_scan_time = time.time() - torsion_scan_init
-        self._torsion_coordinate_time += torsion_scan_time
-        return xyzs_quantity, phis
+        phis : np.ndarray of shape (n_divisions,), implicitly in radians
+            The torsions angles representing the left bin edge at which a potential will be calculated
+        bin_width : float, implicitly in radians
+            The bin width of torsion scan increment
 
-    def _torsion_log_probability_mass_function(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
         """
-        Calculate the torsion logp pmf using OpenMM
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        assert check_dimensionality(positions, unit.angstroms)
+        assert check_dimensionality(r, float)
+        assert check_dimensionality(theta, float)
+
+        # Compute dimensionless positions in md_unit_system as numba-friendly float64
+        length_unit = unit.nanometers
+        import copy
+        positions_copy = copy.deepcopy(positions)
+        positions_copy = positions_copy.value_in_unit(length_unit).astype(np.float64)
+        bond_positions = positions_copy[torsion.atom2.idx]
+        angle_positions = positions_copy[torsion.atom3.idx]
+        torsion_positions = positions_copy[torsion.atom4.idx]
+
+        # Compute dimensionless torsion values for torsion scan
+        phis, bin_width = np.linspace(-np.pi, +np.pi, num=n_divisions, retstep=True, endpoint=False)
+
+        # Compute dimensionless positions for torsion scan
+        from perses.rjmc import coordinate_numba
+        internal_coordinates = np.array([r, theta, 0.0], np.float64)
+        xyzs = coordinate_numba.torsion_scan(bond_positions, angle_positions, torsion_positions, internal_coordinates, phis)
+
+        # Convert positions back into standard md_unit_system length units (nanometers)
+        xyzs_quantity = unit.Quantity(xyzs, unit=unit.nanometers)
+
+        # Return unit-bearing positions and dimensionless torsions (implicitly in md_unit_system)
+        check_dimensionality(xyzs_quantity, unit.nanometers)
+        check_dimensionality(phis, float)
+        return xyzs_quantity, phis, bin_width
+
+    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions):
+        """
+        Calculate the torsion log probability using OpenMM, including all energetic contributions for the atom being driven
+
+        This includes all contributions from bonds, angles, and torsions for the atom being placed
+        (and, optionally, sterics if added to the growth system when it was created).
 
         Parameters
         ----------
-        growth_context : openmm.Context
-            Context containing the modified system and
-        torsion : parmed.Dihedral
+        growth_context : simtk.openmm.Context
+            Context containing the modified system
+        torsion : parmed.Dihedral modified to use simtk.unit.Quantity
             parmed Dihedral containing relevant atoms
-        positions : [n,3] np.ndarray in nm
-            positions of the atoms in the system
-        r : float in nm
-            bond length
-        theta : float in radians
-            bond angle
-        beta : float
-            inverse temperature
-        n_divisions : int, optional
-            number of divisions for the torsion scan
+        positions : simtk.unit.Quantity with shape (natoms,3) with units compatible with nanometers
+            Positions of the atoms in the system
+        r : float (implicitly in nanometers)
+            Dimensionless bond length (must be in nanometers)
+        theta : float (implcitly in radians on domain [0,+pi])
+            Dimensionless valence angle (must be in radians)
+        beta : simtk.unit.Quantity with units compatible with1/(kJ/mol)
+            Inverse thermal energy
+        n_divisions : int
+            Number of divisions for the torsion scan
 
         Returns
         -------
-        logp_torsions : np.ndarray of float
-            normalized probability of each of n_divisions of torsion
-        phis : np.ndarray, in radians
-            The torsions angles at which a potential was calculated
+        logp_torsions : np.ndarray of float with shape (n_divisions,)
+            logp_torsions[i] is the normalized probability density at phis[i]
+        phis : np.ndarray of float with shape (n_divisions,), implicitly in radians
+            phis[i] is the torsion angle left bin edges at which the log probability logp_torsions[i] was calculated
+        bin_width : float implicitly in radian
+            The bin width for torsions
+
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
         """
-        logq = np.zeros(n_divisions)
+        # TODO: This method could benefit from memoization to speed up tests and particle filtering
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        check_dimensionality(positions, unit.angstroms)
+        check_dimensionality(r, float)
+        check_dimensionality(theta, float)
+        check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
+
+        # Compute energies for all torsions
+        logq = np.zeros(n_divisions) # logq[i] is the log unnormalized torsion probability density
         atom_idx = torsion.atom1.idx
-        xyzs, phis = self._torsion_scan(torsion, positions, r, theta, n_divisions=n_divisions)
-        xyzs = xyzs.value_in_unit_system(units.md_unit_system)
-        positions = positions.value_in_unit_system(units.md_unit_system)
+        xyzs, phis, bin_width = self._torsion_scan(torsion, positions, r, theta, n_divisions)
+        xyzs = xyzs.value_in_unit_system(unit.md_unit_system) # make positions dimensionless again
+        positions = positions.value_in_unit_system(unit.md_unit_system)
         for i, xyz in enumerate(xyzs):
+            # Set positions
             positions[atom_idx,:] = xyz
-            position_set = time.time()
             growth_context.setPositions(positions)
-            position_time = time.time() - position_set
-            self._position_set_time += position_time
-            energy_computation_init = time.time()
+
+            # Compute potential energy
             state = growth_context.getState(getEnergy=True)
             potential_energy = state.getPotentialEnergy()
-            energy_computation_time = time.time() - energy_computation_init
-            self._energy_time += energy_computation_time
+
+            # Store unnormalized log probabilities
             logq_i = -beta*potential_energy
             logq[i] = logq_i
 
+        # It's OK to have a few torsions with NaN energies,
+        # but we need at least _some_ torsions to have finite energies
         if np.sum(np.isnan(logq)) == n_divisions:
             raise Exception("All %d torsion energies in torsion PMF are NaN." % n_divisions)
-        logq[np.isnan(logq)] = -np.inf
-        logq -= max(logq)
-        q = np.exp(logq)
-        Z = np.sum(q)
-        logp_torsions = logq - np.log(Z)
 
+        # Suppress the contribution from any torsions with NaN energies
+        logq[np.isnan(logq)] = -np.inf
+
+        # Compute the normalized log probability
+        from scipy.special import logsumexp
+        logp_torsions = logq - logsumexp(logq)
+
+        # Write proposed torsion energies to a PDB file for visualization or debugging, if desired
         if hasattr(self, '_proposal_pdbfile'):
             # Write proposal probabilities to PDB file as B-factors for inert atoms
             f_i = -logp_torsions
@@ -728,500 +1262,124 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # atom_positions[order,k]
             # torsion_pmf[order, division_index]
 
-        return logp_torsions, phis
+        assert check_dimensionality(logp_torsions, float)
+        assert check_dimensionality(phis, float)
+        assert check_dimensionality(bin_width, float)
+        return logp_torsions, phis, bin_width
 
-
-    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions=360):
+    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions):
         """
-        Propose a torsion using OpenMM
+        Propose a torsion angle using OpenMM
 
         Parameters
         ----------
-        growth_context : openmm.Context
-            Context containing the modified system and
-        torsion : parmed.Dihedral
+        growth_context : simtk.openmm.Context
+            Context containing the modified system
+        torsion : parmed.Dihedral modified to use simtk.unit.Quantity
             parmed Dihedral containing relevant atoms
-        positions : [n,3] np.ndarray in nm
-            positions of the atoms in the system
-        r : float in nm
-            bond length
-        theta : float in radians
-            bond angle
-        beta : float
-            inverse temperature
-        n_divisions : int, optional
-            number of divisions for the torsion scan. default 360
+        positions : simtk.unit.Quantity with shape (natoms,3) with units compatible with nanometers
+            Positions of the atoms in the system
+        r : float (implicitly in nanometers)
+            Dimensionless bond length (must be in nanometers)
+        theta : float (implcitly in radians on domain [0,+pi])
+            Dimensionless valence angle (must be in radians)
+        beta : simtk.unit.Quantity with units compatible with1/(kJ/mol)
+            Inverse thermal energy
+        n_divisions : int
+            Number of divisions for the torsion scan
 
         Returns
         -------
-        phi : float in radians
-            The proposed torsion
+        phi : float, implicitly in radians
+            The proposed torsion angle
         logp : float
-            The log probability of the proposal.
-        """
-        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
-        division = units.Quantity(2*np.pi/n_divisions, unit=units.radian)
-        phi_median_idx = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
-        phi_min = phis[phi_median_idx] - division/2.0
-        phi_max = phis[phi_median_idx] + division/2.0
-        phi = np.random.uniform(phi_min.value_in_unit(units.radian), phi_max.value_in_unit(units.radian))
-        logp = logp_torsions[phi_median_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions
-        return units.Quantity(phi, unit=units.radian), logp
+            The log probability of the proposal
 
-    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions=360):
+        .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
+
+        """
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+        # TODO: Switch from simple discrete quadrature to more sophisticated computation of pdf
+
+        check_dimensionality(positions, unit.angstroms)
+        check_dimensionality(r, float)
+        check_dimensionality(theta, float)
+        check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
+
+        # Compute probability mass function for all possible proposed torsions
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions)
+
+        # Draw a torsion bin and a torsion uniformly within that bin
+        index = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
+        phi = phis[index]
+        logp = logp_torsions[index]
+
+        # Draw uniformly within the bin
+        phi = np.random.uniform(phi, phi+bin_width)
+        logp -= np.log(bin_width)
+
+        assert check_dimensionality(phi, float)
+        assert check_dimensionality(logp, float)
+        return phi, logp
+
+    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions):
         """
         Calculate the logp of a torsion using OpenMM
 
         Parameters
         ----------
-        growth_context : openmm.Context
-            Context containing the modified system and
-        torsion : parmed.Dihedral
+        growth_context : simtk.openmm.Context
+            Context containing the modified system
+        torsion : parmed.Dihedral modified to use simtk.unit.Quantity
             parmed Dihedral containing relevant atoms
-        positions : [n,3] np.ndarray in nm
-            positions of the atoms in the system
-        r : float in nm
-            Bond length
-        theta : float in radians
-            Bond angle
-        phi : float, in radians
-            The torsion angle
-        beta : float
-            inverse temperature
-        n_divisions : int, optional
-            number of divisions for logp calculation. default 360.
+        positions : simtk.unit.Quantity with shape (natoms,3) with units compatible with nanometers
+            Positions of the atoms in the system
+        r : float (implicitly in nanometers)
+            Dimensionless bond length (must be in nanometers)
+        theta : float (implicitly in radians on domain [0,+pi])
+            Dimensionless valence angle (must be in radians)
+        phi : float (implicitly in radians on domain [-pi,+pi))
+            Dimensionless torsion angle (must be in radians)
+        beta : simtk.unit.Quantity with units compatible with1/(kJ/mol)
+            Inverse thermal energy
+        n_divisions : int
+            Number of divisions for the torsion scan
 
         Returns
         -------
         torsion_logp : float
-            the logp of this torsion
+            The log probability this torsion would be drawn
         """
-        logp_torsions, phis = self._torsion_log_probability_mass_function(growth_context, torsion, positions, r, theta, beta, n_divisions=n_divisions)
-        phi_idx = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
-        torsion_logp = logp_torsions[phi_idx] - np.log(2*np.pi / n_divisions) # convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
+        # TODO: Overhaul this method to accept and return unit-bearing quantities
+
+        # Check that quantities are unitless
+        check_dimensionality(positions, unit.angstroms)
+        check_dimensionality(r, float)
+        check_dimensionality(theta, float)
+        check_dimensionality(phi, float)
+        check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
+
+        # Compute torsion probability mass function
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions)
+
+        # Determine which bin the torsion falls within
+        index = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
+
+        # Convert from probability mass function to probability density function so that sum(dphi*p) = 1, with dphi = (2*pi)/n_divisions.
+        torsion_logp = logp_torsions[index] - np.log(bin_width)
+
+        assert check_dimensionality(torsion_logp, float)
         return torsion_logp
-
-class PredAtomTopologyIndex(oechem.OEUnaryAtomPred):
-
-    def __init__(self, topology_index):
-        super(PredAtomTopologyIndex, self).__init__()
-        self._topology_index = topology_index
-
-    def __call__(self, atom):
-        atom_data = atom.GetData()
-        if 'topology_index' in atom_data.keys():
-            if atom_data['topology_index'] == self._topology_index:
-                return True
-        return False
-
-
-class BootstrapParticleFilter(object):
-    """
-    Implements a Bootstrap Particle Filter (BPF)
-    to sample from the appropriate degrees of freedom.
-    Designed for use with the dimension-matching scheme
-    of Perses.
-    """
-
-    def __init__(self, growth_context, atom_torsions, initial_positions, beta, n_particles=18, resample_frequency=10):
-        """
-
-        Parameters
-        ----------
-        growth_context : simtk.openmm.Context object
-            Context containing appropriate "growth system"
-        atom_torsions : dict
-            parmed.Atom : parmed.Dihedral dict that specifies
-            what torsion to use to propose each atom
-        initial_positions : np.ndarray [n,3]
-            The positions of existing atoms.
-        beta : simtk.unit.Quantity
-            The inverse temperature, with units
-        n_particles : int, optional
-            The number of particles in the BPF (note that this
-            is NOT the number of atoms). Default 18.
-        resample_frequency : int, optional
-            How often to resample particles. default 10
-        """
-
-        raise NotImplementedError("The implementation of this GeometryEngine is not complete")
-        self._system = growth_context.getSystem()
-        self._beta = beta
-        self._growth_stage = 0
-        self._growth_context = growth_context
-        self._atom_torsions = atom_torsions
-        self._n_particles = n_particles
-        self._resample_frequency = resample_frequency
-        self._n_new_atoms = len(self._atom_torsions)
-        self._initial_positions = initial_positions
-        self._new_indices = [atom.idx for atom in self._atom_torsions.keys()]
-        #create a matrix for log weights (n_particles, n_stages)
-        self._Wij = np.zeros([self._n_particles, self._n_new_atoms])
-        #create an array for positions--only store new positions to avoid
-        #consuming way too much memory
-        self._new_positions = np.zeros([self._n_particles, self._n_new_atoms, 3])
-        self._generate_configurations()
-
-    def _internal_to_cartesian(self, bond_position, angle_position, torsion_position, r, theta, phi):
-        """
-        Calculate the cartesian coordinates given the internal, as well as abs(detJ)
-        """
-        from perses.rjmc import coordinate_numba
-        r = r.value_in_unit(units.nanometers)
-        theta = theta.value_in_unit(units.radians)
-        phi = phi.value_in_unit(units.radians)
-        bond_position = bond_position.astype(np.float64)
-        angle_position = angle_position.astype(np.float64)
-        torsion_position = torsion_position.astype(np.float64)
-        xyz = coordinate_numba.internal_to_cartesian(bond_position, angle_position, torsion_position, np.array([r, theta, phi], dtype=np.float64))
-        return xyz, r**2*np.sin(theta)
-
-    def _get_bond_constraint(self, atom1, atom2, system):
-        """
-        Get the constraint parameters corresponding to the bond
-        between the given atoms
-
-        Parameters
-        ----------
-        atom1 : parmed.Atom object
-           the first atom of the constrained bond
-        atom2 : parmed.Atom object
-           the second atom of the constrained bond
-        system : openmm.System object
-           The system containing the constraint
-
-        Returns
-        -------
-        constraint : float, quantity nm
-            the parameters of the bond constraint
-        """
-        atom_indices = {atom1.idx, atom2.idx}
-        n_constraints = system.getNumConstraints()
-        constraint = None
-        for i in range(n_constraints):
-            constraint_parameters = system.getConstraintParameters(i)
-            constraint_atoms = set(constraint_parameters[:2])
-            if len(constraint_atoms.intersection(atom_indices))==2:
-                constraint = constraint_parameters[2]
-        return constraint
-
-    def _log_unnormalized_target(self, new_positions):
-        """
-        Given a set of new positions (not all positions!) and a growth
-        stage, return the log unnormalized probability.
-
-        Parameters
-        ----------
-        new_positions :  np.array
-            Array containing m 3D coordinates of new atoms
-
-        Returns
-        -------
-        log_unnormalized_probability : float
-            The unnormalized probability of this configuration
-        """
-        positions = copy.deepcopy(self._initial_positions)
-        positions[self._new_indices] = new_positions
-        self._growth_context.setParameter('growth_stage', self._growth_stage)
-        self._growth_context.setPositions(positions)
-        energy = self._growth_context.getState(getEnergy=True).getPotentialEnergy()
-        return -self._beta*energy
-
-    def _get_relevant_angle(self, atom1, atom2, atom3):
-        """
-        Get the angle containing the 3 given atoms
-        """
-        atom1_angles = set(atom1.angles)
-        atom2_angles = set(atom2.angles)
-        atom3_angles = set(atom3.angles)
-        relevant_angle_set = atom1_angles.intersection(atom2_angles, atom3_angles)
-        relevant_angle = relevant_angle_set.pop()
-        if type(relevant_angle.type.k) != units.Quantity:
-            relevant_angle_with_units = self._add_angle_units(relevant_angle)
-        else:
-            relevant_angle_with_units = relevant_angle
-        return relevant_angle_with_units
-
-    def _add_bond_units(self, bond):
-        """
-        Add the correct units to a harmonic bond
-
-        Arguments
-        ---------
-        bond : parmed bond object
-            The bond to get units
-
-        Returns
-        -------
-
-        """
-        if type(bond.type.k)==units.Quantity:
-            return bond
-        bond.type.req = units.Quantity(bond.type.req, unit=units.angstrom)
-        bond.type.k = units.Quantity(2.0*bond.type.k, unit=units.kilocalorie_per_mole/units.angstrom**2)
-        return bond
-
-    def _add_angle_units(self, angle):
-        """
-        Add the correct units to a harmonic angle
-
-        Arguments
-        ----------
-        angle : parmed angle object
-             the angle to get unit-ed
-
-        Returns
-        -------
-        angle_with_units : parmed angle
-            The angle, but with units on its parameters
-        """
-        if type(angle.type.k)==units.Quantity:
-            return angle
-        angle.type.theteq = units.Quantity(angle.type.theteq, unit=units.degree)
-        angle.type.k = units.Quantity(2.0*angle.type.k, unit=units.kilocalorie_per_mole/units.radian**2)
-        return angle
-
-    def _get_relevant_bond(self, atom1, atom2):
-        """
-        utility function to get the bond connecting atoms 1 and 2.
-        Returns either a bond object or None
-        (since there is no constraint class)
-
-        Arguments
-        ---------
-        atom1 : parmed atom object
-             One of the atoms in the bond
-        atom2 : parmed.atom object
-             The other atom in the bond
-
-        Returns
-        -------
-        relevant_bond_with_units : parmed.Bond
-            Bond connecting the two atoms, if there is one. None if constrained or
-            no bond.
-        """
-        bonds_1 = set(atom1.bonds)
-        bonds_2 = set(atom2.bonds)
-        relevant_bond_set = bonds_1.intersection(bonds_2)
-        relevant_bond = relevant_bond_set.pop()
-        if relevant_bond.type is None:
-            return None
-        relevant_bond_with_units = self._add_bond_units(relevant_bond)
-        return relevant_bond_with_units
-
-    def _bond_logq(self, r, bond):
-        """
-        Calculate the log-probability of a given bond at a given inverse temperature
-
-        Arguments
-        ---------
-        r : float
-            bond length, in nanometers
-        r0 : float
-            equilibrium bond length, in nanometers
-        k_eq : float
-            Spring constant of bond
-        beta : simtk.unit.Quantity
-            1/kT or inverse temperature
-        """
-        k_eq = bond.type.k
-        r0 = bond.type.req
-        logq = -self._beta*0.5*k_eq*(r-r0)**2
-        return logq
-
-    def _angle_logq(self, theta, angle):
-        """
-        Calculate the log-probability of a given bond at a given inverse temperature
-
-        Arguments
-        ---------
-        theta : float
-            bond angle, in randians
-        angle : parmed angle object
-            Bond angle object containing parameters
-        beta : simtk.unit.Quantity
-            1/kT or inverse temperature
-        """
-        k_eq = angle.type.k
-        theta0 = angle.type.theteq
-        logq = -self._beta*k_eq*0.5*(theta-theta0)**2
-        return logq
-
-    def _propose_bond(self, bond):
-        """
-        Bond length proposal
-        """
-        r0 = bond.type.req
-        k = bond.type.k
-        sigma_r = units.sqrt(1.0/(self._beta*k))
-        r = sigma_r*np.random.randn() + r0
-        return r
-
-    def _propose_angle(self, angle):
-        """
-        Bond angle proposal
-        """
-        theta0 = angle.type.theteq
-        k = angle.type.k
-        sigma_theta = units.sqrt(1.0/(self._beta*k))
-        theta = sigma_theta*np.random.randn() + theta0
-        return theta
-
-    def _propose_atom(self, atom, torsion, new_positions):
-        """
-        Propose a set of internal coordinates (r, theta, phi) and transform
-        to cartesian coordinates (with jacobian correction).
-        for the given atom. R and theta are drawn from their respective
-        equilibrium distributions, whereas phi is simply a uniform sample.
-
-        Parameters
-        ----------
-        atom : parmed.Atom
-            atom that will have its position proposed
-        torsion : parmed.Dihedral
-            torsion that contains relevant information for atom
-        new_positions : [m, 3] np.array
-            array of just the new positions (not existing atoms)
-        Returns
-        -------
-        xyz : [1,3] np.array of float
-            The proposed cartesian coordinates
-        logp : float
-            The log probability with jacobian correction
-        """
-        positions = copy.deepcopy(self._initial_positions)
-        positions[self._new_indices] = new_positions
-        bond_atom = torsion.atom2
-        angle_atom = torsion.atom3
-        torsion_atom = torsion.atom4
-
-        if atom != torsion.atom1:
-            raise Exception('atom != torsion.atom1')
-
-        bond = self._get_relevant_bond(atom, bond_atom)
-
-        if bond is not None:
-            r = self._propose_bond(bond)
-            bond_k = bond.type.k
-            sigma_r = units.sqrt(1/(self._beta*bond_k))
-            logZ_r = np.log((np.sqrt(2*np.pi)*(sigma_r/units.angstroms))) # CHECK DOMAIN AND UNITS
-            logp_r = self._bond_logq(r, bond) - logZ_r
-        else:
-            constraint = self._get_bond_constraint(atom, bond_atom, self._system)
-            r = constraint #set bond length to exactly constraint
-            logp_r = 0.0
-
-        #propose an angle and calculate its probability
-        angle = self._get_relevant_angle(atom, bond_atom, angle_atom)
-        theta = self._propose_angle(angle)
-        angle_k = angle.type.k
-        sigma_theta = units.sqrt(1/(self._beta*angle_k))
-        logZ_theta = np.log((np.sqrt(2*np.pi)*(sigma_theta/units.radians))) # CHECK DOMAIN AND UNITS
-        logp_theta = self._angle_logq(theta, angle) - logZ_theta
-
-        #propose a torsion angle uniformly (this can be dramatically improved)
-        phi = np.random.uniform(-np.pi, np.pi)
-        logp_phi = -np.log(2*np.pi)
-
-        #get the new cartesian coordinates and detJ:
-        new_xyz, detJ = self._internal_to_cartesian(positions[bond_atom.idx], positions[angle_atom.idx], positions[torsion_atom.idx], r, theta, phi)
-        #accumulate logp
-        logp_proposal = logp_r + logp_theta + logp_phi + np.log(np.abs(detJ))
-
-        return new_xyz, logp_proposal
-
-    def _resample(self):
-        """
-        Resample from the current set of weights and positions.
-        """
-        particle_indices = range(self._n_particles)
-        new_indices = np.random.choice(particle_indices, size=self._n_particles, p=self._Wij[:, self._growth_stage-1])
-        for particle_index in particle_indices:
-            self._new_positions[particle_index, :, :] = self._new_positions[new_indices[particle_index], :, :]
-        self._Wij[:, self._growth_stage-1] = -np.log(self._n_particles) #set particle weights to be equal
-
-    def _generate_configurations(self):
-        """
-        Generate the ensemble of configurations of the new atoms, approximately
-        from p(x_new | x_common).
-        """
-        for i, atom_torsion in enumerate(self._atom_torsions.items()):
-            self._growth_stage = i+1
-            for particle_index in range(self._n_particles):
-                proposed_xyz, logp_proposal = self._propose_atom(atom_torsion[0], atom_torsion[1])
-                self._new_positions[particle_index, i, :] = proposed_xyz
-                unnormalized_log_target = self._log_unnormalized_target(self._new_positions[particle_index, :,:])
-                if i > 0:
-                    self._Wij = [particle_index, i] = (unnormalized_log_target - logp_proposal) + self._Wij[particle_index, i-1]
-                else:
-                    self._Wij = [particle_index, i] = unnormalized_log_target - logp_proposal
-            sum_log_weights = np.sum(np.exp(self._Wij[:,i]))
-            self._Wij -= np.log(sum_log_weights)
-            if i % self._resample_frequency == 0 and i != 0:
-                self._resample()
-
-
-class OmegaGeometryEngine(GeometryEngine):
-    """
-    This class proposes new small molecule geometries based on a set of precomputed
-    omega geometries.
-    """
-
-    def __init__(self, n_omega_references=1, proposal_sigma=1.0, metadata=None):
-        self._n_omega_references = n_omega_references
-        self._proposal_sigma = 1.0
-        self._reference_oemols = {}
-        self._metadata = metadata
-        raise NotImplementedError("This GeometryEngine is not currently supported.")
-
-    def propose(self, top_proposal, current_positions, beta):
-        """
-        Propose positions of new atoms according to a selected omega geometry.
-
-        Parameters
-        ----------
-        top_proposal : TopologyProposal object
-            TopologyProposal object generated by the proposal engine
-        current_positions : [n, 3] np.array of float
-            Positions of the current system
-        beta : float
-            inverse temperature
-
-        Returns
-        -------
-        new_positions : [m, 3] np.array of float
-            The positions of the new system
-        logp_propose : float
-            The log-probability of the proposal
-        """
-        pass
-
-    def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
-        """
-
-        Parameters
-        ----------
-        top_proposal
-        new_coordinates
-        old_coordinates
-        beta
-
-        Returns
-        -------
-
-        """
-        pass
-
 
 class GeometrySystemGenerator(object):
     """
-    This is an internal utility class that generates OpenMM systems
-    with only valence terms and special parameters to assist in
-    geometry proposals.
+    Internal utility class to generate OpenMM systems with only valence terms and special parameters for newly placed atoms to assist in geometry proposals.
+
+    The resulting system will have the specified global context parameter (controlled by ``parameter_name``)
+    that selects which proposed atom will have all its valence terms activated. When this parameter is set to the
+    index of the atom being added within ``growth_indices``, all valence terms associated with that atom will be computed.
+    Only valence terms involving newly placed atoms will be computed; valence terms between fixed atoms will be omitted.
     """
-    _HarmonicBondForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(r-r0)^2, 0);"
-    _HarmonicAngleForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
-    _PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
     def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=False, add_extra_angles=False, reference_topology=None, use_sterics=False, force_names=None, force_parameters=None, verbose=True):
         """
@@ -1229,9 +1387,9 @@ class GeometrySystemGenerator(object):
         ----------
         reference_system : simtk.openmm.System object
             The system containing the relevant forces and particles
-        growth_indices : list of int
-            The order in which the atom indices will be proposed
-        parameter_name : str
+        growth_indices : list of parmed.Atom
+            List of parmed Atom objects defining the order in which the atom indices will be proposed
+        global_parameter_name : str, optional, default='growth_index'
             The name of the global context parameter
         add_extra_torsions : bool, optional
             Whether to add additional torsions to keep rings flat. Default true.
@@ -1251,17 +1409,28 @@ class GeometrySystemGenerator(object):
            Even better would be to use something like openforcefield Topology objects from which capped molecules can be generated and used to generate biases on the fly.
 
         """
-        ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
-                                  # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
+        # TODO: Rename `growth_indices` (which is really a list of Atom objects) to `atom_growth_order` or `atom_addition_order`
+
+        # Check that we're not using the reserved name
+        if global_parameter_name == 'growth_idx':
+            raise ValueError('global_parameter_name cannot be "growth_idx" due to naming collisions')
 
         default_growth_index = len(growth_indices) # default value of growth index to use in System that is returned
         self.current_growth_index = default_growth_index
+
+        # Bonds, angles, and torsions
+        self._HarmonicBondForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(r-r0)^2, 0);"
+        self._HarmonicAngleForceEnergy = "select(step({}+0.1 - growth_idx), (K/2)*(theta-theta0)^2, 0);"
+        self._PeriodicTorsionForceEnergy = "select(step({}+0.1 - growth_idx), k*(1+cos(periodicity*theta-phase)), 0);"
 
         # Nonbonded sterics and electrostatics.
         # TODO: Allow user to select whether electrostatics or sterics components are included in the nonbonded interaction energy.
         self._nonbondedEnergy = "select(step({}+0.1 - growth_idx), U_sterics + U_electrostatics, 0);"
         self._nonbondedEnergy += "growth_idx = max(growth_idx1, growth_idx2);"
         # Sterics
+        from openmmtools.constants import ONE_4PI_EPS0 # OpenMM constant for Coulomb interactions (implicitly in md_unit_system units)
+        # TODO: Auto-detect combining rules to allow this to work with other force fields?
+        # TODO: Enable more flexible handling / metaprogramming of CustomForce objects?
         self._nonbondedEnergy += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._nonbondedEnergy += "epsilon = sqrt(epsilon1*epsilon2); sigma = 0.5*(sigma1 + sigma2);"
         # Electrostatics
@@ -1273,102 +1442,98 @@ class GeometrySystemGenerator(object):
         self._nonbondedExceptionEnergy += "U_exception = ONE_4PI_EPS0*chargeprod/r + 4*epsilon*x*(x-1.0); x = (sigma/r)^6;"
         self._nonbondedExceptionEnergy += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
 
-        self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
+        self.sterics_cutoff_distance = 9.0 * unit.angstroms # cutoff for steric interactions with added/deleted atoms
 
         self.verbose = verbose
 
         # Get list of particle indices for new and old atoms.
-        new_particle_indices = growth_indices
-        old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in new_particle_indices]
+        new_particle_indices = [ atom.idx for atom in growth_indices ] # atoms that will be added, one at a time
+        old_particle_indices = [ idx for idx in range(reference_system.getNumParticles()) if idx not in new_particle_indices ] # fixed atoms
 
-        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
+        # Compile index of reference forces
+        reference_forces = dict()
+        for (index, force) in enumerate(reference_system.getForces()):
+            force_name = force.__class__.__name__
+            if force_name in reference_forces:
+                raise ValueError('reference_system has two {} objects. This is currently unsupported.'.format(force_name))
+            else:
+                reference_forces[force_name] = force
+
+        # Create new System
+        from simtk import openmm
         growth_system = openmm.System()
-        #create the forces:
-        modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(parameter_name))
-        modified_bond_force.addPerBondParameter("r0")
-        modified_bond_force.addPerBondParameter("K")
-        modified_bond_force.addPerBondParameter("growth_idx")
-        modified_bond_force.addGlobalParameter(parameter_name, default_growth_index)
 
-        modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(parameter_name))
-        modified_angle_force.addPerAngleParameter("theta0")
-        modified_angle_force.addPerAngleParameter("K")
-        modified_angle_force.addPerAngleParameter("growth_idx")
-        modified_angle_force.addGlobalParameter(parameter_name, default_growth_index)
-
-        modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(parameter_name))
-        modified_torsion_force.addPerTorsionParameter("periodicity")
-        modified_torsion_force.addPerTorsionParameter("phase")
-        modified_torsion_force.addPerTorsionParameter("k")
-        modified_torsion_force.addPerTorsionParameter("growth_idx")
-        modified_torsion_force.addGlobalParameter(parameter_name, default_growth_index)
-
-        growth_system.addForce(modified_bond_force)
-        growth_system.addForce(modified_angle_force)
-        growth_system.addForce(modified_torsion_force)
-
-        #copy the particles over
+        # Copy particles
         for i in range(reference_system.getNumParticles()):
             growth_system.addParticle(reference_system.getParticleMass(i))
 
-        #copy each bond, adding the per-particle parameter as well
-        reference_bond_force = reference_forces['HarmonicBondForce']
-        for bond in range(reference_bond_force.getNumBonds()):
-            bond_parameters = reference_bond_force.getBondParameters(bond)
-            growth_idx = self._calculate_growth_idx(bond_parameters[:2], growth_indices)
-            if growth_idx==0:
-                continue
-            modified_bond_force.addBond(bond_parameters[0], bond_parameters[1], [bond_parameters[2], bond_parameters[3], growth_idx])
+        # We don't need to copy constraints, since we will not be running dynamics with this system
 
-        #copy each angle, adding the per particle parameter as well
+        # Virtual sites are, in principle, automatically supported
+
+        # Create bond force
+        modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(global_parameter_name))
+        modified_bond_force.addGlobalParameter(global_parameter_name, default_growth_index)
+        for parameter_name in ['r0', 'K', 'growth_idx']:
+            modified_bond_force.addPerBondParameter(parameter_name)
+        growth_system.addForce(modified_bond_force)
+        reference_bond_force = reference_forces['HarmonicBondForce']
+        for bond_index in range(reference_bond_force.getNumBonds()):
+            p1, p2, r0, K = reference_bond_force.getBondParameters(bond_index)
+            growth_idx = self._calculate_growth_idx([p1, p2], growth_indices)
+            if growth_idx > 0:
+                modified_bond_force.addBond(p1, p2, [r0, K, growth_idx])
+
+        # Create angle force
+        modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(global_parameter_name))
+        modified_angle_force.addGlobalParameter(global_parameter_name, default_growth_index)
+        for parameter_name in ['theta0', 'K', 'growth_idx']:
+            modified_angle_force.addPerAngleParameter(parameter_name)
+        growth_system.addForce(modified_angle_force)
         reference_angle_force = reference_forces['HarmonicAngleForce']
         for angle in range(reference_angle_force.getNumAngles()):
-            angle_parameters = reference_angle_force.getAngleParameters(angle)
-            growth_idx = self._calculate_growth_idx(angle_parameters[:3], growth_indices)
-            if growth_idx==0:
-                continue
-            modified_angle_force.addAngle(angle_parameters[0], angle_parameters[1], angle_parameters[2], [angle_parameters[3], angle_parameters[4], growth_idx])
+            p1, p2, p3, theta0, K = reference_angle_force.getAngleParameters(angle)
+            growth_idx = self._calculate_growth_idx([p1, p2, p3], growth_indices)
+            if growth_idx > 0:
+                modified_angle_force.addAngle(p1, p2, p3, [theta0, K, growth_idx])
 
-        #copy each torsion, adding the per particle parameter as well
+        # Create torsion force
+        modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(global_parameter_name))
+        modified_torsion_force.addGlobalParameter(global_parameter_name, default_growth_index)
+        for parameter_name in ['periodicity', 'phase', 'k', 'growth_idx']:
+            modified_torsion_force.addPerTorsionParameter(parameter_name)
+        growth_system.addForce(modified_torsion_force)
         reference_torsion_force = reference_forces['PeriodicTorsionForce']
         for torsion in range(reference_torsion_force.getNumTorsions()):
-            torsion_parameters = reference_torsion_force.getTorsionParameters(torsion)
-            growth_idx = self._calculate_growth_idx(torsion_parameters[:4], growth_indices)
-            if growth_idx==0:
-                continue
-            modified_torsion_force.addTorsion(torsion_parameters[0], torsion_parameters[1], torsion_parameters[2], torsion_parameters[3], [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], growth_idx])
+            p1, p2, p3, p4, periodicity, phase, k = reference_torsion_force.getTorsionParameters(torsion)
+            growth_idx = self._calculate_growth_idx([p1, p2, p3, p4], growth_indices)
+            if growth_idx > 0:
+                modified_torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, phase, k, growth_idx])
 
         # Add (1,4) exceptions, regardless of whether 'use_sterics' is specified, because these are part of the valence forces.
         if 'NonbondedForce' in reference_forces.keys():
-            custom_bond_force = openmm.CustomBondForce(self._nonbondedExceptionEnergy.format(parameter_name))
-            custom_bond_force.addPerBondParameter("chargeprod")
-            custom_bond_force.addPerBondParameter("sigma")
-            custom_bond_force.addPerBondParameter("epsilon")
-            custom_bond_force.addPerBondParameter("growth_idx")
-            custom_bond_force.addGlobalParameter(parameter_name, default_growth_index)
+            custom_bond_force = openmm.CustomBondForce(self._nonbondedExceptionEnergy.format(global_parameter_name))
+            custom_bond_force.addGlobalParameter(global_parameter_name, default_growth_index)
+            for parameter_name in ['chargeprod', 'sigma', 'epsilon', 'growth_idx']:
+                custom_bond_force.addPerBondParameter(parameter_name)
             growth_system.addForce(custom_bond_force)
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
-            #print('growth_indices:', growth_indices)
             reference_nonbonded_force = reference_forces['NonbondedForce']
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
-                [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
-                growth_idx_1 = new_particle_indices.index(particle_index_1) + 1 if particle_index_1 in new_particle_indices else 0
-                growth_idx_2 = new_particle_indices.index(particle_index_2) + 1 if particle_index_2 in new_particle_indices else 0
-                growth_idx = max(growth_idx_1, growth_idx_2)
+                p1, p2, chargeprod, sigma, epsilon = reference_nonbonded_force.getExceptionParameters(exception_index)
+                growth_idx = self._calculate_growth_idx([p1, p2], growth_indices)
                 # Only need to add terms that are nonzero and involve newly added atoms.
-                if (growth_idx > 0) and ((chargeprod.value_in_unit_system(units.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(units.md_unit_system) != 0.0)):
-                    if self.verbose: _logger.info('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index_1, particle_index_2, chargeprod/units.elementary_charge**2, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
-                    custom_bond_force.addBond(particle_index_1, particle_index_2, [chargeprod, sigma, epsilon, growth_idx])
+                if (growth_idx > 0) and ((chargeprod.value_in_unit_system(unit.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(unit.md_unit_system) != 0.0)):
+                    if self.verbose: _logger.info('Adding CustomBondForce: %5d %5d : chargeprod %8.3f e^2, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (p1, p2, chargeprod/unit.elementary_charge**2, sigma/unit.angstrom, epsilon/unit.kilocalorie_per_mole, growth_idx))
+                    custom_bond_force.addBond(p1, p2, [chargeprod, sigma, epsilon, growth_idx])
 
-        #copy parameters for sterics parameters in nonbonded force
-        if 'NonbondedForce' in reference_forces.keys() and use_sterics:
-            modified_sterics_force = openmm.CustomNonbondedForce(self._nonbondedEnergy.format(parameter_name))
-            modified_sterics_force.addPerParticleParameter("charge")
-            modified_sterics_force.addPerParticleParameter("sigma")
-            modified_sterics_force.addPerParticleParameter("epsilon")
-            modified_sterics_force.addPerParticleParameter("growth_idx")
-            modified_sterics_force.addGlobalParameter(parameter_name, default_growth_index)
+        # Copy parameters for local sterics parameters in nonbonded force
+        if use_sterics and 'NonbondedForce' in reference_forces.keys():
+            modified_sterics_force = openmm.CustomNonbondedForce(self._nonbondedEnergy.format(global_parameter_name))
+            modified_sterics_force.addGlobalParameter(global_parameter_name, default_growth_index)
+            for parameter_name in ['charge', 'sigma', 'epsilon', 'growth_idx']:
+                modified_sterics_force.addPerParticleParameter(parameter_name)
             growth_system.addForce(modified_sterics_force)
             # Translate nonbonded method to cutoff methods.
             reference_nonbonded_force = reference_forces['NonbondedForce']
@@ -1380,14 +1545,14 @@ class GeometrySystemGenerator(object):
             # Add particle parameters.
             for particle_index in range(reference_nonbonded_force.getNumParticles()):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
-                growth_idx = new_particle_indices.index(particle_index) + 1 if particle_index in new_particle_indices else 0
+                growth_idx = self._calculate_growth_idx([particle_index], growth_indices)
                 modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
                 if self.verbose and (growth_idx > 0):
-                    _logger.info('Adding NonbondedForce particle %5d : charge %8.3f |e|, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index, charge/units.elementary_charge, sigma/units.angstrom, epsilon/units.kilocalorie_per_mole, growth_idx))
+                    _logger.info('Adding NonbondedForce particle %5d : charge %8.3f |e|, sigma %8.3f A, epsilon %8.3f kcal/mol, growth_idx %5d' % (particle_index, charge/unit.elementary_charge, sigma/unit.angstrom, epsilon/unit.kilocalorie_per_mole, growth_idx))
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
             for exception_index in range(reference_nonbonded_force.getNumExceptions()):
-                [particle_index_1, particle_index_2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
+                [p1, p2, chargeprod, sigma, epsilon] = reference_nonbonded_force.getExceptionParameters(exception_index)
                 modified_sterics_force.addExclusion(particle_index_1, particle_index_2)
             # Only compute interactions of new particles with all other particles
             # TODO: Allow inteactions to be resticted to only the residue being grown.
@@ -1406,7 +1571,7 @@ class GeometrySystemGenerator(object):
             self._determine_extra_angles(modified_angle_force, reference_topology, reference_oemol, growth_indices)
 
         # Store growth system
-        self._growth_parameter_name = parameter_name
+        self._growth_parameter_name = global_parameter_name
         self._growth_system = growth_system
 
     def set_growth_parameter_index(self, growth_parameter_index, context=None):
@@ -1464,6 +1629,9 @@ class GeometrySystemGenerator(object):
             The torsion force with extra torsions added appropriately.
 
         """
+        from openeye import oechem, oeomega
+        from simtk import openmm
+
         # Do nothing if there are no atoms to grow.
         if len(growth_indices) == 0:
             return torsion_force
@@ -1477,19 +1645,19 @@ class GeometrySystemGenerator(object):
 
         #now, for each torsion, extract the set of indices and the angle
         periodicity = 1
-        k = 120.0*units.kilocalories_per_mole # stddev of 12 degrees
+        k = 120.0*unit.kilocalories_per_mole # stddev of 12 degrees
         #print([atom.name for atom in growth_indices])
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
             atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
             # Determine phase in [-pi,+pi) interval
-            #phase = (np.pi)*units.radians+angle
+            #phase = (np.pi)*unit.radians+angle
             phase = torsion.radians + np.pi # TODO: Check that this is the correct convention?
             while (phase >= np.pi):
                 phase -= 2*np.pi
             while (phase < -np.pi):
                 phase += 2*np.pi
-            phase *= units.radian
+            phase *= unit.radian
             #print('PHASE>>>> ' + str(phase)) # DEBUG
             growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
             atom_names = [torsion.a.GetName(), torsion.b.GetName(), torsion.c.GetName(), torsion.d.GetName()]
@@ -1550,10 +1718,12 @@ class GeometrySystemGenerator(object):
         angle_force : simtk.openmm.CustomAngleForce
             The modified angle force
         """
+        from openeye import oechem, oeomega
+        from simtk import openmm
         import itertools
         if len(growth_indices)==0:
             return
-        angle_force_constant = 400.0*units.kilojoules_per_mole/units.radians**2
+        angle_force_constant = 400.0*unit.kilojoules_per_mole/unit.radians**2
         atoms = list(reference_topology.atoms())
 
         #we now have the residue as an oemol. Time to find the relevant angles.
@@ -1572,7 +1742,7 @@ class GeometrySystemGenerator(object):
             for angle_atoms in itertools.combinations(bonded_atoms, 2):
                     angle = oechem.OEGetAngle(oemol, angle_atoms[0], atom, angle_atoms[1])
                     atom_indices = [angle_atoms[0].GetData("topology_index"), atom.GetData("topology_index"), angle_atoms[1].GetData("topology_index")]
-                    angle_radians = angle*units.radian
+                    angle_radians = angle*unit.radian
                     growth_idx = self._calculate_growth_idx(atom_indices, growth_indices)
                     #If this is a CustomAngleForce, we need to pass the parameters as a list, and it will have the growth_idx parameter.
                     #If it's a regular HarmonicAngleForce, there is no growth_index and the parameters are passed separately.
@@ -1584,175 +1754,38 @@ class GeometrySystemGenerator(object):
                         raise ValueError("Angle force must be either CustomAngleForce or HarmonicAngleForce")
         return angle_force
 
-
     def _calculate_growth_idx(self, particle_indices, growth_indices):
         """
         Utility function to calculate the growth index of a particular force.
+
         For each particle index, it will check to see if it is in growth_indices.
         If not, 0 is added to an array, if yes, the index in growth_indices is added.
         Finally, the method returns the max of the accumulated array
+
         Parameters
         ----------
         particle_indices : list of int
-            The indices of particles involved in this force
-        growth_indices : list of int
-            The ordered list of indices for atom position proposals
+            The indices of particles involved in this force term (e.g. a bond, angle, or torsion)
+        growth_indices : list of parmed.Atom
+            The ordered list of parmed Atom objects defining the order in which atoms are to be added
+
         Returns
         -------
         growth_idx : int
-            The growth_idx parameter
+            The growth index for the atom to be added
+            0 denotes it is part of the fixed atoms
+            1,2,3,... denote atoms sequentially added in that order
         """
+        growth_indices_list = [ atom.idx for atom in list(growth_indices) ]
         particle_indices_set = set(particle_indices)
         growth_indices_set = set(growth_indices)
         new_atoms_in_force = particle_indices_set.intersection(growth_indices_set)
+
         if len(new_atoms_in_force) == 0:
+            # This is a fixed atom
             return 0
         new_atom_growth_order = [growth_indices.index(atom_idx)+1 for atom_idx in new_atoms_in_force]
         return max(new_atom_growth_order)
-
-class GeometrySystemGeneratorFast(GeometrySystemGenerator):
-    """
-    Use updateParametersInContext to make energy evaluation fast.
-    """
-
-    def __init__(self, reference_system, growth_indices, parameter_name, add_extra_torsions=False, add_extra_angles=False, reference_topology=None, use_sterics=True, force_names=None, force_parameters=None, verbose=True):
-        """
-        Parameters
-        ----------
-        reference_system : simtk.openmm.System object
-            The system containing the relevant forces and particles
-        growth_indices : list of int
-            The order in which the atom indices will be proposed
-        parameter_name : str
-            The name of the global context parameter
-        add_extra_torsions : bool, optional
-            Whether to add additional torsions to keep rings flat. Default true.
-        force_names : list of str
-            A list of the names of forces that will be included in this system
-        force_parameters : dict
-            Options for the forces (e.g., NonbondedMethod : 'CutffNonPeriodic')
-        verbose : bool, optional, default=False
-            If True, will print verbose output.
-        add_extra_torsions : bool, optional, default=False
-            If True, will add biasing torsions to help create well-formed rings
-        add_extra_angles : bool, optional, default=False
-            If True, will add biasing angles to help create well-formed rings
-
-        .. todo ::
-
-           Provide a mechanism for creating a NetworkX library of residue templates and biasing torsions/angles.
-           We can pre-cache biopolymer residue templates for known biopolymer residues, and then generate new ones from OpenEye OEMols on the fly.
-           Even better would be to use something like openforcefield Topology objects from which capped molecules can be generated and used to generate biases on the fly.
-
-        NB: We assume `reference_system` remains unmodified
-
-        """
-        self.sterics_cutoff_distance = 9.0 * units.angstroms # cutoff for sterics
-
-        self.verbose = verbose
-
-        # Get list of particle indices for new and old atoms.
-        self._new_particle_indices = growth_indices
-        self._old_particle_indices = [idx for idx in range(reference_system.getNumParticles()) if idx not in self._new_particle_indices]
-        self._growth_indices = growth_indices
-
-        # Determine forces to keep
-        forces_to_keep = ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce']
-        if use_sterics:
-            forces_to_keep += ['NonbondedForce']
-
-        # Create reference system, removing forces we won't use
-        self._reference_system = copy.deepcopy(reference_system)
-        force_indices_to_remove = list()
-        for force_index in range(self._reference_system.getNumForces()):
-            force = self._reference_system.getForce(force_index)
-            force_name = force.__class__.__name__
-            if force_name not in forces_to_keep:
-                force_indices_to_remove.append(force_index)
-        for force_index in force_indices_to_remove[::-1]:
-            self._reference_system.removeForce(force_index)
-
-        # Create new system, copying forces we will keep.
-        self._growth_system = copy.deepcopy(self._reference_system)
-
-        #Extract the forces from the system to use for adding auxiliary angles and torsions
-        reference_forces = {reference_system.getForce(index).__class__.__name__ : reference_system.getForce(index) for index in range(reference_system.getNumForces())}
-
-        # Ensure 'canonical form' of System has all parameters turned on, or else we'll run into nonbonded exceptions
-        self.current_growth_index = -1
-        self.set_growth_parameter_index(len(self._growth_indices))
-
-        # Add extra ring-closing torsions, if requested.
-        if add_extra_torsions:
-            if reference_topology==None:
-                raise ValueError("Need to specify topology in order to add extra torsions.")
-            self._determine_extra_torsions(reference_forces['PeriodicTorsionForce'], reference_topology, growth_indices)
-        if add_extra_angles:
-            if reference_topology==None:
-                raise ValueError("Need to specify topology in order to add extra angles")
-            self._determine_extra_angles(reference_forces['HarmonicAngleForce'], reference_topology, growth_indices)
-        # TODO: Precompute growth indices for force terms for speed
-
-    def set_growth_parameter_index(self, growth_index, context=None):
-        """
-        Set the growth parameter index
-        """
-        self.current_growth_index = growth_index
-        for (growth_force, reference_force) in zip(self._growth_system.getForces(), self._reference_system.getForces()):
-            force_name = growth_force.__class__.__name__
-            if (force_name == 'HarmonicBondForce'):
-                for bond in range(reference_force.getNumBonds()):
-                    parameters = reference_force.getBondParameters(bond)
-                    this_growth_index = self._calculate_growth_idx(parameters[:2], self._growth_indices)
-                    if (growth_index < this_growth_index):
-                        parameters[3] *= 0.0
-                    growth_force.setBondParameters(bond, *parameters)
-            elif (force_name == 'HarmonicAngleForce'):
-                for angle in range(reference_force.getNumAngles()):
-                    parameters = reference_force.getAngleParameters(angle)
-                    this_growth_index = self._calculate_growth_idx(parameters[:3], self._growth_indices)
-                    if (growth_index < this_growth_index):
-                        parameters[4] *= 0.0
-                    growth_force.setAngleParameters(angle, *parameters)
-            elif (force_name == 'PeriodicTorsionForce'):
-                for torsion in range(reference_force.getNumTorsions()):
-                    parameters = reference_force.getTorsionParameters(torsion)
-                    this_growth_index = self._calculate_growth_idx(parameters[:4], self._growth_indices)
-                    if (growth_index < this_growth_index):
-                        parameters[6] *= 0.0
-                    growth_force.setTorsionParameters(torsion, *parameters)
-            elif (force_name == 'NonbondedForce'):
-                for particle_index in range(reference_force.getNumParticles()):
-                    parameters = reference_force.getParticleParameters(particle_index)
-                    this_growth_index = self._calculate_growth_idx([particle_index], self._growth_indices)
-                    if (growth_index < this_growth_index):
-                        parameters[0] *= 0.0
-                        parameters[2] *= 0.0
-                    growth_force.setParticleParameters(particle_index, *parameters)
-                for exception_index in range(reference_force.getNumExceptions()):
-                    parameters = reference_force.getExceptionParameters(exception_index)
-                    this_growth_index = self._calculate_growth_idx(parameters[:2], self._growth_indices)
-                    if (growth_index < this_growth_index):
-                        parameters[2] *= 1.0e-6 # WORKAROUND // TODO: Change to zero when OpenMM issue is fixed
-                        parameters[4] *= 1.0e-6 # WORKAROUND // TODO: Change to zero when OpenMM issue is fixed
-                    growth_force.setExceptionParameters(exception_index, *parameters)
-
-            # Update parameters in context
-            if context is not None:
-                growth_force.updateParametersInContext(context)
-
-class PredHBond(oechem.OEUnaryBondPred):
-    """
-    Example elaborating usage on:
-    https://docs.eyesopen.com/toolkits/python/oechemtk/predicates.html#section-predicates-match
-    """
-    def __call__(self, bond):
-        atom1 = bond.GetBgn()
-        atom2 = bond.GetEnd()
-        if atom1.IsHydrogen() or atom2.IsHydrogen():
-            return True
-        else:
-            return False
 
 class NetworkXProposalOrder(object):
     """
@@ -1829,6 +1862,7 @@ class NetworkXProposalOrder(object):
             A list of torsions, where the first atom in the torsion is the one being proposed
         logp_torsion_choice : float
             log probability of the chosen torsions
+
         """
         heavy_atoms_torsions, heavy_logp = self._propose_atoms_in_order(self._heavy)
         hydrogen_atoms_torsions, hydrogen_logp = self._propose_atoms_in_order(self._hydrogens)
@@ -1930,8 +1964,3 @@ class NetworkXProposalOrder(object):
             g.add_edge(bond[0].index, bond[1].index)
 
         return g
-
-class NoTorsionError(Exception):
-    def __init__(self, message):
-        # Call the base class constructor with the parameters it needs
-        super(NoTorsionError, self).__init__(message)

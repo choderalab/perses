@@ -19,6 +19,8 @@ TODO
 
 """
 
+# TODO: Use inexpensive charging methods for small molecules in tests
+
 __author__ = 'John D. Chodera'
 
 ################################################################################
@@ -42,6 +44,11 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
 from openmmtools.constants import kB
+from perses.rjmc.topology_proposal import SystemGenerator
+
+# TODO: Use dummy system generator to work around SystemGenerator issues
+#from perses.rjmc.topology_proposal import DummySystemGenerator
+#SystemGenerator = DummySystemGenerator
 
 ################################################################################
 # TEST SYSTEMS
@@ -1492,7 +1499,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         # Create a system generator for desired forcefields
         print('Creating system generators...')
-        from perses.rjmc.topology_proposal import SystemGenerator
+
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
@@ -1705,7 +1712,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         pressure = 1.0*unit.atmospheres
 
         # Create a system generator for our desired forcefields.
-        from perses.rjmc.topology_proposal import SystemGenerator
+
         from pkg_resources import resource_filename
         system_generators = dict()
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
@@ -1937,7 +1944,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         environments = ['vacuum']
 
         # Create a system generator for our desired forcefields.
-        from perses.rjmc.topology_proposal import SystemGenerator
+
         system_generators = dict()
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff-valence-only.xml')
@@ -2102,7 +2109,7 @@ class NullTestSystem(PersesTestSystem):
         mcmc_samplers = dict()
         exen_samplers = dict()
 
-        from perses.rjmc.topology_proposal import SystemGenerator
+
         from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromIUPAC
         from perses.samplers.samplers import ExpandedEnsembleSampler
 
