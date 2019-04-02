@@ -795,15 +795,18 @@ def check_system(system):
     for index in range(force.getNumTorsions()):
         [i, j, k, l, periodicity, phase, barrier] = force.getTorsionParameters(index)
         if len(set([i,j,k,l])) < 4:
-            # TODO: Serialize system.xml on exceptions.
             msg  = 'Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d\n' % (index,i,j,k,l)
             msg += 'Serialzed system to system.xml for inspection.\n'
-            from simtk.openmm import XmlSerializer
-            serialized_system = XmlSerializer.serialize(system)
-            outfile = open('system.xml', 'w')
-            outfile.write(serialized_system)
-            outfile.close()
             raise Exception(msg)
+    from simtk.openmm import XmlSerializer
+    serialized_system = XmlSerializer.serialize(system)
+    outfile = open('system.xml', 'w')
+    outfile.write(serialized_system)
+    outfile.close()
+    print('system.xml')
+    nbforce = forces['NonbondedForce']
+    #for i in range(0,15):
+        #print('Exception {}: {}'.format(i,nbforce.getExceptionParameters(i)))
 
 def generate_endpoint_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
@@ -828,12 +831,16 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
         Alchemical (hybrid) thermodynamic state for lambda one
     """
     #create the thermodynamic state
-    lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(system)
+    from perses.annihilation.lambda_protocol import RelativeAlchemicalState
+
+    lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(system)
     lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
 
     #ensure their states are set appropriately
     lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-    lambda_one_alchemical_state.set_alchemical_parameters(0.0)
+    lambda_one_alchemical_state.set_alchemical_parameters(1.0)
+
+    check_system(system)
 
     #create the base thermodynamic state with the hybrid system
     thermodynamic_state = states.ThermodynamicState(system, temperature=temperature)
@@ -847,6 +854,7 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     lambda_one_thermodynamic_state = states.CompoundThermodynamicState(thermodynamic_state, composable_states=[lambda_one_alchemical_state])
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
+
 
 def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene"):
     """
@@ -893,6 +901,10 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
+
+    # show atom mapping
+    filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
+    render_atom_mapping(filename,current_mol,proposed_mol,topology_proposal.new_to_old_atom_map)
 
     #generate new positions with geometry engine
     new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
@@ -958,3 +970,58 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
 
     return topology_proposal, solvated_positions, new_positions
+
+def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
+    """
+    Generate a test vacuum topology proposal, current positions, and new positions triplet
+    from two IUPAC molecule names.
+
+    Parameters
+    ----------
+    current_mol_name : str, optional
+        name of the first molecule
+    proposed_mol_name : str, optional
+        name of the second molecule
+
+    Returns
+    -------
+    topology_proposal : perses.rjmc.topology_proposal
+        The topology proposal representing the transformation
+    current_positions : np.array, unit-bearing
+        The positions of the initial system
+    new_positions : np.array, unit-bearing
+        The positions of the new system
+    """
+    from openmoltools import forcefield_generators
+    from openmmtools import testsystems
+
+    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+   
+    host_guest = testsystems.HostGuestVacuum()
+    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology 
+    ligand_topology = [res for res in top_old.residues()]
+    current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
+    proposed_mol = createOEMolFromSMILES('C1CC2(CCC1(CC2)C)C')
+
+    initial_smiles = oechem.OEMolToSmiles(current_mol)
+    final_smiles = oechem.OEMolToSmiles(proposed_mol)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
+
+    gaff_filename = get_data_filename('data/gaff.xml')
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    geometry_engine = geometry.FFAllAngleGeometryEngine()
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
+
+    #generate topology proposal
+    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
+
+    #generate new positions with geometry engine
+    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+
+    return topology_proposal, pos_old, new_positions

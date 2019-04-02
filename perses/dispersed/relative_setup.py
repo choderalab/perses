@@ -13,6 +13,7 @@ import simtk.unit as unit
 import numpy as np
 from perses.tests.utils import giveOpenmmPositionsToOEMOL, get_data_filename, extractPositionsFromOEMOL
 from perses.annihilation.new_relative import HybridTopologyFactory
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, \
     SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -26,7 +27,7 @@ import logging
 import os
 import pickle
 import dask.distributed as distributed
-from yank.multistate import MultiStateReporter, sams, replicaexchange
+from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 import parmed as pm
 
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove
@@ -404,14 +405,6 @@ class NonequilibriumSwitchingFEP(object):
     This class manages Nonequilibrium switching based relative free energy calculations, carried out on a distributed computing framework.
     """
 
-    default_forward_functions = {
-        'lambda_sterics': 'lambda',
-        'lambda_electrostatics': 'lambda',
-        'lambda_bonds': 'lambda',
-        'lambda_angles': 'lambda',
-        'lambda_torsions': 'lambda'
-    }
-
     def __init__(self, topology_proposal, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=None, n_equil_steps=1000, ncmc_nsteps=100, nsteps_per_iteration=1,
                  temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
@@ -470,13 +463,11 @@ class NonequilibriumSwitchingFEP(object):
 
         # use default functions if none specified
         if forward_functions == None:
-            self._forward_functions = self.default_forward_functions
+            self._forward_functions = python_hybrid_functions 
         else:
             self._forward_functions = forward_functions
 
-        # reverse functions to get a symmetric protocol
-        self._reverse_functions = {param: param_formula.replace("lambda", "(1-lambda)") for param, param_formula in
-                                   self._forward_functions.items()}
+        self._reverse_functions = python_reverse_functions 
 
         # setup splitting string:
         self._neq_splitting_string = neq_splitting_string
@@ -525,7 +516,7 @@ class NonequilibriumSwitchingFEP(object):
         self._n_eq_iterations_per_call = 1
 
         # create the thermodynamic state
-        lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(self._hybrid_system)
+        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(self._hybrid_system)
         lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
 
         lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
@@ -882,7 +873,7 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
     def setup(self, n_states, temperature, storage_file):
         hybrid_system = self._factory.hybrid_system
         initial_hybrid_positions = self._factory.hybrid_positions
-        lambda_zero_alchemical_state = alchemy.AlchemicalState.from_system(hybrid_system)
+        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
         #lambda_zero_alchemical_state.set_alchemical_parameters(1.0)
 
         thermostate = states.ThermodynamicState(hybrid_system, temperature=temperature)
@@ -890,8 +881,8 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
 
         thermodynamic_state_list = [compound_thermodynamic_state]
 
-        for idx in range(n_states):
-            lambda_val = (1.0 + idx) / n_states
+        lambda_values = np.linspace(0.,1.,n_states)
+        for lambda_val in lambda_values:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
@@ -1043,7 +1034,6 @@ def run_setup(setup_options):
     if setup_options['fe_type'] == 'nonequilibrium':
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
 
-        forward_functions = setup_options['forward_functions']
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
         scheduler_address = setup_options['scheduler_address']
 
@@ -1052,7 +1042,6 @@ def run_setup(setup_options):
             ne_fep[phase] = NonequilibriumSwitchingFEP(top_prop['%s_topology_proposal' % phase],
                                                        top_prop['%s_old_positions' % phase],
                                                        top_prop['%s_new_positions' % phase],
-                                                       forward_functions=forward_functions, 
                                                        n_equil_steps=n_equilibrium_steps_per_iteration,
                                                        ncmc_nsteps=n_steps_ncmc_protocol,
                                                        nsteps_per_iteration=n_steps_per_move_application,
@@ -1077,14 +1066,14 @@ def run_setup(setup_options):
         for phase in phases:
             htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
-                                               top_prop['%s_new_positions' % phase], softcore_method='amber')
+                                               top_prop['%s_new_positions' % phase])
             
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
             else:
                 selection_indices = None
             
-            storage_name = "-".join([trajectory_prefix, '%s.nc' % phase])
+            storage_name = str(trajectory_directory)+'/'+str(trajectory_prefix)+'-'+str(phase)+'.nc'
             reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
                                           checkpoint_interval=checkpoint_interval)
 

@@ -39,7 +39,7 @@ fe_type: sams
 checkpoint_interval: 10
 
 #number of iterations
-n_cycles: 100
+n_cycles: 50 
 
 #The number of SAMS states
 n_states: 100
@@ -48,7 +48,7 @@ n_states: 100
 n_equilibration_iterations: 10
 
 #where to put the trajectories
-trajectory_directory: cdk2_neq_hbonds
+trajectory_directory: cdk2_sams_hbonds
 
 #how to prefix the trajectory files (project-specific name)
 trajectory_prefix: cdk2
@@ -62,4 +62,4 @@ phases:
     - complex
 
 #timestep in fs
-timestep: 4.0
+timestep: 2.0

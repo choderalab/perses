@@ -14,7 +14,7 @@ if __name__ == "__main__":
     try:
        yaml_filename = sys.argv[1]
     except IndexError as e:
-        yaml_filename = "/Users/grinawap/perses/examples/cdk2-example/cdk2_setup.yaml"
+        yaml_filename = "cdk2_setup.yaml"
         print("You need to specify the setup yaml file as an argument to the script.")
         #raise e
 
@@ -108,3 +108,5 @@ if __name__ == "__main__":
             logZ[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
             free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
             print("Finished phase {}".format(phase))
+        for phase in free_energies:
+            print("{} phase has a free energy of {}".format(phase, free_energies[phase])) 
