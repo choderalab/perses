@@ -71,15 +71,37 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
     initial_sampler_state = SamplerState(hybrid_factory.hybrid_positions, box_vectors=hybrid_factory.hybrid_system.getDefaultPeriodicBoxVectors())
 
     hybrid_endpoint_results = []
+    all_results = []
     for lambda_state in (0, 1):
-        result = run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
+        result, non, hybrid = run_endpoint_perturbation(alchemical_thermodynamic_states[lambda_state],
                                         nonalchemical_thermodynamic_states[lambda_state], initial_sampler_state,
                                         mc_move, 100, hybrid_factory, lambda_index=lambda_state)
-        print(result)
+        all_results.append(non)
+        all_results.append(hybrid)
+        print('lambda {} : {}'.format(lambda_state,result))
 
         hybrid_endpoint_results.append(result)
-
+    calculate_cross_variance(all_results)
     return hybrid_endpoint_results
+
+def calculate_cross_variance(all_results):
+    """
+    Calculates the overlap (df and ddf) between the non-alchemical state at lambda=0 to the hybrid state at lambda=1 and visa versa
+    These ensembles are not expected to have good overlap, as they are of explicitly different system, but provides a benchmark of appropriate dissimilarity
+    """
+    if len(all_results) != 4:
+        return
+    else:
+        non_a = all_results[0]
+        hybrid_a = all_results[1]
+        non_b = all_results[2]
+        hybrid_b = all_results[3]
+    print('CROSS VALIDATION')
+    [df, ddf] = pymbar.EXP(non_a - hybrid_b) 
+    print('df: {}, ddf: {}'.format(df, ddf))
+    [df, ddf] = pymbar.EXP(non_b - hybrid_a) 
+    print('df: {}, ddf: {}'.format(df, ddf))
+    return
 
 def check_result(results, threshold=3.0, neffmin=10):
     """
@@ -104,9 +126,38 @@ def check_result(results, threshold=3.0, neffmin=10):
     if ddf > threshold:
         raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
 
-def test_simple_overlap():
+def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol'],['imatinib','nilotinib']]):
+    """
+    Test to run pairs of small molecule perturbations in vacuum, using test_simple_overlap, both forward and backward.
+    pentane <-> butane is adding a methyl group
+    fluorobenzene <-> chlorobenzene perturbs one halogen to another, with no adding or removing of atoms
+    benzene <-> catechol perturbing molecule in two positions simultaneously
+    benzene <-> 2-phenyl ethanol addition of 3 heavy atom group 
+    """
+    # TODO remove line below
+    pairs = [['2-phenyl ethanol','benzene']]
+    for pair in pairs:
+        print('{} -> {}'.format(pair[0],pair[1]))
+        test_simple_overlap(pair[0],pair[1])
+        # now running the reverse
+#        print('{} -> {}'.format(pair[1],pair[0]))
+#        test_simple_overlap(pair[1],pair[0])
+
+def test_simple_overlap(name1='pentane',name2='butane'):
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='imatinib', proposed_mol_name='nilotinib')
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2)
+    results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
+    for idx, lambda_result in enumerate(results):
+        try:
+            check_result(lambda_result)
+        except Exception as e:
+            message = "pentane->butane failed at lambda %d \n" % idx
+            message += str(e)
+            raise Exception(message)
+
+def test_hostguest_overlap():
+    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for host-guest system in vacuum"""
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_hostguest_proposal()
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -174,6 +225,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     ddf : float
         Standard deviation of estimate, corrected for correlation, from EXP estimator.
     """
+    from simtk.openmm.app import PDBFile
     #run an initial minimization:
     mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
     mcmc_sampler.minimize(max_iterations=20)
@@ -181,13 +233,22 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
 
     #initialize work array
     w = np.zeros([n_iterations])
+    non_potential = np.zeros([n_iterations])
+    hybrid_potential = np.zeros([n_iterations])
 
     #run n_iterations of the endpoint perturbation:
     for iteration in range(n_iterations):
         mc_move.apply(lambda_thermodynamic_state, new_sampler_state)
-        print(iteration)
         #compute the reduced potential at the new state
         hybrid_context, integrator = cache.global_context_cache.get_context(lambda_thermodynamic_state)
+        state = hybrid_context.getState(getPositions=True, getVelocities=True, getForces=True)
+#        forces = state.getForces(asNumpy=True).value_in_unit_system(unit.md_unit_system) # unitless, in MD unit system
+#        force_magnitudes = np.sqrt(np.sum(forces**2, 1))
+#        for x in force_magnitudes:
+#            print(x)
+        state_xml = openmm.XmlSerializer.serialize(state)
+        with open('state{}_l{}.xml'.format(iteration,lambda_index), 'w') as outfile:
+            outfile.write(state_xml)
         new_sampler_state.apply_to_context(hybrid_context, ignore_velocities=True)
         hybrid_reduced_potential = lambda_thermodynamic_state.reduced_potential(hybrid_context)
 
@@ -198,24 +259,24 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
             nonalchemical_positions = factory.new_positions(new_sampler_state.positions)
         else:
             raise ValueError("The lambda index needs to be either one or zero for this to be meaningful")
-
+        #pdbfile = open('state{}_l{}.pdb'.format(iteration,lambda_index),'w')
+        #PDBFile.writeModel(factory.hybrid_topology, new_sampler_state.positions, file=pdbfile)
         nonalchemical_sampler_state = SamplerState(nonalchemical_positions, box_vectors=new_sampler_state.box_vectors)
 
         #compute the reduced potential at the nonalchemical system as well:
         nonalchemical_context, integrator = cache.global_context_cache.get_context(nonalchemical_thermodynamic_state)
         nonalchemical_sampler_state.apply_to_context(nonalchemical_context, ignore_velocities=True)
         nonalchemical_reduced_potential = nonalchemical_thermodynamic_state.reduced_potential(nonalchemical_context)
-
         w[iteration] = nonalchemical_reduced_potential - hybrid_reduced_potential
-
+        non_potential[iteration] = nonalchemical_reduced_potential
+        hybrid_potential[iteration] = hybrid_reduced_potential
     [t0, g, Neff_max] = timeseries.detectEquilibration(w)
-    print(Neff_max)
     w_burned_in = w[t0:]
 
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
 
-    return [df, ddf_corrected, Neff_max]
+    return [df, ddf_corrected, Neff_max], non_potential, hybrid_potential 
 
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
@@ -302,6 +363,20 @@ def test_position_output():
 
     assert np.all(np.isclose(old_positions.in_units_of(unit.nanometers), old_positions_factory.in_units_of(unit.nanometers)))
     assert np.all(np.isclose(new_positions.in_units_of(unit.nanometers), new_positions_factory.in_units_of(unit.nanometers)))
+
+def test_generate_endpoint_thermodynamic_states():
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='propane', proposed_mol_name='pentane')
+    hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
+
+    #get the relevant thermodynamic states:
+    _, _, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(hybrid_factory.hybrid_system, topology_proposal)
+    # check the parameters for each state
+    lambda_protocol = ['lambda_sterics_core','lambda_electrostatics_core','lambda_sterics_insert','lambda_electrostatics_insert','lambda_sterics_delete','lambda_electrostatics_delete']
+    for value in lambda_protocol:
+        if getattr(lambda_zero_thermodynamic_state, value) != 0.: 
+            raise Exception('Interaction {} not set to 0. at lambda = 0. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
+        if getattr(lambda_one_thermodynamic_state, value) != 1.: 
+            raise Exception('Interaction {} not set to 1. at lambda = 1. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
 
 if __name__ == '__main__':
     #test_compare_energies()

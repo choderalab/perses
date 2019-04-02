@@ -11,34 +11,7 @@ from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
 from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
-from openmmtools.alchemy import AlchemicalState
-
-
-# make something hyperbolic or something to go from on to off to on
-default_hybrid_functions = {
-    'lambda_sterics_core' : 'lambda',
-    'lambda_electrostatics' : 'lambda',
-    'lambda_sterics_insert' : 'select(step(lambda-0.5), 1.0, 2*lambda)',
-    'lambda_sterics_delete' : 'select(step(lambda-0.5), 2.0*(lambda - 0.5), 0.0)',
-    'lambda_electrostatics_insert' : 'select(step(lambda-0.5),2.0*(lambda-0.5),0.0)',
-    'lambda_electrostatics_delete' : 'select(step(lambda-0.5), 1.0, 2.0*lambda)',
-    'lambda_bonds' : 'lambda',
-    'lambda_angles' : 'lambda',
-    'lambda_torsions' : 'lambda'
-    }
-
-python_hybrid_functions = {
-    'lambda_sterics_core': lambda x: x,
-    'lambda_electrostatics': lambda x: x,
-    'lambda_sterics_insert': lambda x: 2.0*x if x< 0.5 else 1.0,
-    'lambda_sterics_delete': lambda x: 0.0 if x < 0.5 else 2.0*(x-0.5),
-    'lambda_electrostatics_insert': lambda x: 0.0 if x < 0.5 else 2.0*(x-0.5),
-    'lambda_electrostatics_delete': lambda x: 2.0*x if x< 0.5 else 1.0,
-    'lambda_bonds': lambda x: x,
-    'lambda_angles': lambda x: x,
-    'lambda_torsions': lambda x: x
-}
-
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
@@ -299,8 +272,8 @@ class NCMCEngine(object):
         hybrid_system = hybrid_factory.hybrid_system
         hybrid_thermodynamic_state = ThermodynamicState(hybrid_system, temperature=self._temperature, pressure=self._pressure)
 
-        #Now create an AlchemicalState from the hybrid system:
-        alchemical_state = AlchemicalState.from_system(hybrid_system)
+        #Now create an RelativeAlchemicalState from the hybrid system:
+        alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
         alchemical_state.set_alchemical_parameters(0.0)
 
         #Now create a compound thermodynamic state that combines the hybrid thermodynamic state with the alchemical state:

@@ -2453,7 +2453,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         _logger.info('Building new Topology object...')
 
-        oemol_proposed.SetTitle(oemol_proposed.GetTitle())
+        oemol_proposed.SetTitle(self._residue_name)
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
         append_topology(new_topology, current_receptor_topology)
