@@ -1066,7 +1066,7 @@ def run_setup(setup_options):
         for phase in phases:
             htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
-                                               top_prop['%s_new_positions' % phase], softcore_method='amber')
+                                               top_prop['%s_new_positions' % phase])
             
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
