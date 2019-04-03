@@ -349,13 +349,13 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # Place each atom in predetermined order
         logging.debug("There are %d new atoms" % len(atom_proposal_order))
         atom_placements = list()
-        for torsion in torsion_proposal_order:
+        for torsion_atom_indices in torsion_proposal_order:
             # Get parmed Structure Atom objects associated with torsion
-            atom, bond_atom, angle_atom, torsion_atom = [ structure.atoms[index] for index in torsion ]
+            atom, bond_atom, angle_atom, torsion_atom = [ structure.atoms[index] for index in torsion_atom_indices ]
 
             # Activate the new atom interactions
             growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
-            if self.verbose: _logger.info("Proposing atom %s from torsion %s" %(str(atom), str(torsion)))
+            if self.verbose: _logger.info(f"Proposing atom {atom} from torsion {torsion_atom_indices}")
 
             # Get internal coordinates if direction is reverse
             if direction == 'reverse':
@@ -389,14 +389,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # Propose a torsion angle and calcualate its log probability
             if direction=='forward':
                 # Note that (r, theta) are dimensionless here
-                phi, logp_phi = self._propose_torsion(context, torsion, new_positions, r, theta, beta, self._n_torsion_divisions)
+                phi, logp_phi = self._propose_torsion(context, torsion_atom_indices, new_positions, r, theta, beta, self._n_torsion_divisions)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 import copy
                 old_positions_for_torsion = copy.deepcopy(old_positions)
                 # Note that (r, theta, phi) are dimensionless here
-                logp_phi = self._torsion_logp(context, torsion, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions)
+                logp_phi = self._torsion_logp(context, torsion_atom_indices, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions)
 
             #accumulate logp
             #if direction == 'reverse':
@@ -1171,14 +1171,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(theta, float)
         return theta
 
-    def _torsion_scan(self, torsion, positions, r, theta, n_divisions):
+    def _torsion_scan(self, torsion_atom_indices, positions, r, theta, n_divisions):
         """
         Compute unit-bearing Carteisan positions and torsions (dimensionless, in md_unit_system) for a torsion scan
 
         Parameters
         ----------
-        torsion : parmed.Dihedral
-            Parmed Dihedral containing relevant atoms defining torsion
+        torsion_atom_indices : int tuple of shape (4,)
+            Atom indices defining torsion, where torsion_atom_indices[0] is the atom to be driven
         positions : simtk.unit.Quantity of shape (natoms,3) with units compatible with nanometers
             Positions of the atoms in the system
         r : float (implicitly in md_unit_system)
@@ -1210,9 +1210,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         import copy
         positions_copy = copy.deepcopy(positions)
         positions_copy = positions_copy.value_in_unit(length_unit).astype(np.float64)
-        bond_positions = positions_copy[torsion.atom2.idx]
-        angle_positions = positions_copy[torsion.atom3.idx]
-        torsion_positions = positions_copy[torsion.atom4.idx]
+        atom_positions, bond_positions, angle_positions, torsion_positions = [ positions_copy[index] for index in torsion_atom_indices ]
 
         # Compute dimensionless torsion values for torsion scan
         phis, bin_width = np.linspace(-np.pi, +np.pi, num=n_divisions, retstep=True, endpoint=False)
@@ -1230,7 +1228,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(phis, float)
         return xyzs_quantity, phis, bin_width
 
-    def _torsion_log_pmf(self, growth_context, torsion, positions, r, theta, beta, n_divisions):
+    def _torsion_log_pmf(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions):
         """
         Calculate the torsion log probability using OpenMM, including all energetic contributions for the atom being driven
 
@@ -1241,8 +1239,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         growth_context : simtk.openmm.Context
             Context containing the modified system
-        torsion : parmed.Dihedral modified to use simtk.unit.Quantity
-            parmed Dihedral containing relevant atoms
+        torsion_atom_indices : int tuple of shape (4,)
+            Atom indices defining torsion, where torsion_atom_indices[0] is the atom to be driven
         positions : simtk.unit.Quantity with shape (natoms,3) with units compatible with nanometers
             Positions of the atoms in the system
         r : float (implicitly in nanometers)
@@ -1277,8 +1275,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # Compute energies for all torsions
         logq = np.zeros(n_divisions) # logq[i] is the log unnormalized torsion probability density
-        atom_idx = torsion.atom1.idx
-        xyzs, phis, bin_width = self._torsion_scan(torsion, positions, r, theta, n_divisions)
+        atom_idx = torsion_atom_indices[0]
+        xyzs, phis, bin_width = self._torsion_scan(torsion_atom_indices, positions, r, theta, n_divisions)
         xyzs = xyzs.value_in_unit_system(unit.md_unit_system) # make positions dimensionless again
         positions = positions.value_in_unit_system(unit.md_unit_system)
         for i, xyz in enumerate(xyzs):
@@ -1327,7 +1325,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(bin_width, float)
         return logp_torsions, phis, bin_width
 
-    def _propose_torsion(self, growth_context, torsion, positions, r, theta, beta, n_divisions):
+    def _propose_torsion(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions):
         """
         Propose a torsion angle using OpenMM
 
@@ -1335,8 +1333,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         growth_context : simtk.openmm.Context
             Context containing the modified system
-        torsion : parmed.Dihedral modified to use simtk.unit.Quantity
-            parmed Dihedral containing relevant atoms
+        torsion_atom_indices : int tuple of shape (4,)
+            Atom indices defining torsion, where torsion_atom_indices[0] is the atom to be driven
         positions : simtk.unit.Quantity with shape (natoms,3) with units compatible with nanometers
             Positions of the atoms in the system
         r : float (implicitly in nanometers)
@@ -1367,7 +1365,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute probability mass function for all possible proposed torsions
-        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions)
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions)
 
         # Draw a torsion bin and a torsion uniformly within that bin
         index = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
@@ -1382,7 +1380,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(logp, float)
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion, positions, r, theta, phi, beta, n_divisions):
+    def _torsion_logp(self, growth_context, torsion_atom_indices, positions, r, theta, phi, beta, n_divisions):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -1390,8 +1388,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         ----------
         growth_context : simtk.openmm.Context
             Context containing the modified system
-        torsion : parmed.Dihedral modified to use simtk.unit.Quantity
-            parmed Dihedral containing relevant atoms
+        torsion_atom_indices : int tuple of shape (4,)
+            Atom indices defining torsion, where torsion_atom_indices[0] is the atom to be driven
         positions : simtk.unit.Quantity with shape (natoms,3) with units compatible with nanometers
             Positions of the atoms in the system
         r : float (implicitly in nanometers)
@@ -1420,7 +1418,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute torsion probability mass function
-        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion, positions, r, theta, beta, n_divisions)
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions)
 
         # Determine which bin the torsion falls within
         index = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
