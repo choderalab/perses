@@ -23,6 +23,7 @@ from openmoltools import forcefield_generators
 import openeye.oegraphsim as oegraphsim
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.storage import NetCDFStorageView
+from perses.forcefields import SystemGenerator
 from io import StringIO
 import openmoltools
 import base64
