@@ -97,9 +97,9 @@ def calculate_cross_variance(all_results):
         non_b = all_results[2]
         hybrid_b = all_results[3]
     print('CROSS VALIDATION')
-    [df, ddf] = pymbar.EXP(non_a - hybrid_b) 
+    [df, ddf] = pymbar.EXP(non_a - hybrid_b)
     print('df: {}, ddf: {}'.format(df, ddf))
-    [df, ddf] = pymbar.EXP(non_b - hybrid_a) 
+    [df, ddf] = pymbar.EXP(non_b - hybrid_a)
     print('df: {}, ddf: {}'.format(df, ddf))
     return
 
@@ -126,13 +126,24 @@ def check_result(results, threshold=3.0, neffmin=10):
     if ddf > threshold:
         raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
 
+def test_networkx_proposal_order():
+    """
+    This test fails with a 'no topical torsions found' error with the old ProposalOrderTools
+    """
+    pairs=[('pentane','propane')]
+    for pair in pairs:
+        print('{} -> {}'.format(pair[0],pair[1]))
+        test_simple_overlap(pair[0],pair[1])
+        print('{} -> {}'.format(pair[1],pair[0]))
+        test_simple_overlap(pair[1],pair[0])
+
 def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol'],['imatinib','nilotinib']]):
     """
     Test to run pairs of small molecule perturbations in vacuum, using test_simple_overlap, both forward and backward.
     pentane <-> butane is adding a methyl group
     fluorobenzene <-> chlorobenzene perturbs one halogen to another, with no adding or removing of atoms
     benzene <-> catechol perturbing molecule in two positions simultaneously
-    benzene <-> 2-phenyl ethanol addition of 3 heavy atom group 
+    benzene <-> 2-phenyl ethanol addition of 3 heavy atom group
     """
     # TODO remove line below
     pairs = [['propane','pentane']]
@@ -276,7 +287,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
 
-    return [df, ddf_corrected, Neff_max], non_potential, hybrid_potential 
+    return [df, ddf_corrected, Neff_max], non_potential, hybrid_potential
 
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
@@ -373,9 +384,9 @@ def test_generate_endpoint_thermodynamic_states():
     # check the parameters for each state
     lambda_protocol = ['lambda_sterics_core','lambda_electrostatics_core','lambda_sterics_insert','lambda_electrostatics_insert','lambda_sterics_delete','lambda_electrostatics_delete']
     for value in lambda_protocol:
-        if getattr(lambda_zero_thermodynamic_state, value) != 0.: 
+        if getattr(lambda_zero_thermodynamic_state, value) != 0.:
             raise Exception('Interaction {} not set to 0. at lambda = 0. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
-        if getattr(lambda_one_thermodynamic_state, value) != 1.: 
+        if getattr(lambda_one_thermodynamic_state, value) != 1.:
             raise Exception('Interaction {} not set to 1. at lambda = 1. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
 
 if __name__ == '__main__':

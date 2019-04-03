@@ -580,10 +580,13 @@ def test_torsion_scan():
     #get the torsion that we're going to rotate
     torsion = testsystem.structure.dihedrals[0]
 
+    #get torsion atom indices
+    torsion_atom_indices = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
+
     #perform the torsion scan with the genometry engine, which returns cartesian coordinates
     # phis are returned as float array, implicitly in units of radians
     # xyzs are returned as unit-bearing quantities
-    xyzs, phis, bin_width = geometry_engine._torsion_scan(torsion, testsystem.positions, r, theta, n_divisions)
+    xyzs, phis, bin_width = geometry_engine._torsion_scan(torsion_atom_indices, testsystem.positions, r, theta, n_divisions)
 
     # Check that the values of phi that OpenMM calculates matches the ones created by the GeometryEngine within 1.0e-6
     for i, phi in enumerate(phis):
@@ -615,8 +618,11 @@ def test_torsion_log_discrete_pdf():
     torsion = testsystem.structure.dihedrals[0]
     torsion_with_units = geometry_engine._add_torsion_units(torsion)
 
+    #get torsion atom indices
+    torsion_atom_indices = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
+
     #Calculate the torsion log pmf according to the geometry engine
-    torsion_log_discrete_pdf, phis, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion_with_units, testsystem.positions, r, theta, beta, n_divisions)
+    torsion_log_discrete_pdf, phis, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion_atom_indices, testsystem.positions, r, theta, beta, n_divisions)
 
     #Calculate the torsion potential manually using Python
     manual_torsion_log_discrete_pdf = calculate_torsion_discrete_log_pdf_manually(beta, torsion_with_units, phis)
@@ -666,7 +672,7 @@ def calculate_torsion_discrete_log_pdf_manually(beta, torsion, phis):
 
 def test_torsion_logp():
     """
-    Test that the continuous torsion probability density function integrates to unit
+    Test that the continuous torsion probability density function integrates to unity
     """
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
@@ -695,9 +701,12 @@ def test_torsion_logp():
     # Initialize an array for the continuous torsion log pdf
     log_pdf = np.zeros(n_divisions_test)
 
+    #get torsion atom indices
+    torsion_atom_indices = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
+
     #calculate the continuous log pdf of the torsion at each test point using the geometry engine with n_divisions
     for i in range(n_divisions_test):
-        log_pdf[i] = geometry_engine._torsion_logp(testsystem._context, torsion, testsystem.positions, r, theta, phis[i], beta, n_divisions)
+        log_pdf[i] = geometry_engine._torsion_logp(testsystem._context, torsion_atom_indices, testsystem.positions, r, theta, phis[i], beta, n_divisions)
 
     #exponentiate and integrate the continuous torsion log pdf
     pdf = np.exp(log_pdf)
@@ -730,9 +739,12 @@ def test_propose_torsion():
     #retrieve the torsion of interest (0--there is only one) from the parmed structure
     torsion = testsystem.structure.dihedrals[0]
 
+    #get torsion atom indices
+    torsion_atom_indices = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
+
     #calculate the log probability mass function for an array of phis
     # phis are numpy floats, with implied units of radians
-    log_p_i, phi_i, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions)
+    log_p_i, phi_i, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion_atom_indices, testsystem.positions, r, theta, beta, n_divisions)
     assert np.isclose(np.exp(log_p_i).sum(), 1.0), 'torsion probability mass function is not normalized'
 
     # Compute the CDF
@@ -747,7 +759,7 @@ def test_propose_torsion():
     #Draw a set of samples from the torsion distribution using the GeometryEngine
     torsion_samples = np.zeros(n_samples)
     for i in range(n_samples):
-        phi, logp = geometry_engine._propose_torsion(testsystem._context, torsion, testsystem.positions, r, theta, beta, n_divisions)
+        phi, logp = geometry_engine._propose_torsion(testsystem._context, torsion_atom_indices, testsystem.positions, r, theta, beta, n_divisions)
         assert (phi >= -np.pi) and (phi < +np.pi), "sampled phi of {} is outside allowed bounds of [-pi,+pi)".format(phi)
         torsion_samples[i] = phi
 
