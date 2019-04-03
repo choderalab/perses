@@ -1,6 +1,12 @@
+# .readthedocs.yml
+
+version: 2
+
 conda:
-    file: docs/environment.yml
+  environment: docs/environment.yml
 
 python:
-    version: 3.5
-    setup_py_install: true
+  version: 3.6
+  install:
+    - method: setuptools
+      path: .

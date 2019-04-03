@@ -78,7 +78,7 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
                                         mc_move, 100, hybrid_factory, lambda_index=lambda_state)
         all_results.append(non)
         all_results.append(hybrid)
-        print(result)
+        print('lambda {} : {}'.format(lambda_state,result))
 
         hybrid_endpoint_results.append(result)
     calculate_cross_variance(all_results)
@@ -97,9 +97,9 @@ def calculate_cross_variance(all_results):
         non_b = all_results[2]
         hybrid_b = all_results[3]
     print('CROSS VALIDATION')
-    [df, ddf] = pymbar.EXP(non_a - hybrid_b) 
+    [df, ddf] = pymbar.EXP(non_a - hybrid_b)
     print('df: {}, ddf: {}'.format(df, ddf))
-    [df, ddf] = pymbar.EXP(non_b - hybrid_a) 
+    [df, ddf] = pymbar.EXP(non_b - hybrid_a)
     print('df: {}, ddf: {}'.format(df, ddf))
     return
 
@@ -126,21 +126,32 @@ def check_result(results, threshold=3.0, neffmin=10):
     if ddf > threshold:
         raise Exception("Standard deviation of %f exceeds threshold of %f" % (ddf, threshold))
 
-def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol']]):
+def test_networkx_proposal_order():
+    """
+    This test fails with a 'no topical torsions found' error with the old ProposalOrderTools
+    """
+    pairs=[('pentane','propane')]
+    for pair in pairs:
+        print('{} -> {}'.format(pair[0],pair[1]))
+        test_simple_overlap(pair[0],pair[1])
+        print('{} -> {}'.format(pair[1],pair[0]))
+        test_simple_overlap(pair[1],pair[0])
+
+def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol'],['imatinib','nilotinib']]):
     """
     Test to run pairs of small molecule perturbations in vacuum, using test_simple_overlap, both forward and backward.
     pentane <-> butane is adding a methyl group
     fluorobenzene <-> chlorobenzene perturbs one halogen to another, with no adding or removing of atoms
     benzene <-> catechol perturbing molecule in two positions simultaneously
-    benzene <-> 2-phenyl ethanol addition of 3 heavy atom group 
+    benzene <-> 2-phenyl ethanol addition of 3 heavy atom group
     """
+    # TODO remove line below
+    pairs = [['propane','pentane']]
     for pair in pairs:
         print('{} -> {}'.format(pair[0],pair[1]))
-        print('smaller to larger')
         test_simple_overlap(pair[0],pair[1])
         # now running the reverse
         print('{} -> {}'.format(pair[1],pair[0]))
-        print('larger to smaller')
         test_simple_overlap(pair[1],pair[0])
 
 def test_simple_overlap(name1='pentane',name2='butane'):
@@ -225,6 +236,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     ddf : float
         Standard deviation of estimate, corrected for correlation, from EXP estimator.
     """
+    from simtk.openmm.app import PDBFile
     #run an initial minimization:
     mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
     mcmc_sampler.minimize(max_iterations=20)
@@ -240,6 +252,14 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         mc_move.apply(lambda_thermodynamic_state, new_sampler_state)
         #compute the reduced potential at the new state
         hybrid_context, integrator = cache.global_context_cache.get_context(lambda_thermodynamic_state)
+        state = hybrid_context.getState(getPositions=True, getVelocities=True, getForces=True)
+#        forces = state.getForces(asNumpy=True).value_in_unit_system(unit.md_unit_system) # unitless, in MD unit system
+#        force_magnitudes = np.sqrt(np.sum(forces**2, 1))
+#        for x in force_magnitudes:
+#            print(x)
+        state_xml = openmm.XmlSerializer.serialize(state)
+        with open('state{}_l{}.xml'.format(iteration,lambda_index), 'w') as outfile:
+            outfile.write(state_xml)
         new_sampler_state.apply_to_context(hybrid_context, ignore_velocities=True)
         hybrid_reduced_potential = lambda_thermodynamic_state.reduced_potential(hybrid_context)
 
@@ -250,7 +270,8 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
             nonalchemical_positions = factory.new_positions(new_sampler_state.positions)
         else:
             raise ValueError("The lambda index needs to be either one or zero for this to be meaningful")
-
+        #pdbfile = open('state{}_l{}.pdb'.format(iteration,lambda_index),'w')
+        #PDBFile.writeModel(factory.hybrid_topology, new_sampler_state.positions, file=pdbfile)
         nonalchemical_sampler_state = SamplerState(nonalchemical_positions, box_vectors=new_sampler_state.box_vectors)
 
         #compute the reduced potential at the nonalchemical system as well:
@@ -266,7 +287,7 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
 
-    return [df, ddf_corrected, Neff_max], non_potential, hybrid_potential 
+    return [df, ddf_corrected, Neff_max], non_potential, hybrid_potential
 
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
@@ -360,14 +381,12 @@ def test_generate_endpoint_thermodynamic_states():
 
     #get the relevant thermodynamic states:
     _, _, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(hybrid_factory.hybrid_system, topology_proposal)
-    print(dir(lambda_zero_thermodynamic_state))
-    print(vars(lambda_zero_thermodynamic_state))
     # check the parameters for each state
     lambda_protocol = ['lambda_sterics_core','lambda_electrostatics_core','lambda_sterics_insert','lambda_electrostatics_insert','lambda_sterics_delete','lambda_electrostatics_delete']
     for value in lambda_protocol:
-        if getattr(lambda_zero_thermodynamic_state, value) != 0.: 
+        if getattr(lambda_zero_thermodynamic_state, value) != 0.:
             raise Exception('Interaction {} not set to 0. at lambda = 0. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
-        if getattr(lambda_one_thermodynamic_state, value) != 1.: 
+        if getattr(lambda_one_thermodynamic_state, value) != 1.:
             raise Exception('Interaction {} not set to 1. at lambda = 1. {} set to {}'.format(value,value, getattr(lambda_one_thermodynamic_state, value)))
 
 if __name__ == '__main__':

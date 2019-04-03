@@ -786,15 +786,18 @@ def check_system(system):
     for index in range(force.getNumTorsions()):
         [i, j, k, l, periodicity, phase, barrier] = force.getTorsionParameters(index)
         if len(set([i,j,k,l])) < 4:
-            # TODO: Serialize system.xml on exceptions.
             msg  = 'Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d\n' % (index,i,j,k,l)
             msg += 'Serialzed system to system.xml for inspection.\n'
-            from simtk.openmm import XmlSerializer
-            serialized_system = XmlSerializer.serialize(system)
-            outfile = open('system.xml', 'w')
-            outfile.write(serialized_system)
-            outfile.close()
             raise Exception(msg)
+    from simtk.openmm import XmlSerializer
+    serialized_system = XmlSerializer.serialize(system)
+    outfile = open('system.xml', 'w')
+    outfile.write(serialized_system)
+    outfile.close()
+    print('system.xml')
+    nbforce = forces['NonbondedForce']
+    #for i in range(0,15):
+        #print('Exception {}: {}'.format(i,nbforce.getExceptionParameters(i)))
 
 def generate_endpoint_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
@@ -818,10 +821,6 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     lambda_one_thermodynamic_State : ThermodynamicState
         Alchemical (hybrid) thermodynamic state for lambda one
     """
-    #TODO remove once issues are fixed
-    #uncommenting following two lines turns of non-bonded interactions in the test system
-    #from openmmtools.tests.test_alchemy import turn_off_nonbonded
-    #turn_off_nonbonded(system,sterics=True,electrostatics=True)
     #create the thermodynamic state
     from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 
@@ -831,6 +830,8 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     #ensure their states are set appropriately
     lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
     lambda_one_alchemical_state.set_alchemical_parameters(1.0)
+
+    check_system(system)
 
     #create the base thermodynamic state with the hybrid system
     thermodynamic_state = states.ThermodynamicState(system, temperature=temperature)

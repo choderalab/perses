@@ -19,6 +19,8 @@ TODO
 
 """
 
+# TODO: Use inexpensive charging methods for small molecules in tests
+
 __author__ = 'John D. Chodera'
 
 ################################################################################
@@ -42,6 +44,10 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
 from openmmtools.constants import kB
+
+# TODO: Use dummy system generator to work around SystemGenerator issues
+#from perses.rjmc.topology_proposal import DummySystemGenerator
+#SystemGenerator = DummySystemGenerator
 
 ################################################################################
 # TEST SYSTEMS
@@ -1492,7 +1498,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         # Create a system generator for desired forcefields
         print('Creating system generators...')
-        from perses.rjmc.topology_proposal import SystemGenerator
+
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
@@ -1705,14 +1711,14 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         pressure = 1.0*unit.atmospheres
 
         # Create a system generator for our desired forcefields.
-        from perses.rjmc.topology_proposal import SystemGenerator
+
         from pkg_resources import resource_filename
         system_generators = dict()
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
-        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'], use_antechamber=False,
+        system_generators['explicit'] = SystemGenerator([gaff_xml_filename, 'tip3p.xml'], use_antechamber=True,
             forcefield_kwargs={ 'nonbondedMethod' : app.CutoffPeriodic, 'nonbondedCutoff' : 9.0 * unit.angstrom, 'implicitSolvent' : None, 'constraints' : constraints }, barostat=barostat)
-        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename], use_antechamber=False,
+        system_generators['vacuum'] = SystemGenerator([gaff_xml_filename], use_antechamber=True,
             forcefield_kwargs={ 'nonbondedMethod' : app.NoCutoff, 'implicitSolvent' : None, 'constraints' : constraints })
 
         # Create topologies and positions
@@ -1769,7 +1775,6 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         if not premapped_json_dict:
             for environment in environments:
-
                 proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
         else:
             atom_mapper = SmallMoleculeAtomMapper.from_json(premapped_json_dict)
@@ -1937,7 +1942,7 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         environments = ['vacuum']
 
         # Create a system generator for our desired forcefields.
-        from perses.rjmc.topology_proposal import SystemGenerator
+
         system_generators = dict()
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff-valence-only.xml')
@@ -2102,7 +2107,7 @@ class NullTestSystem(PersesTestSystem):
         mcmc_samplers = dict()
         exen_samplers = dict()
 
-        from perses.rjmc.topology_proposal import SystemGenerator
+
         from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromIUPAC
         from perses.samplers.samplers import ExpandedEnsembleSampler
 

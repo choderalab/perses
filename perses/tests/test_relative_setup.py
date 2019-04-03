@@ -77,7 +77,7 @@ def test_run_cdk2_iterations():
 
     yaml_filename = "cdk2_setup.yaml"
     yaml_file = open(yaml_filename, "r")
-    setup_options = yaml.load(yaml_file)
+    setup_options = yaml.safe_load(yaml_file)
     yaml_file.close()
 
     if not os.path.exists(setup_options['trajectory_directory']):

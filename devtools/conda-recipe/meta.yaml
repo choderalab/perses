@@ -13,6 +13,7 @@ requirements:
   build:
     - python
     - setuptools
+    - numpy
 
   run:
     - python
@@ -22,7 +23,9 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.3.0
+    - openmm >=7.3.1
+    - parmed
+    - openmoltools
     - openmmtools
     - numba
     - netcdf4
@@ -41,6 +44,7 @@ requirements:
     - parmed
     - openmoltools
     - tinydb
+    - tqdm
 
 test:
   requires:
