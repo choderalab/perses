@@ -44,6 +44,7 @@ from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy
 from openmmtools.constants import kB
+from perses.forcefields import SystemGenerator
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
@@ -167,7 +168,7 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
         self.geometry_engine.pdb_filename_prefix = 'geometry'
 
         # Create a system generator for our desired forcefields.
-        from perses.forcefields import SystemGenerator
+
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
@@ -314,7 +315,7 @@ class AlanineDipeptideValenceTestSystem(PersesTestSystem):
         #self.geometry_engine.pdb_filename_prefix = 'geometry2'
 
         # Create a system generator for our desired forcefields.
-        from perses.forcefields import SystemGenerator
+
         system_generators = dict()
         from pkg_resources import resource_filename
         valence_xml_filename = resource_filename('perses', 'amber99sbildn-valence-only.xml')
@@ -458,7 +459,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
         pressure = 1.0*unit.atmospheres
 
         # Create a system generator for our desired forcefields.
-        from perses.forcefields import SystemGenerator
+
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
@@ -680,7 +681,7 @@ class MybTestSystem(PersesTestSystem):
         self.geometry_engine.pdb_filename_prefix = 'geometry'
 
         # Create a system generator for our desired forcefields.
-        from perses.forcefields import SystemGenerator
+
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
         system_generators['explicit'] = SystemGenerator(['amber99sbildn.xml', 'tip3p.xml'],
@@ -857,7 +858,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
                 environments.append(environment)
 
         # Create a system generator for desired forcefields
-        from perses.forcefields import SystemGenerator
+
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
@@ -1068,7 +1069,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         # TODO: Cache molecule parameterization
 
         # Create a system generator for desired forcefields
-        from perses.forcefields import SystemGenerator
+
         from pkg_resources import resource_filename
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = openmm.MonteCarloBarostat(pressure, temperature)
@@ -1287,7 +1288,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         # TODO: Cache molecule parameterization
 
         print('Creating system generators...')
-        from perses.forcefields import SystemGenerator
+
         gaff_xml_filename = resource_filename('perses', 'data/gaff.xml')
         barostat = MonteCarloBarostat(pressure, temperature)
         system_generators = dict()
