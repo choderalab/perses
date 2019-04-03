@@ -1121,11 +1121,11 @@ class HybridTopologyFactory(object):
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
-                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, 0.0*epsilon)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge will be turned off at lambda_electrostatics_delete = 0, on at lambda_electrostatics_delete = 1
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_delete', particle_index, -charge, 0*sigma, 0*epsilon)
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_delete', particle_index, -charge, 0*sigma, -epsilon)
 
             elif particle_index in self._atom_classes['unique_new_atoms']:
                 #get the parameters in the new system
@@ -1137,11 +1137,11 @@ class HybridTopologyFactory(object):
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
-                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, sigma, 0.0)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0*charge, sigma, 0*epsilon)
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge will be turned off at lambda_electrostatics_insert = 0, on at lambda_electrostatics_insert = 1
-                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_insert', particle_index, +charge, 0, 0)
+                self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_insert', particle_index, +charge, 0*sigma, +epsilon)
 
             elif particle_index in self._atom_classes['core_atoms']:
                 #get the parameters in the new and old systems:
@@ -1155,7 +1155,7 @@ class HybridTopologyFactory(object):
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 #still add the particle to the regular nonbonded force, but with zeroed out parameters.
-                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge_old, 0.5*(sigma_old+sigma_new), 0.0)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge_old, 0.5*(sigma_old+sigma_new), np.sqrt(epsilon_old*epsilon_new))
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
             
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
