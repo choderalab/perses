@@ -32,3 +32,5 @@ dependencies:
   - yank
   - parmed
   - tqdm
+  - nose
+  - nose-timer
