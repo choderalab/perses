@@ -1,0 +1,34 @@
+name: perses
+channels:
+  - omnia-dev
+  - omnia
+  - openeye
+  - conda-forge
+  - defaults
+dependencies:
+  - python >=3.6
+  - setuptools
+  - numpy >=1.14
+  - scipy
+  - numexpr
+  - autograd
+  - pymbar
+  - openmm >=7.3.1
+  - parmed
+  - openmoltools
+  - openmmtools
+  - numba
+  - netcdf4
+  - matplotlib
+  - seaborn
+  - mdtraj
+  - pdbfixer
+  - lxml
+  - networkx >=2.0
+  - openeye-toolkits
+  - dask
+  - distributed
+  - progressbar2
+  - yank
+  - parmed
+  - tqdm
