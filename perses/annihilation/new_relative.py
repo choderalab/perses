@@ -890,8 +890,7 @@ class HybridTopologyFactory(object):
 
             if index_set==angle_parameter_indices:
                 return angle_parameters
-            else:
-                return []
+        return []  # return empty if no matching angle found
 
     def _find_torsion_parameters(self, torsion_force, indices):
         """
@@ -940,24 +939,24 @@ class HybridTopologyFactory(object):
         #custom angle force if all atoms are part of "core." Otherwise, they are either unique to one system or never
         #change.
         for angle_index in range(old_system_angle_force.getNumAngles()):
-            angle_parameters = old_system_angle_force.getAngleParameters(angle_index)
+            old_angle_parameters = old_system_angle_force.getAngleParameters(angle_index)
 
             #get the indices in the hybrid system
-            hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in angle_parameters[:3]]
+            hybrid_index_list = [self._old_to_hybrid_map[old_atomid] for old_atomid in old_angle_parameters[:3]]
             hybrid_index_set = set(hybrid_index_list)
 
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
             #interpolate
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
                 #get the new indices so we can get the new angle parameters
-                new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in angle_parameters[:3]]
+                new_indices = [self._topology_proposal.old_to_new_atom_map[old_atomid] for old_atomid in old_angle_parameters[:3]]
                 new_angle_parameters = self._find_angle_parameters(new_system_angle_force, new_indices)
                 if not new_angle_parameters:
-                    new_angle_parameters = [0, 0, 0, angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2]
+                    new_angle_parameters = [0, 0, 0, old_angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2]
 
                 #add to the hybrid force:
                 #the parameters at indices 3 and 4 represent theta0 and k, respectively.
-                hybrid_force_parameters = [angle_parameters[3], angle_parameters[4], new_angle_parameters[3], new_angle_parameters[4]]
+                hybrid_force_parameters = [old_angle_parameters[3], old_angle_parameters[4], new_angle_parameters[3], new_angle_parameters[4]]
                 self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
 
             # Check if the atoms are neither all core nor all environment, which would mean they involve unique old interactions
@@ -969,8 +968,8 @@ class HybridTopologyFactory(object):
                     # If we are, then we need to generate the softened parameters (at lambda=1 for old atoms)
                     # We do this by using the same equilibrium angle, and scaling the force constant at the non-interacting
                     # endpoint:
-                    hybrid_force_parameters = [angle_parameters[3], angle_parameters[4], angle_parameters[3],
-                                               self._angle_softening_constant * angle_parameters[4]]
+                    hybrid_force_parameters = [old_angle_parameters[3], old_angle_parameters[4], old_angle_parameters[3],
+                                               self._angle_softening_constant * old_angle_parameters[4]]
 
                     # Add this interaction to the alchemical angle force
                     self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
@@ -983,20 +982,20 @@ class HybridTopologyFactory(object):
                     self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0],
                                                                                 hybrid_index_list[1],
                                                                                 hybrid_index_list[2],
-                                                                                angle_parameters[3],
-                                                                                angle_parameters[4])
+                                                                                old_angle_parameters[3],
+                                                                                old_angle_parameters[4])
             #otherwise, only environment atoms are in this interaction, so add it to the standard angle force
             else:
                 self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2], angle_parameters[3],
-                                                                            angle_parameters[4])
+                                                                            hybrid_index_list[2], old_angle_parameters[3],
+                                                                            old_angle_parameters[4])
 
         #finally, loop through the new system force to add any unique new angles
         for angle_index in range(new_system_angle_force.getNumAngles()):
-            angle_parameters = new_system_angle_force.getAngleParameters(angle_index)
+            new_angle_parameters = new_system_angle_force.getAngleParameters(angle_index)
 
             #get the indices in the hybrid system
-            hybrid_index_list = [self._new_to_hybrid_map[new_index] for new_index in angle_parameters[:3]]
+            hybrid_index_list = [self._new_to_hybrid_map[new_atomid] for new_atomid in new_angle_parameters[:3]]
             hybrid_index_set = set(hybrid_index_list)
 
             #if the intersection of this hybrid set with the unique new atoms is nonempty, it must be added:
@@ -1006,7 +1005,7 @@ class HybridTopologyFactory(object):
                 if self._soften_angles:
 
                     # If so, generate the parameters for the alchemical angle by scaling the force constant at the dummy endpoint (lambda=0 for new atoms)
-                    hybrid_force_parameters = [angle_parameters[3], angle_parameters[4] * self._angle_softening_constant, angle_parameters[3], angle_parameters[4]]
+                    hybrid_force_parameters = [new_angle_parameters[3], new_angle_parameters[4] * self._angle_softening_constant, new_angle_parameters[3], new_angle_parameters[4]]
 
                     # Then add the angle to the alchemical force:
                     self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
@@ -1015,12 +1014,12 @@ class HybridTopologyFactory(object):
                 # Otherwise, just add to the nonalchemical force
                 else:
                     self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2], angle_parameters[3],
-                                                                            angle_parameters[4])
+                                                                            hybrid_index_list[2], new_angle_parameters[3],
+                                                                            new_angle_parameters[4])
 
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
                 if not self._find_angle_parameters(self._hybrid_system_forces['core_angle_force'], hybrid_index_list):
-                    hybrid_force_parameters = [angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2, angle_parameters[3], angle_parameters[4]]
+                    hybrid_force_parameters = [new_angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2, new_angle_parameters[3], new_angle_parameters[4]]
                     self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2],
                                                                             hybrid_force_parameters)
