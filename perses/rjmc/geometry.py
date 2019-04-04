@@ -359,7 +359,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
             # Get internal coordinates if direction is reverse
             if direction == 'reverse':
-                atom_coords, bond_coords, angle_coords, torsion_coords = [ old_positions[index] for index in torsion ]
+                atom_coords, bond_coords, angle_coords, torsion_coords = [ old_positions[index] for index in torsion_atom_indices ]
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
                 # Extract dimensionless internal coordinates
                 r, theta, phi = internal_coordinates[0], internal_coordinates[1], internal_coordinates[2] # dimensionless
@@ -1870,6 +1870,7 @@ class NetworkXProposalOrder(object):
             raise ValueError("Direction must be either forward or reverse.")
 
         self._new_atom_objects = list(self._destination_topology.atoms())
+        self._new_atoms_to_place = [atom for atom in self._destination_topology.atoms() if atom.index in self._new_atoms]
 
         self._atoms_with_positions_set = set(self._atoms_with_positions)
 
@@ -1877,7 +1878,7 @@ class NetworkXProposalOrder(object):
         self._heavy = []
 
         # Sort the new atoms into hydrogen and heavy atoms:
-        for atom in self._new_atom_objects:
+        for atom in self._new_atoms_to_place:
             if atom.element == self._hydrogen:
                 self._hydrogens.append(atom.index)
             else:
