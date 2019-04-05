@@ -639,7 +639,7 @@ class HybridTopologyFactory(object):
 
     def _nonbonded_custom_sterics_common(self):
         """
-        Get a custom sterics expression using amber softcore expression 
+        Get a custom sterics expression using amber softcore expression
 
         Returns
         -------
@@ -652,8 +652,8 @@ class HybridTopologyFactory(object):
 
 
         sterics_addition += "lambda_alpha = new_interaction*(1-lambda_sterics_insert) + old_interaction*lambda_sterics_delete;"
-        sterics_addition += "lambda_sterics = core_interaction*lambda_sterics_core + new_interaction*lambda_sterics_insert + old_interaction*(1-lambda_sterics_delete);"
-        sterics_addition += "core_interaction = delta(unique_old1+unique_old2+unique_new1+unique_new2);new_interaction = max(unique_new1, unique_new2);old_interaction = max(unique_old1, unique_old2);" 
+        sterics_addition += "lambda_sterics = core_interaction*lambda_sterics_core + new_interaction*lambda_sterics_insert + old_interaction*lambda_sterics_delete;"
+        sterics_addition += "core_interaction = delta(unique_old1+unique_old2+unique_new1+unique_new2);new_interaction = max(unique_new1, unique_new2);old_interaction = max(unique_old1, unique_old2);"
 
         return sterics_addition
 
@@ -1157,7 +1157,7 @@ class HybridTopologyFactory(object):
                 #still add the particle to the regular nonbonded force, but with zeroed out parameters.
                 check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge_old, 0.5*(sigma_old+sigma_new), 0.0)
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
-            
+
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
                 # TODO: We could also interpolate the Lennard-Jones here instead of core_sterics force so that core_sterics_force could just be softcore
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_core', particle_index, (charge_new - charge_old), 0, 0)
