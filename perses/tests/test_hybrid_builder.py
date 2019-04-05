@@ -137,6 +137,17 @@ def test_networkx_proposal_order():
         print('{} -> {}'.format(pair[1],pair[0]))
         test_simple_overlap(pair[1],pair[0])
 
+def test_explosion():
+    """
+    This test fails with ridiculous DeltaF if the alchemical factory is misbehaving
+    """
+    pairs = [['2-phenyl ethanol', 'benzene']]
+    for pair in pairs:
+        print('{} -> {}'.format(pair[0],pair[1]))
+        test_simple_overlap(pair[0],pair[1])
+        print('{} -> {}'.format(pair[1],pair[0]))
+        test_simple_overlap(pair[1],pair[0])
+
 def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol'],['imatinib','nilotinib']]):
     """
     Test to run pairs of small molecule perturbations in vacuum, using test_simple_overlap, both forward and backward.

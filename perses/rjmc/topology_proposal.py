@@ -2001,7 +2001,7 @@ class SystemGenerator(object):
 
     def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None,
         particle_charge=True, exception_charge=True, particle_epsilon=True, exception_epsilon=True,
-        torsions=True):
+        torsions=True, angles=True):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
@@ -2024,6 +2024,7 @@ class SystemGenerator(object):
         self._particle_epsilon = particle_epsilon
         self._exception_epsilon = exception_epsilon
         self._torsions = torsions
+        self._angles = angles
 
     def getForceField(self):
         """
@@ -2076,8 +2077,13 @@ class SystemGenerator(object):
             p1, p2, p3, p4, periodicity, phase, K = force.getTorsionParameters(index)
             if not self._torsions:
                 K *= 0
-            force.setTorsionParameters(index, p1, p2, p3, p4, periodicity, phase, 0*K)
-
+            force.setTorsionParameters(index, p1, p2, p3, p4, periodicity, phase, K)
+        force = forces['HarmonicAngleForce']
+        for index in range(force.getNumAngles()):
+            p1, p2, p3, angle, K = force.getAngleParameters(index)
+            if not self._angles:
+                K *= 0
+            force.setAngleParameters(index, p1, p2, p3, angle, K)
 
 
             #from simtk import unit
