@@ -860,6 +860,7 @@ class HybridTopologyFactory(object):
                  if not self._find_bond_parameters(self._hybrid_system_forces['core_bond_force'], index1_hybrid, index2_hybrid):
                      r0_old = r0_new
                      k_old = 0.0*unit.kilojoule_per_mole/unit.angstrom**2
+                     print('Adding new core_bond_force')
                      self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
                                                                            [r0_old, k_old, r0_new, k_new])
 

@@ -55,7 +55,8 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
        list of [df, ddf, N_eff] for 1 and 0
     """
     #create the hybrid system:
-    hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
+    #hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
+    hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=False) # DEBUG
 
     #get the relevant thermodynamic states:
     nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state = utils.generate_endpoint_thermodynamic_states(
@@ -247,11 +248,16 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     ddf : float
         Standard deviation of estimate, corrected for correlation, from EXP estimator.
     """
-    from simtk.openmm.app import PDBFile
+    import mdtraj as md
     #run an initial minimization:
     mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
     mcmc_sampler.minimize(max_iterations=20)
     new_sampler_state = mcmc_sampler.sampler_state
+
+    with open(f'hybrid{lambda_index}-system.xml', 'w') as outfile:
+        outfile.write(openmm.XmlSerializer.serialize(lambda_thermodynamic_state.system))
+    with open(f'nonalchemical{lambda_index}-system.xml', 'w') as outfile:
+        outfile.write(openmm.XmlSerializer.serialize(nonalchemical_thermodynamic_state.system))
 
     #initialize work array
     w = np.zeros([n_iterations])
@@ -259,18 +265,20 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     hybrid_potential = np.zeros([n_iterations])
 
     #run n_iterations of the endpoint perturbation:
+    hybrid_trajectory = unit.Quantity(np.zeros([n_iterations, lambda_thermodynamic_state.system.getNumParticles(), 3]), unit.nanometers) # DEBUG
+    nonalchemical_trajectory = unit.Quantity(np.zeros([n_iterations, nonalchemical_thermodynamic_state.system.getNumParticles(), 3]), unit.nanometers) # DEBUG
     for iteration in range(n_iterations):
         mc_move.apply(lambda_thermodynamic_state, new_sampler_state)
         #compute the reduced potential at the new state
         hybrid_context, integrator = cache.global_context_cache.get_context(lambda_thermodynamic_state)
-        state = hybrid_context.getState(getPositions=True, getVelocities=True, getForces=True)
-#        forces = state.getForces(asNumpy=True).value_in_unit_system(unit.md_unit_system) # unitless, in MD unit system
-#        force_magnitudes = np.sqrt(np.sum(forces**2, 1))
-#        for x in force_magnitudes:
-#            print(x)
-        state_xml = openmm.XmlSerializer.serialize(state)
-        with open('state{}_l{}.xml'.format(iteration,lambda_index), 'w') as outfile:
-            outfile.write(state_xml)
+
+        # DEBUG: write state and parameters
+        state = hybrid_context.getState(getPositions=True, getParameters=True)
+        hybrid_trajectory[iteration,:,:] = state.getPositions(asNumpy=True) # DEBUG
+        #state_xml = openmm.XmlSerializer.serialize(state)
+        #with open(f'state{iteration}_l{lambda_index}.xml', 'w') as outfile:
+        #    outfile.write(state_xml)
+
         new_sampler_state.apply_to_context(hybrid_context, ignore_velocities=True)
         hybrid_reduced_potential = lambda_thermodynamic_state.reduced_potential(hybrid_context)
 
@@ -281,9 +289,10 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
             nonalchemical_positions = factory.new_positions(new_sampler_state.positions)
         else:
             raise ValueError("The lambda index needs to be either one or zero for this to be meaningful")
-        #pdbfile = open('state{}_l{}.pdb'.format(iteration,lambda_index),'w')
-        #PDBFile.writeModel(factory.hybrid_topology, new_sampler_state.positions, file=pdbfile)
         nonalchemical_sampler_state = SamplerState(nonalchemical_positions, box_vectors=new_sampler_state.box_vectors)
+
+        # DEBUG
+        nonalchemical_trajectory[iteration,:,:] = nonalchemical_positions
 
         #compute the reduced potential at the nonalchemical system as well:
         nonalchemical_context, integrator = cache.global_context_cache.get_context(nonalchemical_thermodynamic_state)
@@ -292,13 +301,22 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         w[iteration] = nonalchemical_reduced_potential - hybrid_reduced_potential
         non_potential[iteration] = nonalchemical_reduced_potential
         hybrid_potential[iteration] = hybrid_reduced_potential
+
+    # DEBUG
+    if lambda_index == 0:
+        nonalchemical_mdtraj_topology = md.Topology.from_openmm(factory._topology_proposal.old_topology)
+    elif lambda_index == 1:
+        nonalchemical_mdtraj_topology = md.Topology.from_openmm(factory._topology_proposal.new_topology)
+    md.Trajectory(hybrid_trajectory / unit.nanometers, factory.hybrid_topology).save(f'hybrid{lambda_index}.pdb')
+    md.Trajectory(nonalchemical_trajectory / unit.nanometers, nonalchemical_mdtraj_topology).save(f'nonalchemical{lambda_index}.pdb')
+
     [t0, g, Neff_max] = timeseries.detectEquilibration(w)
     w_burned_in = w[t0:]
 
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
 
-    return [df, ddf_corrected, Neff_max], non_potential, hybrid_potential
+    return [df, ddf_corrected, t0, Neff_max], non_potential, hybrid_potential
 
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """

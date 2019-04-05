@@ -894,8 +894,8 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff},
-        particle_charge=False, exception_charge=False, particle_epsilon=False, exception_epsilon=False, torsions=False, angles=False)
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds},
+        particle_charge=False, exception_charge=False, particle_epsilon=False, exception_epsilon=False, torsions=False)
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
