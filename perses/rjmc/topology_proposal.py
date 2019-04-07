@@ -2024,7 +2024,6 @@ class SystemGenerator(object):
         self._particle_epsilon = particle_epsilon
         self._exception_epsilon = exception_epsilon
         self._torsions = torsions
-        self._angles = angles
 
     def getForceField(self):
         """
@@ -2080,12 +2079,6 @@ class SystemGenerator(object):
                     if not self._torsions:
                         K *= 0
                     force.setTorsionParameters(index, p1, p2, p3, p4, periodicity, phase, K)
-            elif force.__class__.__name__ == 'HarmonicAngleForce':
-                for index in range(force.getNumAngles()):
-                    p1, p2, p3, angle, K = force.getAngleParameters(index)
-                    if not self._angles:
-                        K *= 0.01
-                    force.setAngleParameters(index, p1, p2, p3, angle, K)
 
         # Add barostat if requested.
         if self._barostat is not None:

@@ -67,7 +67,7 @@ def run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positi
     alchemical_thermodynamic_states = [lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state]
 
     #create an MCMCMove, BAOAB with default parameters (but don't restart if we encounter a NaN)
-    mc_move = mcmc.LangevinDynamicsMove(n_restart_attempts=0)
+    mc_move = mcmc.LangevinDynamicsMove(n_restart_attempts=0, n_steps=100)
 
     initial_sampler_state = SamplerState(hybrid_factory.hybrid_positions, box_vectors=hybrid_factory.hybrid_system.getDefaultPeriodicBoxVectors())
 
@@ -117,9 +117,7 @@ def check_result(results, threshold=3.0, neffmin=10):
     neff_min : float, default 10
         the minimum number of acceptable samples
     """
-    df = results[0]
-    ddf = results[1]
-    N_eff = results[2]
+    [df, ddf, t0, N_eff] = results
 
     if N_eff < neffmin:
         raise Exception("Number of effective samples %f was below minimum of %f" % (N_eff, neffmin))
@@ -169,8 +167,8 @@ def test_simple_overlap(name1='pentane',name2='butane'):
     # DEBUG: Turn off constraints and nonbondeds
     forcefield_kwargs = { 'constraints' : None }
     system_generator_kwargs = {
-        'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False,
-        'torsions' : False, 'angles' : True }
+        #'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False, 'torsions' : False
+        }
 
     topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2,
         forcefield_kwargs=forcefield_kwargs, system_generator_kwargs=system_generator_kwargs)
@@ -227,7 +225,8 @@ def test_difficult_overlap():
             message += str(e)
             raise Exception(message)
 
-def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory, lambda_index=0):
+def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermodynamic_state, initial_hybrid_sampler_state, mc_move, n_iterations, factory,
+    lambda_index=0, print_work=False, write_system=False, write_state=False, write_trajectories=False):
     """
 
     Parameters
@@ -244,8 +243,16 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         The number of iterations
     factory : HybridTopologyFactory
         The hybrid topology factory
-    lambda_index : int, optional default 0
+    lambda_index : int, optional, default=0
         The index, 0 or 1, at which to retrieve nonalchemical positions
+    print_work : bool, optional, default=False
+        If True, will print work values
+    write_system : bool, optional, default=False
+        If True, will write alchemical and nonalchemical System XML files
+    write_state : bool, optional, default=False
+        If True, write alchemical (hybrid) State XML files each iteration
+    write_trajectories : bool, optional, default=False
+        If True, will write trajectories
 
     Returns
     -------
@@ -255,15 +262,17 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
         Standard deviation of estimate, corrected for correlation, from EXP estimator.
     """
     import mdtraj as md
+
     #run an initial minimization:
     mcmc_sampler = mcmc.MCMCSampler(lambda_thermodynamic_state, initial_hybrid_sampler_state, mc_move)
     mcmc_sampler.minimize(max_iterations=20)
     new_sampler_state = mcmc_sampler.sampler_state
 
-    with open(f'hybrid{lambda_index}-system.xml', 'w') as outfile:
-        outfile.write(openmm.XmlSerializer.serialize(lambda_thermodynamic_state.system))
-    with open(f'nonalchemical{lambda_index}-system.xml', 'w') as outfile:
-        outfile.write(openmm.XmlSerializer.serialize(nonalchemical_thermodynamic_state.system))
+    if write_system:
+        with open(f'hybrid{lambda_index}-system.xml', 'w') as outfile:
+            outfile.write(openmm.XmlSerializer.serialize(lambda_thermodynamic_state.system))
+        with open(f'nonalchemical{lambda_index}-system.xml', 'w') as outfile:
+            outfile.write(openmm.XmlSerializer.serialize(nonalchemical_thermodynamic_state.system))
 
     #initialize work array
     w = np.zeros([n_iterations])
@@ -274,21 +283,21 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     hybrid_trajectory = unit.Quantity(np.zeros([n_iterations, lambda_thermodynamic_state.system.getNumParticles(), 3]), unit.nanometers) # DEBUG
     nonalchemical_trajectory = unit.Quantity(np.zeros([n_iterations, nonalchemical_thermodynamic_state.system.getNumParticles(), 3]), unit.nanometers) # DEBUG
     for iteration in range(n_iterations):
+        # Generate a new sampler state for the hybrid system
         mc_move.apply(lambda_thermodynamic_state, new_sampler_state)
-        #compute the reduced potential at the new state
+
+        # Compute the hybrid reduced potential at the new sampler state
         hybrid_context, integrator = cache.global_context_cache.get_context(lambda_thermodynamic_state)
-
-        # DEBUG: write state and parameters
-        state = hybrid_context.getState(getPositions=True, getParameters=True)
-        hybrid_trajectory[iteration,:,:] = state.getPositions(asNumpy=True) # DEBUG
-        #state_xml = openmm.XmlSerializer.serialize(state)
-        #with open(f'state{iteration}_l{lambda_index}.xml', 'w') as outfile:
-        #    outfile.write(state_xml)
-
         new_sampler_state.apply_to_context(hybrid_context, ignore_velocities=True)
         hybrid_reduced_potential = lambda_thermodynamic_state.reduced_potential(hybrid_context)
 
-        #generate a sampler state for the nonalchemical system
+        if write_state:
+            state = hybrid_context.getState(getPositions=True, getParameters=True)
+            state_xml = openmm.XmlSerializer.serialize(state)
+            with open(f'state{iteration}_l{lambda_index}.xml', 'w') as outfile:
+                outfile.write(state_xml)
+
+        # Construct a sampler state for the nonalchemical system
         if lambda_index == 0:
             nonalchemical_positions = factory.old_positions(new_sampler_state.positions)
         elif lambda_index == 1:
@@ -297,32 +306,40 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
             raise ValueError("The lambda index needs to be either one or zero for this to be meaningful")
         nonalchemical_sampler_state = SamplerState(nonalchemical_positions, box_vectors=new_sampler_state.box_vectors)
 
-        # DEBUG
-        nonalchemical_trajectory[iteration,:,:] = nonalchemical_positions
+        if write_trajectories:
+            state = hybrid_context.getState(getPositions=True)
+            hybrid_trajectory[iteration,:,:] = state.getPositions(asNumpy=True)
+            nonalchemical_trajectory[iteration,:,:] = nonalchemical_positions
 
-        #compute the reduced potential at the nonalchemical system as well:
+        # Compute the nonalchemical reduced potential
         nonalchemical_context, integrator = cache.global_context_cache.get_context(nonalchemical_thermodynamic_state)
         nonalchemical_sampler_state.apply_to_context(nonalchemical_context, ignore_velocities=True)
         nonalchemical_reduced_potential = nonalchemical_thermodynamic_state.reduced_potential(nonalchemical_context)
+
+        # Compute and store the work
         w[iteration] = nonalchemical_reduced_potential - hybrid_reduced_potential
         non_potential[iteration] = nonalchemical_reduced_potential
         hybrid_potential[iteration] = hybrid_reduced_potential
 
-    # DEBUG
-    if lambda_index == 0:
-        nonalchemical_mdtraj_topology = md.Topology.from_openmm(factory._topology_proposal.old_topology)
-    elif lambda_index == 1:
-        nonalchemical_mdtraj_topology = md.Topology.from_openmm(factory._topology_proposal.new_topology)
-    md.Trajectory(hybrid_trajectory / unit.nanometers, factory.hybrid_topology).save(f'hybrid{lambda_index}.pdb')
-    md.Trajectory(nonalchemical_trajectory / unit.nanometers, nonalchemical_mdtraj_topology).save(f'nonalchemical{lambda_index}.pdb')
+        if print_work:
+            print(f'{iteration:8d} {hybrid_reduced_potential:8.3f} {nonalchemical_reduced_potential:8.3f} => {w[iteration]:8.3f}')
 
+    if write_trajectories:
+        if lambda_index == 0:
+            nonalchemical_mdtraj_topology = md.Topology.from_openmm(factory._topology_proposal.old_topology)
+        elif lambda_index == 1:
+            nonalchemical_mdtraj_topology = md.Topology.from_openmm(factory._topology_proposal.new_topology)
+        md.Trajectory(hybrid_trajectory / unit.nanometers, factory.hybrid_topology).save(f'hybrid{lambda_index}.pdb')
+        md.Trajectory(nonalchemical_trajectory / unit.nanometers, nonalchemical_mdtraj_topology).save(f'nonalchemical{lambda_index}.pdb')
+
+    # Analyze data and return results
     [t0, g, Neff_max] = timeseries.detectEquilibration(w)
     w_burned_in = w[t0:]
-
     [df, ddf] = pymbar.EXP(w_burned_in)
     ddf_corrected = ddf * np.sqrt(g)
+    results = [df, ddf_corrected, t0, Neff_max]
 
-    return [df, ddf_corrected, t0, Neff_max], non_potential, hybrid_potential
+    return results, non_potential, hybrid_potential
 
 def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """

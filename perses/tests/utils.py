@@ -918,6 +918,25 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     #generate new positions with geometry engine
     new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
 
+    # DEBUG: Zero out bonds and angles for one system
+    #print('Zeroing bonds of old system')
+    #for force in topology_proposal.old_system.getForces():
+    #    if force.__class__.__name__ == 'HarmonicAngleForce':
+    #        for index in range(force.getNumAngles()):
+    #            p1, p2, p3, angle, K = force.getAngleParameters(index)
+    #            K *= 0.0
+    #            force.setAngleParameters(index, p1, p2, p3, angle, K)
+    #    if False and force.__class__.__name__ == 'HarmonicBondForce':
+    #        for index in range(force.getNumBonds()):
+    #            p1, p2, r0, K = force.getBondParameters(index)
+    #            K *= 0.0
+    #            force.setBondParameters(index, p1, p2, r0, K)
+
+    # DEBUG : Box vectors
+    #box_vectors = np.eye(3) * 100 * unit.nanometers
+    #topology_proposal.old_system.setDefaultPeriodicBoxVectors(box_vectors[0,:], box_vectors[1,:], box_vectors[2,:])
+    #topology_proposal.new_system.setDefaultPeriodicBoxVectors(box_vectors[0,:], box_vectors[1,:], box_vectors[2,:])
+
     return topology_proposal, old_positions, new_positions
 
 def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
