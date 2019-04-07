@@ -1920,6 +1920,14 @@ class NetworkXProposalOrder(object):
             msg = 'NetworkXProposalOrder: proposal_order is empty\n'
             raise Exception(msg)
 
+        #Check that no atom is placed until each atom in the corresponding torsion is in the set of atoms with positions
+        _set_of_atoms_with_positions = set(self._atoms_with_positions)
+
+        # Now iterate through the proposal_order, ensuring that each atom in the corresponding torsion list is in the _set_of_atoms_with_positions (appending to the set after each placement)
+        for torsion in proposal_order:
+            assert set(torsion[1:]).issubset(_set_of_atoms_with_positions), "Proposal Order Issue: a torsion atom is not position-defined"
+            _set_of_atoms_with_positions.add(torsion[0])
+            
         return proposal_order, heavy_logp + hydrogen_logp
 
     def _propose_atoms_in_order(self, atom_group):
