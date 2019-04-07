@@ -860,7 +860,6 @@ class HybridTopologyFactory(object):
                  if not self._find_bond_parameters(self._hybrid_system_forces['core_bond_force'], index1_hybrid, index2_hybrid):
                      r0_old = r0_new
                      k_old = 0.0*unit.kilojoule_per_mole/unit.angstrom**2
-                     print('Adding new core_bond_force')
                      self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
                                                                            [r0_old, k_old, r0_new, k_new])
 
@@ -1246,8 +1245,6 @@ class HybridTopologyFactory(object):
         Returns
         -------
         """
-        print("handling exceptions")
-
         old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
         new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
 
@@ -1313,8 +1310,6 @@ class HybridTopologyFactory(object):
                 sigma = 0.5*(sigma0+sigma1)
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
-
-        print("done handling exceptions")
 
     def _handle_original_exceptions(self):
         """

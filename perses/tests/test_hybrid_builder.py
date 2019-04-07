@@ -147,14 +147,58 @@ def test_explosion():
         print('{} -> {}'.format(pair[1],pair[0]))
         test_simple_overlap(pair[1],pair[0])
 
-def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol'],['imatinib','nilotinib']]):
+def test_vacuum_overlap_with_constraints():
+    """
+    Test that constraints do not cause problems for the hybrid factory in vacuum
+    """
+    test_simple_overlap('2-phenyl ethanol', 'benzene', forcefield_kwargs={'constraints' : app.HBonds})
+
+def test_valence_overlap():
+    """
+    Test hybrid factory vacuum overlap with valence terms only
+    """
+    system_generator_kwargs = {
+        'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False, 'torsions' : True,
+        }
+    test_simple_overlap('2-phenyl ethanol', 'benzene', system_generator_kwargs=system_generator_kwargs)
+
+def test_bonds_angles_overlap():
+    """
+    Test hybrid factory vacuum overlap with bonds and angles
+    """
+    system_generator_kwargs = {
+        'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False, 'torsions' : False,
+        }
+    test_simple_overlap('2-phenyl ethanol', 'benzene', system_generator_kwargs=system_generator_kwargs)
+
+def test_sterics_overlap():
+    """
+    Test hybrid factory vacuum overlap with valence terms and sterics only
+    """
+    system_generator_kwargs = {
+        'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : True, 'exception_epsilon' : True, 'torsions' : True,
+        }
+    test_simple_overlap('2-phenyl ethanol', 'benzene', system_generator_kwargs=system_generator_kwargs)
+
+def test_simple_overlap_pairs(pairs=None):
     """
     Test to run pairs of small molecule perturbations in vacuum, using test_simple_overlap, both forward and backward.
-    pentane <-> butane is adding a methyl group
-    fluorobenzene <-> chlorobenzene perturbs one halogen to another, with no adding or removing of atoms
-    benzene <-> catechol perturbing molecule in two positions simultaneously
-    benzene <-> 2-phenyl ethanol addition of 3 heavy atom group
+
+    Parameters
+    ----------
+    pairs : list of lists of str, optional, default=None
+        Pairs of IUPAC names to test.
+        If None, will test a default set:
+        [['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol'],['imatinib','nilotinib']]
+
+        pentane <-> butane is adding a methyl group
+        fluorobenzene <-> chlorobenzene perturbs one halogen to another, with no adding or removing of atoms
+        benzene <-> catechol perturbing molecule in two positions simultaneously
+        benzene <-> 2-phenyl ethanol addition of 3 heavy atom group
     """
+    if pairs is None:
+        pairs = [['pentane','butane'],['fluorobenzene', 'chlorobenzene'],['benzene', 'catechol'],['benzene','2-phenyl ethanol'],['imatinib','nilotinib']]
+
     for pair in pairs:
         print('{} -> {}'.format(pair[0],pair[1]))
         test_simple_overlap(pair[0],pair[1])
@@ -162,17 +206,26 @@ def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chl
         print('{} -> {}'.format(pair[1],pair[0]))
         test_simple_overlap(pair[1],pair[0])
 
-def test_simple_overlap(name1='pentane',name2='butane'):
-    """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    # DEBUG: Turn off constraints and nonbondeds
-    forcefield_kwargs = { 'constraints' : None }
-    system_generator_kwargs = {
-        #'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False, 'torsions' : False
-        }
+def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None, system_generator_kwargs=None):
+    """Test that the variance of the hybrid -> real perturbation in vacuum is sufficiently small.
 
+    Parameters
+    ----------
+    name1 : str
+        IUPAC name of initial molecule
+    name2 : str
+        IUPAC name of final molecule
+    forcefield_kwargs : dict, optional, default=None
+        If None, these parameters are fed to the SystemGenerator
+        Setting { 'constraints' : app.HBonds } will enable constraints to hydrogen
+    system_generator_kwargs : dict, optional, default=None
+        If None, these parameters are fed to the SystemGenerator
+        Setting { 'particle_charge' : False } will turn off particle charges in parameterized systems
+        Can also disable 'exception_charge', 'particle_epsilon', 'exception_epsilon', and 'torsions' by setting to False
+
+    """
     topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2,
         forcefield_kwargs=forcefield_kwargs, system_generator_kwargs=system_generator_kwargs)
-    print('number of constraints: old_system {} new_system {}'.format(topology_proposal.old_system.getNumConstraints(),topology_proposal.new_system.getNumConstraints()))
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
     for idx, lambda_result in enumerate(results):
         try:

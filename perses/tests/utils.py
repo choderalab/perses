@@ -797,16 +797,12 @@ def check_system(system):
         if len(set([i,j,k,l])) < 4:
             msg  = 'Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d\n' % (index,i,j,k,l)
             msg += 'Serialzed system to system.xml for inspection.\n'
+            from simtk.openmm import XmlSerializer
+            serialized_system = XmlSerializer.serialize(system)
+            outfile = open('system.xml', 'w')
+            outfile.write(serialized_system)
+            outfile.close()
             raise Exception(msg)
-    from simtk.openmm import XmlSerializer
-    serialized_system = XmlSerializer.serialize(system)
-    outfile = open('system.xml', 'w')
-    outfile.write(serialized_system)
-    outfile.close()
-    print('system.xml')
-    nbforce = forces['NonbondedForce']
-    #for i in range(0,15):
-        #print('Exception {}: {}'.format(i,nbforce.getExceptionParameters(i)))
 
 def generate_endpoint_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
