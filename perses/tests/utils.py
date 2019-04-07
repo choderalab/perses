@@ -894,7 +894,8 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds},
+        particle_charge=False, exception_charge=False, particle_epsilon=False, exception_epsilon=False, torsions=False)
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
@@ -996,9 +997,9 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     from openmmtools import testsystems
 
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-   
+
     host_guest = testsystems.HostGuestVacuum()
-    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology 
+    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology
     ligand_topology = [res for res in top_old.residues()]
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
     proposed_mol = createOEMolFromSMILES('C1CC2(CCC1(CC2)C)C')

@@ -1987,9 +1987,21 @@ class SystemGenerator(object):
         If True, will add the GAFF residue template generator.
     barostat : MonteCarloBarostat, optional, default=None
         If provided, a matching barostat will be added to the generated system.
+    particle_charges : bool, optional, default=True
+        If False, particle charges will be zeroed
+    exception_charges : bool, optional, default=True
+        If False, exception charges will be zeroed.
+    particle_epsilon : bool, optional, default=True
+        If False, particle LJ epsilon will be zeroed.
+    exception_epsilon : bool, optional, default=True
+        If False, exception LJ epsilon will be zeroed.
+    torsions : bool, optional, default=True
+        If False, torsions will be zeroed.
     """
 
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, use_antechamber=True, barostat=None,
+        particle_charge=True, exception_charge=True, particle_epsilon=True, exception_epsilon=True,
+        torsions=True, angles=True):
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
         self._forcefield = app.ForceField(*self._forcefield_xmls)
@@ -2006,6 +2018,13 @@ class SystemGenerator(object):
                 temperature = barostat.getTemperature()
             frequency = barostat.getFrequency()
             self._barostat = (pressure, temperature, frequency)
+        # DEBUG
+        self._particle_charge = particle_charge
+        self._exception_charge = exception_charge
+        self._particle_epsilon = particle_epsilon
+        self._exception_epsilon = exception_epsilon
+        self._torsions = torsions
+        self._angles = angles
 
     def getForceField(self):
         """
@@ -2035,6 +2054,37 @@ class SystemGenerator(object):
         """
         # TODO: Write some debug info if exception is raised
         system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
+
+        # DEBUG
+        forces = { force.__class__.__name__ : force for force in system.getForces() }
+        force = forces['NonbondedForce']
+        for index in range(force.getNumParticles()):
+            charge, sigma, epsilon = force.getParticleParameters(index)
+            if not self._particle_charge:
+                charge *= 0
+            if not self._particle_epsilon:
+                epsilon *= 0
+            force.setParticleParameters(index, charge, sigma, epsilon)
+        for index in range(force.getNumExceptions()):
+            p1, p2, chargeProd, sigma, epsilon = force.getExceptionParameters(index)
+            if not self._exception_charge:
+                chargeProd *= 0
+            if not self._exception_epsilon:
+                epsilon *= 0
+            force.setExceptionParameters(index, p1, p2, chargeProd, sigma, epsilon)
+        force = forces['PeriodicTorsionForce']
+        for index in range(force.getNumTorsions()):
+            p1, p2, p3, p4, periodicity, phase, K = force.getTorsionParameters(index)
+            if not self._torsions:
+                K *= 0
+            force.setTorsionParameters(index, p1, p2, p3, p4, periodicity, phase, K)
+        force = forces['HarmonicAngleForce']
+        for index in range(force.getNumAngles()):
+            p1, p2, p3, angle, K = force.getAngleParameters(index)
+            if not self._angles:
+                K *= 0
+            force.setAngleParameters(index, p1, p2, p3, angle, K)
+
 
             #from simtk import unit
             #nparticles = sum([1 for atom in new_topology.atoms()])
