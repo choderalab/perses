@@ -856,7 +856,7 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
 
-def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", system_generator_kwargs=None):
+def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", forcefield_kwargs=None, system_generator_kwargs=None):
     """
     Generate a test vacuum topology proposal, current positions, and new positions triplet from two IUPAC molecule names.
 
@@ -900,11 +900,9 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
-    forcefield_kwargs = {'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds}
-    if forcefield_kwargs is not None:
-        forcefield_kwargs.update()
-    if system_generator_kwargs is None:
-        system_generator_kwargs = dict()
+    default_forcefield_kwargs = {'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds}
+    forcefield_kwargs = default_forcefield_kwargs.update(forcefield_kwargs) if (forcefield_kwargs is not None) else default_forcefield_kwargs
+    system_generator_kwargs = system_generator_kwargs if (system_generator_kwargs is not None) else dict()
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'],
         forcefield_kwargs=forcefield_kwargs,
         **system_generator_kwargs)

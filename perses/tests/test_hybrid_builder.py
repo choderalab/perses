@@ -170,9 +170,11 @@ def test_simple_overlap(name1='pentane',name2='butane'):
     forcefield_kwargs = { 'constraints' : None }
     system_generator_kwargs = {
         'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False,
-        'torsions' : False, 'angles' : False }
+        'torsions' : False, 'angles' : True }
 
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2, system_generator_kwargs=system_generator_kwargs)
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2,
+        forcefield_kwargs=forcefield_kwargs, system_generator_kwargs=system_generator_kwargs)
+    print('number of constraints: old_system {} new_system {}'.format(topology_proposal.old_system.getNumConstraints(),topology_proposal.new_system.getNumConstraints()))
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
     for idx, lambda_result in enumerate(results):
         try:
