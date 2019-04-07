@@ -856,10 +856,11 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
 
-def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene"):
+def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", system_generator_kwargs=None):
     """
-    Generate a test vacuum topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
+    Generate a test vacuum topology proposal, current positions, and new positions triplet from two IUPAC molecule names.
+
+    Constraints are added to the system by default. To override this, set ``forcefield_kwargs = None``.
 
     Parameters
     ----------
@@ -867,6 +868,11 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
         name of the first molecule
     proposed_mol_name : str, optional
         name of the second molecule
+    forcefield_kwargs : dict, optional, default=None
+        Additional arguments to ForceField in addition to
+        'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff
+    system_generator_kwargs : dict, optional, default=None
+        Dict passed onto SystemGenerator
 
     Returns
     -------
@@ -894,8 +900,14 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds},
-        particle_charge=False, exception_charge=False, particle_epsilon=False, exception_epsilon=False, torsions=False)
+    forcefield_kwargs = {'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds}
+    if forcefield_kwargs is not None:
+        forcefield_kwargs.update()
+    if system_generator_kwargs is None:
+        system_generator_kwargs = dict()
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'],
+        forcefield_kwargs=forcefield_kwargs,
+        **system_generator_kwargs)
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
         [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)

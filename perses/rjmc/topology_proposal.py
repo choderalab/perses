@@ -2018,7 +2018,7 @@ class SystemGenerator(object):
                 temperature = barostat.getTemperature()
             frequency = barostat.getFrequency()
             self._barostat = (pressure, temperature, frequency)
-        # DEBUG
+
         self._particle_charge = particle_charge
         self._exception_charge = exception_charge
         self._particle_epsilon = particle_epsilon
@@ -2037,7 +2037,7 @@ class SystemGenerator(object):
         """
         return self._forcefield
 
-    def build_system(self, new_topology):
+    def build_system(self, new_topology, check_system=False):
         """
         Build a system from the new_topology, adding templates
         for the molecules in oemol_list
@@ -2046,6 +2046,8 @@ class SystemGenerator(object):
         ----------
         new_topology : simtk.openmm.app.Topology object
             The topology of the system
+        check_system : book, optional, default=False`
+            If True, will check system for issues following creation
 
         Returns
         -------
@@ -2055,7 +2057,7 @@ class SystemGenerator(object):
         # TODO: Write some debug info if exception is raised
         system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
 
-        # DEBUG
+        # Turn off various force classes for debugging if requested
         forces = { force.__class__.__name__ : force for force in system.getForces() }
         force = forces['NonbondedForce']
         for index in range(force.getNumParticles()):
@@ -2085,22 +2087,6 @@ class SystemGenerator(object):
                 K *= 0
             force.setAngleParameters(index, p1, p2, p3, angle, K)
 
-
-            #from simtk import unit
-            #nparticles = sum([1 for atom in new_topology.atoms()])
-            #positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.angstroms)
-            ## Write PDB file of failed topology
-            #from simtk.openmm.app import PDBFile
-            #outfile = open('BuildSystem-failure.pdb', 'w')
-            #pdbfile = PDBFile.writeFile(new_topology, positions, outfile)
-            #outfile.close()
-            #msg = str(e)
-            #import traceback
-            #msg += traceback.format_exc(e)
-            #msg += "\n"
-            #msg += "PDB file written as 'BuildSystem-failure.pdb'"
-            #raise Exception(msg)
-
         # Add barostat if requested.
         if self._barostat is not None:
             MAXINT = np.iinfo(np.int32).max
@@ -2109,9 +2095,10 @@ class SystemGenerator(object):
             barostat.setRandomNumberSeed(seed)
             system.addForce(barostat)
 
-        # DEBUG: See if any torsions have duplicate atoms.
-        #from perses.tests.utils import check_system
-        #check_system(system)
+        # See if any torsions have duplicate atoms.
+        if check_system:
+            from perses.tests import utils
+            utils.check_system(system)
 
         return system
 

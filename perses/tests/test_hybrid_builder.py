@@ -166,7 +166,13 @@ def test_simple_overlap_pairs(pairs=[['pentane','butane'],['fluorobenzene', 'chl
 
 def test_simple_overlap(name1='pentane',name2='butane'):
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for pentane->butane in vacuum"""
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2)
+    # DEBUG: Turn off constraints and nonbondeds
+    forcefield_kwargs = { 'constraints' : None }
+    system_generator_kwargs = {
+        'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False,
+        'torsions' : False, 'angles' : False }
+
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2, system_generator_kwargs=system_generator_kwargs)
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
     for idx, lambda_result in enumerate(results):
         try:
