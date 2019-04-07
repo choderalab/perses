@@ -2054,41 +2054,38 @@ class SystemGenerator(object):
         new_system : openmm.System
             A system object generated from the topology
         """
-        # DEBUG
-        print('forcefield_kwargs: ', self._forcefield_kwargs)
-
         # TODO: Write some debug info if exception is raised
         system = self._forcefield.createSystem(new_topology, **self._forcefield_kwargs)
 
         # Turn off various force classes for debugging if requested
-        forces = { force.__class__.__name__ : force for force in system.getForces() }
-        force = forces['NonbondedForce']
-        for index in range(force.getNumParticles()):
-            charge, sigma, epsilon = force.getParticleParameters(index)
-            if not self._particle_charge:
-                charge *= 0
-            if not self._particle_epsilon:
-                epsilon *= 0
-            force.setParticleParameters(index, charge, sigma, epsilon)
-        for index in range(force.getNumExceptions()):
-            p1, p2, chargeProd, sigma, epsilon = force.getExceptionParameters(index)
-            if not self._exception_charge:
-                chargeProd *= 0
-            if not self._exception_epsilon:
-                epsilon *= 0
-            force.setExceptionParameters(index, p1, p2, chargeProd, sigma, epsilon)
-        force = forces['PeriodicTorsionForce']
-        for index in range(force.getNumTorsions()):
-            p1, p2, p3, p4, periodicity, phase, K = force.getTorsionParameters(index)
-            if not self._torsions:
-                K *= 0
-            force.setTorsionParameters(index, p1, p2, p3, p4, periodicity, phase, K)
-        force = forces['HarmonicAngleForce']
-        for index in range(force.getNumAngles()):
-            p1, p2, p3, angle, K = force.getAngleParameters(index)
-            if not self._angles:
-                K *= 0.01
-            force.setAngleParameters(index, p1, p2, p3, angle, K)
+        for force in system.getForces():
+            if force.__class__.__name__ == 'NonbondedForce':
+                for index in range(force.getNumParticles()):
+                    charge, sigma, epsilon = force.getParticleParameters(index)
+                    if not self._particle_charge:
+                        charge *= 0
+                    if not self._particle_epsilon:
+                        epsilon *= 0
+                    force.setParticleParameters(index, charge, sigma, epsilon)
+                for index in range(force.getNumExceptions()):
+                    p1, p2, chargeProd, sigma, epsilon = force.getExceptionParameters(index)
+                    if not self._exception_charge:
+                        chargeProd *= 0
+                    if not self._exception_epsilon:
+                        epsilon *= 0
+                    force.setExceptionParameters(index, p1, p2, chargeProd, sigma, epsilon)
+            elif force.__class__.__name__ == 'PeriodicTorsionForce':
+                for index in range(force.getNumTorsions()):
+                    p1, p2, p3, p4, periodicity, phase, K = force.getTorsionParameters(index)
+                    if not self._torsions:
+                        K *= 0
+                    force.setTorsionParameters(index, p1, p2, p3, p4, periodicity, phase, K)
+            elif force.__class__.__name__ == 'HarmonicAngleForce':
+                for index in range(force.getNumAngles()):
+                    p1, p2, p3, angle, K = force.getAngleParameters(index)
+                    if not self._angles:
+                        K *= 0.01
+                    force.setAngleParameters(index, p1, p2, p3, angle, K)
 
         # Add barostat if requested.
         if self._barostat is not None:

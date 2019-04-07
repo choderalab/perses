@@ -884,20 +884,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
         The positions of the new system
     """
     from openmoltools import forcefield_generators
-
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
-
-    initial_smiles = oechem.OEMolToSmiles(current_mol)
-    final_smiles = oechem.OEMolToSmiles(proposed_mol)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
-    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
 
     gaff_filename = get_data_filename('data/gaff.xml')
     default_forcefield_kwargs = {'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds}
@@ -906,21 +893,32 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'],
         forcefield_kwargs=forcefield_kwargs,
         **system_generator_kwargs)
+
+    old_oemol = createOEMolFromIUPAC(current_mol_name)
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    old_topology = generateTopologyFromOEMol(old_oemol)
+    old_positions = extractPositionsFromOEMOL(old_oemol)
+    old_smiles = oechem.OEMolToSmiles(old_oemol)
+    old_system = system_generator.build_system(old_topology)
+
+    new_oemol = createOEMolFromIUPAC(proposed_mol_name)
+    new_smiles = oechem.OEMolToSmiles(new_oemol)
+
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
+        [old_smiles, new_smiles], system_generator, residue_name=current_mol_name)
 
     #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
+    topology_proposal = proposal_engine.propose(old_system, old_topology, current_mol=old_oemol, proposed_mol=new_oemol)
 
     # show atom mapping
     filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
-    render_atom_mapping(filename,current_mol,proposed_mol,topology_proposal.new_to_old_atom_map)
+    render_atom_mapping(filename, old_oemol, new_oemol, topology_proposal.new_to_old_atom_map)
 
     #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+    new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
 
-    return topology_proposal, pos_old, new_positions
+    return topology_proposal, old_positions, new_positions
 
 def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
     """
