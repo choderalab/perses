@@ -30,18 +30,43 @@ def test_get_data_filename(datafile='data/gaff2.xml'):
 
 
 # functions testing perses.utils.openeye
-def test_createOEMolFromSMILES(smiles='CC', title='MOL'):
-    """
 
-    :param smiles:
-    :param title:
-    :return:
-    """
-    from perses.utils.openeye import createOEMolFromSMILES
-    molecule = createOEMolFromSMILES(smiles,title)
+if istravis:
+    continue # cannot test functions that rely on openeye modules on travis without license file
+else:
+    def test_createOEMolFromSMILES(smiles='CC', title='MOL'):
+        """
+        Generating an OEMol of ethane from simple SMILES string
 
-    # checking that it has returned an OEMol with a non-zero number of atoms
-    assert (molecule.NumAtoms() > 0), "createOEMolFromSMILES has returned an empty molecule"
+        Paramters
+        ---------
+        smiles : str, default 'CC'
+            default is ethane molecule
+        title : str, default 'MOL'
+            title for OEMol object
+        """
+        from perses.utils.openeye import createOEMolFromSMILES
+        molecule = createOEMolFromSMILES(smiles,title)
 
-    # checking that the OEMol has been correctly titled
-    assert (molecule.GetTitle() == title), "createOEMolFromSMILES has not titled OEMol object correctly"
+        # checking that it has returned an OEMol with a non-zero number of atoms
+        assert (molecule.NumAtoms() > 0), "createOEMolFromSMILES has returned an empty molecule"
+
+        # checking that the OEMol has been correctly titled
+        assert (molecule.GetTitle() == title), "createOEMolFromSMILES has not titled OEMol object correctly"
+
+    def test_extractPositionsFromOEMOL():
+        #TODO
+
+
+    def test_giveOpenmmPositionsToOEMOL():
+        #TODO
+
+    def test_createOEMolFromIUPAC():
+        #TODO
+
+    def test_createOEMolFromSMILES():
+        #TODO
+
+    def test_oemol_to_omm_ff()
+        #TODO
+
