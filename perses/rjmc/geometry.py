@@ -1920,6 +1920,14 @@ class NetworkXProposalOrder(object):
             msg = 'NetworkXProposalOrder: proposal_order is empty\n'
             raise Exception(msg)
 
+        #Check that no atom is placed until each atom in the corresponding torsion is in the set of atoms with positions
+        _set_of_atoms_with_positions = set(self._atoms_with_positions)
+
+        # Now iterate through the proposal_order, ensuring that each atom in the corresponding torsion list is in the _set_of_atoms_with_positions (appending to the set after each placement)
+        for torsion in proposal_order:
+            assert set(torsion[1:]).issubset(_set_of_atoms_with_positions), "Proposal Order Issue: a torsion atom is not position-defined"
+            _set_of_atoms_with_positions.add(torsion[0])
+            
         return proposal_order, heavy_logp + hydrogen_logp
 
     def _propose_atoms_in_order(self, atom_group):
@@ -1942,59 +1950,48 @@ class NetworkXProposalOrder(object):
         from scipy import special
         atom_torsions = []
         logp = 0.0
+        assert len(atom_group) == len(set(atom_group)), "There are duplicate atom indices in the list of atom proposal indices"
         while len(atom_group) > 0:
-            proposal_atoms = dict()
+                #initialise an eligible_torsions_list
+                eligible_torsions_list = list()
 
-            for atom_idx in atom_group:
-                # Find the shortest path up to length four from the atom in question:
-                shortest_paths = nx.algorithms.single_source_shortest_path(self._residue_graph, atom_idx, cutoff=4)
+                for atom_index in atom_group:
 
-                # Loop through shortest paths to find all paths of length 4 to an atom with positions:
-                eligible_torsions_list = []
+                    # Find the shortest path up to length four from the atom in question:
+                    shortest_paths = nx.algorithms.single_source_shortest_path(self._residue_graph, atom_index, cutoff=4)
 
-                for destination, path in shortest_paths.items():
+                    # Loop through the destination and path of each path and append to eligible_torsions_list
+                    # if destination has a position and path[1:3] is a subset of atoms with positions
+                    for destination, path in shortest_paths.items():
 
-                    # Check if the path is length 4 (a torsion) and that the destination has a position. Continue if not.
-                    if len(path) != 4 or destination not in self._atoms_with_positions:
-                        continue
+                        # Check if the path is length 4 (a torsion) and that the destination has a position. Continue if not.
+                        if len(path) != 4 or destination not in self._atoms_with_positions_set:
+                            continue
 
-                    # If the last atom is in atoms with positions, check to see if the others are also.
-                    # If they are, append the torsion to the list of possible torsions to propose
-                    if set(path[1:3]).issubset(self._atoms_with_positions_set):
-                        eligible_torsions_list.append(path)
+                        # If the last atom is in atoms with positions, check to see if the others are also.
+                        # If they are, append the torsion to the list of possible torsions to propose
+                        if set(path[1:3]).issubset(self._atoms_with_positions_set):
+                            eligible_torsions_list.append(path)
 
-                # If there are any eligible torsions, choose one randomly, add it to the atom_torsions,
-                # and mark this atom as having a position
+                assert len(eligible_torsions_list) != 0, "There is a connectivity issue; there are no torsions from which to choose"
+                #now we have to randomly choose a single torsion
                 ntorsions = len(eligible_torsions_list)
-                if len(eligible_torsions_list) > 0:
-                    torsion_index = np.random.choice(range(ntorsions))
-                    atom_torsion = eligible_torsions_list[torsion_index]
-                    proposal_atoms[atom_idx] = atom_torsion
+                random_torsion_index = np.random.choice(range(ntorsions))
+                random_torsion = eligible_torsions_list[random_torsion_index]
 
-                    # Add the appropriate logP contribution for uniform choice:
-                    logp += np.log(1/len(eligible_torsions_list))
-                    self._atoms_with_positions_set.add(atom_idx)
+                #append random torsion to the atom_torsions and remove source atom from the atom_group
+                chosen_atom_index = random_torsion[0]
+                atom_torsions.append(random_torsion)
+                atom_group.remove(chosen_atom_index)
 
-            # Return if no atoms to propose
-            if len(proposal_atoms)  == 0:
-                return list(), 0.0
+                #add atom to atoms with positions and corresponding set
+                self._atoms_with_positions_set.add(chosen_atom_index)
 
-            # Remove the newly added atoms from the atom group:
-            for atom_idx in proposal_atoms:
-                atom_group.remove(atom_idx)
-
-            # Choose the order in which to add these atoms:
-            atoms_to_order = list(proposal_atoms.keys())
-            atom_order = np.random.choice(atoms_to_order, size=len(atoms_to_order), replace=False)
-
-            # Add these atoms to the atom torsion list:
-            for atom in atom_order:
-                atom_torsions.append(proposal_atoms[atom])
-
-            #Add to the logp:
-            logp += -special.gammaln(len(atoms_to_order) + 1)
+                #add the log probability of the choice to logp
+                logp += np.log(1./ntorsions)
 
         return atom_torsions, logp
+
 
     def _residue_to_graph(self, residue):
         """
