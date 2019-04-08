@@ -201,7 +201,8 @@ Below is a very simple example script that constructs a :py:class:`HybridTopolog
     from openmoltools import forcefield_generators
     
     #these are utility functions to rapidly create test systems.
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.data import get_data_filename
     
     #We'll generate the systems by IUPAC name
     mol_name = "benzene"

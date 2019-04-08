@@ -76,85 +76,6 @@ def show_topology(topology):
         output += '\n'
     print(output)
 
-def extractPositionsFromOEMOL(molecule):
-    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
-    coords = molecule.GetCoords()
-    for index in range(molecule.NumAtoms()):
-        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
-    return positions
-
-def giveOpenmmPositionsToOEMOL(positions, molecule):
-    assert molecule.NumAtoms() == len(positions)
-    coords = molecule.GetCoords()
-    for key in coords.keys(): # openmm in nm, openeye in A
-        coords[key] = (positions[key][0]/unit.angstrom,positions[key][1]/unit.angstrom,positions[key][2]/unit.angstrom)
-    molecule.SetCoords(coords)
-
-def createOEMolFromIUPAC(iupac_name='bosutinib'):
-    from openeye import oechem, oeiupac, oeomega
-
-    # Create molecule.
-    mol = oechem.OEMol()
-    oeiupac.OEParseIUPACName(mol, iupac_name)
-    mol.SetTitle(iupac_name)
-
-    # Assign aromaticity and hydrogens.
-    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
-    oechem.OEAddExplicitHydrogens(mol)
-
-    # Create atom names.
-    oechem.OETriposAtomNames(mol)
-
-    # Create bond types
-    oechem.OETriposBondTypeNames(mol)
-
-    # Assign geometry
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega.SetIncludeInput(False)
-    omega.SetStrictStereo(True)
-    omega(mol)
-
-    return mol
-
-def createOEMolFromSMILES(smiles='CC', title='MOL'):
-    """
-    Generate an oemol with a geometry
-    """
-    from openeye import oechem, oeiupac, oeomega
-
-    # Create molecule
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, smiles)
-
-    # Set title.
-    mol.SetTitle(title)
-
-    # Assign aromaticity and hydrogens.
-    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
-    oechem.OEAddExplicitHydrogens(mol)
-
-    # Create atom names.
-    oechem.OETriposAtomNames(mol)
-
-    # Assign geometry
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega.SetIncludeInput(False)
-    omega.SetStrictStereo(True)
-    omega(mol)
-
-    return mol
-
-def oemol_to_omm_ff(oemol, molecule_name):
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
-    system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMOL(oemol)
-    return system, positions, topology
 
 def compare_at_lambdas(context, functions):
     """
@@ -210,27 +131,6 @@ def generate_gaff_xml():
     params.write(gaff_xml, provenance=provenance)
 
     return gaff_xml
-
-def get_data_filename(relative_path):
-    """Get the full path to one of the reference files shipped for testing
-
-    In the source distribution, these files are in ``perses/data/*/``,
-    but on installation, they're moved to somewhere in the user's python
-    site-packages directory.
-
-    Parameters
-    ----------
-    name : str
-        Name of the file to load (with respect to the openmoltools folder).
-
-    """
-
-    fn = resource_filename('perses', relative_path)
-
-    if not os.path.exists(fn):
-        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
-
-    return fn
 
 def forcefield_directory():
     """
@@ -879,7 +779,8 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     """
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import get_data_filename 
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
     proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
