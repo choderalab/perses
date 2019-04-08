@@ -1,150 +1,48 @@
-import numpy as np
-import seaborn as sns
-import mdtraj as md
-from perses.tests import utils
+################################################################################
+# IMPORTS
+################################################################################
+import copy
 from simtk import openmm, unit
 from simtk.openmm import app
-from openmmtools import testsystems, states, mcmc, integrators
-
-from openmmtools.constants import kB
-import tqdm
-from tqdm import tqdm_notebook, trange
+import os, os.path
+import sys, math
+import numpy as np
+from functools import partial
+from pkg_resources import resource_filename
+from perses.rjmc import geometry
+from perses.rjmc.topology_proposal import SystemGenerator, TopologyProposal, SmallMoleculeSetProposalEngine
 from openeye import oechem
+if sys.version_info >= (3, 0):
+    from io import StringIO
+    from subprocess import getstatusoutput
+else:
+    from cStringIO import StringIO
+    from commands import getstatusoutput
+from openmmtools.constants import kB
+from openmmtools import alchemy, states
+from perses.tests.utils import render_atom_mapping
+
+################################################################################
+# CONSTANTS
+################################################################################
 
 temperature = 300.0 * unit.kelvin
-beta = 1.0 / (temperature*kB)
-PATH = None
+kT = kB * temperature
+beta = 1.0/kT
 
+LOGP_FORWARD_THRESHOLD = 1e3
 REFERENCE_PLATFORM = openmm.Platform.getPlatformByName("Reference")
 
-def convert_to_md(openmm_positions):
-    """
-    Convert openmm position objects into numpy ndarrays
-
-    Arguments
-    ---------
-    openmm_positions: openmm unit.Quantity object
-        Positions generated from openmm simulation
-
-    Returns
-    -------
-    md_positions_stacked: np.ndarray
-        Positions in md_unit_system (nanometers)
-    """
-    _openmm_positions_no_units = [_posits.value_in_unit_system(unit.md_unit_system) for _posits in openmm_positions]
-    md_positions_stacked = np.stack(_openmm_positions_no_units)
-
-    return md_positions_stacked
-
-def compute_rp(system, positions):
-    """
-    Utility function to compute the reduced potential
-
-    Arguments
-    ---------
-    system: openmm system object
-    positions: openmm unit.Quantity object
-        openmm position (single frame)
-
-    Returns
-    -------
-    rp: float
-        reduced potential
-    """
-    from simtk.unit.quantity import is_dimensionless
-    _i = openmm.VerletIntegrator(1.0)
-    _ctx = openmm.Context(system, _i, REFERENCE_PLATFORM)
-    _ctx.setPositions(positions)
-    rp = beta*_ctx.getState(getEnergy=True).getPotentialEnergy()
-    assert is_dimensionless(rp), "reduced potential is not dimensionless"
-    del _ctx
-    return rp
-
-#create iid bead system and save
-def create_iid_systems(system_attributes, mol, num_iterations):
-    """
-    Function to simulate i.i.d conformations of the initial molecule
-
-    Arguments
-    ---------
-    system_attributes: dict
-        dict of molecule A and B with (oemol, sys, pos, top)
-    mol: str
-        molecule to simulate
-
-    Returns
-    -------
-    iid_positions_A: numpy.ndarray
-        num_iterations of independent initial molecule conformations
-    """
-    from openmmtools import integrators
-    import tqdm
-    _oemolA, _sysA, _posA, _topA = system_attributes[mol]
-    _platform = openmm.Platform.getPlatformByName("CPU")
-    _integrator = integrators.LangevinIntegrator(temperature, 1./unit.picoseconds, 0.002*unit.picoseconds)
-    _ctx = openmm.Context(_sysA, _integrator)
-    _ctx.setPositions(_posA)
-    openmm.LocalEnergyMinimizer.minimize(_ctx)
-
-    _iid_positions_A=[]
-    for _iteration in tqdm.trange(num_iterations):
-        _integrator.step(1000)
-        _state=_ctx.getState(getPositions=True)
-        _iid_positions_A.append(_state.getPositions(asNumpy=True))
-
-    _iid_positions_A = convert_to_md(_iid_positions_A)
-
-    return _iid_positions_A
-
-from perses.tests.utils import createOEMolFromSMILES
-def create_system_from_mol(molecule):
-    from perses.tests.utils import get_data_filename, extractPositionsFromOEMOL
-    from perses.tests.utils import createOEMolFromSMILES
-    from io import StringIO
-
-    # Generate a topology.
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    topology = generateTopologyFromOEMol(molecule)
-
-    # Initialize a forcefield with GAFF.
-    # TODO: Fix path for `gaff.xml` since it is not yet distributed with OpenMM
-    from simtk.openmm.app import ForceField
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    forcefield = ForceField(gaff_xml_filename)
-
-    # Generate template and parameters.
-    from openmoltools.forcefield_generators import generateResidueTemplate
-    [template, ffxml] = generateResidueTemplate(molecule)
-
-    # Register the template.
-    forcefield.registerResidueTemplate(template)
-
-    # Add the parameters.
-    forcefield.loadFile(StringIO(ffxml))
-
-    # Create the system.
-    system = forcefield.createSystem(topology, removeCMMotion=False)
-
-
-    # Extract positions
-    positions = extractPositionsFromOEMOL(molecule)
-
-
-
-    return (molecule, system, positions, topology)
-
-#define the topology proposal function
-def generate_vacuum_topology_proposal(current_system, current_top, current_mol, proposed_mol, atom_expr=None, bond_expr=None):
+def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'propane', proposed_mol_name = 'octane', num_iterations = 10):
     """
     Generate a test vacuum topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
+    from two IUPAC molecule names.  Assert that the logp_forward < 1e3.
+    This assertion will fail if the proposal order tool proposed the placement of the a carbon before a previously defined carbon in the alkane.
 
     Parameters
     ----------
-    current_system : openmm.System
+    current_mol_name : str, optional
         name of the first molecule
-    current_mol : oechem.OEMol
-         OEMol of the first molecule
     proposed_mol_name : str, optional
         name of the second molecule
 
@@ -158,404 +56,38 @@ def generate_vacuum_topology_proposal(current_system, current_top, current_mol, 
         The positions of the new system
     """
     from openmoltools import forcefield_generators
-    from perses.rjmc import topology_proposal as tp
+
     from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-    from openeye import oechem
 
-
-    proposed_mol.SetTitle("MOL")
-    current_mol_name = current_mol.GetTitle()
+    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
+    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
 
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
 
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+
+    solvated_system = forcefield.createSystem(top_old, removeCMMotion=False)
+
     gaff_filename = get_data_filename('data/gaff.xml')
-    system_generator = tp.SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
-    proposal_engine = tp.SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name="MOL", atom_expr=atom_expr, bond_expr=bond_expr)
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff})
+    geometry_engine = geometry.FFAllAngleGeometryEngine()
+    proposal_engine = SmallMoleculeSetProposalEngine(
+        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
 
     #generate topology proposal
-    topology_proposal = proposal_engine.propose(current_system, current_top, current_mol=current_mol, proposed_mol=proposed_mol)
+    topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
 
-    return topology_proposal
+    # show atom mapping
+    filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
+    render_atom_mapping(filename,current_mol,proposed_mol,topology_proposal.new_to_old_atom_map)
 
-def generate_small_molecule_library(IUPAC = True, SMILES = False, mol1 = 'benzene', mol2 = 'toluene', nb_removed = True):
-    """
-    Generate mol_attributes dictionary for running eq. simulations, topology proposal, and hybrid proposal.
+    for _ in range(num_iterations):
+        #generate new positions with geometry engine
+        new_positions, logp_forward = geometry_engine.propose(topology_proposal, pos_old, beta)
+        assert logp_forward < 1e3, "A heavy atom was proposed in an improper order"
 
-    Parameters
-    ----------
-    IUPAC : bool
-        Whether mol1 and mol2 are IUPACS
-    SMILES : bool
-        Whether mol1 and mol2 are IUPACS
-    mol1 : str
-        molecule 1.  IUPAC if IUPAC == True; else, SMILES
-    mol2 : str
-        molecule 2.  IUPAC if IUPAC == True; else, SMILES
-    nb_removed : bool
-        Whether to make a copy of the resulting dictionary and remove nonbonded forces
 
-    Returns
-    -------
-    mol_attributes : dict
-        mol_attributes[mol] = (molecule, system, positions, topology).
-        molecule: OpenEyeMOL; system, positions, and topology are openmm objects
-
-    mol_attributes_no_nb : dict
-        mol_attributes[mol] = (molecule, system, positions, topology).
-        molecule: OpenEyeMOL; system, positions, and topology are openmm objects
-
-    """
-    from perses.tests.utils import createOEMolFromSMILES, createOEMolFromIUPAC
-    mol_attributes = dict()
-    if IUPAC == True and SMILES == False:
-        molecule1 = createOEMolFromIUPAC(mol1)
-        molecule1.SetTitle("MOL")
-
-        molecule2 = createOEMolFromIUPAC(mol2)
-        molecule1.SetTitle("MOL")
-
-    elif IUPAC == False and SMILES == True:
-        molecule1 = createOEMolFromSMILES(mol1, "MOL")
-        molecule2 = createOEMolFromSMILES(mol2, "MOL")
-    else:
-        raise Exception("Either IUPAC or SMILES must be turned on (exclusively)")
-
-    #now we actually create attributes
-    for molecule, label in zip([molecule1, molecule2], ["mol1", "mol2"]):
-        mol_attributes[label] = create_system_from_mol(molecule)
-
-    #make copy and remove nb if specified
-    if nb_removed == True:
-        import copy
-        mol_attributes_no_nb = copy.deepcopy(mol_attributes)
-        for mol in mol_attributes_no_nb:
-            mol_attributes_no_nb[mol][1].removeForce(3)
-            #print("{} nonbonded copy forces: {}".format(mol, mol_attributes_no_nb[mol][1].getForces()))
-        return mol_attributes, mol_attributes_no_nb
-
-
-    return mol_attributes
-
-class SmallMoleculeVacuumRJMC(object):
-    """
-    This class proposed a jump from arbitrary A --> A' and back (where A is real system and A' is the Alchemical system in the
-    thermodynamic cycle in A --RJMC--> A' --lambda_perturbation--> B' --RJMC--> B)
-    """
-
-    def __init__(self, num_iterations = 1, mol1 = 'propane', mol2 = 'chloropropane', IUPAC = True, SMILES = False, nb_removed = True):
-        """
-        Parameters
-        ----------
-        num_iterations = int
-            Number of forward proposals to conduct
-        mol1 : str
-            molecule 1.  IUPAC if IUPAC == True; else, SMILES
-        mol2 : str
-            molecule 2.  IUPAC if IUPAC == True; else, SMILES
-        IUPAC : bool
-            Whether mol1 and mol2 are IUPACS
-        SMILES : bool
-            Whether mol1 and mol2 are IUPACS
-        nb_removed : bool
-            Whether to make a copy of the resulting dictionary and remove nonbonded forces
-
-        Returns
-        -------
-        mol_attributes : dict
-            mol_attributes[mol] = (molecule, system, positions, topology).
-            molecule: OpenEyeMOL; system, positions, and topology are openmm objects
-
-        mol_attributes_no_nb : dict
-            mol_attributes[mol] = (molecule, system, positions, topology).
-            molecule: OpenEyeMOL; system, positions, and topology are openmm objects
-        """
-        self.num_iterations = num_iterations
-        self.mol1 = mol1
-        self.mol2 = mol2
-        self.IUPAC = IUPAC
-        self.SMILES = SMILES
-        self.nb_removed = nb_removed
-
-        #equilibrium filenames to write to disk
-        self.mol1_eq_filename = '{}_eq.npy'.format(self.mol1)
-        self.mol2_eq_filename = '{}_eq.npy'.format(self.mol2)
-
-        if self.nb_removed:
-            self.mol_attributes, self.mol_attributes_no_nb = generate_small_molecule_library(mol1 = mol1, mol2 = mol2, nb_removed = self.nb_removed)
-
-        else:
-            self.mol_attributes = generate_small_molecule_library(mol1 = self.mol1, mol2 = self.mol2, nb_removed = self.nb_removed)
-
-    def eq_simulations(self):
-        """
-        Generate iid distributions for mol1 and mol2
-        """
-        self.iid1, self.iid2 = create_iid_systems(self.mol_attributes_no_nb, "mol1", self.num_iterations), create_iid_systems(self.mol_attributes_no_nb, "mol2", self.num_iterations)
-        self.iid1_quantity, self.iid2_quantity = unit.Quantity(self.iid1, unit = unit.nanometers), unit.Quantity(self.iid2, unit = unit.nanometers)
-        self.mol1_eq_filename, self.mol2_eq_filename = '{}{}_eq_vacRJMC.npy'.format(PATH, self.mol1), '{}{}_eq_vacRJMC.npy'.format(PATH, self.mol2)
-
-    def initial_topology_proposal(self):
-        """
-        Generate an initial topology proposal.  Note we do not use the nb version in this case since the hybrid factory cannot handle
-        the proposal when there are no nonbonded forces.
-        """
-        self.initial_topology_proposal = generate_vacuum_topology_proposal(current_system = self.mol_attributes['mol1'][1],
-                                                                           current_top = self.mol_attributes['mol1'][3],
-                                                                           current_mol = self.mol_attributes['mol1'][0],
-                                                                           proposed_mol = self.mol_attributes['mol2'][0],
-                                                                           atom_expr=None,
-                                                                           bond_expr=None)
-
-    def create_hybrid_factory(self):
-        """
-        Generate a hybrid factory from the initial_topology_proposal
-        """
-        from perses.annihilation.new_relative import HybridTopologyFactory
-
-        self.hybrid_factory = HybridTopologyFactory(self.initial_topology_proposal, self.mol_attributes['mol1'][2], self.mol_attributes['mol2'][2])
-
-    def create_new_hybrid_sys_top(self):
-        """
-        Instantiates a new topology from the hybrid system that removed all nonbonded forces and places all custom bonded forces (at lambda=0)
-        into normal force objects whilst deleting all other forces.  the proposal engine in geometry.py will not work if there are custom forces
-        determined by an external parameter.
-        """
-
-        #generate copies of old system and hybrid systems
-        import copy
-
-        old_sys = copy.deepcopy(self.mol_attributes_no_nb['mol1'][1])
-        hybrid_sys = copy.deepcopy(self.hybrid_factory.hybrid_system)
-
-        #remove force indices of nonbonded forces
-        hybrid_sys.removeForce(6)
-        hybrid_sys.removeForce(6)
-
-
-        #next, we make another copy for reference
-        old_copy, hybrid_copy = copy.deepcopy(old_sys), copy.deepcopy(hybrid_sys)
-
-        #remove custom forces
-        hybrid_copy.removeForce(4)
-        hybrid_copy.removeForce(2)
-        hybrid_copy.removeForce(0)
-
-        #define old and hybrid_topologies
-        old_topology = self.initial_topology_proposal.old_topology
-        hybrid_topology = self.hybrid_factory._hybrid_topology
-
-        #get indices
-        old_indices = [atom.index for atom in old_topology.atoms()]
-        hybrid_indices = [atom.index for atom in hybrid_topology.atoms()]
-        new_indices = [hybrid_index for hybrid_index in hybrid_indices if hybrid_index not in old_indices]
-
-        #get bond parameters
-        num_bonds = hybrid_sys.getForce(1).getNumBonds()
-        num_indices = 2
-        bond_params =  [hybrid_sys.getForce(1).getBondParameters(i) for i in range(num_bonds)]
-        new_bond_params = [tuple(param_set) for param_set in bond_params if any(item in param_set[:num_indices] for item in new_indices )]
-
-        #get angle parameters
-        num_angles = hybrid_sys.getForce(3).getNumAngles()
-        num_indices = 3
-        angle_params = [hybrid_sys.getForce(3).getAngleParameters(i) for i in range(num_angles)]
-        new_angle_params = [tuple(param_set) for param_set in angle_params if any(item in param_set[:num_indices] for item in new_indices)]
-
-        #get torsion parameters
-        num_torsions = hybrid_sys.getForce(5).getNumTorsions()
-        num_indices = 4
-        torsion_params =  [hybrid_sys.getForce(5).getTorsionParameters(i) for i in range(num_torsions)]
-        new_torsion_params = [tuple(param_set) for param_set in torsion_params if any(item in param_set[:num_indices] for item in new_indices)]
-
-        #now to remove existing valence force objects
-        hybrid_copy.removeForce(2)
-        hybrid_copy.removeForce(1)
-        hybrid_copy.removeForce(0)
-
-        #now to remove forces in non-custom valence forces that don't include new atom
-        bond_force = openmm.HarmonicBondForce()
-        hybrid_copy.addForce(bond_force)
-        for parameter_set in new_bond_params:
-            bond_force.addBond(*parameter_set)
-
-        angle_force = openmm.HarmonicAngleForce()
-        hybrid_copy.addForce(angle_force)
-        for parameter_set in new_angle_params:
-            angle_force.addAngle(*parameter_set)
-
-        torsion_force = openmm.PeriodicTorsionForce()
-        hybrid_copy.addForce(torsion_force)
-        for parameter_set in new_torsion_params:
-            torsion_force.addTorsion(*parameter_set)
-
-        #now to add old params from old_sys to non_custom valence forces in hybrid_copy
-        num_bonds = old_sys.getForce(0).getNumBonds()
-        num_indices = 2
-        bond_params =  [old_sys.getForce(0).getBondParameters(i) for i in range(num_bonds)]
-
-        num_angles = old_sys.getForce(1).getNumAngles()
-        num_indices = 3
-        angle_params =  [old_sys.getForce(1).getAngleParameters(i) for i in range(num_angles)]
-
-        num_torsions = old_sys.getForce(2).getNumTorsions()
-        num_indices = 4
-        torsion_params = [old_sys.getForce(2).getTorsionParameters(i) for i in range(num_torsions)]
-
-        bond_force = hybrid_copy.getForce(0)
-        for parameter_set in bond_params:
-            bond_force.addBond(*parameter_set)
-
-        angle_force = hybrid_copy.getForce(1)
-        for parameter_set in angle_params:
-            angle_force.addAngle(*parameter_set)
-
-        torsion_force = hybrid_copy.getForce(2)
-        for parameter_set in torsion_params:
-            torsion_force.addTorsion(*parameter_set)
-
-        num_bonds = hybrid_copy.getForce(0).getNumBonds()
-        num_angles = hybrid_copy.getForce(1).getNumAngles()
-        num_torsions = hybrid_copy.getForce(2).getNumTorsions()
-
-        #start a new hybrid topology and add all atoms
-        self.new_hybrid_topology = app.Topology()
-        new_chain = self.new_hybrid_topology.addChain("0")
-        new_res = self.new_hybrid_topology.addResidue("MOL", new_chain)
-        for index, atom in enumerate([atom for atom in self.hybrid_factory._hybrid_topology.atoms()]):
-            self.new_hybrid_topology.addAtom(atom.name, atom.element, new_res, index)
-
-        #get a list of bonds and add to topology
-        bond_pairs = [hybrid_copy.getForce(0).getBondParameters(i)[:2] for i in range(num_bonds)]
-        atoms = list(self.new_hybrid_topology.atoms())
-        for pair in bond_pairs:
-            self.new_hybrid_topology.addBond(atoms[pair[0]], atoms[pair[1]])
-
-        self.hybrid_system = hybrid_copy
-
-    def conduct_old_hybrid_top_proposal(self):
-        from perses.rjmc.topology_proposal import TopologyProposal
-        self.final_topology_proposal = TopologyProposal(new_topology = self.new_hybrid_topology, new_system = self.hybrid_system,
-                                                        old_topology = self.mol_attributes_no_nb['mol1'][3], old_system = self.mol_attributes_no_nb['mol1'][1],
-                                                        logp_proposal = 0.0,
-                                                        new_to_old_atom_map = {value: key for key, value in self.hybrid_factory._old_to_hybrid_map.items()},
-                                                        old_chemical_state_key = 'old', new_chemical_state_key = 'new', metadata = None)
-
-
-    def run_rj_simple_system_lnZ(self, configurations_initial, topology_proposal, n_replicates):
-        """
-        Function to execute reversibje jump MC
-
-        Arguments
-        ---------
-        configurations_initial: openmm.Quantity
-            n_replicate frames of equilibrium simulation of initial system
-        topology_proposal: dict
-            perses.topology_proposal object
-        n_replicates: int
-            number of replicates to simulate
-
-        Returns
-        -------
-        final_positions: list
-            list of openmm position objects for final molecule proposal
-        """
-        import tqdm
-        from perses.rjmc.geometry_lnZ import FFAllAngleGeometryEngine
-        final_positions = []
-        _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
-        lnZs = list()
-        for _replicate_idx in tqdm.trange(n_replicates):
-            _old_positions = configurations_initial[_replicate_idx, :, :]
-            _new_positions, _lp, lnZ = _geometry_engine.propose(topology_proposal, _old_positions, beta)
-            final_positions.append(_new_positions)
-            lnZs.append(lnZ)
-
-        return final_positions, lnZs
-
-    def run_rj_simple_system(self, configurations_initial, topology_proposal, n_replicates):
-        """
-        Function to execute reversibje jump MC
-
-        Arguments
-        ---------
-        configurations_initial: openmm.Quantity
-            n_replicate frames of equilibrium simulation of initial system
-        topology_proposal: dict
-            perses.topology_proposal object
-        n_replicates: int
-            number of replicates to simulate
-
-        Returns
-        -------
-        logPs: numpy ndarray
-            shape = (n_replicates, 4) where logPs[i] = (reduced potential of initial molecule, log proposal probability, reversed log proposal probability, reduced potential of proposed molecule)
-        final_positions: list
-            list of openmm position objects for final molecule proposal
-        """
-        import tqdm
-        from perses.rjmc.geometry import FFAllAngleGeometryEngine
-        final_positions = []
-        logPs = np.zeros([n_replicates, 4])
-        _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
-        for _replicate_idx in tqdm.trange(n_replicates):
-            _old_positions = configurations_initial[_replicate_idx, :, :]
-            _new_positions, _lp = _geometry_engine.propose(topology_proposal, _old_positions, beta)
-            _lp_reverse = _geometry_engine.logp_reverse(topology_proposal, _new_positions, _old_positions, beta)
-            _initial_rp = compute_rp(topology_proposal.old_system, _old_positions)
-            logPs[_replicate_idx, 0] = _initial_rp
-            logPs[_replicate_idx, 1] = _lp
-            logPs[_replicate_idx, 2] = _lp_reverse
-            final_rp = compute_rp(topology_proposal.new_system, _new_positions)
-            logPs[_replicate_idx, 3] = final_rp
-            final_positions.append(_new_positions)
-        return logPs, final_positions
-
-    def forward_transformation(self, iid_positions_A, _topology_proposal, printer=False):
-        """
-        Function to conduct run_rj_simple_system RJMC on each conformation of initial molecule (i.e. A --> B)
-
-        Arguments
-        ---------
-        iid_positions_A: openmm.Quantity
-            ndarray of iid conformations of molecule A
-        printer: boolean
-            whether to print the stacked positions of the proposed molecule
-
-        Returns
-        -------
-        proposed positions: openmm.Quantity
-            num_iterations of final proposal molecule
-        self.work_forward: ndarray
-            numpy array of forward works
-        """
-        _data_forward, _proposed_positions = self.run_rj_simple_system(iid_positions_A, _topology_proposal, self.num_iterations)
-        self.work_forward = _data_forward[:, 3] - _data_forward[:, 0] - _data_forward[:, 2] + _data_forward[:, 1]
-
-        _proposed_positions_stacked=convert_to_md(_proposed_positions)
-        proposed_positions=unit.Quantity(_proposed_positions_stacked, unit=unit.nanometers)
-
-        if printer:
-            print('data_forward: ')
-            print(_data_forward)
-
-
-        return proposed_positions
-
-
-def test_benzene_to_benzaldehyde():
-    """
-    Test that the transformation benzene --> benzahdehyde to ensure that the work <1e5.
-    If this is the case, then the oxygen has been placed before the carbonyl carbon.
-    """
-    test = SmallMoleculeVacuumRJMC(num_iterations = 20, mol1 = 'benzene', mol2 = 'benzaldehyde', IUPAC = True, SMILES = False, nb_removed = True)
-    test.eq_simulations()
-    test.initial_topology_proposal()
-    test.create_hybrid_factory()
-    test.create_new_hybrid_sys_top()
-    test.conduct_old_hybrid_top_proposal()
-    test.forward_transformation(test.iid1_quantity, test.final_topology_proposal, False)
-    assert all(work < 1e5 for work in test.work_forward)
-
-#test_benzene_to_benzaldehyde()
+#logp_forward_check_for_vacuum_topology_proposal()
