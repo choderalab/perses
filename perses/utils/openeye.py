@@ -9,8 +9,9 @@ __author__ = 'John D. Chodera'
 
 from openeye import oechem
 import simtk.unit as unit
+import numpy as np
 
-def extractPositionsFromOEMOL(molecule,units=unit.angstrom):
+def extractPositionsFromOEMol(molecule,units=unit.angstrom):
     """
     Get a molecules coordinates from an openeye.oemol
 
@@ -30,7 +31,7 @@ def extractPositionsFromOEMOL(molecule,units=unit.angstrom):
 
     return positions
 
-def giveOpenmmPositionsToOEMOL(positions, molecule):
+def giveOpenmmPositionsToOEMol(positions, molecule):
     """
     Replace OEMol positions with openmm format positions
 
@@ -74,6 +75,8 @@ def createOEMolFromIUPAC(iupac_name,max_confs=1):
     # Create molecule.
     molecule = oechem.OEMol()
     oeiupac.OEParseIUPACName(molecule, iupac_name)
+
+    # Set title.
     molecule.SetTitle(iupac_name)
 
     # Assign aromaticity and hydrogens.
@@ -138,7 +141,7 @@ def createOEMolFromSMILES(smiles, title='MOL',max_confs=1):
 
     return molecule
 
-def oemol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
+def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     """
     Convert an openeye.oechem.OEMol to a openmm system, positions and topology
 
@@ -164,6 +167,6 @@ def oemol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     topology = forcefield_generators.generateTopologyFromOEMol(molecule)
     system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMOL(molecule)
+    positions = extractPositionsFromOEMol(molecule)
 
     return system, positions, topology
