@@ -37,7 +37,7 @@ from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
 from openmmtools import states
 from openmmtools.mcmc import MCMCSampler, LangevinSplittingDynamicsMove
-from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
+from perses.utils.smallmolecules import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.topology_proposal import OESMILES_OPTIONS
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -510,7 +510,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
                 break
 
         from openmoltools import forcefield_generators
-        from perses.tests.utils import extractPositionsFromOEMOL, giveOpenmmPositionsToOEMOL
+        from perses.utils.openeye import extractPositionsFromOEMol, giveOpenmmPositionsToOEMol
         import perses.rjmc.geometry as geometry
         from perses.rjmc.topology_proposal import TopologyProposal
         # create OEMol version of benzene
@@ -1711,13 +1711,13 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # # Parametrize and generate residue templates for small molecule set
         from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
         from io import StringIO
-        from perses.tests.utils import smiles_to_oemol, extractPositionsFromOEMOL
+        from perses.utils.openeye import createOEMolFromSMILES, extractPositionsFromOEMol
         forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
         # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
         # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
         from openmoltools import forcefield_generators ## IVY
         forcefield.registerTemplateGenerator(gaffTemplateGenerator) ## IVY
-        d_smiles_to_oemol = {smiles : smiles_to_oemol(smiles, "MOL_%d" % i)for i, smiles in enumerate(molecules)}
+        d_smiles_to_oemol = {smiles : createOEMolFromSMILES(smiles, "MOL_%d" % i)for i, smiles in enumerate(molecules)}
         # ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
         #
         # f = open('clinical-kinase-inhibitors.xml', 'w')
@@ -1740,10 +1740,10 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # smiles = sanitizeSMILES([smiles])[0]
         # print("sanitized: ", smiles)
         # molecule = smiles_to_oemol(smiles, title=d_smiles_to_oemol[smiles].GetTitle())
-        molecule = smiles_to_oemol(smiles)
+        molecule = createOEMolFromSMILES(smiles)
 
         topologies['vacuum'] = generateTopologyFromOEMol(molecule)
-        positions['vacuum'] = extractPositionsFromOEMOL(molecule)
+        positions['vacuum'] = extractPositionsFromOEMol(molecule)
 
         # Create molecule in solvent.
         modeller = app.Modeller(topologies['vacuum'], positions['vacuum'])
@@ -1943,11 +1943,11 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
         # Create molecule in vacuum.
-        from perses.tests.utils import createOEMolFromSMILES, extractPositionsFromOEMOL
+        from perses.utils.openeye import createOEMolFromSMILES, extractPositionsFromOEMol
         smiles = molecules[0] # current sampler state
         molecule = createOEMolFromSMILES(smiles)
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
-        positions['vacuum'] = extractPositionsFromOEMOL(molecule)
+        positions['vacuum'] = extractPositionsFromOEMol(molecule)
 
         # Set up the proposal engines.
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
@@ -2386,7 +2386,7 @@ def check_topologies(testsystem):
             msg = str(e)
             msg += '\n'
             msg += "topology for environment '%s' cannot be built into a system" % environment
-            from perses.tests.utils import show_topology
+            from perses.utils.smallmolecules import show_topology
             show_topology(topology)
             raise Exception(msg)
 

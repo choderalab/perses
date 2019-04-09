@@ -859,19 +859,13 @@ def generate_initial_molecule(iupac_name):
 def oemol_to_openmm_system(oemol, molecule_name=None, forcefield=['data/gaff.xml']):
     from perses.rjmc import topology_proposal
     from openmoltools import forcefield_generators
+    from perses.utils.openeye import extractPositionsFromOEMol
     xml_filenames = [get_data_filename(fname) for fname in forcefield]
     system_generator = topology_proposal.SystemGenerator(xml_filenames, forcefield_kwargs={'constraints' : None})
     topology = forcefield_generators.generateTopologyFromOEMol(oemol)
     system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMOL(oemol)
+    positions = extractPositionsFromOEMol(oemol)
     return system, positions, topology
-
-def extractPositionsFromOEMOL(molecule):
-    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
-    coords = molecule.GetCoords()
-    for index in range(molecule.NumAtoms()):
-        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
-    return positions
 
 def oemol_to_openmm_system_amber(oemol, molecule_name):
     """

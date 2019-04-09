@@ -5,7 +5,7 @@ from openeye import oechem, oeiupac
 from openmmtools import integrators, states, mcmc, constants
 from openmoltools import forcefield_generators
 from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeAtomMapper
-from perses.tests.utils import extractPositionsFromOEMOL
+from perses.utils.openeye import extractPositionsFromOEMol
 from simtk import openmm, unit
 from io import StringIO
 from simtk.openmm import app
@@ -76,7 +76,7 @@ def generate_complex_topologies_and_positions(ligand_filename, protein_pdb_filen
 
         complex_topologies[smiles] = complex_topology
 
-        ligand_positions = extractPositionsFromOEMOL(mol_dict[smiles])
+        ligand_positions = extractPositionsFromOEMol(mol_dict[smiles])
 
         complex_positions[:n_receptor_atoms, :] = receptor_positions
         complex_positions[n_receptor_atoms:, :] = ligand_positions
@@ -123,7 +123,7 @@ def generate_ligand_topologies_and_positions(ligand_filename):
 
         ligand_topologies[smiles] = ligand_md_topology
 
-        ligand_positions = extractPositionsFromOEMOL(mol_dict[smiles])
+        ligand_positions = extractPositionsFromOEMol(mol_dict[smiles])
 
         ligand_positions_dict[smiles] = ligand_positions
 

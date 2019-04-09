@@ -64,19 +64,6 @@ def quantity_is_finite(quantity):
         return False
     return True
 
-def show_topology(topology):
-    output = ""
-    for atom in topology.atoms():
-        output += "%8d %5s %5s %3s: bonds " % (atom.index, atom.name, atom.residue.id, atom.residue.name)
-        for bond in atom.residue.bonds():
-            if bond[0] == atom:
-                output += " %8d" % bond[1].index
-            if bond[1] == atom:
-                output += " %8d" % bond[0].index
-        output += '\n'
-    print(output)
-
-
 def compare_at_lambdas(context, functions):
     """
     Compare the energy components at all lambdas = 1 and 0.
@@ -109,92 +96,7 @@ def compare_at_lambdas(context, functions):
 
     print("------------------------")
 
-def generate_gaff_xml():
-    """
-    Return a file-like object for `gaff.xml`
-    """
-    from openmoltools import amber
-    gaff_dat_filename = amber.find_gaff_dat()
 
-    # Generate ffxml file contents for parmchk-generated frcmod output.
-    leaprc = StringIO("parm = loadamberparams %s" % gaff_dat_filename)
-    import parmed
-    params = parmed.amber.AmberParameterSet.from_leaprc(leaprc)
-    params = parmed.openmm.OpenMMParameterSet.from_parameterset(params)
-    citations = """\
-    Wang, J., Wang, W., Kollman P. A.; Case, D. A. "Automatic atom type and bond type perception in molecular mechanical calculations". Journal of Molecular Graphics and Modelling , 25, 2006, 247260.
-    Wang, J., Wolf, R. M.; Caldwell, J. W.;Kollman, P. A.; Case, D. A. "Development and testing of a general AMBER force field". Journal of Computational Chemistry, 25, 2004, 1157-1174.
-    """
-    ffxml = str()
-    gaff_xml = StringIO(ffxml)
-    provenance=dict(OriginalFile='gaff.dat', Reference=citations)
-    params.write(gaff_xml, provenance=provenance)
-
-    return gaff_xml
-
-def forcefield_directory():
-    """
-    Return the forcefield directory for the additional forcefield files like gaff.xml
-
-    Returns
-    -------
-    forcefield_directory_name : str
-        Directory where OpenMM can find additional forcefield files
-    """
-    forcefield_directory_name = resource_filename("perses", "data")
-    return forcefield_directory_name
-
-def createSystemFromIUPAC(iupac_name):
-    """
-    Create an openmm system out of an oemol
-
-    Parameters
-    ----------
-    iupac_name : str
-        IUPAC name
-
-    Returns
-    -------
-    molecule : openeye.OEMol
-        OEMol molecule
-    system : openmm.System object
-        OpenMM system
-    positions : [n,3] np.array of floats
-        Positions
-    topology : openmm.app.Topology object
-        Topology
-    """
-
-    # Create OEMol
-    molecule = createOEMolFromIUPAC(iupac_name)
-
-    # Generate a topology.
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    topology = generateTopologyFromOEMol(molecule)
-
-    # Initialize a forcefield with GAFF.
-    # TODO: Fix path for `gaff.xml` since it is not yet distributed with OpenMM
-    from simtk.openmm.app import ForceField
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    forcefield = ForceField(gaff_xml_filename)
-
-    # Generate template and parameters.
-    from openmoltools.forcefield_generators import generateResidueTemplate
-    [template, ffxml] = generateResidueTemplate(molecule)
-
-    # Register the template.
-    forcefield.registerResidueTemplate(template)
-
-    # Add the parameters.
-    forcefield.loadFile(StringIO(ffxml))
-
-    # Create the system.
-    system = forcefield.createSystem(topology, removeCMMotion=False)
-
-    # Extract positions
-    positions = extractPositionsFromOEMOL(molecule)
-
-    return (molecule, system, positions, topology)
 
 def get_atoms_with_undefined_stereocenters(molecule, verbose=False):
     """
@@ -207,7 +109,6 @@ def get_atoms_with_undefined_stereocenters(molecule, verbose=False):
     verbose : bool, optional, default=False
         If True, will print verbose output about undefined stereocenters.
 
-    TODO
     ----
     Add handling of chiral bonds:
     https://docs.eyesopen.com/toolkits/python/oechemtk/glossary.html#term-canonical-isomeric-smiles
@@ -322,231 +223,11 @@ def enumerate_undefined_stereocenters(molecule, verbose=False):
 
     return molecules
 
-def smiles_to_oemol(smiles_string, title="MOL"):
-    """
-    Convert the SMILES string into an OEMol
-
-    Returns
-    -------
-    oemols : np.array of type object
-    array of oemols
-    """
-    from openeye import oechem, oeomega
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, smiles_string)
-    mol.SetTitle(title)
-    oechem.OEAddExplicitHydrogens(mol)
-    oechem.OETriposAtomNames(mol)
-    oechem.OETriposBondTypeNames(mol)
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega(mol)
-    return mol
-
-def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
-    """
-    Sanitize set of SMILES strings by ensuring all are canonical isomeric SMILES.
-    Duplicates are also removed.
-    Parameters
-    ----------
-    smiles_list : iterable of str
-        The set of SMILES strings to sanitize.
-    mode : str, optional, default='drop'
-        When a SMILES string that does not correspond to canonical isomeric SMILES is found, select the action to be performed.
-        'exception' : raise an `Exception`
-        'drop' : drop the SMILES string
-        'expand' : expand all stereocenters into multiple molecules
-    verbose : bool, optional, default=False
-        If True, print verbose output.
-    Returns
-    -------
-    sanitized_smiles_list : list of str
-         Sanitized list of canonical isomeric SMILES strings.
-    Examples
-    --------
-    Sanitize a simple list.
-    >>> smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
-    Throw an exception if undefined stereochemistry is present.
-    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='exception')
-    Traceback (most recent call last):
-      ...
-    Exception: Molecule '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]' has undefined stereocenters
-    Drop molecules iwth undefined stereochemistry.
-    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
-    >>> len(sanitized_smiles_list)
-    2
-    Expand molecules iwth undefined stereochemistry.
-    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='expand')
-    >>> len(sanitized_smiles_list)
-    4
-    """
-    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
-    sanitized_smiles_set = set()
-    OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
-    for smiles in smiles_list:
-        molecule = OEGraphMol()
-        OESmilesToMol(molecule, smiles)
-
-        oechem.OEAddExplicitHydrogens(molecule)
-
-        if verbose:
-            molecule.SetTitle(smiles)
-            oechem.OETriposAtomNames(molecule)
-
-        if has_undefined_stereocenters(molecule, verbose=verbose):
-            if mode == 'drop':
-                if verbose:
-                    print("Dropping '%s' due to undefined stereocenters." % smiles)
-                continue
-            elif mode == 'exception':
-                raise Exception("Molecule '%s' has undefined stereocenters" % smiles)
-            elif mode == 'expand':
-                if verbose:
-                    print('Expanding stereochemistry:')
-                    print('original: %s', smiles)
-                molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
-                for molecule in molecules:
-                    # isosmiles = OECreateIsoSmiString(molecule) ## IVY
-                    # sanitized_smiles_set.add(isosmiles) ## IVY
-
-                    smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)  ## IVY
-                    # smiles_string = oechem.OEMolToSmiles(molecule)
-                    sanitized_smiles_set.add(smiles_string)  ## IVY
-                    if verbose: print('expanded: %s', smiles_string)
-        else:
-            # Convert to OpenEye's canonical isomeric SMILES.
-            # isosmiles = OECreateIsoSmiString(molecule)
-            smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS) ## IVY
-            # smiles_string = oechem.OEMolToSmiles(molecule)
-            sanitized_smiles_set.add(smiles_string) ## IVY
-
-    sanitized_smiles_list = list(sanitized_smiles_set)
-    return sanitized_smiles_list
-
-
-def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=1200):
-    """
-    Render the atom mapping to a PDF file.
-
-    Parameters
-    ----------
-    filename : str
-        The PDF filename to write to.
-    molecule1 : openeye.oechem.OEMol
-        Initial molecule
-    molecule2 : openeye.oechem.OEMol
-        Final molecule
-    new_to_old_atom_map : dict of int
-        new_to_old_atom_map[molecule2_atom_index] is the corresponding molecule1 atom index
-    width : int, optional, default=1200
-        Width in pixels
-    height : int, optional, default=1200
-        Height in pixels
-
-    """
-    from openeye import oechem
-
-    # Make copies of the input molecules
-    molecule1, molecule2 = oechem.OEGraphMol(molecule1), oechem.OEGraphMol(molecule2)
-
-    oechem.OEGenerate2DCoordinates(molecule1)
-    oechem.OEGenerate2DCoordinates(molecule2)
-
-    old_atoms_1 = [atom for atom in molecule1.GetAtoms()]
-    old_atoms_2 = [atom for atom in molecule2.GetAtoms()]
-
-    # Add both to an OEGraphMol reaction
-    rmol = oechem.OEGraphMol()
-    rmol.SetRxn(True)
-    def add_molecule(mol):
-        # Add atoms
-        new_atoms = list()
-        old_to_new_atoms = dict()
-        for old_atom in mol.GetAtoms():
-            new_atom = rmol.NewAtom(old_atom.GetAtomicNum())
-            new_atoms.append(new_atom)
-            old_to_new_atoms[old_atom] = new_atom
-        # Add bonds
-        for old_bond in mol.GetBonds():
-            rmol.NewBond(old_to_new_atoms[old_bond.GetBgn()], old_to_new_atoms[old_bond.GetEnd()], old_bond.GetOrder())
-        return new_atoms, old_to_new_atoms
-
-    [new_atoms_1, old_to_new_atoms_1] = add_molecule(molecule1)
-    [new_atoms_2, old_to_new_atoms_2] = add_molecule(molecule2)
-
-    # Label reactant and product
-    for atom in new_atoms_1:
-        atom.SetRxnRole(oechem.OERxnRole_Reactant)
-    for atom in new_atoms_2:
-        atom.SetRxnRole(oechem.OERxnRole_Product)
-
-    # Label mapped atoms
-    index =1
-    for (index2, index1) in new_to_old_atom_map.items():
-        new_atoms_1[index1].SetMapIdx(index)
-        new_atoms_2[index2].SetMapIdx(index)
-        index += 1
-    # Set up image options
-    from openeye import oedepict
-    itf = oechem.OEInterface()
-    oedepict.OEConfigureImageOptions(itf)
-    ext = oechem.OEGetFileExtension(filename)
-    if not oedepict.OEIsRegisteredImageFile(ext):
-        raise Exception('Unknown image type for filename %s' % filename)
-    ofs = oechem.oeofstream()
-    if not ofs.open(filename):
-        raise Exception('Cannot open output file %s' % filename)
-
-    # Setup depiction options
-    oedepict.OEConfigure2DMolDisplayOptions(itf, oedepict.OE2DMolDisplaySetup_AromaticStyle)
-    opts = oedepict.OE2DMolDisplayOptions(width, height, oedepict.OEScale_AutoScale)
-    oedepict.OESetup2DMolDisplayOptions(opts, itf)
-    opts.SetBondWidthScaling(True)
-    opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
-    opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
-
-    # Depict reaction with component highlights
-    oechem.OEGenerate2DCoordinates(rmol)
-    rdisp = oedepict.OE2DMolDisplay(rmol, opts)
-
-    colors = [c for c in oechem.OEGetLightColors()]
-    highlightstyle = oedepict.OEHighlightStyle_BallAndStick
-    #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
-    oedepict.OERenderMolecule(ofs, ext, rdisp)
-    ofs.close()
-
-
-def canonicalize_SMILES(smiles_list):
-    """Ensure all SMILES strings end up in canonical form.
-    Stereochemistry must already have been expanded.
-    SMILES strings are converted to a OpenEye Topology and back again.
-    Parameters
-    ----------
-    smiles_list : list of str
-        List of SMILES strings
-    Returns
-    -------
-    canonical_smiles_list : list of str
-        List of SMILES strings, after canonicalization.
-    """
-
-    # Round-trip each molecule to a Topology to end up in canonical form
-    from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue, generateTopologyFromOEMol
-    from openeye import oechem
-    canonical_smiles_list = list()
-    for smiles in smiles_list:
-        molecule = smiles_to_oemol(smiles)
-        topology = generateTopologyFromOEMol(molecule)
-        residues = [ residue for residue in topology.residues() ]
-        new_molecule = generateOEMolFromTopologyResidue(residues[0])
-        new_smiles = oechem.OECreateIsoSmiString(new_molecule)
-        canonical_smiles_list.append(new_smiles)
-    return canonical_smiles_list
-
 def test_sanitizeSMILES():
     """
     Test SMILES sanitization.
     """
+    from perses.utils.smallmolecules import sanitizeSMILES
     smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
 
     sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
@@ -565,29 +246,6 @@ def test_sanitizeSMILES():
         isosmiles = OECreateIsoSmiString(molecule)
         if (smiles != isosmiles):
             raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
-
-def describe_oemol(mol):
-    """
-    Render the contents of an OEMol to a string.
-
-    Parameters
-    ----------
-    mol : OEMol
-        Molecule to describe
-
-    Returns
-    -------
-    description : str
-        The description
-    """
-    description = ""
-    description += "ATOMS:\n"
-    for atom in mol.GetAtoms():
-        description += "%8d %5s %5d\n" % (atom.GetIdx(), atom.GetName(), atom.GetAtomicNum())
-    description += "BONDS:\n"
-    for bond in mol.GetBonds():
-        description += "%8d %8d\n" % (bond.GetBgnIdx(), bond.GetEndIdx())
-    return description
 
 def compute_potential(system, positions, platform=None):
     """
@@ -654,32 +312,6 @@ def compute_potential_components(context):
         energy_components.append((forcename, potential))
     del context, integrator
     return energy_components
-
-def smiles_to_topology(smiles):
-    """
-    Convert a SMILES string to an OpenMM
-    Topology
-
-    Parameters
-    ----------
-    smiles : str
-        smiles to be made into topology
-
-    Returns
-    -------
-    topology : simtk.openmm.topology.app
-        topology of the smiles
-    mol : OEMol
-        OEMol with explicit hydrogens
-    """
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, smiles)
-    oechem.OEAddExplicitHydrogens(mol)
-    oechem.OETriposAtomNames(mol)
-    oechem.OETriposBondTypeNames(mol)
-    topology = generateTopologyFromOEMol(mol)
-    return topology, mol
 
 def check_system(system):
     """
@@ -836,7 +468,8 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.data import get_data_filename
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
     proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
@@ -896,7 +529,8 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.data import get_data_filename
    
     host_guest = testsystems.HostGuestVacuum()
     unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology 

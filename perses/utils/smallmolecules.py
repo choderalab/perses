@@ -1,0 +1,224 @@
+"""
+
+Utility functions for handing small molecules
+
+"""
+
+__author__ = 'John D. Chodera'
+
+
+
+
+def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
+    """
+    Sanitize set of SMILES strings by ensuring all are canonical isomeric SMILES.
+    Duplicates are also removed.
+
+    Parameters
+    ----------
+    smiles_list : iterable of str
+        The set of SMILES strings to sanitize.
+    mode : str, optional, default='drop'
+        When a SMILES string that does not correspond to canonical isomeric SMILES is found, select the action to be performed.
+        'exception' : raise an `Exception`
+        'drop' : drop the SMILES string
+        'expand' : expand all stereocenters into multiple molecules
+    verbose : bool, optional, default=False
+        If True, print verbose output.
+
+    Returns
+    -------
+    sanitized_smiles_list : list of str
+         Sanitized list of canonical isomeric SMILES strings.
+
+    Examples
+    --------
+    Sanitize a simple list.
+    >>> smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
+    Throw an exception if undefined stereochemistry is present.
+    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='exception')
+    Traceback (most recent call last):
+      ...
+    Exception: Molecule '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]' has undefined stereocenters
+    Drop molecules iwth undefined stereochemistry.
+    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
+    >>> len(sanitized_smiles_list)
+    2
+    Expand molecules iwth undefined stereochemistry.
+    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='expand')
+    >>> len(sanitized_smiles_list)
+    4
+    """
+    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
+    sanitized_smiles_set = set()
+    OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
+    for smiles in smiles_list:
+        molecule = OEGraphMol()
+        OESmilesToMol(molecule, smiles)
+
+        oechem.OEAddExplicitHydrogens(molecule)
+
+        if verbose:
+            molecule.SetTitle(smiles)
+            oechem.OETriposAtomNames(molecule)
+
+        if has_undefined_stereocenters(molecule, verbose=verbose):
+            if mode == 'drop':
+                if verbose:
+                    print("Dropping '%s' due to undefined stereocenters." % smiles)
+                continue
+            elif mode == 'exception':
+                raise Exception("Molecule '%s' has undefined stereocenters" % smiles)
+            elif mode == 'expand':
+                if verbose:
+                    print('Expanding stereochemistry:')
+                    print('original: %s', smiles)
+                molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
+                for molecule in molecules:
+                    smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)  ## IVY
+                    sanitized_smiles_set.add(smiles_string)  ## IVY
+                    if verbose: print('expanded: %s', smiles_string)
+        else:
+            # Convert to OpenEye's canonical isomeric SMILES.
+            smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS) ## IVY
+            sanitized_smiles_set.add(smiles_string) ## IVY
+
+    sanitized_smiles_list = list(sanitized_smiles_set)
+
+    return sanitized_smiles_list
+
+def canonicalize_SMILES(smiles_list):
+    """Ensure all SMILES strings end up in canonical form.
+    Stereochemistry must already have been expanded.
+    SMILES strings are converted to a OpenEye Topology and back again.
+    Parameters
+    ----------
+    smiles_list : list of str
+        List of SMILES strings
+    Returns
+    -------
+    canonical_smiles_list : list of str
+        List of SMILES strings, after canonicalization.
+    """
+
+    # Round-trip each molecule to a Topology to end up in canonical form
+    from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue, generateTopologyFromOEMol
+    from perses.utils.openeye import createOEMolFromSMILES
+    from openeye import oechem
+    canonical_smiles_list = list()
+    for smiles in smiles_list:
+        molecule = createOEMolFromSMILES(smiles)
+        topology = generateTopologyFromOEMol(molecule)
+        residues = [ residue for residue in topology.residues() ]
+        new_molecule = generateOEMolFromTopologyResidue(residues[0])
+        new_smiles = oechem.OECreateIsoSmiString(new_molecule)
+        canonical_smiles_list.append(new_smiles)
+    return canonical_smiles_list
+
+def show_topology(topology):
+    """
+    Outputs bond atoms and bonds in topology object
+
+    Paramters
+    ---------
+    topology : Topology object
+    """
+    output = ""
+    for atom in topology.atoms():
+        output += "%8d %5s %5s %3s: bonds " % (atom.index, atom.name, atom.residue.id, atom.residue.name)
+        for bond in atom.residue.bonds():
+            if bond[0] == atom:
+                output += " %8d" % bond[1].index
+            if bond[1] == atom:
+                output += " %8d" % bond[0].index
+        output += '\n'
+    print(output)
+
+def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=1200):
+    """
+    Render the atom mapping to a PDF file.
+
+    Parameters
+    ----------
+    filename : str
+        The PDF filename to write to.
+    molecule1 : openeye.oechem.OEMol
+        Initial molecule
+    molecule2 : openeye.oechem.OEMol
+        Final molecule
+    new_to_old_atom_map : dict of int
+        new_to_old_atom_map[molecule2_atom_index] is the corresponding molecule1 atom index
+    width : int, optional, default=1200
+        Width in pixels
+    height : int, optional, default=1200
+        Height in pixels
+
+    """
+    from openeye import oechem
+
+    # Make copies of the input molecules
+    molecule1, molecule2 = oechem.OEGraphMol(molecule1), oechem.OEGraphMol(molecule2)
+
+    oechem.OEGenerate2DCoordinates(molecule1)
+    oechem.OEGenerate2DCoordinates(molecule2)
+
+    # Add both to an OEGraphMol reaction
+    rmol = oechem.OEGraphMol()
+    rmol.SetRxn(True)
+    def add_molecule(mol):
+        # Add atoms
+        new_atoms = list()
+        old_to_new_atoms = dict()
+        for old_atom in mol.GetAtoms():
+            new_atom = rmol.NewAtom(old_atom.GetAtomicNum())
+            new_atoms.append(new_atom)
+            old_to_new_atoms[old_atom] = new_atom
+        # Add bonds
+        for old_bond in mol.GetBonds():
+            rmol.NewBond(old_to_new_atoms[old_bond.GetBgn()], old_to_new_atoms[old_bond.GetEnd()], old_bond.GetOrder())
+        return new_atoms, old_to_new_atoms
+
+    [new_atoms_1, old_to_new_atoms_1] = add_molecule(molecule1)
+    [new_atoms_2, old_to_new_atoms_2] = add_molecule(molecule2)
+
+    # Label reactant and product
+    for atom in new_atoms_1:
+        atom.SetRxnRole(oechem.OERxnRole_Reactant)
+    for atom in new_atoms_2:
+        atom.SetRxnRole(oechem.OERxnRole_Product)
+
+    # Label mapped atoms
+    index =1
+    for (index2, index1) in new_to_old_atom_map.items():
+        new_atoms_1[index1].SetMapIdx(index)
+        new_atoms_2[index2].SetMapIdx(index)
+        index += 1
+    # Set up image options
+    from openeye import oedepict
+    itf = oechem.OEInterface()
+    oedepict.OEConfigureImageOptions(itf)
+    ext = oechem.OEGetFileExtension(filename)
+    if not oedepict.OEIsRegisteredImageFile(ext):
+        raise Exception('Unknown image type for filename %s' % filename)
+    ofs = oechem.oeofstream()
+    if not ofs.open(filename):
+        raise Exception('Cannot open output file %s' % filename)
+
+    # Setup depiction options
+    oedepict.OEConfigure2DMolDisplayOptions(itf, oedepict.OE2DMolDisplaySetup_AromaticStyle)
+    opts = oedepict.OE2DMolDisplayOptions(width, height, oedepict.OEScale_AutoScale)
+    oedepict.OESetup2DMolDisplayOptions(opts, itf)
+    opts.SetBondWidthScaling(True)
+    opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
+    opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
+
+    # Depict reaction with component highlights
+    oechem.OEGenerate2DCoordinates(rmol)
+    rdisp = oedepict.OE2DMolDisplay(rmol, opts)
+
+    colors = [c for c in oechem.OEGetLightColors()]
+    highlightstyle = oedepict.OEHighlightStyle_BallAndStick
+    #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
+    oedepict.OERenderMolecule(ofs, ext, rdisp)
+    ofs.close()
+

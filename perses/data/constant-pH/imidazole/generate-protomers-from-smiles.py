@@ -143,7 +143,7 @@ def enumerate_conformations(name, smiles=None, pdbname=None):
     elif smiles:
         # Generate molecule geometry with OpenEye
         print("Generating molecule {}".format(name))
-        oe_molecule = openeye.smiles_to_oemol(smiles)
+        oe_molecule = openeye.createOEMolFromSMILES(smiles)
         # Assign Tripos atom types
         oechem.OETriposAtomTypeNames(oe_molecule)
         oechem.OETriposBondTypeNames(oe_molecule)

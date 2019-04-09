@@ -2,7 +2,8 @@ import simtk.openmm as openmm
 import simtk.unit as unit
 from perses.annihilation.ncmc_switching import NCMCGHMCAlchemicalIntegrator
 import progressbar
-from perses.tests.utils import createSystemFromIUPAC, get_data_filename
+from perses.utils.openeye import createSystemFromIUPAC
+from perses.utils.data import get_data_filename
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine, SystemGenerator
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -33,7 +34,8 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.data import get_data_filename
 
     m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
     refmol = createOEMolFromIUPAC(ref_mol_name)
@@ -70,7 +72,8 @@ def generate_vacuum_hybrid_topology(mol_name="naphthalene", ref_mol_name="benzen
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.data import get_data_filename
 
     m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
     refmol = createOEMolFromIUPAC(ref_mol_name)

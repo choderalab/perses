@@ -29,7 +29,7 @@ if __name__ == "__main__":
         phases = ['complex', 'solvent']
     if not os.path.exists(trajectory_directory):
         os.makedirs(trajectory_directory)
-
+    print(setup_options)
     setup_dict = relative_setup.run_setup(setup_options)
     print("setup complete")
     print('setup_dict keys: {}'.format(setup_dict.keys()))

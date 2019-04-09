@@ -37,7 +37,7 @@ def get_data_filename(relative_path):
 
     return fn
 
-def extractPositionsFromOEMOL(molecule):
+def extractPositionsFromOEMol(molecule):
     positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
     coords = molecule.GetCoords()
     for index in range(molecule.NumAtoms()):
@@ -68,7 +68,7 @@ def oemol_to_omm_ff(oemol, molecule_name):
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     topology = forcefield_generators.generateTopologyFromOEMol(oemol)
     system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMOL(oemol)
+    positions = extractPositionsFromOEMol(oemol)
     return system, positions, topology
 
 def test_small_molecule_proposals():

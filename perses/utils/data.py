@@ -34,3 +34,39 @@ def get_data_filename(relative_path):
 
     return fn
 
+def generate_gaff_xml():
+    """
+    Return a file-like object for `gaff.xml`
+    """
+    #TODO this function isn't used anywhere
+    from openmoltools import amber
+    gaff_dat_filename = amber.find_gaff_dat()
+
+    # Generate ffxml file contents for parmchk-generated frcmod output.
+    leaprc = StringIO("parm = loadamberparams %s" % gaff_dat_filename)
+    import parmed
+    params = parmed.amber.AmberParameterSet.from_leaprc(leaprc)
+    params = parmed.openmm.OpenMMParameterSet.from_parameterset(params)
+    citations = """\
+    Wang, J., Wang, W., Kollman P. A.; Case, D. A. "Automatic atom type and bond type perception in molecular mechanical calculations". Journal of Molecular Graphics and Modelling , 25, 2006, 247260.
+    Wang, J., Wolf, R. M.; Caldwell, J. W.;Kollman, P. A.; Case, D. A. "Development and testing of a general AMBER force field". Journal of Computational Chemistry, 25, 2004, 1157-1174.
+    """
+    ffxml = str()
+    gaff_xml = StringIO(ffxml)
+    provenance=dict(OriginalFile='gaff.dat', Reference=citations)
+    params.write(gaff_xml, provenance=provenance)
+
+    return gaff_xml
+
+def forcefield_directory():
+    """
+    Return the forcefield directory for the additional forcefield files like gaff.xml
+
+    Returns
+    -------
+    forcefield_directory_name : str
+        Directory where OpenMM can find additional forcefield files
+    """
+    #TODO this function isn't used anywhere
+    forcefield_directory_name = resource_filename("perses", "data")
+    return forcefield_directory_name

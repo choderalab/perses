@@ -11,7 +11,8 @@ import simtk.openmm as openmm
 import simtk.openmm.app as app
 import simtk.unit as unit
 import numpy as np
-from perses.tests.utils import giveOpenmmPositionsToOEMOL, get_data_filename, extractPositionsFromOEMOL
+from perses.utils.openeye import giveOpenmmPositionsToOEMol, extractPositionsFromOEMol
+from perses.utils.data import get_data_filename
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator, \
@@ -83,7 +84,7 @@ class NonequilibriumFEPSetup(object):
             self._receptor_mol2_filename = receptor_mol2_filename
             self._receptor_mol = self.load_sdf(self._receptor_mol2_filename)
             mol_list.append(self._receptor_mol)
-            self._receptor_positions_old = extractPositionsFromOEMOL(self._receptor_mol)
+            self._receptor_positions_old = extractPositionsFromOEMol(self._receptor_mol)
             self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
             self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
 
@@ -107,7 +108,7 @@ class NonequilibriumFEPSetup(object):
             mol_list.append(self._old_ligand_oemol)
             mol_list.append(self._new_ligand_oemol)
 
-            self._old_ligand_positions = extractPositionsFromOEMOL(self._old_ligand_oemol)
+            self._old_ligand_positions = extractPositionsFromOEMol(self._old_ligand_oemol)
 
             ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
 
@@ -129,7 +130,7 @@ class NonequilibriumFEPSetup(object):
             #self._old_ligand_topology = app.AmberPrmtopFile('%s.parm7' % self._ligand_file[0]).topology
             #self._old_ligand_positions = app.AmberInpcrdFile('%s.rst7' % self._ligand_file[0]).positions
             #self._old_ligand_oemol = forcefield_generators.generateOEMolFromTopologyResidue(next(self._old_ligand_topology.residues()))
-            #giveOpenmmPositionsToOEMOL(self._old_ligand_positions, self._old_ligand_oemol)
+            #giveOpenmmPositionsToOEMol(self._old_ligand_positions, self._old_ligand_oemol)
             old_ligand = pm.load_file('%s.parm7' % self._ligand_file[0], '%s.rst7' % self._ligand_file[0])
             self._old_ligand_topology = old_ligand.topology
             self._old_ligand_positions = old_ligand.positions
@@ -142,7 +143,7 @@ class NonequilibriumFEPSetup(object):
             #self._new_ligand_positions = app.AmberInpcrdFile('%s.rst7' % self._ligand_file[1]).positions
             #self._new_ligand_oemol = forcefield_generators.generateOEMolFromTopologyResidue(
             #    next(self._new_ligand_topology.residues()))
-            #giveOpenmmPositionsToOEMOL(self._new_ligand_positions, self._new_ligand_oemol)
+            #giveOpenmmPositionsToOEMol(self._new_ligand_positions, self._new_ligand_oemol)
             new_ligand = pm.load_file('%s.parm7' % self._ligand_file[1], '%s.rst7' % self._ligand_file[1])
             self._new_ligand_topology = new_ligand.topology
             self._new_ligand_positions = new_ligand.positions

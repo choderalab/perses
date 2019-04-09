@@ -141,6 +141,7 @@ def createOEMolFromSMILES(smiles, title='MOL',max_confs=1):
 
     return molecule
 
+
 def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     """
     Convert an openeye.oechem.OEMol to a openmm system, positions and topology
@@ -170,3 +171,85 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     positions = extractPositionsFromOEMol(molecule)
 
     return system, positions, topology
+
+def createSystemFromIUPAC(iupac_name):
+    """
+    Create an openmm system out of an oemol
+
+    Parameters
+    ----------
+    iupac_name : str
+        IUPAC name
+
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol
+        OEMol molecule
+    system : openmm.System object
+        OpenMM system
+    positions : [n,3] np.array of floats
+        Positions
+    topology : openmm.app.Topology object
+        Topology
+    """
+
+    # Create OEMol
+    molecule = createOEMolFromIUPAC(iupac_name)
+
+    # generate openmm system, positions and topology
+    system, positions, topology = OEMol_to_omm_ff(molecule)
+
+    return (molecule, system, positions, topology)
+
+def createSystemFromSMILES(smiles):
+    """
+    Create an openmm system from a smiles string
+
+    Parameters
+    ----------
+    smiles : str
+        smiles string of molecule
+
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol
+        OEMol molecule
+    system : openmm.System object
+        OpenMM system
+    positions : [n,3] np.array of floats
+        Positions
+    topology : openmm.app.Topology object
+        Topology
+    """
+
+    # Create OEMol
+    molecule = createOEMolFromIUPAC(iupac_name)
+
+    # generate openmm system, positions and topology
+    system, positions, topology = OEMol_to_omm_ff(molecule)
+
+    return (molecule, system, positions, topology)
+
+def describe_oemol(mol):
+    """
+    Render the contents of an OEMol to a string.
+
+    Parameters
+    ----------
+    mol : OEMol
+        Molecule to describe
+
+    Returns
+    -------
+    description : str
+        The description
+    """
+    description = ""
+    description += "ATOMS:\n"
+    for atom in mol.GetAtoms():
+        description += "%8d %5s %5d\n" % (atom.GetIdx(), atom.GetName(), atom.GetAtomicNum())
+    description += "BONDS:\n"
+    for bond in mol.GetBonds():
+        description += "%8d %8d\n" % (bond.GetBgnIdx(), bond.GetEndIdx())
+    return description
+

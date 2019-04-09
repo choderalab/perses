@@ -1,7 +1,7 @@
 from simtk import openmm, unit
 from simtk.openmm import app
 import os, os.path
-from perses.tests.utils import sanitizeSMILES
+from perses.utils.smallmolecules import sanitizeSMILES
 from perses.tests.testsystems import minimize
 from perses.tests.testsystems import PersesTestSystem
 import perses.rjmc.geometry as geometry

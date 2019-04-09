@@ -68,7 +68,7 @@ def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"
     """
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
 
     mol = createOEMolFromIUPAC(mol_name)
     m, system, positions, topology = createSystemFromIUPAC(mol_name)
@@ -93,7 +93,7 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
 
     mol = createOEMolFromIUPAC(mol_name)
     m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
@@ -133,7 +133,8 @@ def generate_solvated_hybrid_topology(mol_name="naphthalene", ref_mol_name="benz
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.data import get_data_filename
 
     mol = createOEMolFromIUPAC(mol_name)
     m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
@@ -555,7 +556,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
     #    molecule_names = ['pentane']
 
     for molecule_name in molecule_names:
-        from perses.tests.utils import createSystemFromIUPAC
+        from perses.utils.openeye import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
 
         # Eliminate half of the molecule
@@ -602,7 +603,7 @@ def test_ncmc_engine_molecule():
     #    molecule_names = ['pentane']
 
     for molecule_name in molecule_names:
-        from perses.tests.utils import createSystemFromIUPAC
+        from perses.utils.openeye import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
         natoms = system.getNumParticles()
 
@@ -640,7 +641,8 @@ def test_ncmc_hybrid_engine_molecule():
         mols_and_refs = [['naphthalene', 'benzene']]
 
     for mol_ref in mols_and_refs:
-        from perses.tests.utils import createSystemFromIUPAC
+        from perses.utils.openeye import createSystemFromIUPAC
+
         [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
 
         topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
@@ -661,7 +663,7 @@ def test_ncmc_hybrid_explicit_engine_molecule():
         mols_and_refs = [['naphthalene', 'benzene']]
 
     for mol_ref in mols_and_refs:
-        from perses.tests.utils import createSystemFromIUPAC
+        from perses.utils.openeye import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
 
         #topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])

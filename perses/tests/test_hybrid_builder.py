@@ -286,7 +286,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     from perses.annihilation.new_relative import HybridTopologyFactory
     import simtk.openmm as openmm
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
 
     mol_name = "naphthalene"
     ref_mol_name = "benzene"

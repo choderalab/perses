@@ -1466,7 +1466,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Handle case where there are no matches
         if len(matches) == 0:
-            from perses.tests.utils import describe_oemol
+            from perses.utils.openeye import describe_oemol
             msg = 'No matches found in _get_mol_atom_matches.\n'
             msg += '\n'
             msg += 'oegraphmol_current:\n'
@@ -2690,8 +2690,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         forward_probability = molecule_probabilities[proposed_smiles_idx]
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
         logp = np.log(reverse_probability) - np.log(forward_probability)
-        from perses.tests.utils import smiles_to_oemol
-        proposed_mol = smiles_to_oemol(proposed_smiles, "MOL_%d" %proposed_smiles_idx)
+        from perses.utils.openeye import createOEMolFromSMILES
+        proposed_mol = createOEMolFromSMILES(proposed_smiles, "MOL_%d" %proposed_smiles_idx)
         return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):
@@ -2760,7 +2760,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         safe_smiles
         removed_smiles
         """
-        from perses.tests.utils import smiles_to_topology
+        from perses.tests.utils import createSystemFromSMILES
         import itertools
         from perses.rjmc.geometry import ProposalOrderTools
         from perses.tests.test_geometry_engine import oemol_to_openmm_system
@@ -2772,13 +2772,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             smiles_pairs.add((mol1, mol2))
 
         for smiles_pair in smiles_pairs:
-            topology_1, mol1 = smiles_to_topology(smiles_pair[0])
-            topology_2, mol2 = smiles_to_topology(smiles_pair[1])
-            try:
-                sys1, pos1, top1 = oemol_to_openmm_system(mol1)
-                sys2, pos2, top2 = oemol_to_openmm_system(mol2)
-            except:
-                continue
+            mol1, sys1, pos1, top1 = createSystemFromSMILES(smiles_pair[0])
+            mol2, sys2, pos2, top2 = createSystemFromSMILES(smiles_pair[1])
+
             new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol1, mol2, atom_expr=atom_opts, bond_expr=bond_opts)
             if not new_to_old_atom_map:
                 continue
