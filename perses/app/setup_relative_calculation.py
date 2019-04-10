@@ -168,9 +168,10 @@ def run_setup(setup_options):
             top_prop['solvent_topology_proposal'] = fe_setup.solvent_topology_proposal
             top_prop['solvent_old_positions'] = fe_setup.solvent_old_positions
             top_prop['solvent_new_positions'] = fe_setup.solvent_new_positions
-     #   if 'vacuum' in phases:
-     #      phase_dict = {'phase':'vacuum','topology_proposal':fe_setup.vacuum_topology_proposal,
-     #                    'old_positions':fe_setup.vacuum_old_positions, 'new_positions': fe_setup.vacuum_new_positions}
+        if 'vacuum' in phases:
+            top_prop['vacuum_topology_proposal'] = fe_setup.vacuum_topology_proposal
+            top_prop['vacuum_old_positions'] = fe_setup.vacuum_old_positions
+            top_prop['vacuum_new_positions'] = fe_setup.vacuum_new_positions
 
     else:
         top_prop = np.load(setup_options['topology_proposal']).item()

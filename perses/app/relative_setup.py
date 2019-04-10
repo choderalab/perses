@@ -80,10 +80,10 @@ class RelativeFEPSetup(object):
                 self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
 
                 all_old_mol = createSystemFromSMILES(self._ligand_smiles_old,title='OLD')
-                self._ligand_oemol_old, _, self._ligand_positions_old, self._ligand_topology_old = all_old_mol
+                self._ligand_oemol_old, self._ligand_system_old, self._ligand_positions_old, self._ligand_topology_old = all_old_mol
 
                 all_new_mol = createSystemFromSMILES(self._ligand_smiles_new,title='NEW')
-                self._ligand_oemol_new, _, self._ligand_positions_new, self._ligand_topology_new = all_new_mol
+                self._ligand_oemol_new, self._ligand_system_new, self._ligand_positions_new, self._ligand_topology_new = all_new_mol
                 print(self._ligand_oemol_old.GetTitle())
                 print(self._ligand_oemol_new.GetTitle())
 
@@ -120,6 +120,7 @@ class RelativeFEPSetup(object):
                 self._ligand_smiles_old = createSMILESfromOEMol(self._ligand_oemol_old)
                 self._ligand_smiles_new = createSMILESfromOEMol(self._ligand_oemol_new)
 
+                # replace this with function that will generate the system etc. so that vacuum can be performed
                 self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
                 self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
             else:
@@ -238,18 +239,17 @@ class RelativeFEPSetup(object):
                                                                                     self._ligand_positions_old_solvated,
                                                                                     beta)
         elif 'vacuum' in phases:
-            #self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
-            #    self._ligand_topology_old, self._ligand_positions_old)
-
-            self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
-
-            self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
-                                                                            self._ligand_topology_old_solvated)
-            self._ligand_positions_new_solvated, _ = self._geometry_engine.propose(self._solvent_topology_proposal,
-                                                                                   self._ligand_positions_old_solvated,
+            self._vacuum_positions_old = self._ligand_positions_old
+            self._vacuum_topology_proposal = self._proposal_engine.propose(self._ligand_system_old,
+                                                                            self._ligand_topology_old)
+            self._vacuum_positions_new, _ = self._geometry_engine.propose(self._vacuum_topology_proposal,
+                                                                                   self._vacuum_positions_old,
                                                                                    beta)
 
+
         #TODO sort handling of the vacuum leg
+        # def _generate_ligand_only_topologies (but from a solvent leg, rather than a complex leg)
+        # def _generate_ligand_only_topologies (but from a solvent leg, rather than a complex leg)
 
 
     def _generate_ligand_only_topologies(self, old_positions):
@@ -396,17 +396,17 @@ class RelativeFEPSetup(object):
     def solvent_new_positions(self):
         return self._ligand_positions_new_solvated
 
-#    @property
-#    def vacuum_topology_proposal(self):
-#        return self._vacuum_topology_proposal
-#
-#    @property
-#    def vacuum_old_positions(self):
-#        return self._vacuum_positions_old
-#
-#    @property
-#    def vacuum_new_positions(self):
-#        return self._vacuum_positions_new
+    @property
+    def vacuum_topology_proposal(self):
+        return self._vacuum_topology_proposal
+
+    @property
+    def vacuum_old_positions(self):
+        return self._vacuum_positions_old
+
+    @property
+    def vacuum_new_positions(self):
+        return self._vacuum_positions_new
 
 
 class NonequilibriumFEPSetup(object):
