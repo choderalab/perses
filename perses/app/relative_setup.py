@@ -84,18 +84,17 @@ class RelativeFEPSetup(object):
 
                 all_new_mol = createSystemFromSMILES(self._ligand_smiles_new,title='NEW')
                 self._ligand_oemol_new, self._ligand_system_new, self._ligand_positions_new, self._ligand_topology_new = all_new_mol
-                print(self._ligand_oemol_old.GetTitle())
-                print(self._ligand_oemol_new.GetTitle())
 
                 mol_list.append(self._ligand_oemol_old)
                 mol_list.append(self._ligand_oemol_new)
 
                 ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
 
+                # forcefield_generators needs to be able to distinguish between the two ligands
+                # while topology_proposal needs them to have the same residue name
                 self._ligand_oemol_old.SetTitle("MOL")
                 self._ligand_oemol_new.SetTitle("MOL")
-                print(self._ligand_oemol_old.GetTitle())
-                print(self._ligand_oemol_new.GetTitle())
+
                 self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
                 self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
 
@@ -105,8 +104,6 @@ class RelativeFEPSetup(object):
 
                 mol_list.append(self._ligand_oemol_old)
                 mol_list.append(self._ligand_oemol_new)
-                print(self._ligand_oemol_old.GetTitle())
-                print(self._ligand_oemol_new.GetTitle())
 
                 self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
 
@@ -114,8 +111,6 @@ class RelativeFEPSetup(object):
 
                 self._ligand_oemol_old.SetTitle("MOL")
                 self._ligand_oemol_new.SetTitle("MOL")
-                print(self._ligand_oemol_old.GetTitle())
-                print(self._ligand_oemol_new.GetTitle())
 
                 self._ligand_smiles_old = createSMILESfromOEMol(self._ligand_oemol_old)
                 self._ligand_smiles_new = createSMILESfromOEMol(self._ligand_oemol_new)
