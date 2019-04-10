@@ -66,7 +66,34 @@ def forcefield_directory():
     -------
     forcefield_directory_name : str
         Directory where OpenMM can find additional forcefield files
+
     """
     #TODO this function isn't used anywhere
     forcefield_directory_name = resource_filename("perses", "data")
     return forcefield_directory_name
+
+def load_smi(smi_file,index=None):
+    """
+    loads list of smiles from a text file. Will return the i-th smiles in file if index is provided, where index
+    starts at zero.
+
+    Parameters
+    ----------
+    smi_file : str
+        file name containing strings
+    index : None or int, default None
+        index of smiles to return. If not provided, list of smiles is returned
+
+    Returns
+    --------
+    smiles : string, or list of strings
+        depending on number of smiles in file, or if index is provided
+    """
+    with open(smi_file) as f:
+        smiless = f.readlines()
+    if index is None:
+        print('HERE, ')
+        return smiless
+    else:
+        smiles = smiless[index]
+        return smiles

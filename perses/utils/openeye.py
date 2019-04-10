@@ -201,7 +201,7 @@ def createSystemFromIUPAC(iupac_name):
 
     return (molecule, system, positions, topology)
 
-def createSystemFromSMILES(smiles):
+def createSystemFromSMILES(smiles,title='MOL'):
     """
     Create an openmm system from a smiles string
 
@@ -223,7 +223,7 @@ def createSystemFromSMILES(smiles):
     """
 
     # Create OEMol
-    molecule = createOEMolFromIUPAC(iupac_name)
+    molecule = createOEMolFromSMILES(smiles,title=title)
 
     # generate openmm system, positions and topology
     system, positions, topology = OEMol_to_omm_ff(molecule)
@@ -244,6 +244,7 @@ def describe_oemol(mol):
     description : str
         The description
     """
+    #TODO this needs a test
     description = ""
     description += "ATOMS:\n"
     for atom in mol.GetAtoms():
@@ -253,3 +254,32 @@ def describe_oemol(mol):
         description += "%8d %8d\n" % (bond.GetBgnIdx(), bond.GetEndIdx())
     return description
 
+def createOEMolFromSDF(sdf_filename, index=0):
+    """
+    Load an SDF file into an OEMol. Since SDF files can contain multiple molecules, an index can be provided as well.
+
+    Parameters
+    ----------
+    sdf_filename : str
+        The name of the SDF file
+    index : int, default 0
+        The index of the molecule in the SDF file
+
+    Returns
+    -------
+    mol : openeye.oechem.OEMol object
+        The loaded oemol object
+    """
+    #TODO this needs a test
+    ifs = oechem.oemolistream()
+    ifs.open(sdf_filename)
+    # get the list of molecules
+    mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
+    # we'll always take the first for now
+    mol_to_return = mol_list[index]
+    return mol_to_return
+
+def createSMILESfromOEMol(molecule):
+    smiles = oechem.OECreateSmiString(molecule,
+                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+    return smiles

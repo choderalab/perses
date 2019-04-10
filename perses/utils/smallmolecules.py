@@ -7,8 +7,6 @@ Utility functions for handing small molecules
 __author__ = 'John D. Chodera'
 
 
-
-
 def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     """
     Sanitize set of SMILES strings by ensuring all are canonical isomeric SMILES.
@@ -221,4 +219,6 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
+
+
 

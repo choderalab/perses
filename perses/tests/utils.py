@@ -412,7 +412,8 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     from openmoltools import forcefield_generators
 
     from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
-    from perses.utils.openeye import get_data_filename 
+    from perses.utils.data import get_data_filename
+    from perses.utils.smallmolecules import render_atom_mapping
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
     proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
@@ -529,11 +530,11 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
 
-    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import createOEMolFromSMILES
     from perses.utils.data import get_data_filename
    
     host_guest = testsystems.HostGuestVacuum()
-    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology 
+    unsolv_old_system, old_positions, top_old = host_guest.system, host_guest.positions, host_guest.topology
     ligand_topology = [res for res in top_old.residues()]
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
     proposed_mol = createOEMolFromSMILES('C1CC2(CCC1(CC2)C)C')
@@ -557,6 +558,6 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
 
     #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+    new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
 
-    return topology_proposal, pos_old, new_positions
+    return topology_proposal, old_positions, new_positions
