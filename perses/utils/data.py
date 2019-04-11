@@ -92,7 +92,6 @@ def load_smi(smi_file,index=None):
     with open(smi_file) as f:
         smiless = f.readlines()
     if index is None:
-        print('HERE, ')
         return smiless
     else:
         smiles = smiless[index]

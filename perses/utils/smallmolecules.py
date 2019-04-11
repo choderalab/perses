@@ -47,7 +47,9 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     >>> len(sanitized_smiles_list)
     4
     """
+    from openeye import oechem
     from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
+    from perses.tests.utils import has_undefined_stereocenters, enumerate_undefined_stereocenters
     sanitized_smiles_set = set()
     OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
     for smiles in smiles_list:

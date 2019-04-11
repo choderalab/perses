@@ -76,6 +76,7 @@ class RelativeFEPSetup(object):
         self._new_ligand_index = new_ligand_index
         if type(self._ligand_input) is not list: # the ligand has been provided as a single file
             if self._ligand_input[-3:] == 'smi': #
+                from perses.utils.smallmolecules import sanitizeSMILES
                 self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
                 self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
 

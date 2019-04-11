@@ -169,6 +169,7 @@ def has_undefined_stereocenters(molecule, verbose=False):
     True
 
     """
+    #TODO move to utils
     atoms = get_atoms_with_undefined_stereocenters(molecule, verbose=verbose)
     if len(atoms) > 0:
         return True
@@ -208,6 +209,7 @@ def enumerate_undefined_stereocenters(molecule, verbose=False):
     2
 
     """
+    #TODO move to utils
     from openeye.oechem import OEAtomStereo_RightHanded, OEAtomStereo_LeftHanded, OEAtomStereo_Tetrahedral
     from itertools import product
 

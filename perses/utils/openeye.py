@@ -221,6 +221,10 @@ def createSystemFromSMILES(smiles,title='MOL'):
     topology : openmm.app.Topology object
         Topology
     """
+    # clean up smiles string
+    from perses.utils.smallmolecules import sanitizeSMILES
+    smiles = sanitizeSMILES([smiles])
+    smiles = smiles[0]
 
     # Create OEMol
     molecule = createOEMolFromSMILES(smiles,title=title)
@@ -280,6 +284,6 @@ def createOEMolFromSDF(sdf_filename, index=0):
     return mol_to_return
 
 def createSMILESfromOEMol(molecule):
-    smiles = oechem.OECreateSmiString(molecule,
+    m.OECreateSmiString(molecule,
                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
     return smiles

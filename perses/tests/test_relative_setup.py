@@ -1,13 +1,11 @@
 import numpy as np
 import os
 from pkg_resources import resource_filename
-from simtk import openmm, unit
-import simtk.openmm.app as app
-import openeye.oechem as oechem
-from perses.dispersed import relative_setup, feptasks
+from simtk import unit
+from perses.dispersed import feptasks
+from perses.app import relative_setup
 import mdtraj as md
-from openmmtools import states, alchemy, testsystems, integrators, cache
-import pickle
+from openmmtools import states, alchemy, testsystems, cache
 import yaml
 
 default_forward_functions = {

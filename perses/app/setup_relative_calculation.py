@@ -14,7 +14,7 @@ from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 
 
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 def getSetupOptions(filename):
     """
@@ -332,7 +332,7 @@ if __name__ == "__main__":
             free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
             print(f"Finished phase {phase}")
         for phase in free_energies:
-            print(f'Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}')
+            print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
             print(f"{phase} phase has a free energy of {free_energies[phase]}")
 
 
