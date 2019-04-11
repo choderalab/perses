@@ -90,7 +90,7 @@ def load_smi(smi_file,index=None):
         depending on number of smiles in file, or if index is provided
     """
     with open(smi_file) as f:
-        smiless = f.readlines()
+        smiless = f.read().splitlines()
     if index is None:
         return smiless
     else:
