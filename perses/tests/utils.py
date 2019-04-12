@@ -915,7 +915,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     return topology_proposal, old_positions, new_positions
 
-def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
+def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", barostat=True):
     """
     Generate a test solvated topology proposal, current positions, and new positions triplet
     from two IUPAC molecule names.
@@ -926,6 +926,8 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
         name of the first molecule
     proposed_mol_name : str, optional
         name of the second molecule
+    barostat : bool, optional, default=True
+        If True, a barostat will be added
 
     Returns
     -------
@@ -936,25 +938,31 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     new_positions : np.array, unit-bearing
         The positions of the new system
     """
-    import simtk.openmm.app as app
-
     from perses.tests.utils import createOEMolFromIUPAC, createTopologyFromIUPAC, get_data_filename
 
-    current_mol, pos_old, top_old = createTopologyFromIUPAC(current_mol_name)
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
+    # Create old system
+    old_oemol = createOEMolFromIUPAC(current_mol_name)
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    old_topology = generateTopologyFromOEMol(old_oemol)
+    old_positions = extractPositionsFromOEMOL(old_oemol)
+    old_smiles = oechem.OEMolToSmiles(old_oemol)
 
-    initial_smiles = oechem.OEMolToSmiles(current_mol)
-    final_smiles = oechem.OEMolToSmiles(proposed_mol)
+    # Create new molecule
+    new_oemol = createOEMolFromIUPAC(proposed_mol_name)
+    new_smiles = oechem.OEMolToSmiles(new_oemol)
 
-    from perses.forcefields import SystemGenerator
+    from perses.tests.utils import get_data_filename
+    gaff_filename = get_data_filename('gaff.xml')
     cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
+    from perses.forcefields import SystemGenerator
     system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat,
         forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME},
-        oemols=[host_guest.host_oemol, host_guest.guest_oemol],
+        oemols=[old_oemol, new_oemol],
         cache=cache)
 
-    modeller = app.Modeller(top_old, pos_old)
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    import simtk.openmm.app as app
+    modeller = app.Modeller(old_topology, old_positions)
+    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9.0*unit.angstrom)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
     solvated_system = system_generator.build_system(solvated_topology)

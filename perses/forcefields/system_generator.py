@@ -33,9 +33,20 @@ class SystemGenerator(object):
         Additional molecules that should be parameterized on the fly by OEGAFFTemplateGenerator
     cache : filename or TinyDB instance
         JSON filename or TinyDB instance that can be used to cache parameterized small molecules by OEGAFFTemplateGenerator
+    particle_charges : bool, optional, default=True
+        If False, particle charges will be zeroed
+    exception_charges : bool, optional, default=True
+        If False, exception charges will be zeroed.
+    particle_epsilon : bool, optional, default=True
+        If False, particle LJ epsilon will be zeroed.
+    exception_epsilon : bool, optional, default=True
+        If False, exception LJ epsilon will be zeroed.
+    torsions : bool, optional, default=True
+        If False, torsions will be zeroed.
     """
 
-    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, barostat=None, oemols=None, cache=None):
+    def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, barostat=None, oemols=None, cache=None,
+        particle_charges=True, exception_charges=True, particle_epsilons=True, exception_epsilons=True, torsions=True):
         # Cache force fields and settings to use
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
@@ -56,8 +67,7 @@ class SystemGenerator(object):
         if 'removeCMMotion' not in self._forcefield_kwargs:
             self._forcefield_kwargs['removeCMMotion'] = False
 
-        # Cache barostat information
-        # TODO: Is this necessary?
+        # Cache barostat if needed
         self._barostat = None
         if barostat is not None:
             pressure = barostat.getDefaultPressure()
@@ -67,6 +77,12 @@ class SystemGenerator(object):
                 temperature = barostat.getTemperature()
             frequency = barostat.getFrequency()
             self._barostat = (pressure, temperature, frequency)
+
+        self._particle_charges = particle_charges
+        self._exception_charges = exception_charges
+        self._particle_epsilons = particle_epsilons
+        self._exception_epsilons = exception_epsilons
+        self._torsions = torsions
 
     def get_forcefield(self):
         """
@@ -118,17 +134,41 @@ class SystemGenerator(object):
             msg += "PDB file written as 'BuildSystem-failure.pdb'"
             raise Exception(msg)
 
+        # Turn off various force classes for debugging if requested
+        for force in system.getForces():
+            if force.__class__.__name__ == 'NonbondedForce':
+                for index in range(force.getNumParticles()):
+                    charge, sigma, epsilon = force.getParticleParameters(index)
+                    if not self._particle_charges:
+                        charge *= 0
+                    if not self._particle_epsilons:
+                        epsilon *= 0
+                    force.setParticleParameters(index, charge, sigma, epsilon)
+                for index in range(force.getNumExceptions()):
+                    p1, p2, chargeProd, sigma, epsilon = force.getExceptionParameters(index)
+                    if not self._exception_charges:
+                        chargeProd *= 0
+                    if not self._exception_epsilons:
+                        epsilon *= 0
+                    force.setExceptionParameters(index, p1, p2, chargeProd, sigma, epsilon)
+            elif force.__class__.__name__ == 'PeriodicTorsionForce':
+                for index in range(force.getNumTorsions()):
+                    p1, p2, p3, p4, periodicity, phase, K = force.getTorsionParameters(index)
+                    if not self._torsions:
+                        K *= 0
+                    force.setTorsionParameters(index, p1, p2, p3, p4, periodicity, phase, K)
+
         # Add barostat if requested.
         if self._barostat is not None:
-            from simtk import openmm
-            import numpy as np
             MAXINT = np.iinfo(np.int32).max
             barostat = openmm.MonteCarloBarostat(*self._barostat)
             seed = np.random.randint(MAXINT)
             barostat.setRandomNumberSeed(seed)
             system.addForce(barostat)
 
-        _logger.info('System generation took %.3f s' % (time.time() - timer_start))
+        # See if any torsions have duplicate atoms.
+        from perses.tests import utils
+        utils.check_system(system)
 
         return system
 

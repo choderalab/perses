@@ -199,7 +199,7 @@ def generateResidueTemplate(molecule, residue_atoms=None, normalize=True, gaff_v
         charge = atom.GetPartialCharge()
         parameters = { 'charge' : charge }
         atom_template = ForceField._TemplateAtomData(atomname, typename, element, parameters)
-        template.atoms.append(atom_template)
+        template.addAtom(atom_template)
     for bond in molecule.GetBonds():
         if (bond.GetBgn() in residue_atoms) and (bond.GetEnd() in residue_atoms):
             template.addBondByName(bond.GetBgn().GetName(), bond.GetEnd().GetName())
@@ -674,7 +674,7 @@ class OEGAFFTemplateGenerator(object):
         from networkx.algorithms import isomorphism
         def node_match(n1, n2):
             """Return True of nodes match, and False if not"""
-            return (n1.element==n2.element) and (n1.number_of_external_bonds==n2.number_of_external_bonds)
+            return (n1['element']==n2['element']) and (n1['number_of_external_bonds']==n2['number_of_external_bonds'])
         graph_matcher = isomorphism.GraphMatcher(residue_graph, template_graph, node_match=node_match)
         if graph_matcher.is_isomorphic() == False:
             return None
