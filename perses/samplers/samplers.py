@@ -1126,12 +1126,13 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
         hybrid_system = self._factory.hybrid_system
         initial_hybrid_positions = self._factory.hybrid_positions
         lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
-        #lambda_zero_alchemical_state.set_alchemical_parameters(1.0)
+
 
         thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
         compound_thermodynamic_state = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
 
-        thermodynamic_state_list = [compound_thermodynamic_state]
+        #thermodynamic_state_list = [compound_thermodynamic_state]
+        thermodynamic_state_list = []
 
         lambda_values = np.linspace(0.,1.,n_states)
         for lambda_val in lambda_values:
