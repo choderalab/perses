@@ -11,14 +11,14 @@ build:
 
 requirements:
   build:
-    - python
+    - python >=3.6
     - setuptools
-    - numpy
+    - numpy >=1.14
 
   run:
-    - python
+    - python >=3.6
     - setuptools
-    - numpy
+    - numpy >=1.14
     - scipy
     - numexpr
     - autograd
@@ -46,13 +46,7 @@ requirements:
     - tinydb
     - tqdm
 
-test:
-  requires:
-    - nose
-    - nose-timer
-  imports:
-    - perses
-
 about:
   home: https://github.com/choderalab/perses
-  license: GNU Lesser General Public License v2 or later (LGPLv2+)
+  license: MIT
+  license_file: LICENSE
