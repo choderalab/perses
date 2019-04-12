@@ -158,7 +158,7 @@ def test_valence_overlap():
     Test hybrid factory vacuum overlap with valence terms only
     """
     system_generator_kwargs = {
-        'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False, 'torsions' : True,
+        'particle_charges' : False, 'exception_charges' : False, 'particle_epsilons' : False, 'exception_epsilons' : False, 'torsions' : True,
         }
     test_simple_overlap('2-phenyl ethanol', 'benzene', system_generator_kwargs=system_generator_kwargs)
 
@@ -167,7 +167,7 @@ def test_bonds_angles_overlap():
     Test hybrid factory vacuum overlap with bonds and angles
     """
     system_generator_kwargs = {
-        'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : False, 'exception_epsilon' : False, 'torsions' : False,
+        'particle_charges' : False, 'exception_charges' : False, 'particle_epsilons' : False, 'exception_epsilons' : False, 'torsions' : False,
         }
     test_simple_overlap('2-phenyl ethanol', 'benzene', system_generator_kwargs=system_generator_kwargs)
 
@@ -176,7 +176,7 @@ def test_sterics_overlap():
     Test hybrid factory vacuum overlap with valence terms and sterics only
     """
     system_generator_kwargs = {
-        'particle_charge' : False, 'exception_charge' : False, 'particle_epsilon' : True, 'exception_epsilon' : True, 'torsions' : True,
+        'particle_charges' : False, 'exception_charges' : False, 'particle_epsilons' : True, 'exception_epsilons' : True, 'torsions' : True,
         }
     test_simple_overlap('2-phenyl ethanol', 'benzene', system_generator_kwargs=system_generator_kwargs)
 
@@ -393,74 +393,6 @@ def run_endpoint_perturbation(lambda_thermodynamic_state, nonalchemical_thermody
     results = [df, ddf_corrected, t0, Neff_max]
 
     return results, non_potential, hybrid_potential
-
-def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
-    """
-    Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
-    """
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-    from perses.annihilation.new_relative import HybridTopologyFactory
-    import simtk.openmm as openmm
-
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
-
-    mol_name = "naphthalene"
-    ref_mol_name = "benzene"
-
-    mol = createOEMolFromIUPAC(mol_name)
-    m, system, positions, topology = createSystemFromIUPAC(mol_name)
-
-    refmol = createOEMolFromIUPAC(ref_mol_name)
-
-    #map one of the rings
-    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
-
-    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
-    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
-    effective_atom_map = {value : value for value in atom_map.values()}
-
-    #make a topology proposal with the appropriate data:
-    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
-
-    factory = HybridTopologyFactory(top_proposal, positions, positions)
-
-    alchemical_system = factory.hybrid_system
-    alchemical_positions = factory.hybrid_positions
-
-    integrator = openmm.VerletIntegrator(1)
-    platform = openmm.Platform.getPlatformByName("Reference")
-    context = openmm.Context(alchemical_system, integrator, platform)
-
-    context.setPositions(alchemical_positions)
-
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : 'lambda',
-        'lambda_angles' : 'lambda',
-        'lambda_torsions' : 'lambda'
-    }
-
-    #set all to zero
-    for parm in functions.keys():
-        context.setParameter(parm, 0.0)
-
-    initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
-
-    #set all to one
-    for parm in functions.keys():
-        context.setParameter(parm, 1.0)
-
-    final_energy = context.getState(getEnergy=True).getPotentialEnergy()
-
-    if np.abs(final_energy - initial_energy) > 1.0e-6*unit.kilojoule_per_mole:
-        raise Exception("The energy at the endpoints was not equal for molecule %s" % mol_name)
-
-def test_compare_energies():
-    mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]
-
-    for mol_ref_pair in mols_and_refs:
-        compare_energies(mol_name=mol_ref_pair[0], ref_mol_name=mol_ref_pair[1])
 
 def test_position_output():
     """
