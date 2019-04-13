@@ -101,7 +101,7 @@ def giveOpenmmPositionsToOEMOL(positions, molecule):
         coords[key] = (positions[key][0]/unit.angstrom,positions[key][1]/unit.angstrom,positions[key][2]/unit.angstrom)
     molecule.SetCoords(coords)
 
-def createOEMolFromIUPAC(iupac_name='ethane', title='MOL'):
+def createOEMolFromIUPAC(iupac_name='ethane', title=None):
     """
     Generate an openeye OEMol with a geometry from an IUPAC name
 
@@ -109,8 +109,9 @@ def createOEMolFromIUPAC(iupac_name='ethane', title='MOL'):
     ----------
     iupac_name : str, optional, default='ethane'
         IUPAC or common name (parsed by openeye.oeiupac)
-    title : str, optional, default='MOL'
+    title : str, optional, default=None
         Title to assign molecule
+        If None, the iupac_name will be used.
 
     Returns
     -------
@@ -122,6 +123,7 @@ def createOEMolFromIUPAC(iupac_name='ethane', title='MOL'):
     # Create molecule.
     mol = oechem.OEMol()
     oeiupac.OEParseIUPACName(mol, iupac_name)
+    title = title if (title is not None) else iupac_name
     mol.SetTitle(title)
 
     # Assign aromaticity and hydrogens.
@@ -843,7 +845,7 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
 
-def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", forcefield_kwargs=None, system_generator_kwargs=None):
+def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", forcefield_kwargs=None, system_generator_kwargs=None, write_atom_mapping=False):
     """
     Generate a test vacuum topology proposal, current positions, and new positions triplet from two IUPAC molecule names.
 
@@ -952,6 +954,7 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     new_smiles = oechem.OEMolToSmiles(new_oemol)
 
     from perses.tests.utils import get_data_filename
+    from simtk.openmm import app
     gaff_filename = get_data_filename('gaff.xml')
     cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
     from perses.forcefields import SystemGenerator
@@ -960,7 +963,6 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
         oemols=[old_oemol, new_oemol],
         cache=cache)
 
-    import simtk.openmm.app as app
     modeller = app.Modeller(old_topology, old_positions)
     modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9.0*unit.angstrom)
     solvated_topology = modeller.getTopology()
