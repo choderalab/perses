@@ -23,7 +23,7 @@ requirements:
     - numexpr
     - autograd
     - pymbar
-    - openmm >=7.3.1
+    - openmm >=7.4.0
     - parmed
     - openmoltools
     - openmmtools >=0.18.1
