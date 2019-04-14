@@ -28,11 +28,22 @@ mpl_logger.setLevel(logging.WARNING)
 ################################################################################
 
 @attr('travis')
-def test_generate_vacuum_topology_proposal():
+def test_generate_test_topology_proposal():
     """Test generate_vacuum_topology_proposal"""
-    from perses.tests.utils import generate_vacuum_topology_proposal
+    from perses.tests.utils import generate_test_topology_proposal
+
     # Create the topology proposal
-    topology_proposal, old_positions, new_positions = generate_vacuum_topology_proposal()
+    topology_proposal, old_positions, new_positions = generate_test_topology_proposal()
+
+    # Test solvated system
+    topology_proposal, old_positions, new_positions = generate_test_topology_proposal(solvent=True)
+
+    # Test writing of atom mapping
+    topology_proposal, old_positions, new_positions = generate_test_topology_proposal(write_atom_mapping=True)
+
+    # Test other molecule names
+    topology_proposal, old_positions, new_positions = generate_test_topology_proposal(old_iupac_name='benzene', new_iupac_name='toluene')
+    topology_proposal, old_positions, new_positions = generate_test_topology_proposal(old_iupac_name='toluene', new_iupac_name='catechol')
 
 @attr('travis')
 def test_generate_vacuum_hostguest_proposal():
@@ -91,7 +102,7 @@ def test_createSystemFromIUPAC():
     for iupac in iupac_list:
         oemol, system, positions, topology = createSystemFromIUPAC(iupac)
         resnames = [ residue.name for residue in topology.residues() ]
-        assert resnames[0] == 'MOL'
+        assert resnames[0] == iupac
 
     # Test setting the residue name
     oemol, system, positions, topology = createSystemFromIUPAC('ethane', resname='XYZ')

@@ -709,9 +709,9 @@ class OEGAFFTemplateGenerator(object):
 
         # If a database is specified, check against molecules in the database
         if self._cache is not None:
-            print('Opening cache from {}'.format(self._cache))
             from tinydb import TinyDB
-            db = TinyDB(self._cache)
+            tinydb_kwargs = { 'sort_keys' : True, 'indent' : 4, 'separators' : (',', ': ') } # for pretty-printing
+            db = TinyDB(self._cache, **tinydb_kwargs)
             for entry in db:
                 # Skip any molecules we've added to the database this session
                 if entry['smiles'] in self._smiles_added_to_db:
@@ -745,7 +745,9 @@ class OEGAFFTemplateGenerator(object):
                 # If a cache is specified, add this molecule
                 if self._cache is not None:
                     print('Writing {} to cache'.format(smiles))
-                    db.insert({'smiles' : smiles, 'template' : self._JSONEncoder().encode(template), 'ffxml' : ffxml})
+                    from openeye.oeiupac import OECreateIUPACName
+                    iupac = OECreateIUPACName(oemol_template)
+                    db.insert({'smiles' : smiles, 'template' : self._JSONEncoder().encode(template), 'ffxml' : ffxml, 'iupac' : iupac})
                     self._smiles_added_to_db.add(smiles)
                     db.close()
 

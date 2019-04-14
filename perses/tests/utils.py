@@ -844,19 +844,20 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
-
-def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", forcefield_kwargs=None, system_generator_kwargs=None, write_atom_mapping=False):
+def generate_test_topology_proposal(old_iupac_name="benzene", new_iupac_name="toluene", solvent=False, forcefield_kwargs=None, system_generator_kwargs=None, write_atom_mapping=False, use_barostat=False):
     """
-    Generate a test vacuum topology proposal, current positions, and new positions triplet from two IUPAC molecule names.
+    Generate a test topology proposal (in vacuum or solvent), current positions, and new positions triplet from two IUPAC molecule names.
 
     Constraints are added to the system by default. To override this, set ``forcefield_kwargs = None``.
 
     Parameters
     ----------
-    current_mol_name : str, optional
+    old_iupac_name : str, optional
         name of the first molecule
-    proposed_mol_name : str, optional
+    new_iupac_name : str, optional
         name of the second molecule
+    solvent : bool, optional, default=False
+        If True, will create a test system in solvent
     forcefield_kwargs : dict, optional, default=None
         Additional arguments to ForceField in addition to
         'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff
@@ -865,6 +866,8 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     write_atom_mapping : bool, optional, default=False
         If True, output a PDF showing the atom mapping
         containing the names of both molecules
+    use_barostat : bool, optional, default=True
+        If True and solvent==True, a barostat will be added.
 
     Returns
     -------
@@ -878,37 +881,48 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     from perses.tests.utils import createOEMolFromIUPAC, createTopologyFromIUPAC, get_data_filename
 
     # Create old system
-    old_oemol = createOEMolFromIUPAC(current_mol_name)
+    old_oemol = createOEMolFromIUPAC(old_iupac_name)
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
     old_topology = generateTopologyFromOEMol(old_oemol)
     old_positions = extractPositionsFromOEMOL(old_oemol)
     old_smiles = oechem.OEMolToSmiles(old_oemol)
 
     # Create new molecule
-    new_oemol = createOEMolFromIUPAC(proposed_mol_name)
+    new_oemol = createOEMolFromIUPAC(new_iupac_name)
     new_smiles = oechem.OEMolToSmiles(new_oemol)
 
     # Set up SystemGenerator
     gaff_filename = get_data_filename('gaff.xml')
+    forcefield_ffxml_filenames = [gaff_filename, 'amber99sbildn.xml', 'tip3p.xml']
+    nonbonded_method = app.PME if solvent else app.NoCutoff
+    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50) if (use_barostat and solvent) else None
     cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
     default_forcefield_kwargs = {'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds}
     forcefield_kwargs = default_forcefield_kwargs.update(forcefield_kwargs) if (forcefield_kwargs is not None) else default_forcefield_kwargs
     system_generator_kwargs = system_generator_kwargs if (system_generator_kwargs is not None) else dict()
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'],
-        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff},
+    system_generator = SystemGenerator(forcefield_ffxml_filenames,
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': nonbonded_method},
+        barostat=barostat,
         oemols=[old_oemol, new_oemol],
         cache=cache, **system_generator_kwargs)
+
+    if solvent:
+        # Solvate the small molecule
+        modeller = app.Modeller(old_topology, old_positions)
+        modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9.0*unit.angstrom)
+        old_topology = modeller.getTopology()
+        old_positions = modeller.getPositions()
 
     # Build the system
     old_system = system_generator.build_system(old_topology)
 
     # Generate topology proposal
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [old_smiles, new_smiles], system_generator, residue_name=current_mol_name)
+        [old_smiles, new_smiles], system_generator, residue_name=old_iupac_name)
     topology_proposal = proposal_engine.propose(old_system, old_topology, current_mol=old_oemol, proposed_mol=new_oemol)
 
     if write_atom_mapping:
-        filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
+        filename = str(old_iupac_name)+str(new_iupac_name)+'.pdf'
         render_atom_mapping(filename, old_oemol, new_oemol, topology_proposal.new_to_old_atom_map)
 
     # Generate new positions with geometry engine
@@ -917,68 +931,31 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     return topology_proposal, old_positions, new_positions
 
-def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", barostat=True):
+def create_vacuum_hybrid_system(old_iupac_name="styrene", new_iupac_name="2-phenylethanol"):
     """
-    Generate a test solvated topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
+    Generate hybrid alchemical System for a transformation between two molecules in vacuum.
 
     Parameters
     ----------
-    current_mol_name : str, optional
-        name of the first molecule
-    proposed_mol_name : str, optional
-        name of the second molecule
-    barostat : bool, optional, default=True
-        If True, a barostat will be added
+    old_iupac_name : str
+        The IUPAC name of the initial molecule.
+    new_iupac_name : str
+        The IUPAC name of the final molecule.
 
     Returns
     -------
-    topology_proposal : perses.rjmc.topology_proposal
-        The topology proposal representing the transformation
-    current_positions : np.array, unit-bearing
-        The positions of the initial system
-    new_positions : np.array, unit-bearing
-        The positions of the new system
+    topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+        The TopologyProposal for the transformation
+    hybrid_topology_factory : perses.annihilation.new_relative.HybridTopologyFactory
+        The HybridTopologyFactory
+
     """
-    from perses.tests.utils import createOEMolFromIUPAC, createTopologyFromIUPAC, get_data_filename
 
-    # Create old system
-    old_oemol = createOEMolFromIUPAC(current_mol_name)
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    old_topology = generateTopologyFromOEMol(old_oemol)
-    old_positions = extractPositionsFromOEMOL(old_oemol)
-    old_smiles = oechem.OEMolToSmiles(old_oemol)
+    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=old_iupac_name, proposed_mol_name=new_iupac_name)
+    hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
 
-    # Create new molecule
-    new_oemol = createOEMolFromIUPAC(proposed_mol_name)
-    new_smiles = oechem.OEMolToSmiles(new_oemol)
-
-    from perses.tests.utils import get_data_filename
-    from simtk.openmm import app
-    gaff_filename = get_data_filename('gaff.xml')
-    cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
-    from perses.forcefields import SystemGenerator
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat,
-        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME},
-        oemols=[old_oemol, new_oemol],
-        cache=cache)
-
-    modeller = app.Modeller(old_topology, old_positions)
-    modeller.addSolvent(system_generator.forcefield, model='tip3p', padding=9.0*unit.angstrom)
-    solvated_topology = modeller.getTopology()
-    solvated_positions = modeller.getPositions()
-    solvated_system = system_generator.build_system(solvated_topology)
-    geometry_engine = geometry.FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
-
-    return topology_proposal, solvated_positions, new_positions
+    # Return the topology proposal and hybrid factory
+    return topology_proposal, hybrid_factory
 
 def generate_vacuum_hostguest_proposal():
     """
@@ -1032,3 +1009,51 @@ def generate_vacuum_hostguest_proposal():
     new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
 
     return topology_proposal, old_positions, new_positions
+
+def createSystemFromIUPAC(iupac_name='phenol', resname=None):
+    """
+    Create an OpenMM system out of an oemol
+
+    Parameters
+    ----------
+    iupac_name : str, optional, default='phenol'
+        IUPAC molecule name
+    resname : str, optional, default=None
+        If not None, will set the residue name to specified string.
+        Otherwise, residue name will be iupac_name.
+
+    Returns
+    -------
+    molecule : openeye.OEMol
+        OEMol molecule
+    system : openmm.System object
+        OpenMM system
+    positions : [n,3] np.array of floats
+        Positions
+    topology : openmm.app.Topology object
+        Topology
+    """
+
+    # Create OEMol
+    oemol = createOEMolFromIUPAC(iupac_name, title=resname)
+
+    # Generate a topology.
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    topology = generateTopologyFromOEMol(oemol)
+
+    # Create system generator
+    from perses.tests.utils import get_data_filename
+    gaff_filename = get_data_filename('gaff.xml')
+    cache = get_data_filename('OEGAFFTemplateGenerator-cache.json')
+    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml'],
+        forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff},
+        oemols=[oemol],
+        cache=cache)
+
+    # Create the system
+    system = system_generator.build_system(topology)
+
+    # Extract positions
+    positions = extractPositionsFromOEMOL(oemol)
+
+    return oemol, system, positions, topology

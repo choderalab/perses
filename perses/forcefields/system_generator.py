@@ -60,7 +60,7 @@ class SystemGenerator(object):
         if oemols or cache:
             from .openmm_forcefield import OEGAFFTemplateGenerator
             # TODO: Add method to check which version of GAFF should be used based on presence of gaff.xml or gaff2.xml
-            self._generator = OEGAFFTemplateGenerator(oemols=oemols)
+            self._generator = OEGAFFTemplateGenerator(oemols=oemols, cache=cache)
             self._forcefield.registerTemplateGenerator(self._generator.generator)
 
         # Ensure that center-of-mass motion removal is not added
