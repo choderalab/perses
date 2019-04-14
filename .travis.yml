@@ -36,7 +36,7 @@ before_install:
   # Install Conda and dependencies
   - source devtools/travis-ci/install.sh
   # Add nighly openmm dev builds
-  - conda config --add channels omnia/label/dev
+  - conda config --add channels omnia-dev
   # Add openeye beta builds
   - conda config --add channels openeye/label/beta
   # Report Python version
