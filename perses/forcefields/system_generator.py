@@ -16,37 +16,40 @@ _logger = logging.getLogger("perses.forcefields.system_generator")
 
 class SystemGenerator(object):
     """
-    This is a utility class to generate OpenMM Systems from
-    topology objects.
+    This is a utility class to generate OpenMM Systems from OpenMM Topology objects.
 
-    Parameters
-    ----------
-    forcefields_to_use : list of string
-        List of the names of ffxml files that will be used in system creation.
-    forcefield_kwargs : dict of arguments to createSystem, optional
-        Allows specification of various aspects of system creation.
-    metadata : dict, optional
-        Metadata associated with the SystemGenerator.
-    barostat : MonteCarloBarostat, optional, default=None
-        If provided, a matching barostat will be added to the generated system.
-    oemols : list of openeye.oechem OEMol
-        Additional molecules that should be parameterized on the fly by OEGAFFTemplateGenerator
-    cache : filename or TinyDB instance
-        JSON filename or TinyDB instance that can be used to cache parameterized small molecules by OEGAFFTemplateGenerator
-    particle_charges : bool, optional, default=True
-        If False, particle charges will be zeroed
-    exception_charges : bool, optional, default=True
-        If False, exception charges will be zeroed.
-    particle_epsilon : bool, optional, default=True
-        If False, particle LJ epsilon will be zeroed.
-    exception_epsilon : bool, optional, default=True
-        If False, exception LJ epsilon will be zeroed.
-    torsions : bool, optional, default=True
-        If False, torsions will be zeroed.
     """
 
     def __init__(self, forcefields_to_use, forcefield_kwargs=None, metadata=None, barostat=None, oemols=None, cache=None,
         particle_charges=True, exception_charges=True, particle_epsilons=True, exception_epsilons=True, torsions=True):
+        """
+        Create a new SystemGenerator
+
+        Parameters
+        ----------
+        forcefields_to_use : list of string
+            List of the names of ffxml files that will be used in system creation.
+        forcefield_kwargs : dict of arguments to createSystem, optional
+            Allows specification of various aspects of system creation.
+        metadata : dict, optional
+            Metadata associated with the SystemGenerator.
+        barostat : MonteCarloBarostat, optional, default=None
+            If provided, a matching barostat will be added to the generated system.
+        oemols : list of openeye.oechem OEMol
+            Additional molecules that should be parameterized on the fly by OEGAFFTemplateGenerator
+        cache : filename or TinyDB instance
+            JSON filename or TinyDB instance that can be used to cache parameterized small molecules by OEGAFFTemplateGenerator
+        particle_charges : bool, optional, default=True
+            If False, particle charges will be zeroed
+        exception_charges : bool, optional, default=True
+            If False, exception charges will be zeroed.
+        particle_epsilon : bool, optional, default=True
+            If False, particle LJ epsilon will be zeroed.
+        exception_epsilon : bool, optional, default=True
+            If False, exception LJ epsilon will be zeroed.
+        torsions : bool, optional, default=True
+            If False, torsions will be zeroed.
+        """
         # Cache force fields and settings to use
         self._forcefield_xmls = forcefields_to_use
         self._forcefield_kwargs = forcefield_kwargs if forcefield_kwargs is not None else {}
