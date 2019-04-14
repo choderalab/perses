@@ -151,9 +151,6 @@ class NonequilibriumFEPSetup(object):
         self._old_ligand_md_topology = md.Topology.from_openmm(self._old_ligand_topology)
         self._new_liands_md_topology = md.Topology.from_openmm(self._new_ligand_topology)
 
-        #self._forcefield = app.ForceField(*forcefield_files)
-        #self._forcefield.loadFile(StringIO(ffxml))
-
         print("Generated forcefield")
 
         self._complex_md_topology_old = self._receptor_md_topology_old.join(self._old_ligand_md_topology)
@@ -182,8 +179,6 @@ class NonequilibriumFEPSetup(object):
                                                                         'hydrogenMass': 4 * unit.amus})
         else:
             self._system_generator = SystemGenerator(forcefield_files, oemols=mol_list, forcefield_kwargs={'constraints': app.HBonds})
-
-        self._system_generator._forcefield.loadFile(StringIO(ffxml))
 
         # self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_smiles, self._new_ligand_smiles, self._system_generator, residue_name="MOL")
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol,

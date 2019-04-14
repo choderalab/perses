@@ -13,7 +13,7 @@ dependencies:
   - numexpr
   - autograd
   - pymbar
-  - openmm >=7.3.1
+  - openmm >=7.4.0
   - openmoltools # may need to sort out ambermini/ambertools/parmed dependencies (we don't want ambertools)
   - openmmtools # may need to sort out ambermini/ambertools/parmed dependencies
   - numba

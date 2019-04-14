@@ -41,7 +41,6 @@ requirements:
     - progressbar2
     - yank
     - ambermini
-    - parmed
     - tinydb
     - tqdm
     - nose
