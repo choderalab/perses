@@ -402,7 +402,7 @@ def enumerate_undefined_stereocenters(molecule, verbose=False):
     molecule : openeye.oechem.OEMol
         The molecule whose stereocenters are to be expanded.
     verbose : bool, optional, default=False
-        If True, will print verbose output about undefined stereocenters.
+        If True, will print verbose output about undefined sgenerate_test_topology_proposal
 
     Returns
     -------
@@ -951,7 +951,7 @@ def create_vacuum_hybrid_system(old_iupac_name="styrene", new_iupac_name="2-phen
 
     """
 
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=old_iupac_name, proposed_mol_name=new_iupac_name)
+    topology_proposal, current_positions, new_positions = utils.generate_test_topology_proposal(current_mol_name=old_iupac_name, proposed_mol_name=new_iupac_name)
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
 
     # Return the topology proposal and hybrid factory

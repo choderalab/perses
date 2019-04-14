@@ -224,7 +224,7 @@ def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None,
         Can also disable 'exception_charge', 'particle_epsilon', 'exception_epsilon', and 'torsions' by setting to False
 
     """
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(old_iupac_name=name1, new_iupac_name=name2,
+    topology_proposal, current_positions, new_positions = utils.generate_test_topology_proposal(old_iupac_name=name1, new_iupac_name=name2,
         forcefield_kwargs=forcefield_kwargs, system_generator_kwargs=system_generator_kwargs)
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
     for idx, lambda_result in enumerate(results):
@@ -255,7 +255,7 @@ def test_difficult_overlap():
     name2 = 'nilotinib'
 
     print(name1, name2)
-    topology_proposal, solvated_positions, new_positions = utils.generate_solvated_hybrid_test_topology(old_iupac_name=name1, new_iupac_name=name2)
+    topology_proposal, solvated_positions, new_positions = utils.generate_test_topology_proposal(old_iupac_name=name1, new_iupac_name=name2, solvent=True)
     results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -267,7 +267,7 @@ def test_difficult_overlap():
             raise Exception(message)
 
     print(name2, name1)
-    topology_proposal, solvated_positions, new_positions = utils.generate_solvated_hybrid_test_topology(old_iupac_name=name2, new_iupac_name=name1)
+    topology_proposal, solvated_positions, new_positions = utils.generate_test_topology_proposal(old_iupac_name=name2, new_iupac_name=name1, solvent=True)
     results = run_hybrid_endpoint_overlap(topology_proposal, solvated_positions, new_positions)
 
     for idx, lambda_result in enumerate(results):
@@ -402,7 +402,7 @@ def test_position_output():
     import numpy as np
 
     #generate topology proposal
-    topology_proposal, old_positions, new_positions = utils.generate_vacuum_topology_proposal()
+    topology_proposal, old_positions, new_positions = utils.generate_test_topology_proposal()
 
     factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
 
@@ -413,7 +413,7 @@ def test_position_output():
     assert np.all(np.isclose(new_positions.in_units_of(unit.nanometers), new_positions_factory.in_units_of(unit.nanometers)))
 
 def test_generate_endpoint_thermodynamic_states():
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(old_iupac_name='propane', new_iupac_name='pentane')
+    topology_proposal, current_positions, new_positions = utils.generate_test_topology_proposal(old_iupac_name='propane', new_iupac_name='pentane')
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
 
     #get the relevant thermodynamic states:
