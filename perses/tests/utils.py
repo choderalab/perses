@@ -188,7 +188,7 @@ def createOEMolFromSMILES(smiles='CC', title='MOL'):
 
 def oemol_to_topology_and_positions(oemol):
     from perses.forcefields import generateTopologyFromOEMol
-    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
+    topology = generateTopologyFromOEMol(oemol)
     positions = extractPositionsFromOEMOL(oemol)
     return topology, positions
 
@@ -634,33 +634,40 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
 
+def canonicalize_SMILES(list_of_smiles):
+    """
+    Turn a list of smiles strings into openeye canonical isomeric smiles.
 
-def canonicalize_SMILES(smiles_list):
-    """Ensure all SMILES strings end up in canonical form.
     Stereochemistry must already have been expanded.
-    SMILES strings are converted to a OpenEye Topology and back again.
+
     Parameters
     ----------
-    smiles_list : list of str
-        List of SMILES strings
+    list_of_smiles : list of str
+        input smiles
+
     Returns
     -------
-    canonical_smiles_list : list of str
-        List of SMILES strings, after canonicalization.
+    list_of_canonicalized_smiles : list of str
+        canonical isomeric smiles
     """
+    from perses.rjmc.topology_proposal import OESMILES_OPTIONS
+    import tempfile
 
-    # Round-trip each molecule to a Topology to end up in canonical form
-    from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue, generateTopologyFromOEMol
-    from openeye import oechem
-    canonical_smiles_list = list()
-    for smiles in smiles_list:
-        molecule = smiles_to_oemol(smiles)
-        topology = generateTopologyFromOEMol(molecule)
-        residues = [ residue for residue in topology.residues() ]
-        new_molecule = generateOEMolFromTopologyResidue(residues[0])
-        new_smiles = oechem.OECreateIsoSmiString(new_molecule)
-        canonical_smiles_list.append(new_smiles)
-    return canonical_smiles_list
+    list_of_canonicalized_smiles = list()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mol2_filename = os.path.join(tmpdir, 'current.mol2')
+        ofs = oechem.oemolostream(mol2_filename)
+        for smiles in list_of_smiles:
+            mol = oechem.OEMol()
+            oechem.OESmilesToMol(mol, smiles)
+            # TODO: Warn if incomplete stereochemistry is specified
+            oechem.OEAddExplicitHydrogens(mol)
+            can_smi = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
+            list_of_canonicalized_smiles.append(can_smi)
+
+        ofs.close()
+
+    return list_of_canonicalized_smiles
 
 def test_sanitizeSMILES():
     """
@@ -882,7 +889,7 @@ def generate_test_topology_proposal(old_iupac_name="benzene", new_iupac_name="to
 
     # Create old system
     old_oemol = createOEMolFromIUPAC(old_iupac_name)
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    from perses.forcefields import generateTopologyFromOEMol
     old_topology = generateTopologyFromOEMol(old_oemol)
     old_positions = extractPositionsFromOEMOL(old_oemol)
     old_smiles = oechem.OEMolToSmiles(old_oemol)
@@ -1038,7 +1045,7 @@ def createSystemFromIUPAC(iupac_name='phenol', resname=None):
     oemol = createOEMolFromIUPAC(iupac_name, title=resname)
 
     # Generate a topology.
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    from openmoltools.forcefields import generateTopologyFromOEMol
     topology = generateTopologyFromOEMol(oemol)
 
     # Create system generator

@@ -24,6 +24,8 @@ mpl_logger.setLevel(logging.WARNING)
 # Tests
 ################################################################################
 
+# TODO: Add tests for SystemGenerator
+
 class TestOEGAFFTemplateGenerator(unittest.TestCase):
     def setUp(self):
         from openeye import oechem

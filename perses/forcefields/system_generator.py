@@ -163,6 +163,8 @@ class SystemGenerator(object):
 
         # Add barostat if requested.
         if self._barostat is not None:
+            import numpy as np
+            from simtk import openmm
             MAXINT = np.iinfo(np.int32).max
             barostat = openmm.MonteCarloBarostat(*self._barostat)
             seed = np.random.randint(MAXINT)

@@ -670,8 +670,9 @@ class OEGAFFTemplateGenerator(object):
         for oebond in oemol_template.GetBonds():
             template_graph.add_edge(oebond.GetBgn().GetName(), oebond.GetEnd().GetName())
 
-        print(f'residue_graph: nodes {len(list(residue_graph.nodes))} edges {len(list(residue_graph.edges))}')
-        print(f'template_graph: nodes {len(list(template_graph.nodes))} edges {len(list(template_graph.edges))}')
+        # DEBUG
+        #print(f'residue_graph: nodes {len(list(residue_graph.nodes))} edges {len(list(residue_graph.edges))}')
+        #print(f'template_graph: nodes {len(list(template_graph.nodes))} edges {len(list(template_graph.edges))}')
 
         # Determine graph isomorphism
         from networkx.algorithms import isomorphism

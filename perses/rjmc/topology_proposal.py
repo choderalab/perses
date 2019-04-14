@@ -2049,7 +2049,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         # Determine SMILES string for current small molecule
         if current_mol is None:
-            current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
+            raise ValueError('current_mol must be specified')
         else:
             # TODO: Make sure we're using canonical mol to smiles conversion
             current_mol_smiles = oechem.OEMolToSmiles(current_mol)
@@ -2178,6 +2178,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             isomeric canonical SMILES
 
         """
+        # TODO: This must be replaced with matching the SMILES graph within the Topology
+        # until we can use the openforcefield Topology object
         chemical_state_key, _ = self._topology_to_smiles(topology)
         return chemical_state_key
 
