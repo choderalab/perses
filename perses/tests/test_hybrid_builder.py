@@ -10,7 +10,7 @@ except ImportError:
 
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, TopologyProposal
+from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
 from perses.tests import utils
 import openeye.oechem as oechem
 from openmmtools import alchemy
