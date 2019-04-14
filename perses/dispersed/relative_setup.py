@@ -8,7 +8,7 @@ import openmmtools
 import openmmtools.alchemy as alchemy
 import pymbar
 import simtk.openmm as openmm
-import simtk.openmm.app as app
+from simtk.openmm import app
 import simtk.unit as unit
 import numpy as np
 from perses.tests.utils import giveOpenmmPositionsToOEMOL, get_data_filename, extractPositionsFromOEMOL
@@ -163,6 +163,11 @@ class NonequilibriumFEPSetup(object):
         self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions_old
         self._complex_positions_old[n_atoms_protein_old:, :] = self._old_ligand_positions
 
+        # DEBUG: Write PDB file
+        with open('complex.pdb','w') as outfile:
+            print('Writing complex.pdb')
+            app.PDBFile.writeFile(self._complex_topology_old, self._complex_positions_old, file=outfile, keepIds=True)
+
         if self._solvate:
             self._nonbonded_method = app.PME
         else:
@@ -254,10 +259,11 @@ class NonequilibriumFEPSetup(object):
         modeller = app.Modeller(topology, positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name != "MOL"]
         modeller.delete(hs)
-        modeller.addHydrogens(forcefield=self._system_generator._forcefield)
+        #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
+        modeller.addHydrogens()
         if self._solvate:
             print("preparing to add solvent")
-            modeller.addSolvent(self._system_generator._forcefield, model=model, padding=self._padding)
+            modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding)
             solvated_topology = modeller.getTopology()
             solvated_positions = modeller.getPositions()
             print("solvent added, parameterizing")

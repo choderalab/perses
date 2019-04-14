@@ -35,6 +35,8 @@ before_install:
   - ulimit -a
   # Install Conda and dependencies
   - source devtools/travis-ci/install.sh
+  # Add nighly openmm dev builds
+  - conda config --add channels omnia/label/dev
   - python -V
   # Unpack encrypted OpenEye license file
   - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then openssl aes-256-cbc -K $encrypted_e49582a90fb5_key -iv $encrypted_e49582a90fb5_iv -in devtools/travis-ci/oe_license.txt.enc -out $OE_LICENSE -d; fi
