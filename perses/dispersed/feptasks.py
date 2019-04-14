@@ -138,11 +138,10 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
 
-        integrator.reset()
-
         sampler_state.apply_to_context(context, ignore_velocities=False)
 
         # Subclasses may implement _before_integration().
+        integrator.reset()
         self._before_integration(context, thermodynamic_state)
 
         self._cumulative_work[0] = integrator.get_protocol_work(dimensionless=True)
@@ -198,12 +197,12 @@ class ExternalNonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         thermodynamic_state : openmmtools.states.ThermodynamicState
             the thermodynamic state for which this integrator is cached.
         """
-        self._integrator.reset()
+        #self._integrator.reset()  # TODO: We can't do this unless the integrator is bound to a context
         self._current_total_work = 0
 
     def _before_integration(self, context: openmm.Context, thermodynamic_state: states.ThermodynamicState):
         """Execute code after Context creation and before integration."""
-        self.reset()
+        pass
 
     @property
     def cumulative_work(self):
@@ -351,11 +350,10 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
 
-        integrator.reset()
-
         sampler_state.apply_to_context(context, ignore_velocities=False)
 
         # Subclasses may implement _before_integration().
+        integrator.reset() # TODO: We can move this into _before_integration if the integrator is passed as well
         self._before_integration(context, thermodynamic_state)
 
         self._cumulative_work[0] = integrator.get_protocol_work(dimensionless=True)
@@ -423,12 +421,12 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         thermodynamic_state : openmmtools.states.ThermodynamicState
             the thermodynamic state for which this integrator is cached.
         """
-        self._integrator.reset()
+        #self._integrator.reset() # TODO: We can't do this unless the integrator is bound to a context
         self._current_protocol_work = 0.0
 
     def _before_integration(self, context: openmm.Context, thermodynamic_state: states.ThermodynamicState):
         """Execute code after Context creation and before integration."""
-        self._integrator.reset()
+        pass
 
     @property
     def current_total_work(self):
