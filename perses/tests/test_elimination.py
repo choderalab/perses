@@ -38,6 +38,17 @@ istravis = os.environ.get('TRAVIS', None) == 'true'
 # TESTS
 ################################################################################
 
+# Alchemical functions for standard (non-softcore)
+forward_functions = {
+    'lambda_sterics_core': 'lambda',
+    'lambda_electrostatics_core': 'lambda',
+    'lambda_sterics_insert': '(2*lambda)*step(0.5-lambda) + 1*(1-step(0.5-lambda))',
+    'lambda_sterics_delete': '0*step(0.5-lambda) + 2*(lambda-0.5)*(1-step(0.5-lambda))',
+    'lambda_electrostatics_insert': '0*step(0.5-lambda) + 2*(lambda-0.5)*(1-step(0.5-lambda))',
+    'lambda_electrostatics_delete': '(2*lambda)*step(0.5-lambda) + 1*(1-step(0.5-lambda))',
+}
+reverse_functions = { parameter_name : f'1-({parameter_value})' for (parameter_name, parameter_value) in forward_functions.items() }
+
 def simulate(system, positions, nsteps=500, timestep=1.0*unit.femtoseconds, temperature=temperature, collision_rate=5.0/unit.picoseconds, platform=None):
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     if platform == None:
@@ -61,31 +72,6 @@ def simulate_hybrid(hybrid_system,functions, lambda_value, positions, nsteps=100
     integrator.step(nsteps)
     positions = context.getState(getPositions=True).getPositions(asNumpy=True)
     return positions
-
-def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
-    """
-    Generate a test topology proposal and positions for the hybrid test.
-    """
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
-
-    mol = createOEMolFromIUPAC(mol_name)
-    m, system, positions, topology = createSystemFromIUPAC(mol_name)
-
-    refmol = createOEMolFromIUPAC(ref_mol_name)
-
-    #map one of the rings
-    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
-
-    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
-    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
-    effective_atom_map = {value : value for value in atom_map.values()}
-
-    #make a topology proposal with the appropriate data:
-    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
-
-    return top_proposal, positions
 
 def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
 
@@ -178,7 +164,7 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_n
     -------
 
     """
-    from perses.annihilation import NCMCGHMCAlchemicalIntegrator
+    from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator
     from perses.annihilation.new_relative import HybridTopologyFactory
 
     #make the hybrid topology factory:
@@ -192,25 +178,16 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_n
 
     n_iterations = 50 #number of times to do NCMC protocol
 
-    #alchemical functions
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : 'lambda',
-        'lambda_angles' : 'lambda',
-        'lambda_torsions' : 'lambda'
-    }
-
     w_f = np.zeros(n_iterations)
     w_r = np.zeros(n_iterations)
 
     #make the alchemical integrators:
-    #forward_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
-    #reverse_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
+    #forward_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
+    #reverse_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
 
     #first, do forward protocol (lambda=0 -> 1)
     for i in range(n_iterations):
-        forward_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
+        forward_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, alchemical_functions=forward_functions, nsteps_neq=ncmc_nsteps)
         equil_positions = simulate_hybrid(hybrid_system,functions, 0.0, initial_hybrid_positions)
         context = openmm.Context(hybrid_system, forward_integrator, platform)
         context.setPositions(equil_positions)
@@ -221,7 +198,7 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_n
 
     #now, reverse protocol
     for i in range(n_iterations):
-        reverse_integrator = NCMCGHMCAlchemicalIntegrator(temperature, hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
+        reverse_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, alchemical_functions=reverse_functions, nsteps_neq=ncmc_nsteps)
         equil_positions = simulate_hybrid(hybrid_system,functions, 1.0, initial_hybrid_positions)
         context = openmm.Context(hybrid_system, reverse_integrator, platform)
         context.setPositions(equil_positions)
@@ -265,7 +242,7 @@ def check_alchemical_null_elimination(topology_proposal, positions, ncmc_nsteps=
     }
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCEngine
-    ncmc_engine = NCMCEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
+    ncmc_engine = NCMCEngine(temperature=temperature, functions=forward_functions, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
     if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -339,22 +316,18 @@ def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nstep
         Number of NCMC switching steps, or 0 for instantaneous switching.
     NSIGMA_MAX : float, optional, default=6.0
     """
-    functions = {
-        'lambda_sterics' : 'lambda',
-        'lambda_electrostatics' : 'lambda',
-        'lambda_bonds' : 'lambda',
-        'lambda_angles' : 'lambda',
-        'lambda_torsions' : 'lambda'
-    }
+    # TODO: This test needs to be fixed
+    # Use softcore electrostatics?
+
     # Initialize engine
-    from perses.annihilation import NCMCGHMCAlchemicalIntegrator
+    from openmmtools.integrators import AlchemicalNonequilibriumLangevinIntegrator
     from perses.annihilation.new_relative import HybridTopologyFactory
 
     #The current and "proposed" positions are the same, since the molecule is not changed.
     factory = HybridTopologyFactory(topology_proposal, positions, positions)
 
-    forward_integrator = NCMCGHMCAlchemicalIntegrator(temperature, factory.hybrid_system, functions, nsteps=ncmc_nsteps, direction='insert')
-    reverse_integrator = NCMCGHMCAlchemicalIntegrator(temperature, factory.hybrid_system, functions, nsteps=ncmc_nsteps, direction='delete')
+    forward_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, alchemical_functions=forward_functions, nsteps_neq=ncmc_nsteps)
+    reverse_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, alchemical_functions=reverse_functions, nsteps_neq=ncmc_nsteps)
 
     platform = openmm.Platform.getPlatformByName("Reference")
 
@@ -460,7 +433,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
     }
     # Initialize engine
     from perses.annihilation.ncmc_switching import NCMCHybridEngine
-    ncmc_engine = NCMCHybridEngine(temperature=temperature, functions=functions, nsteps=ncmc_nsteps)
+    ncmc_engine = NCMCHybridEngine(temperature=temperature, functions=forward_functions, nsteps=ncmc_nsteps)
 
     # Make sure that old system and new system are identical.
    # if not (topology_proposal.old_system == topology_proposal.new_system):
@@ -632,44 +605,22 @@ def test_ncmc_engine_molecule():
 @skipIf(istravis, "Skip expensive test on travis")
 def test_ncmc_hybrid_engine_molecule():
     """
-    Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
+    Test relative alchemical NCMC in vacuum and solvent.
     """
     mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene'], ['octane','propane']]
-    #mols_and_refs=[['pentane', 'propane']]
     if os.environ.get("TRAVIS", None) == 'true':
         mols_and_refs = [['naphthalene', 'benzene']]
 
-    for mol_ref in mols_and_refs:
-        from perses.tests.utils import createSystemFromIUPAC
-        [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
+    from perses.tests.utils import generate_test_topology_proposal
+    from perses.tests.utils import createSystemFromIUPAC
 
-        topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
-        #topology_proposal, positions = generate_solvated_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
-        for ncmc_nsteps in [0, 1, 50]:
-            f = partial(check_alchemical_hybrid_elimination_bar, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
-            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
-            yield f
-
-@skipIf(istravis, "Skip expensive test on travis")
-def test_ncmc_hybrid_explicit_engine_molecule():
-    """
-    Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
-    """
-    #mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene'], ['octane','propane']]
-    mols_and_refs=[['pentane', 'propane']]
-    if os.environ.get("TRAVIS", None) == 'true':
-        mols_and_refs = [['naphthalene', 'benzene']]
-
-    for mol_ref in mols_and_refs:
-        from perses.tests.utils import createSystemFromIUPAC
-        [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
-
-        #topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
-        topology_proposal, positions = generate_solvated_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
-        for ncmc_nsteps in [0, 1, 50]:
-            f = partial(check_alchemical_hybrid_elimination_bar, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
-            f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
-            yield f
+    for solvent in [False, True]:
+        for (old_iupac_name, new_iupac_name) in mols_and_refs:
+            topology_proposal, old_positions, new_positions = generate_test_topology_proposal(old_iupac_name=old_iupac_name, new_iupac_name=new_iupac_name, solvent=solvent)
+            for ncmc_nsteps in [0, 1, 50]:
+                f = partial(check_alchemical_hybrid_elimination_bar, topology_proposal, old_positions, ncmc_nsteps=ncmc_nsteps)
+                f.description = f"Testing relative alchemical NCMC for {old_iupac_name} -> {new_iupac_name} (solvent: {solvent}; {ncmc_nsteps} NCMC steps)"
+                yield f
 
 @skipIf(istravis, "Skip expensive test on travis")
 def test_alchemical_elimination_peptide():
