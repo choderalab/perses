@@ -2411,8 +2411,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         molecule_name = self._residue_name
 
         matching_molecules = [res for res in topology.residues() if res.name[:3] == molecule_name[:3]]  # Find residue in topology by searching for residues with name "MOL"
-        if len(matching_molecules) != 1:
+        if len(matching_molecules) > 1:
             raise ValueError("More than one residue with the same name!")
+        if len(matching_molecules) == 0:
+            raise ValueError(f"No residue found with the resname {molecule_name[:3]}")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
         smiles_string = oechem.OECreateSmiString(oemol, OESMILES_OPTIONS)

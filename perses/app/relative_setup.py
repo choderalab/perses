@@ -5,7 +5,7 @@ from perses.utils.openeye import *
 from perses.utils.data import load_smi
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState
-from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator
+from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator,SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
@@ -76,11 +76,10 @@ class RelativeFEPSetup(object):
         self._new_ligand_index = new_ligand_index
         if type(self._ligand_input) is not list: # the ligand has been provided as a single file
             if self._ligand_input[-3:] == 'smi': #
-                from perses.utils.smallmolecules import sanitizeSMILES
                 self._ligand_smiles_old = load_smi(self._ligand_input,self._old_ligand_index)
                 self._ligand_smiles_new = load_smi(self._ligand_input,self._new_ligand_index)
 
-                all_old_mol = createSystemFromSMILES(self._ligand_smiles_old,title='OLD')
+                all_old_mol = createSystemFromSMILES(self._ligand_smiles_old,title='MOL')
                 self._ligand_oemol_old, self._ligand_system_old, self._ligand_positions_old, self._ligand_topology_old = all_old_mol
 
                 all_new_mol = createSystemFromSMILES(self._ligand_smiles_new,title='NEW')
@@ -192,17 +191,13 @@ class RelativeFEPSetup(object):
             else:
                 barostat = None
             self._system_generator = SystemGenerator(forcefield_files, barostat=barostat,
-                                                     forcefield_kwargs={'nonbondedMethod': self._nonbonded_method,
-                                                                        'constraints': app.HBonds,
-                                                                        'hydrogenMass': 4 * unit.amus})
+                                                     forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
         else:
-            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'constraints': app.HBonds})
+            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,'constraints' : app.HBonds})
 
         self._system_generator._forcefield.loadFile(StringIO(ffxml))
 
-        self._proposal_engine = TwoMoleculeSetProposalEngine(self._ligand_oemol_old, self._ligand_oemol_new,
-                                                                     self._system_generator, residue_name="MOL",
-                                                                     atom_map=atom_map)
+        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_smiles_old, self._ligand_smiles_new], self._system_generator, residue_name='MOL')
 
         self._geometry_engine = FFAllAngleGeometryEngine()
 
@@ -237,7 +232,8 @@ class RelativeFEPSetup(object):
         elif 'vacuum' in phases:
             self._vacuum_positions_old = self._ligand_positions_old
             self._vacuum_topology_proposal = self._proposal_engine.propose(self._ligand_system_old,
-                                                                            self._ligand_topology_old)
+                                                                            self._ligand_topology_old,current_mol=self._ligand_oemol_old,
+                                                                           proposed_mol=self._ligand_oemol_new)
             self._vacuum_positions_new, _ = self._geometry_engine.propose(self._vacuum_topology_proposal,
                                                                                    self._vacuum_positions_old,
                                                                                    beta)
