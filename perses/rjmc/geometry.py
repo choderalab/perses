@@ -389,14 +389,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # Propose a torsion angle and calcualate its log probability
             if direction=='forward':
                 # Note that (r, theta) are dimensionless here
-                phi, logp_phi = self._propose_torsion(context, torsion_atom_indices, new_positions, r, theta, beta, self._n_torsion_divisions)
+                phi, logp_phi = self._propose_torsion(context, torsion_atom_indices, new_positions, r, theta, beta, self._n_torsion_divisions, bond, angle)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
             else:
                 import copy
                 old_positions_for_torsion = copy.deepcopy(old_positions)
                 # Note that (r, theta, phi) are dimensionless here
-                logp_phi = self._torsion_logp(context, torsion_atom_indices, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions)
+                logp_phi = self._torsion_logp(context, torsion_atom_indices, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions, bond, angle)
 
             #accumulate logp
             #if direction == 'reverse':
@@ -1228,7 +1228,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(phis, float)
         return xyzs_quantity, phis, bin_width
 
-    def _torsion_log_pmf(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions):
+    def _torsion_log_pmf(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle):
         """
         Calculate the torsion log probability using OpenMM, including all energetic contributions for the atom being driven
 
@@ -1279,6 +1279,32 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         xyzs, phis, bin_width = self._torsion_scan(torsion_atom_indices, positions, r, theta, n_divisions)
         xyzs = xyzs.value_in_unit_system(unit.md_unit_system) # make positions dimensionless again
         positions = positions.value_in_unit_system(unit.md_unit_system)
+
+        #we have to offset the potential by u(r) and u(theta)
+        # Retrieve relevant quantities for valence bond
+        r0 = bond.type.req # equilibrium bond distance, unit-bearing quantity
+        k = bond.type.k * self._bond_softening_constant # force constant, unit-bearing quantity
+        sigma_r = unit.sqrt((1.0/(beta*k))) # standard deviation, unit-bearing quantity
+
+        # Convert to dimensionless quantities in MD unit system
+        r0 = r0.value_in_unit_system(unit.md_unit_system)
+        k = k.value_in_unit_system(unit.md_unit_system)
+        sigma_r = sigma_r.value_in_unit_system(unit.md_unit_system)
+
+        u_r = 0.5*((r - r0)/sigma_r)**2
+
+        # Retrieve relevant quantities for valence angle
+        theta0 = angle.type.theteq
+        k = angle.type.k * self._angle_softening_constant
+        sigma_theta = unit.sqrt(1.0/(beta * k)) # standard deviation, unit-bearing quantity
+
+        # Convert to dimensionless quantities in MD unit system
+        theta0 = theta0.value_in_unit_system(unit.md_unit_system)
+        k = k.value_in_unit_system(unit.md_unit_system)
+        sigma_theta = sigma_theta.value_in_unit_system(unit.md_unit_system)
+
+        u_theta = 0.5*((theta - theta0)/sigma_theta)**2
+
         for i, xyz in enumerate(xyzs):
             # Set positions
             positions[atom_idx,:] = xyz
@@ -1289,7 +1315,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             potential_energy = state.getPotentialEnergy()
 
             # Store unnormalized log probabilities
-            logq_i = -beta*potential_energy
+            logq_i = -beta*potential_energy + u_r + u_theta
             logq[i] = logq_i
 
         # It's OK to have a few torsions with NaN energies,
@@ -1325,7 +1351,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(bin_width, float)
         return logp_torsions, phis, bin_width
 
-    def _propose_torsion(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions):
+    def _propose_torsion(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle):
         """
         Propose a torsion angle using OpenMM
 
@@ -1365,7 +1391,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute probability mass function for all possible proposed torsions
-        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions)
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle)
 
         # Draw a torsion bin and a torsion uniformly within that bin
         index = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
@@ -1380,7 +1406,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(logp, float)
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion_atom_indices, positions, r, theta, phi, beta, n_divisions):
+    def _torsion_logp(self, growth_context, torsion_atom_indices, positions, r, theta, phi, beta, n_divisions, bond, angle):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -1418,7 +1444,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute torsion probability mass function
-        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions)
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle)
 
         # Determine which bin the torsion falls within
         index = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
@@ -1927,7 +1953,7 @@ class NetworkXProposalOrder(object):
         for torsion in proposal_order:
             assert set(torsion[1:]).issubset(_set_of_atoms_with_positions), "Proposal Order Issue: a torsion atom is not position-defined"
             _set_of_atoms_with_positions.add(torsion[0])
-            
+
         return proposal_order, heavy_logp + hydrogen_logp
 
     def _propose_atoms_in_order(self, atom_group):
