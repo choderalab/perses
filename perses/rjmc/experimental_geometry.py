@@ -188,12 +188,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, current_positions)
             logp_proposal = 0.0
         else:
-            logp_proposal, new_positions = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
+            logp_proposal, new_positions, atom_placements, final_context_reduced_potential = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
             self.nproposed += 1
 
         check_dimensionality(new_positions, unit.nanometers)
         check_dimensionality(logp_proposal, float)
-        return new_positions, logp_proposal
+        return new_positions, logp_proposal, atom_placements, final_context_reduced_potential
 
 
     def logp_reverse(self, top_proposal, new_coordinates, old_coordinates, beta):
@@ -290,7 +290,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         new_positions : simtk.unit.Quantity with shape (n_atoms, 3) with units compatible with nanometers
             The new positions (same as input if direction='reverse')
         """
-        import mdtraj as md
+
         # Ensure all parameters have the expected units
         check_dimensionality(old_positions, unit.angstroms)
         if new_positions is not None:
@@ -312,6 +312,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # Create modified System object
             growth_system_generator = GeometrySystemGenerator(top_proposal.new_system, atom_proposal_order, global_parameter_name=growth_parameter_name, reference_topology=top_proposal.new_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
+            atoms_with_positions_system = growth_system_generator._atoms_with_positions_system
+
 
         elif direction=='reverse':
             if new_positions is None:
@@ -325,6 +327,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # Create modified System object
             growth_system_generator = GeometrySystemGenerator(top_proposal.old_system, atom_proposal_order, global_parameter_name=growth_parameter_name, reference_topology=top_proposal.old_topology, use_sterics=self.use_sterics)
             growth_system = growth_system_generator.get_modified_system()
+            atoms_with_positions_system = growth_system_generator._atoms_with_positions_system
         else:
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
@@ -342,37 +345,52 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from simtk import openmm
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        _integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        __integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, context)
         growth_parameter_value = 1
 
+        atoms_with_positions_context = openmm.Context(atoms_with_positions_system, _integrator, platform)
+        atoms_with_positions_context.setPositions(new_positions)
+        state = atoms_with_positions_context.getState(getEnergy=True)
+        atoms_with_positions_reduced_potential = beta*state.getPotentialEnergy()
+        #print("atoms with positions rp: {}".format(atoms_with_positions_reduced_potential))
+
+
+
         # Place each atom in predetermined order
         logging.debug("There are %d new atoms" % len(atom_proposal_order))
         atom_placements = list()
+        #print("torsion proposal order: {}".format(torsion_proposal_order))
+        _forces = growth_system.getForces()
+        #print("growth_system_generator forces: {}".format(_forces))
 
-        # Get the bonds in the new system as a dict
-        bond_list = [(bond[0].index, bond[1].index) for bond in structure.bonds]
-        bond_dict = {}
-        for atom in structure.atoms:
-            atom_index = atom.index
-            other_bonded_atoms = list(set(np.array([bond_pair if atom_index in bond_pair for bond_pair in bond_list]).flatten()) - set([atom_index]))
-            bond_dict[atom_index: other_bonded_atoms]
+        # #bonds
+        # _num_bonds = growth_system.getForce(0).getNumBonds()
+        # for bond_idx in range(_num_bonds):
+        #     print(growth_system.getForce(0).getBondParameters(bond_idx))
+        #
+        # #angles
+        # print()
+        # _num_angles = growth_system.getForce(1).getNumAngles()
+        # for angle_idx in range(_num_angles):
+        #     print(growth_system.getForce(1).getAngleParameters(angle_idx))
+        #
+        # #torsions
+        # print()
+        # _num_torsions = growth_system.getForce(2).getNumTorsions()
+        # for torsion_idx in range(_num_torsions):
+        #     print(growth_system.getForce(2).getTorsionParameters(torsion_idx))
 
         for torsion_atom_indices in torsion_proposal_order:
             # Get parmed Structure Atom objects associated with torsion
             atom, bond_atom, angle_atom, torsion_atom = [ structure.atoms[index] for index in torsion_atom_indices ]
 
-            # Get other topological bonded atoms associated with bond_atom if they have positions
-            positioned_bonded_atoms = [bonded_atom if bonded_atom in atoms_with_positions for bonded_atom in bond_dict[bond_atom]]
-
-            #compute the dihedrals of the positioned topological bonded atoms w.r.t the current torsion
-            t = md.Trajectory(positions, topology)
-            theta = md.compute_angles(t, np.array([theta_indices]))
-            phi = md.compute_dihedrals(t, np.array([phi_indices]))
-
-
             # Activate the new atom interactions
+            #print("growth parameter value: {}".format(growth_parameter_value))
             growth_system_generator.set_growth_parameter_index(growth_parameter_value, context=context)
+
             if self.verbose: _logger.info(f"Proposing atom {atom} from torsion {torsion_atom_indices}")
 
             # Get internal coordinates if direction is reverse
@@ -387,7 +405,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 if direction == 'forward':
                     r = self._propose_bond(bond, beta, self._n_bond_divisions)
 
-                logp_r = self._bond_logp(r, bond, beta, self._n_bond_divisions)
+                logp_r, lnZ_r = self._bond_logp(r, bond, beta, self._n_bond_divisions)
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
@@ -402,7 +420,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             if direction=='forward':
                 theta = self._propose_angle(angle, beta, self._n_angle_divisions)
 
-            logp_theta = self._angle_logp(theta, angle, beta, self._n_angle_divisions)
+            logp_theta, lnZ_theta = self._angle_logp(theta, angle, beta, self._n_angle_divisions)
 
             # Propose a torsion angle and calcualate its log probability
             if direction=='forward':
@@ -416,13 +434,40 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 # Note that (r, theta, phi) are dimensionless here
                 logp_phi = self._torsion_logp(context, torsion_atom_indices, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions, bond, angle)
 
+            #we have to offset the potential by u(r) and u(theta)
+            # Retrieve relevant quantities for valence bond
+            r0 = bond.type.req # equilibrium bond distance, unit-bearing quantity
+            k = bond.type.k * self._bond_softening_constant # force constant, unit-bearing quantity
+            sigma_r = unit.sqrt((1.0/(beta*k))) # standard deviation, unit-bearing quantity
+
+            # Convert to dimensionless quantities in MD unit system
+            r0 = r0.value_in_unit_system(unit.md_unit_system)
+            k = k.value_in_unit_system(unit.md_unit_system)
+            sigma_r = sigma_r.value_in_unit_system(unit.md_unit_system)
+
+            u_r = 0.5*((r - r0)/sigma_r)**2
+
+            # Retrieve relevant quantities for valence angle
+            theta0 = angle.type.theteq
+            k = angle.type.k * self._angle_softening_constant
+            sigma_theta = unit.sqrt(1.0/(beta * k)) # standard deviation, unit-bearing quantity
+
+            # Convert to dimensionless quantities in MD unit system
+            theta0 = theta0.value_in_unit_system(unit.md_unit_system)
+            k = k.value_in_unit_system(unit.md_unit_system)
+            sigma_theta = sigma_theta.value_in_unit_system(unit.md_unit_system)
+
+            u_theta = 0.5*((theta - theta0)/sigma_theta)**2
             #accumulate logp
             #if direction == 'reverse':
             if self.verbose: _logger.info('%8d logp_r %12.3f | logp_theta %12.3f | logp_phi %12.3f | log(detJ) %12.3f' % (atom.idx, logp_r, logp_theta, logp_phi, np.log(detJ)))
-
-            atom_placement_array = np.array([atom.idx,
-                                             r, theta, phi,
-                                             logp_r, logp_theta, logp_phi, np.log(detJ)])
+            # Compute potential energy
+            context.setPositions(new_positions)
+            state = context.getState(getEnergy=True)
+            reduced_potential_energy = beta*state.getPotentialEnergy()
+            # print("growth parameter: {}".format(growth_parameter_value))
+            # print("reduced_potential_energy: {}".format(reduced_potential_energy))
+            atom_placement_array = [atom.idx, u_r, u_theta, theta, phi, logp_r, logp_theta, logp_phi, np.log(detJ), reduced_potential_energy, lnZ_r, lnZ_theta, atoms_with_positions_reduced_potential]
             atom_placements.append(atom_placement_array)
 
             logp_proposal += logp_r + logp_theta + logp_phi - np.log(detJ) # TODO: Check sign of detJ
@@ -431,8 +476,22 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # DEBUG: Write PDB file for placed atoms
             atoms_with_positions.append(atom)
 
+        # assert that the energy of the new positions is ~= atoms_with_positions_reduced_potential + reduced_potential_energy
+        final_context = openmm.Context(top_proposal._new_system, __integrator, platform)
+        final_context.setPositions(new_positions)
+        state = final_context.getState(getEnergy=True)
+        final_context_reduced_potential = beta*state.getPotentialEnergy()
+        assert abs(final_context_reduced_potential - atoms_with_positions_reduced_potential - reduced_potential_energy) < 1e3
+        # print("final_context_reduced_potential: {}".format(final_context_reduced_potential))
+        # print("atoms with atoms_with_positions_reduced_potential: {}".format(atoms_with_positions_reduced_potential))
+        # print("difference (this should be zero!): {}".format(final_context_reduced_potential - atoms_with_positions_reduced_potential - reduced_potential_energy))
+
+        #compute energy of the final state...new_system
+
         # Clean up OpenMM Context since garbage collector is sometimes slow
         del context
+        del atoms_with_positions_context
+        del final_context
 
         #use a new array for each placement, since the variable size will be different.
         if self._storage:
@@ -440,7 +499,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         check_dimensionality(logp_proposal, float)
         check_dimensionality(new_positions, unit.nanometers)
-        return logp_proposal, new_positions
+        return logp_proposal, new_positions, atom_placements, final_context_reduced_potential
 
     @staticmethod
     def _oemol_from_residue(res, verbose=True):
@@ -938,6 +997,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # Form log probability
         from scipy.special import logsumexp
         log_p_i = 2*np.log(r_i+(bin_width/2.0)) - 0.5*((r_i+(bin_width/2.0)-r0)/sigma_r)**2
+        lnZ = np.log(bin_width*np.sum(np.exp(log_p_i)))
         log_p_i -= logsumexp(log_p_i)
 
         check_dimensionality(r_i, float)
@@ -988,7 +1048,20 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # Correct for division size
         logp = log_p_i[index] - np.log(bin_width)
 
-        return logp
+        #remove the numerator of the logp and render lnZ_r
+        r0 = bond.type.req # equilibrium bond distance, unit-bearing quantity
+        k = bond.type.k * self._bond_softening_constant # force constant, unit-bearing quantity
+        sigma_r = unit.sqrt((1.0/(beta*k))) # standard deviation, unit-bearing quantity
+
+        # Convert to dimensionless quantities in MD unit system
+        r0 = r0.value_in_unit_system(unit.md_unit_system)
+        k = k.value_in_unit_system(unit.md_unit_system)
+        sigma_r = sigma_r.value_in_unit_system(unit.md_unit_system)
+
+        u_r = 0.5*((r - r0)/sigma_r)**2
+        lnZ = -1*(logp - 2*np.log(r) + u_r)
+
+        return logp, lnZ
 
     def _propose_bond(self, bond, beta, n_divisions):
         """
@@ -1094,6 +1167,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # Compute log probability
         from scipy.special import logsumexp
         log_p_i = np.log(np.sin(theta_i+(bin_width/2.0))) - 0.5*((theta_i+(bin_width/2.0)-theta0)/sigma_theta)**2
+        lnZ = np.log(bin_width*np.sum(np.exp(log_p_i)))
         log_p_i -= logsumexp(log_p_i)
 
         check_dimensionality(theta_i, float)
@@ -1144,7 +1218,22 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # Correct for division size
         logp = log_p_i[index] - np.log(bin_width)
 
-        return logp
+        #ompute the lnZ for theta
+        # Retrieve relevant quantities for valence angle
+        theta0 = angle.type.theteq
+        k = angle.type.k * self._angle_softening_constant
+        sigma_theta = unit.sqrt(1.0/(beta * k)) # standard deviation, unit-bearing quantity
+
+        # Convert to dimensionless quantities in MD unit system
+        theta0 = theta0.value_in_unit_system(unit.md_unit_system)
+        k = k.value_in_unit_system(unit.md_unit_system)
+        sigma_theta = sigma_theta.value_in_unit_system(unit.md_unit_system)
+
+        u_theta = 0.5*((theta - theta0)/sigma_theta)**2
+
+        lnZ = -1*(logp - np.log(np.sin(theta)) + u_theta)
+
+        return logp, lnZ
 
     def _propose_angle(self, angle, beta, n_divisions):
         """
@@ -1293,10 +1382,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # Compute energies for all torsions
         logq = np.zeros(n_divisions) # logq[i] is the log unnormalized torsion probability density
+        #logq = []
         atom_idx = torsion_atom_indices[0]
         xyzs, phis, bin_width = self._torsion_scan(torsion_atom_indices, positions, r, theta, n_divisions)
         xyzs = xyzs.value_in_unit_system(unit.md_unit_system) # make positions dimensionless again
         positions = positions.value_in_unit_system(unit.md_unit_system)
+        #print("torsion scan")
 
         #we have to offset the potential by u(r) and u(theta)
         # Retrieve relevant quantities for valence bond
@@ -1335,6 +1426,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # Store unnormalized log probabilities
             logq_i = -beta*potential_energy + u_r + u_theta
             logq[i] = logq_i
+            #logq.append(potential_energy)
+
+        #min_energy = min(logq)
+        #logq = np.array([-beta*(energy) for energy in logq])
 
         # It's OK to have a few torsions with NaN energies,
         # but we need at least _some_ torsions to have finite energies
@@ -1346,6 +1441,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # Compute the normalized log probability
         from scipy.special import logsumexp
+        #print("lnZ_phi: {}".format(logsumexp(logq)))
         logp_torsions = logq - logsumexp(logq)
 
         # Write proposed torsion energies to a PDB file for visualization or debugging, if desired
@@ -1367,7 +1463,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(logp_torsions, float)
         assert check_dimensionality(phis, float)
         assert check_dimensionality(bin_width, float)
-        return logp_torsions, phis, bin_width
+        return logp_torsions, phis, bin_width, logq
 
     def _propose_torsion(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle):
         """
@@ -1409,7 +1505,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute probability mass function for all possible proposed torsions
-        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle)
+        logp_torsions, phis, bin_width, logq = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle)
 
         # Draw a torsion bin and a torsion uniformly within that bin
         index = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
@@ -1419,6 +1515,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # Draw uniformly within the bin
         phi = np.random.uniform(phi, phi+bin_width)
         logp -= np.log(bin_width)
+
+        #extract lnZ_phi
+        #lnZ = -1*(logp - logq[index])
+
 
         assert check_dimensionality(phi, float)
         assert check_dimensionality(logp, float)
@@ -1462,7 +1562,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute torsion probability mass function
-        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle)
+        logp_torsions, phis, bin_width, logq  = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle)
 
         # Determine which bin the torsion falls within
         index = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)
@@ -1557,10 +1657,12 @@ class GeometrySystemGenerator(object):
         # Create new System
         from simtk import openmm
         growth_system = openmm.System()
+        atoms_with_positions_system = openmm.System()
 
         # Copy particles
         for i in range(reference_system.getNumParticles()):
             growth_system.addParticle(reference_system.getParticleMass(i))
+            atoms_with_positions_system.addParticle(reference_system.getParticleMass(i))
 
         # We don't need to copy constraints, since we will not be running dynamics with this system
 
@@ -1568,6 +1670,8 @@ class GeometrySystemGenerator(object):
 
         # Create bond force
         modified_bond_force = openmm.CustomBondForce(self._HarmonicBondForceEnergy.format(global_parameter_name))
+        atoms_with_positions_bond_force = openmm.HarmonicBondForce()
+        atoms_with_positions_system.addForce(atoms_with_positions_bond_force)
         modified_bond_force.addGlobalParameter(global_parameter_name, default_growth_index)
         for parameter_name in ['r0', 'K', 'growth_idx']:
             modified_bond_force.addPerBondParameter(parameter_name)
@@ -1578,9 +1682,13 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx([p1, p2], growth_indices)
             if growth_idx > 0:
                 modified_bond_force.addBond(p1, p2, [r0, K, growth_idx])
+            else:
+                atoms_with_positions_bond_force.addBond(p1, p2, r0, K)
 
         # Create angle force
         modified_angle_force = openmm.CustomAngleForce(self._HarmonicAngleForceEnergy.format(global_parameter_name))
+        atoms_with_positions_angle_force = openmm.HarmonicAngleForce()
+        atoms_with_positions_system.addForce(atoms_with_positions_angle_force)
         modified_angle_force.addGlobalParameter(global_parameter_name, default_growth_index)
         for parameter_name in ['theta0', 'K', 'growth_idx']:
             modified_angle_force.addPerAngleParameter(parameter_name)
@@ -1591,9 +1699,13 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx([p1, p2, p3], growth_indices)
             if growth_idx > 0:
                 modified_angle_force.addAngle(p1, p2, p3, [theta0, K, growth_idx])
+            else:
+                atoms_with_positions_angle_force.addAngle(p1, p2, p3, theta0, K)
 
         # Create torsion force
         modified_torsion_force = openmm.CustomTorsionForce(self._PeriodicTorsionForceEnergy.format(global_parameter_name))
+        atoms_with_positions_torsion_force = openmm.PeriodicTorsionForce()
+        atoms_with_positions_system.addForce(atoms_with_positions_torsion_force)
         modified_torsion_force.addGlobalParameter(global_parameter_name, default_growth_index)
         for parameter_name in ['periodicity', 'phase', 'k', 'growth_idx']:
             modified_torsion_force.addPerTorsionParameter(parameter_name)
@@ -1604,6 +1716,8 @@ class GeometrySystemGenerator(object):
             growth_idx = self._calculate_growth_idx([p1, p2, p3, p4], growth_indices)
             if growth_idx > 0:
                 modified_torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, phase, k, growth_idx])
+            else:
+                atoms_with_positions_torsion_force.addTorsion(p1, p2, p3, p4, periodicity, phase, k)
 
         # Add (1,4) exceptions, regardless of whether 'use_sterics' is specified, because these are part of the valence forces.
         if 'NonbondedForce' in reference_forces.keys():
@@ -1667,6 +1781,7 @@ class GeometrySystemGenerator(object):
         # Store growth system
         self._growth_parameter_name = global_parameter_name
         self._growth_system = growth_system
+        self._atoms_with_positions_system = atoms_with_positions_system #note this is only bond, angle, and torsion forces
 
     def set_growth_parameter_index(self, growth_parameter_index, context=None):
         """
@@ -1922,11 +2037,15 @@ class NetworkXProposalOrder(object):
         self._heavy = []
 
         # Sort the new atoms into hydrogen and heavy atoms:
+        #print("     unique new atoms: {}".format(self._new_atoms))
         for atom in self._new_atoms_to_place:
             if atom.element == self._hydrogen:
                 self._hydrogens.append(atom.index)
             else:
                 self._heavy.append(atom.index)
+
+        #print("new heavy atoms to place: {}".format(self._heavy))
+        #print("new hydrogen atoms to place: {}".format(self._hydrogens))
 
         # Sanity check
         if len(self._hydrogens)==0 and len(self._heavy)==0:
@@ -1936,6 +2055,9 @@ class NetworkXProposalOrder(object):
 
         # Choose the first of the new atoms to find the corresponding residue:
         transforming_residue = self._new_atom_objects[self._new_atoms[0]].residue
+        #print("transforming residue:")
+        #for atom in list(transforming_residue.atoms()):
+        #    print(atom)
 
         self._residue_graph = self._residue_to_graph(transforming_residue)
 
