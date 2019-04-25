@@ -86,8 +86,8 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
 
     for _ in range(num_iterations):
         #generate new positions with geometry engine
-        new_positions, logp_forward = geometry_engine.propose(topology_proposal, pos_old, beta)
+        new_positions, logp_forward, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential = geometry_engine.propose(topology_proposal, pos_old, beta)
         assert logp_forward < 1e3, "A heavy atom was proposed in an improper order"
 
 
-#logp_forward_check_for_vacuum_topology_proposal()
+#test_logp_forward_check_for_vacuum_topology_proposal()

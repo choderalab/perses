@@ -422,8 +422,8 @@ class AnalyticalBeadSystems(object):
         _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
         for _replicate_idx in tqdm.trange(n_replicates):
             _old_positions = configurations_initial[_replicate_idx, :, :]
-            _new_positions, _lp = _geometry_engine.propose(topology_proposal, _old_positions, beta)
-            _lp_reverse = _geometry_engine.logp_reverse(topology_proposal, _new_positions, _old_positions, beta)
+            _new_positions, _lp, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential = _geometry_engine.propose(topology_proposal, _old_positions, beta)
+            _lp_reverse, _np_, _info_, _awprp_, _fcrp_ = _geometry_engine.logp_reverse(topology_proposal, _new_positions, _old_positions, beta)
             _initial_rp = self.compute_rp(topology_proposal.old_system, _old_positions)
             logPs[_replicate_idx, 0] = _initial_rp
             logPs[_replicate_idx, 1] = _lp
@@ -605,6 +605,8 @@ def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterati
         WORK_STDDEV_THRESHOLD = 0.1
         WORK_SUM_THRESHOLD = 0.1
         work_sum, work_forward_stddev, work_reverse_stddev = test.work_comparison()
+        print("work forward stddev: {}".format(work_forward_stddev))
+        print("work reverse stddev: {}".format(work_reverse_stddev))
         assert (work_forward_stddev <= WORK_STDDEV_THRESHOLD), "forward work stddev {} exceeds threshold {}".format(work_forward_stddev, WORK_STDDEV_THRESHOLD)
         assert (work_reverse_stddev <= WORK_STDDEV_THRESHOLD), "reverse work stddev {} exceeds threshold {}".format(work_reverse_stddev, WORK_STDDEV_THRESHOLD)
         assert np.all(abs(work_sum) <= WORK_SUM_THRESHOLD), "sum of works {} exceeds threshold {}".format(work_sum, WORK_SUM_THRESHOLD)
