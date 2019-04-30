@@ -89,7 +89,7 @@ class LinearValenceTestSystem(GeometryTestSystem):
     from an earlier test for the geometry engine.
     """
 
-    def __init__(self, bond=True, angle=True, torsion=True, n_atoms=4, add_extra_angle=False):
+    def __init__(self, bond=True, angle=True, torsion=True, n_atoms=4, add_extra_angle=True):
         """
         Arguments
         ---------
@@ -419,17 +419,24 @@ class AnalyticalBeadSystems(object):
         from perses.rjmc.geometry import FFAllAngleGeometryEngine
         final_positions = []
         logPs = np.zeros([n_replicates, 4])
-        _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0)
+        _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = True)
         for _replicate_idx in tqdm.trange(n_replicates):
             _old_positions = configurations_initial[_replicate_idx, :, :]
-            _new_positions, _lp, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential = _geometry_engine.propose(topology_proposal, _old_positions, beta)
-            _lp_reverse, _np_, _info_, _awprp_, _fcrp_ = _geometry_engine.logp_reverse(topology_proposal, _new_positions, _old_positions, beta)
+            _new_positions, _lp = _geometry_engine.propose(topology_proposal, _old_positions, beta)
+            _lp_reverse = _geometry_engine.logp_reverse(topology_proposal, _new_positions, _old_positions, beta)
             _initial_rp = self.compute_rp(topology_proposal.old_system, _old_positions)
-            logPs[_replicate_idx, 0] = _initial_rp
+            if not topology_proposal.unique_old_atoms: #the geometry engine doesn't run the backward proposal
+                logPs[_replicate_idx, 0] = _geometry_engine.forward_atoms_with_positions_reduced_potential
+                logPs[_replicate_idx, 3] = _geometry_engine.forward_final_context_reduced_potential
+            elif not topology_proposal.unique_new_atoms: #the geometry engine doesn't run forward
+                logPs[_replicate_idx, 0] = _geometry_engine.reverse_final_context_reduced_potential
+                logPs[_replicate_idx, 3] = _geometry_engine.reverse_atoms_with_positions_reduced_potential
+            else:
+                logPs[_replicate_idx, 0] = _geometry_engine.reverse_final_context_reduced_potential
+                logPs[_replicate_idx, 3] = _geometry_engine.forward_final_context_reduced_potential
             logPs[_replicate_idx, 1] = _lp
             logPs[_replicate_idx, 2] = _lp_reverse
             final_rp = self.compute_rp(topology_proposal.new_system, _new_positions)
-            logPs[_replicate_idx, 3] = final_rp
             final_positions.append(_new_positions)
         return logPs, final_positions
 
@@ -604,7 +611,7 @@ def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterati
 
         WORK_STDDEV_THRESHOLD = 0.1
         WORK_SUM_THRESHOLD = 0.1
-        work_sum, work_forward_stddev, work_reverse_stddev = test.work_comparison()
+        work_sum, work_forward_stddev, work_reverse_stddev = test.work_comparison(printer = True)
         print("work forward stddev: {}".format(work_forward_stddev))
         print("work reverse stddev: {}".format(work_reverse_stddev))
         assert (work_forward_stddev <= WORK_STDDEV_THRESHOLD), "forward work stddev {} exceeds threshold {}".format(work_forward_stddev, WORK_STDDEV_THRESHOLD)
