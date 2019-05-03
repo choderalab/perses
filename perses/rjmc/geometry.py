@@ -499,8 +499,19 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 previous_reduced_potential_energy = energy_logger[-1]
                 added_energy = reduced_potential_energy - previous_reduced_potential_energy
 
-            atom_placement_array = [atom.idx, u_r, u_theta, r, theta, phi, logp_r, logp_theta, logp_phi, np.log(detJ), added_energy, proposal_prob]
-            rjmc_info.append(atom_placement_array)
+            atom_placement_dict = {'atom_index': atom.idx,
+                                   'u_r': u_r,
+                                   'u_theta' : u_theta,
+                                   'r': r,
+                                   'theta': theta,
+                                   'phi': phi,
+                                   'logp_r': logp_r,
+                                   'logp_theta': logp_theta,
+                                   'logp_phi': logp_phi,
+                                   'log_detJ': np.log(detJ),
+                                   'added_energy': added_energy,
+                                   'proposal_prob': proposal_prob}
+            rjmc_info.append(atom_placement_dict)
 
             logp_proposal += logp_r + logp_theta + logp_phi - np.log(detJ) # TODO: Check sign of detJ
             growth_parameter_value += 1
@@ -1461,7 +1472,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             potential_energy = state.getPotentialEnergy()
 
             # Store unnormalized log probabilities
-            #logq_i = -beta*potential_energy + u_r + u_theta
             logq_i = -beta*potential_energy
             logq[i] = logq_i
 
@@ -1636,6 +1646,16 @@ class GeometrySystemGenerator(object):
         neglect_angles : bool
             whether to neglect (coupled) angle terms that would make the variance non-zero (within numerical tolerance threshold)
 
+        Attributes
+        ----------
+        growth_system : simtk.openmm.System object
+            The system containing all of the valence forces to be added (with the exception of neglected angle forces if neglect_angles == False) with respect
+            to the reference_system Parameter.
+        atoms_with_positions_system : simtk.openmm.System object
+            The system containing all of the core atom valence forces.  This is to be used in the proposal to assert that the final growth_system energy plus
+            the atoms_with_positions_system energy is equal to the final_system energy (for the purpose of energy bookkeeping).
+        neglected_angle_terms : list of ints
+            The indices of the HarmonicAngleForce parameters which are neglected for the purpose of minimizing work variance.  This will be empty if neglect_angles == False.
         """
         # TODO: Rename `growth_indices` (which is really a list of Atom objects) to `atom_growth_order` or `atom_addition_order`
 
