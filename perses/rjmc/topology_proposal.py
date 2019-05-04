@@ -36,8 +36,6 @@ from subprocess import getoutput  # If python 3
 # CONSTANTS
 ################################################################################
 
-OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
-
 #DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
 #DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
@@ -298,6 +296,7 @@ class SmallMoleculeAtomMapper(object):
         iso_can_smiles : str
             OpenEye isomeric canonical smiles corresponding to the input
         """
+        from perses.constants import OESMILES_OPTIONS
         iso_can_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
         return iso_can_smiles
 
@@ -2130,6 +2129,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol = oechem.OEMol()
         oechem.OESmilesToMol(mol, smiles)
         oechem.OEAddExplicitHydrogens(mol)
+        from perses.constants import OESMILES_OPTIONS
         iso_can_smiles = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
         return iso_can_smiles
 
@@ -2157,6 +2157,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             raise ValueError("More than one residue with the same name!")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
+        from perses.constants import OESMILES_OPTIONS
         smiles_string = oechem.OECreateSmiString(oemol, OESMILES_OPTIONS)
         final_smiles_string = smiles_string
         return final_smiles_string, oemol
@@ -2655,6 +2656,7 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
 
         else:
             logp_proposal = 0.0
+            from perses.constants import OESMILES_OPTIONS
             proposed_mol_smiles = oechem.OECreateSmiString(proposed_mol, OESMILES_OPTIONS)
 
         #You will get a weird error if you don't assign atom names.
@@ -2715,6 +2717,7 @@ class TwoMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
     """
 
     def __init__(self, old_mol, new_mol, system_generator, residue_name='MOL', atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None, always_change=True, atom_map=None):
+        from perses.constants import OESMILES_OPTIONS
         self._old_mol_smiles = oechem.OECreateSmiString(old_mol, OESMILES_OPTIONS)
         self._new_mol_smiles = oechem.OECreateSmiString(new_mol, OESMILES_OPTIONS)
         self._old_mol = old_mol

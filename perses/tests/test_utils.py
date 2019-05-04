@@ -45,7 +45,7 @@ def test_sanitizeSMILES():
         raise Exception("Molecules with undefined stereochemistry are not being properly expanded (size=%d)." % len(sanitized_smiles_list))
 
     # Check that all molecules can be round-tripped
-    from perses.rjmc.topology_proposal import OESMILES_OPTIONS
+    from perses.constants import OESMILES_OPTIONS
     from openeye import oechem
     for smiles in sanitized_smiles_list:
         molecule = oechem.OEGraphMol()
@@ -63,7 +63,6 @@ def test_canonicalize_SMILES():
 
     # Test molecule is already in canonical form
     for smiles in ['[H]c1c(n(c(n1)[H])C([H])([H])[C@@]([H])(C(=O)O[H])N([H])[H])[H]']:
-        print(smiles)
         smiles2 = canonicalize_SMILES([smiles])
         assert len(smiles2) == 1, f'Multiple canonical SMILES strings returned from single input {smiles}'
         assert smiles == smiles2[0], f'Canonicalization of already-canonical {smiles} produces non-identical {smiles2}'

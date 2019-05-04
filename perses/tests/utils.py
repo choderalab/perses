@@ -514,7 +514,7 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     """
     from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
     sanitized_smiles_set = set()
-    from perses.rjmc.topology_proposal import OESMILES_OPTIONS
+    from perses.constants import OESMILES_OPTIONS
 
     for smiles in smiles_list:
         molecule = OEGraphMol()
@@ -655,7 +655,7 @@ def canonicalize_SMILES(list_of_smiles):
     if type(list_of_smiles) is str:
         raise ValueError('canonicalize_SMILES only accepts lists of SMILES strings')
 
-    from perses.rjmc.topology_proposal import OESMILES_OPTIONS
+    from perses.constants import OESMILES_OPTIONS
     from openeye import oechem
 
     list_of_canonicalized_smiles = list()
