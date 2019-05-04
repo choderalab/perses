@@ -28,6 +28,33 @@ mpl_logger.setLevel(logging.WARNING)
 ################################################################################
 
 @attr('travis')
+def test_sanitizeSMILES():
+    """
+    Test SMILES sanitization.
+    """
+    from perses.tests.utils import sanitizeSMILES
+
+    smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
+
+    sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
+    if len(sanitized_smiles_list) != 2:
+        raise Exception("Molecules with undefined stereochemistry are not being properly dropped (size=%d)." % len(sanitized_smiles_list))
+
+    sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='expand')
+    if len(sanitized_smiles_list) != 4:
+        raise Exception("Molecules with undefined stereochemistry are not being properly expanded (size=%d)." % len(sanitized_smiles_list))
+
+    # Check that all molecules can be round-tripped
+    from perses.rjmc.topology_proposal import OESMILES_OPTIONS
+    from openeye import oechem
+    for smiles in sanitized_smiles_list:
+        molecule = oechem.OEGraphMol()
+        oechem.OESmilesToMol(molecule, smiles)
+        isosmiles = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)
+        if (smiles != isosmiles):
+            raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
+
+@attr('travis')
 def test_generate_test_topology_proposal():
     """Test generate_vacuum_topology_proposal"""
     from perses.tests.utils import generate_test_topology_proposal

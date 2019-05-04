@@ -501,7 +501,8 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     """
     from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
     sanitized_smiles_set = set()
-    OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
+    from perses.rjmc.topology_proposal import OESMILES_OPTIONS
+
     for smiles in smiles_list:
         molecule = OEGraphMol()
         OESmilesToMol(molecule, smiles)
@@ -525,19 +526,13 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
                     print('original: %s', smiles)
                 molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
                 for molecule in molecules:
-                    # isosmiles = OECreateIsoSmiString(molecule) ## IVY
-                    # sanitized_smiles_set.add(isosmiles) ## IVY
-
-                    smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)  ## IVY
-                    # smiles_string = oechem.OEMolToSmiles(molecule)
-                    sanitized_smiles_set.add(smiles_string)  ## IVY
+                    smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)
+                    sanitized_smiles_set.add(smiles_string)
                     if verbose: print('expanded: %s', smiles_string)
         else:
             # Convert to OpenEye's canonical isomeric SMILES.
-            # isosmiles = OECreateIsoSmiString(molecule)
-            smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS) ## IVY
-            # smiles_string = oechem.OEMolToSmiles(molecule)
-            sanitized_smiles_set.add(smiles_string) ## IVY
+            smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)
+            sanitized_smiles_set.add(smiles_string)
 
     sanitized_smiles_list = list(sanitized_smiles_set)
     return sanitized_smiles_list
@@ -668,29 +663,6 @@ def canonicalize_SMILES(list_of_smiles):
         ofs.close()
 
     return list_of_canonicalized_smiles
-
-def test_sanitizeSMILES():
-    """
-    Test SMILES sanitization.
-    """
-    smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
-
-    sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
-    if len(sanitized_smiles_list) != 2:
-        raise Exception("Molecules with undefined stereochemistry are not being properly dropped (size=%d)." % len(sanitized_smiles_list))
-
-    sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='expand')
-    if len(sanitized_smiles_list) != 4:
-        raise Exception("Molecules with undefined stereochemistry are not being properly expanded (size=%d)." % len(sanitized_smiles_list))
-
-    # Check that all molecules can be round-tripped.
-    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
-    for smiles in sanitized_smiles_list:
-        molecule = OEGraphMol()
-        OESmilesToMol(molecule, smiles)
-        isosmiles = OECreateIsoSmiString(molecule)
-        if (smiles != isosmiles):
-            raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
 
 def describe_oemol(mol):
     """
