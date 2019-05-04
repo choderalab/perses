@@ -45,6 +45,7 @@ import tempfile
 import copy
 from openmmtools.constants import kB
 from perses.forcefields import SystemGenerator
+import pytest
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
@@ -1938,7 +1939,6 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         from perses.tests.utils import createOEMolFromSMILES
         oemols = [ createOEMolFromSMILES(smiles) for smiles in molecules ]
 
-
         # Create a system generator for our desired forcefields.
         system_generators = dict()
         from pkg_resources import resource_filename
@@ -2400,18 +2400,12 @@ def checktestsystem(testsystem_class):
     # Check topologies
     check_topologies(testsystem)
 
-def test_testsystems():
-    """
-    Test instantiation of all test systems.
-    """
-    testsystem_names = ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
+@pytest.mark.parametrize("testsystem_name", ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem'])
+def test_testsystem(testsystem_name):
     niterations = 2 # number of iterations to run
-    for testsystem_name in testsystem_names:
-        import perses.tests.testsystems
-        testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
-        f = partial(checktestsystem, testsystem_class)
-        f.description = "Testing %s" % (testsystem_name)
-        yield f
+    import perses.tests.testsystems
+    testsystem_class = getattr(perses.tests.testsystems, testsystem_name)
+    checktestsystem(testsystem_class)
 
 def run_t4_inhibitors():
     """

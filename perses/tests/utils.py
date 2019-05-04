@@ -152,7 +152,7 @@ def createOEMolFromSMILES(smiles='CC', title='MOL'):
     Parameters
     ----------
     smiles : str, optional, default='CC'
-        The SMILES string to create the OEMol
+        SMILES string with stereochemistry explicitly specified
     title : str, optional, default='MOL'
         Title to assign molecule
 
@@ -160,6 +160,12 @@ def createOEMolFromSMILES(smiles='CC', title='MOL'):
     -------
     oemol : openeye.oechem.OEMol
         The requested molecule with positions and stereochemistry defined.
+
+    .. note ::
+
+       Currently, amides do not have a way of explicitly specifying stereochemistry,
+       and will be generated in arbitrary pyramidal geometries.
+
     """
     from openeye import oechem, oeiupac, oeomega
 
@@ -174,6 +180,9 @@ def createOEMolFromSMILES(smiles='CC', title='MOL'):
     oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
     oechem.OEAddExplicitHydrogens(mol)
 
+    if has_undefined_stereocenters(mol):
+        raise ValueError(f'Molecule {smiles} has undefined stereocenters')
+
     # Create atom names.
     oechem.OETriposAtomNames(mol)
 
@@ -181,7 +190,11 @@ def createOEMolFromSMILES(smiles='CC', title='MOL'):
     omega = oeomega.OEOmega()
     omega.SetMaxConfs(1)
     omega.SetIncludeInput(False)
-    omega.SetStrictStereo(True)
+
+    # TODO: SetStrictStereo must be set to False to ensure pyramidal amides
+    # do not fail with a warning
+    omega.SetStrictStereo(False)
+
     omega(mol)
 
     return mol
@@ -658,7 +671,7 @@ def canonicalize_SMILES(list_of_smiles):
         list_of_canonicalized_smiles.append(canonical_smiles)
 
     return list_of_canonicalized_smiles
-    
+
 def describe_oemol(mol):
     """
     Render the contents of an OEMol to a string.
