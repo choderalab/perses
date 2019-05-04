@@ -622,7 +622,7 @@ def test_torsion_log_discrete_pdf():
     torsion_atom_indices = [torsion.atom1.idx, torsion.atom2.idx, torsion.atom3.idx, torsion.atom4.idx]
 
     #Calculate the torsion log pmf according to the geometry engine
-    torsion_log_discrete_pdf, phis, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion_atom_indices, testsystem.positions, r, theta, beta, n_divisions)
+    torsion_log_discrete_pdf, phis, bin_width, logq = geometry_engine._torsion_log_pmf(testsystem._context, torsion_atom_indices, testsystem.positions, r, theta, beta, n_divisions)
 
     #Calculate the torsion potential manually using Python
     manual_torsion_log_discrete_pdf = calculate_torsion_discrete_log_pdf_manually(beta, torsion_with_units, phis)
@@ -744,7 +744,7 @@ def test_propose_torsion():
 
     #calculate the log probability mass function for an array of phis
     # phis are numpy floats, with implied units of radians
-    log_p_i, phi_i, bin_width = geometry_engine._torsion_log_pmf(testsystem._context, torsion_atom_indices, testsystem.positions, r, theta, beta, n_divisions)
+    log_p_i, phi_i, bin_width, logq = geometry_engine._torsion_log_pmf(testsystem._context, torsion_atom_indices, testsystem.positions, r, theta, beta, n_divisions)
     assert np.isclose(np.exp(log_p_i).sum(), 1.0), 'torsion probability mass function is not normalized'
 
     # Compute the CDF
