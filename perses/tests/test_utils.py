@@ -55,6 +55,34 @@ def test_sanitizeSMILES():
             raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
 
 @attr('travis')
+def test_canonicalize_SMILES():
+    """
+    Test SMILES canonicalization.
+    """
+    from perses.tests.utils import canonicalize_SMILES
+
+    # Test molecule is already in canonical form
+    for smiles in ['[H]c1c(n(c(n1)[H])C([H])([H])[C@@]([H])(C(=O)O[H])N([H])[H])[H]']:
+        print(smiles)
+        smiles2 = canonicalize_SMILES([smiles])
+        assert len(smiles2) == 1, f'Multiple canonical SMILES strings returned from single input {smiles}'
+        assert smiles == smiles2[0], f'Canonicalization of already-canonical {smiles} produces non-identical {smiles2}'
+
+    # Test molecule is not in canonical form
+    for smiles in ['CC', 'CCC']:
+        smiles2 = canonicalize_SMILES([smiles])
+        assert len(smiles2) == 1, f'Multiple canonical SMILES strings returned from single input {smiles}'
+        assert smiles != smiles2, f'Canonicalization of non-canonical {smiles} produces identical {smiles2}'
+
+    # Test molecules with undefined stereochemistry are flagged
+    for smiles in ['[H]c1c(n(c(n1)[H])C([H])([H])C([H])(C(=O)O[H])N([H])[H])[H]']:
+        try:
+            smiles2 = canonicalize_SMILES([smiles])
+            raise Exception(f'canonicalize_SMILES should throw ValueError at undefined stereochemistry in {smiles}')
+        except ValueError as e:
+            pass
+
+@attr('travis')
 def test_generate_test_topology_proposal():
     """Test generate_vacuum_topology_proposal"""
     from perses.tests.utils import generate_test_topology_proposal

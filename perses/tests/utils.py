@@ -506,12 +506,7 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     for smiles in smiles_list:
         molecule = OEGraphMol()
         OESmilesToMol(molecule, smiles)
-
         oechem.OEAddExplicitHydrogens(molecule)
-
-        if verbose:
-            molecule.SetTitle(smiles)
-            oechem.OETriposAtomNames(molecule)
 
         if has_undefined_stereocenters(molecule, verbose=verbose):
             if mode == 'drop':
@@ -536,7 +531,6 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
 
     sanitized_smiles_list = list(sanitized_smiles_set)
     return sanitized_smiles_list
-
 
 def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=1200):
     """
@@ -645,25 +639,26 @@ def canonicalize_SMILES(list_of_smiles):
     list_of_canonicalized_smiles : list of str
         canonical isomeric smiles
     """
+    if type(list_of_smiles) is str:
+        raise ValueError('canonicalize_SMILES only accepts lists of SMILES strings')
+
     from perses.rjmc.topology_proposal import OESMILES_OPTIONS
-    import tempfile
+    from openeye import oechem
 
     list_of_canonicalized_smiles = list()
-    with tempfile.TemporaryDirectory() as tmpdir:
-        mol2_filename = os.path.join(tmpdir, 'current.mol2')
-        ofs = oechem.oemolostream(mol2_filename)
-        for smiles in list_of_smiles:
-            mol = oechem.OEMol()
-            oechem.OESmilesToMol(mol, smiles)
-            # TODO: Warn if incomplete stereochemistry is specified
-            oechem.OEAddExplicitHydrogens(mol)
-            can_smi = oechem.OECreateSmiString(mol, OESMILES_OPTIONS)
-            list_of_canonicalized_smiles.append(can_smi)
+    for smiles in list_of_smiles:
+        molecule = oechem.OEGraphMol()
+        oechem.OESmilesToMol(molecule, smiles)
+        oechem.OEAddExplicitHydrogens(molecule)
 
-        ofs.close()
+        if has_undefined_stereocenters(molecule):
+            raise ValueError(f'Molecule {smiles} has undefined stereocenters')
+
+        canonical_smiles = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)
+        list_of_canonicalized_smiles.append(canonical_smiles)
 
     return list_of_canonicalized_smiles
-
+    
 def describe_oemol(mol):
     """
     Render the contents of an OEMol to a string.
