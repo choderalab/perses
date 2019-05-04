@@ -116,6 +116,9 @@ def generateResidueTemplate(molecule, residue_atoms=None, normalize=True, gaff_v
     """
     from openeye import oechem
 
+    smiles = oechem.OEMolToSmiles(molecule)
+    _logger.info(f'Generating a residue template for {smiles}')
+
     # Make a copy of the molecule so we don't modify the original
     molecule = oechem.OEMol(molecule)
 
@@ -145,7 +148,11 @@ def generateResidueTemplate(molecule, residue_atoms=None, normalize=True, gaff_v
     omega.SetMaxConfs(1)
     omega.SetIncludeInput(False)
     omega.SetStrictStereo(True)
-    omega(molecule)
+    #omega(molecule)
+    ret_code = omega.Build(molecule)
+    if ret_code != oeomega.OEOmegaReturnCode_Success:
+        smiles = oechem.OEMolToSmiles(molecule)
+        raise Exception(f'Could not parameterize {smiles} due to unspecified stereochemistry')
 
     # Create temporary directory for running antechamber.
     import tempfile
@@ -255,7 +262,7 @@ def run_antechamber(molecule_name, input_filename, charge_method="bcc", net_char
     resname : bool, optional, default=False
         Set the residue name used within output files to molecule_name
     log_debug_output : bool, optional, default=False
-        If true, will send output of tleap to logger.
+        If true, will send output of tleap to_logger.
     gaff_version : str, default = 'gaff'
         One of ['gaff', 'gaff2']; selects which atom types to use.
 
@@ -306,7 +313,7 @@ def run_antechamber(molecule_name, input_filename, charge_method="bcc", net_char
         if resname:
             cmd += ' -rn %s' % molecule_name
 
-        if log_debug_output: logger.debug(cmd)
+        if log_debug_output: _logger.debug(cmd)
         output = getoutput(cmd)
         import os
         if not os.path.exists('out.mol2'):
@@ -321,11 +328,11 @@ def run_antechamber(molecule_name, input_filename, charge_method="bcc", net_char
             msg += read_file_contents(local_input_filename)
             msg += 8 * "----------" + '\n'
             raise Exception(msg)
-        if log_debug_output: logger.debug(output)
+        if log_debug_output: _logger.debug(output)
 
         # Run parmchk.
         cmd = "parmchk2 -i out.mol2 -f mol2 -o out.frcmod -s %s" % gaff_version
-        if log_debug_output: logger.debug(cmd)
+        if log_debug_output: _logger.debug(cmd)
         output = getoutput(cmd)
         if not os.path.exists('out.frcmod'):
             msg  = "parmchk2 failed to produce output frcmod file\n"
@@ -339,7 +346,7 @@ def run_antechamber(molecule_name, input_filename, charge_method="bcc", net_char
             msg += read_file_contents('out.mol2')
             msg += 8 * "----------" + '\n'
             raise Exception(msg)
-        if log_debug_output: logger.debug(output)
+        if log_debug_output: _logger.debug(output)
         check_for_errors(output)
 
         #Copy back
@@ -452,10 +459,10 @@ def run_tleap(molecule_name, gaff_mol2_filename, frcmod_filename, prmtop_filenam
         file_handle.close()
 
         cmd = "tleap -f %s " % file_handle.name
-        if log_debug_output: logger.debug(cmd)
+        if log_debug_output: _logger.debug(cmd)
 
         output = getoutput(cmd)
-        if log_debug_output: logger.debug(output)
+        if log_debug_output: _logger.debug(output)
 
         check_for_errors( output, other_errors = ['Improper number of arguments'] )
 
