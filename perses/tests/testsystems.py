@@ -39,7 +39,6 @@ from openmmtools import states
 from openmmtools.mcmc import MCMCSampler, LangevinSplittingDynamicsMove
 from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
-from perses.rjmc.topology_proposal import OESMILES_OPTIONS
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 import tempfile
 import copy

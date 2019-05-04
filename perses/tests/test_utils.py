@@ -34,7 +34,7 @@ def test_sanitizeSMILES():
     """
     from perses.tests.utils import sanitizeSMILES
 
-    smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
+    smiles_list = ['CC', 'CCC', 'c1cn(cn1)CC(C(=O)O)N']
 
     sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
     if len(sanitized_smiles_list) != 2:
@@ -62,7 +62,7 @@ def test_canonicalize_SMILES():
     from perses.tests.utils import canonicalize_SMILES
 
     # Test molecule is already in canonical form
-    for smiles in ['[H]c1c(n(c(n1)[H])C([H])([H])[C@@]([H])(C(=O)O[H])N([H])[H])[H]']:
+    for smiles in ['c1cn(cn1)C[C@@H](C(=O)O)N']:
         smiles2 = canonicalize_SMILES([smiles])
         assert len(smiles2) == 1, f'Multiple canonical SMILES strings returned from single input {smiles}'
         assert smiles == smiles2[0], f'Canonicalization of already-canonical {smiles} produces non-identical {smiles2}'
@@ -74,7 +74,7 @@ def test_canonicalize_SMILES():
         assert smiles != smiles2, f'Canonicalization of non-canonical {smiles} produces identical {smiles2}'
 
     # Test molecules with undefined stereochemistry are flagged
-    for smiles in ['[H]c1c(n(c(n1)[H])C([H])([H])C([H])(C(=O)O[H])N([H])[H])[H]']:
+    for smiles in ['c1cn(cn1)CC(C(=O)O)N']:
         try:
             smiles2 = canonicalize_SMILES([smiles])
             raise Exception(f'canonicalize_SMILES should throw ValueError at undefined stereochemistry in {smiles}')
