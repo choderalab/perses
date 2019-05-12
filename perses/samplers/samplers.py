@@ -1124,6 +1124,7 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
 
     def setup(self, n_states, temperature, storage_file):
         hybrid_system = self._factory.hybrid_system
+
         initial_hybrid_positions = self._factory.hybrid_positions
         lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
 
@@ -1148,7 +1149,8 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
         reporter = storage_file
 
         self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state,
-                    storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
+        #            storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
+                    storage=reporter, unsampled_thermodynamic_states=None)
 
 
 class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchangeSampler):
