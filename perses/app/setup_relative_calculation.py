@@ -218,7 +218,6 @@ def run_setup(setup_options):
         htf = dict()
         hss = dict()
         for phase in phases:
-            print(f"HERE {phase}")
             #TODO write a SAMSFEP class that mirrors NonequilibriumSwitchingFEP
             htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
