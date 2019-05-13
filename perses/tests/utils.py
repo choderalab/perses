@@ -331,12 +331,12 @@ def check_system(system):
         if len(set([i,j,k,l])) < 4:
             msg  = 'Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d\n' % (index,i,j,k,l)
             msg += 'Serialzed system to system.xml for inspection.\n'
-            from simtk.openmm import XmlSerializer
-            serialized_system = XmlSerializer.serialize(system)
-            outfile = open('system.xml', 'w')
-            outfile.write(serialized_system)
-            outfile.close()
             raise Exception(msg)
+    from simtk.openmm import XmlSerializer
+    serialized_system = XmlSerializer.serialize(system)
+    outfile = open('system.xml', 'w')
+    outfile.write(serialized_system)
+    outfile.close()
 
 def generate_endpoint_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
@@ -413,9 +413,8 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     new_positions : np.array, unit-bearing
         The positions of the new system
     """
-    from openmoltools import forcefield_generators
 
-    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import createOEMolFromIUPAC, extractPositionsFromOEMol
     from perses.utils.data import get_data_filename
     from perses.utils.smallmolecules import render_atom_mapping
 
@@ -430,7 +429,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     old_oemol = createOEMolFromIUPAC(current_mol_name)
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
     old_topology = generateTopologyFromOEMol(old_oemol)
-    old_positions = extractPositionsFromOEMOL(old_oemol)
+    old_positions = extractPositionsFromOEMol(old_oemol)
     old_smiles = oechem.OEMolToSmiles(old_oemol)
     old_system = system_generator.build_system(old_topology)
 
@@ -510,7 +509,7 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     modeller = app.Modeller(top_old, pos_old)
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    modeller.addSolvent(forcefield, model='tip3p', padding=2.0*unit.angstrom)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
     solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
@@ -530,7 +529,6 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
 
     #generate new positions with geometry engine
     new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
-
     return topology_proposal, solvated_positions, new_positions
 
 def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
