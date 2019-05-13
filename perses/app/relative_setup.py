@@ -66,6 +66,8 @@ class RelativeFEPSetup(object):
         self._barostat_period = 50
         self._padding = solvent_padding
 
+        self._proposal_phase = None
+
         beta = 1.0 / (kB * temperature)
 
         mol_list = []
@@ -149,40 +151,9 @@ class RelativeFEPSetup(object):
         self._ligand_md_topology_old = md.Topology.from_openmm(self._ligand_topology_old)
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
 
-        # setting up complex leg
-        if 'complex' in phases:
-            if protein_pdb_filename:
-                self._protein_pdb_filename = protein_pdb_filename
-                protein_pdbfile = open(self._protein_pdb_filename, 'r')
-                pdb_file = app.PDBFile(protein_pdbfile)
-                protein_pdbfile.close()
-                self._receptor_positions_old = pdb_file.positions
-                self._receptor_topology_old = pdb_file.topology
-                self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
-
-            elif receptor_mol2_filename:
-                self._receptor_mol2_filename = receptor_mol2_filename
-                self._receptor_mol = createOEMolFromSDF(self._receptor_mol2_filename)
-                mol_list.append(self._receptor_mol)
-                self._receptor_positions_old = extractPositionsFromOEMol(self._receptor_mol)
-                self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
-                self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
-            else:
-                raise ValueError("You need to provide either a protein pdb or a receptor mol2 to run a complex simulation.")
-
-            self._complex_md_topology_old = self._receptor_md_topology_old.join(self._ligand_md_topology_old)
-            self._complex_topology_old = self._complex_md_topology_old.to_openmm()
-
-            n_atoms_complex_old = self._complex_topology_old.getNumAtoms()
-            n_atoms_protein_old = self._receptor_topology_old.getNumAtoms()
-
-            self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_complex_old, 3]), unit=unit.nanometers)
-            self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions_old
-            self._complex_positions_old[n_atoms_protein_old:, :] = self._ligand_positions_old
-
-        if 'solvent' in phases:
+        if 'complex' in phases or 'solvent' in phases:
             self._nonbonded_method = app.PME
-        else:
+        elif 'vacuum' in phases:
             self._nonbonded_method = app.NoCutoff
 
         if pressure is not None:
@@ -193,7 +164,7 @@ class RelativeFEPSetup(object):
             self._system_generator = SystemGenerator(forcefield_files, barostat=barostat,
                                                      forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
         else:
-            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,'constraints' : app.HBonds})
+            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
 
         self._system_generator._forcefield.loadFile(StringIO(ffxml))
 
@@ -201,7 +172,12 @@ class RelativeFEPSetup(object):
 
         self._geometry_engine = FFAllAngleGeometryEngine()
 
+        # if we are running multiple phases, we only want to generate one topology proposal, and use the same one for the other legs
+        # this is tracked using _proposal_phase
         if 'complex' in phases:
+            _logger.info('Generating the topology proposal from the complex leg')
+            self._nonbonded_method = app.PME
+            self._setup_complex_phase(protein_pdb_filename,receptor_mol2_filename)
             self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
             self._complex_topology_old, self._complex_positions_old)
 
@@ -209,68 +185,115 @@ class RelativeFEPSetup(object):
 
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                                                                 self._complex_topology_old_solvated)
+            self._proposal_phase = 'complex'
             self._complex_positions_new_solvated, _ = self._geometry_engine.propose(self._complex_topology_proposal,
                                                                                 self._complex_positions_old_solvated,
                                                                                 beta)
-            if 'solvent' in phases: # want to get solvent leg from complex one
-                self._solvent_topology_proposal, self._ligand_positions_old_solvated = self._generate_ligand_only_topologies(
-                    self._complex_positions_old_solvated)
-                self._ligand_positions_new_solvated, _ = self._geometry_engine.propose(self._solvent_topology_proposal,
-                                                                       self._ligand_positions_old_solvated, beta)
 
-        elif 'solvent' in phases: # no complex phase, so generating solvent phase from scratch
-            self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
+        if 'solvent' in phases:
+            if self._proposal_phase is None:
+                self._nonbonded_method = app.PME
+                _logger.info('No complex leg, so performing topology proposal for solvent leg')
+                self._ligand_topology_old_solvated, self._ligand_positions_old_solvated, self._ligand_system_old_solvated = self._solvate_system(
                 self._ligand_topology_old, self._ligand_positions_old)
+                self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
 
-            self._ligand_md_topology_old_solvated = md.Topology.from_openmm(self._ligand_topology_old_solvated)
-
-            self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
+                self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
                                                                                     self._ligand_topology_old_solvated)
+                self._proposal_phase = 'solvent'
+            else:
+                _logger.info('Using the topology proposal from the complex leg')
+                self._solvent_topology_proposal, self._ligand_positions_old_solvated = self._generate_ligand_only_topologies(
+                    self._complex_topology_proposal, self._complex_positions_old_solvated)
             self._ligand_positions_new_solvated, _ = self._geometry_engine.propose(self._solvent_topology_proposal,
-                                                                                    self._ligand_positions_old_solvated,
-                                                                                    beta)
-        elif 'vacuum' in phases:
-            self._vacuum_positions_old = self._ligand_positions_old
-            self._vacuum_topology_proposal = self._proposal_engine.propose(self._ligand_system_old,
-                                                                            self._ligand_topology_old,current_mol=self._ligand_oemol_old,
-                                                                           proposed_mol=self._ligand_oemol_new)
+                                                                                    self._ligand_positions_old_solvated, beta)
+
+        if 'vacuum' in phases:
+            # need to change nonbonded cutoff and remove barostat for vacuum leg
+            self._nonbonded_method = app.NoCutoff
+            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,
+                                                    'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
+            if self._proposal_phase is None:
+                _logger.info('No complex or solvent leg, so performing topology proposal for vacuum leg')
+                self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
+                                                                                                         self._ligand_positions_old,vacuum=True)
+                self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
+                                                                                self._vacuum_topology_old)
+                self._proposal_phase = 'vacuum'
+            elif self._proposal_phase == 'complex':
+                _logger.info('Using the topology proposal from the complex leg')
+                self._vacuum_topology_proposal, self._vacuum_positions_old = self._generate_ligand_only_topologies(
+                    self._complex_topology_proposal, self._complex_positions_old_solvated, vacuum=True)
+            elif self._proposal_phase == 'solvent':
+                _logger.info('Using the topology proposal from the solvent leg')
+                self._vacuum_topology_proposal, self._vacuum_positions_old = self._generate_ligand_only_topologies(
+                    self._solvent_topology_proposal, self._ligand_positions_old_solvated,vacuum=True)
             self._vacuum_positions_new, _ = self._geometry_engine.propose(self._vacuum_topology_proposal,
-                                                                                   self._vacuum_positions_old,
-                                                                                   beta)
+                                                                          self._vacuum_positions_old,
+                                                                          beta)
 
+    def _setup_complex_phase(self,protein_pdb_filename,receptor_mol2_filename):
+        """
+        Runs setup on the protein/receptor file for relative simulations
 
-        #TODO sort handling of the vacuum leg
-        # def _generate_ligand_only_topologies (but from a solvent leg, rather than a complex leg)
-        # def _generate_ligand_only_topologies (but from a solvent leg, rather than a complex leg)
+        Parameters
+        ----------
+        protein_pdb_filename : str, default None
+            Protein pdb filename. If none, receptor_mol2_filename must be provided
+        receptor_mol2_filename : str, default None
+            Receptor mol2 filename. If none, protein_pdb_filename must be provided
+        """
+        if protein_pdb_filename:
+            self._protein_pdb_filename = protein_pdb_filename
+            protein_pdbfile = open(self._protein_pdb_filename, 'r')
+            pdb_file = app.PDBFile(protein_pdbfile)
+            protein_pdbfile.close()
+            self._receptor_positions_old = pdb_file.positions
+            self._receptor_topology_old = pdb_file.topology
+            self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
 
+        elif receptor_mol2_filename:
+            self._receptor_mol2_filename = receptor_mol2_filename
+            self._receptor_mol = createOEMolFromSDF(self._receptor_mol2_filename)
+            mol_list.append(self._receptor_mol)
+            self._receptor_positions_old = extractPositionsFromOEMol(self._receptor_mol)
+            self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(self._receptor_mol)
+            self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
+        else:
+            raise ValueError("You need to provide either a protein pdb or a receptor mol2 to run a complex simulation.")
 
-    def _generate_ligand_only_topologies(self, old_positions):
+        self._complex_md_topology_old = self._receptor_md_topology_old.join(self._ligand_md_topology_old)
+        self._complex_topology_old = self._complex_md_topology_old.to_openmm()
+
+        n_atoms_complex_old = self._complex_topology_old.getNumAtoms()
+        n_atoms_protein_old = self._receptor_topology_old.getNumAtoms()
+
+        self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_complex_old, 3]), unit=unit.nanometers)
+        self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions_old
+        self._complex_positions_old[n_atoms_protein_old:, :] = self._ligand_positions_old
+
+    def _generate_ligand_only_topologies(self, topology_proposal, old_positions,vacuum=False):
         """
         This method generates ligand-only topologies and positions from a TopologyProposal containing a solvated complex.
         The output of this method is then used when building the solvent-phase simulation with the same atom map.
 
         Parameters
         ----------
-        topology_proposal : perses.rjmc.TopologyProposal
-             TopologyProposal representing the solvated complex transformation
+        old_positions : array
+            Positions of the fully solvated protein ligand syste
 
         Returns
         -------
-        old_ligand_topology : app.Topology
-            The old topology without the receptor or solvent
-        new_ligand_topology : app.Topology
-            The new topology without the receptor or solvent
-        old_ligand_positions : [m, 3] ndarray of Quantity nm
-            The positions of the old ligand without receptor or solvent
-        new_ligand_positions : [n, 3] ndarray of Quantity nm
-            The positions of the new ligand without receptor or solvent
-        atom_map : dict of int: it
-            The mapping between the two topologies without ligand or solvent.
-        """
-        old_complex = md.Topology.from_openmm(self._complex_topology_proposal.old_topology)
-        new_complex = md.Topology.from_openmm(self._complex_topology_proposal.new_topology)
+        ligand_topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+            Topology proposal object of the ligand without complex
 
-        complex_atom_map = self._complex_topology_proposal.old_to_new_atom_map
+        old_solvated_positions : array
+            positions of the system without complex
+        """
+        old_complex = md.Topology.from_openmm(topology_proposal.old_topology)
+        new_complex = md.Topology.from_openmm(topology_proposal.new_topology)
+
+        atom_map = topology_proposal.old_to_new_atom_map
 
         old_mol_start_index, old_mol_len = self._proposal_engine._find_mol_start_index(old_complex.to_openmm())
         new_mol_start_index, new_mol_len = self._proposal_engine._find_mol_start_index(new_complex.to_openmm())
@@ -279,14 +302,13 @@ class RelativeFEPSetup(object):
         old_pos[:, :] = old_positions
         old_ligand_positions = old_pos[old_mol_start_index:(old_mol_start_index + old_mol_len), :]
 
-
         # subset the topologies:
         old_ligand_topology = old_complex.subset(old_complex.select("resname == 'MOL' "))
         new_ligand_topology = new_complex.subset(new_complex.select("resname == 'MOL' "))
 
         # solvate the old ligand topology:
         old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
-            old_ligand_topology.to_openmm(), old_ligand_positions)
+            old_ligand_topology.to_openmm(), old_ligand_positions, vacuum=vacuum)
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -296,6 +318,7 @@ class RelativeFEPSetup(object):
         # append the solvent to the new ligand-only topology:
         new_solvated_ligand_md_topology = new_ligand_topology.join(solvent_only_topology)
         nsl, b = new_solvated_ligand_md_topology.to_dataframe()
+
         # dirty hack because new_solvated_ligand_md_topology.to_openmm() was throwing bond topology error
         new_solvated_ligand_md_topology = md.Topology.from_dataframe(nsl, b)
 
@@ -305,16 +328,13 @@ class RelativeFEPSetup(object):
         # create the new ligand system:
         new_solvated_system = self._system_generator.build_system(new_solvated_ligand_omm_topology)
 
-        new_to_old_atom_map = {complex_atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
-                               old_complex.select("resname == 'MOL' ") if x in complex_atom_map.keys()}
+        new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
+                               old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
         # adjust the atom map to account for the presence of solvent degrees of freedom:
         # By design, all atoms after the ligands are water, and should be mapped.
         n_water_atoms = solvent_only_topology.to_openmm().getNumAtoms()
         for i in range(n_water_atoms):
             new_to_old_atom_map[new_mol_len + i] = old_mol_len + i
-
-        # change the map to accomodate the TP:
-        # new_to_old_atom_map = {value : key for key, value in atom_map_adjusted.items()}
 
         # make a TopologyProposal
         ligand_topology_proposal = TopologyProposal(new_topology=new_solvated_ligand_omm_topology,
@@ -325,8 +345,7 @@ class RelativeFEPSetup(object):
 
         return ligand_topology_proposal, old_solvated_positions
 
-
-    def _solvate_system(self, topology, positions, model='tip3p'):
+    def _solvate_system(self, topology, positions, model='tip3p',vacuum=False):
         """
         Generate a solvated topology, positions, and system for a given input topology and positions.
         For generating the system, the forcefield files provided in the constructor will be used.
@@ -355,13 +374,18 @@ class RelativeFEPSetup(object):
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         modeller.delete(hs)
         modeller.addHydrogens(forcefield=self._system_generator._forcefield)
-        print("preparing to add solvent")
-        modeller.addSolvent(self._system_generator._forcefield, model=model, padding=self._padding)
+        if not vacuum:
+            _logger.info("preparing to add solvent")
+            modeller.addSolvent(self._system_generator._forcefield, model=model, padding=self._padding)
+        else:
+            _logger.info("Skipping solvation of vacuum perturbation")
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
-        print("solvent added, parameterizing")
+        _logger.info("solvent added, parameterizing")
+        print(solvated_topology)
+        dir(solvated_topology)
         solvated_system = self._system_generator.build_system(solvated_topology)
-        print("System parameterized")
+        _logger.info("System parameterized")
         return solvated_topology, solvated_positions, solvated_system
 
     @property
