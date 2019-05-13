@@ -244,7 +244,7 @@ def run_setup(setup_options):
                                                                                          n_restart_attempts=6,
                                                                                          splitting="V R R R O R R R V"),
                                            hybrid_factory=htf[phase], online_analysis_interval=10,
-                                           online_analysis_target_error=0.2, online_analysis_minimum_iterations=10)
+                                           online_analysis_minimum_iterations=10)
             hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_sams_samplers': hss}
@@ -334,6 +334,5 @@ if __name__ == "__main__":
         for phase in free_energies:
             print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
             print(f"{phase} phase has a free energy of {free_energies[phase]}")
-
 
 
