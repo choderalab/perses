@@ -213,6 +213,7 @@ class RelativeFEPSetup(object):
             self._nonbonded_method = app.NoCutoff
             self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,
                                                     'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
+            self._system_generator._forcefield.loadFile(StringIO(ffxml))
             if self._proposal_phase is None:
                 _logger.info('No complex or solvent leg, so performing topology proposal for vacuum leg')
                 self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
