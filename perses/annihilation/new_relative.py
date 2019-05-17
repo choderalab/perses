@@ -1146,7 +1146,7 @@ class HybridTopologyFactory(object):
 
             #if the intersection of this hybrid set with the unique new atoms is nonempty, it must be added:
             if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                _logger.info(f"\t\thandle_harmonic_bonds: angle_index {bond_index} is a core-unique_new or unique_new-unique_new...")
+                _logger.info(f"\t\thandle_harmonic_bonds: angle_index {angle_index} is a core-unique_new or unique_new-unique_new...")
 
                 # Check to see if we are softening angles:
                 if self._soften_angles:
@@ -1653,9 +1653,6 @@ class HybridTopologyFactory(object):
         Find the exceptions associated with old-old and old-core interactions, as well as new-new and new-core interactions.  Theses exceptions will be placed in
         CustomBondedForce that will interpolate electrostatics and a softcore potential.
         """
-        if len(self._old_system_exceptions.keys()) == 0 and len(self._new_system_exceptions.keys()) == 0:
-            _logger.(f"There are no old/new system exceptions.")
-
         from openmmtools.constants import ONE_4PI_EPS0 # OpenMM constant for Coulomb interactions (implicitly in md_unit_system units)
 
         old_new_nonbonded_exceptions = "U_electrostatics + U_sterics;"
