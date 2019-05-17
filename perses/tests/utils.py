@@ -935,7 +935,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     return topology_proposal, old_positions, new_positions
 
-def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
+def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", propose_geometry = True):
     """
     Generate a test solvated topology proposal, current positions, and new positions triplet
     from two IUPAC molecule names.
@@ -946,6 +946,8 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
         name of the first molecule
     proposed_mol_name : str, optional
         name of the second molecule
+    propose_geometry : bool, default True
+        whether to propose the geometry proposal
 
     Returns
     -------
@@ -989,6 +991,9 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
+
+    if not propose_geometry:
+        return topology_proposal, solvated_positions
 
     #generate new positions with geometry engine
     new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
