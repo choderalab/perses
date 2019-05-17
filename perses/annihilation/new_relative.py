@@ -12,6 +12,13 @@ from openmmtools.constants import ONE_4PI_EPS0
 
 InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'core', 'environment'])
 
+#######LOGGING#############################
+import logging
+logging.basicConfig(level = logging.NOTSET)
+_logger = logging.getLogger("new_relative")
+_logger.setLevel(logging.INFO)
+###########################################
+
 class HybridTopologyFactory(object):
     """
     This class generates a hybrid topology based on a perses topology proposal. This class treats atoms
@@ -47,7 +54,7 @@ class HybridTopologyFactory(object):
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False, neglected_new_angle_terms = [], neglected_old_angle_terms = [], forward_1_4_proposal_terms = [[]], reverse_1_4_proposal_terms = [[]]):
         """
         Initialize the Hybrid topology factory.
 
@@ -74,10 +81,22 @@ class HybridTopologyFactory(object):
         angle_softening_constant : float
             For bonds between unique atoms and unique-core atoms, soften the force constant at the "dummy" endpoint by this factor.
             If 1.0, do not soften
+        neglected_new_angle_terms : list
+            list of indices from the HarmonicAngleForce of the new_system for which the geometry engine neglected.
+            Hence, these angles must be alchemically grown in for the unique new atoms (forward lambda protocol)
+        neglected_old_angle_terms : list
+            list of indices from the HarmonicAngleForce of the old_system for which the geometry engine neglected.
+            Hence, these angles must be alchemically deleted for the unique old atoms (reverse lambda protocol)
+        forward_1_4_proposal_terms : list
+            list of 1,4 terms associated with unique_new atoms and unique_new/core atoms.  These will be grown in with a custom bonded force
+        reverse_1_4_proposal_terms : list
+            list of 1,4 terms associated with unique_old atoms and unique_old/core atoms.  These will be deleted with a custom bonded force
+
 
         .. todo :: Document how positions for hybrid system are constructed
 
         """
+        _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
         self._topology_proposal = topology_proposal
         self._old_system = copy.deepcopy(topology_proposal.old_system)
         self._new_system = copy.deepcopy(topology_proposal.new_system)
@@ -87,6 +106,13 @@ class HybridTopologyFactory(object):
         self._old_positions = current_positions
         self._new_positions = new_positions
         self._soften_only_new = soften_only_new
+
+        #new attributes from the modified geometry engine
+        self.neglected_new_angle_terms = neglected_new_angle_terms
+        self.neglected_old_angle_terms = neglected_old_angle_terms
+        self.forward_1_4_proposal_terms = forward_1_4_proposal_terms
+        self.reverse_1_4_proposal_terms = reverse_1_4_proposal_terms
+
 
         if bond_softening_constant != 1.0:
             self._bond_softening_constant = bond_softening_constant
@@ -119,6 +145,8 @@ class HybridTopologyFactory(object):
         # TODO: Store this as self._system_forces[name], name in ('old', 'new', 'hybrid') for compactness
         self._old_system_forces = {type(force).__name__ : force for force in self._old_system.getForces()}
         self._new_system_forces = {type(force).__name__ : force for force in self._new_system.getForces()}
+        _logger.info(f"Old system forces: {self._old_system_forces.keys()}")
+        _logger.info(f"New system forces: {self._new_system_forces.keys()}")
 
         #check that there are no unknown forces in the new and old systems:
         for system_name in ('old', 'new'):
@@ -126,9 +154,11 @@ class HybridTopologyFactory(object):
             unknown_forces = set(force_names) - set(self._known_forces)
             if len(unknown_forces) > 0:
                 raise ValueError("Unkown forces {} encountered in {} system" % (unknown_forces, system_name))
+        _logger.info("No unknown forces.")
 
         #get and store the nonbonded method from the system:
         self._nonbonded_method = self._old_system_forces['NonbondedForce'].getNonbondedMethod()
+        _logger.info(f"Nonbonded method to be used (i.e. from old system): {self._nonbonded_method}")
 
         #start by creating an empty system. This will become the hybrid system.
         self._hybrid_system = openmm.System()
@@ -137,6 +167,7 @@ class HybridTopologyFactory(object):
         #interactions. It does, however, copy the particle masses. In general, hybrid index and old index should be
         #the same.
         # TODO: Refactor this into self._add_particles()
+        _logger.info("Adding and mapping old atoms to hybrid system...")
         for particle_idx in range(self._topology_proposal.n_atoms_old):
             particle_mass = self._old_system.getParticleMass(particle_idx)
             hybrid_idx = self._hybrid_system.addParticle(particle_mass)
@@ -149,6 +180,7 @@ class HybridTopologyFactory(object):
 
         #Next, add the remaining unique atoms from the new system to the hybrid system and map accordingly.
         #As before, this does not copy interactions, only particle indices and masses.
+        _logger.info("Adding and mapping new atoms to hybrid system...")
         for particle_idx in self._topology_proposal.unique_new_atoms:
             particle_mass = self._new_system.getParticleMass(particle_idx)
             hybrid_idx = self._hybrid_system.addParticle(particle_mass)
@@ -159,39 +191,69 @@ class HybridTopologyFactory(object):
         if "MonteCarloBarostat" in self._old_system_forces.keys():
             barostat = copy.deepcopy(self._old_system_forces["MonteCarloBarostat"])
             self._hybrid_system.addForce(barostat)
+            _logger.info("Added MonteCarloBarostat.")
+        else:
+            _logger.info("No MonteCarloBarostat added.")
 
         #Copy over the box vectors:
         box_vectors = self._old_system.getDefaultPeriodicBoxVectors()
         self._hybrid_system.setDefaultPeriodicBoxVectors(*box_vectors)
+        _logger.info(f"getDefaultPeriodicBoxVectors added to hybrid: {box_vectors}")
 
         #assign atoms to one of the classes described in the class docstring
         self._atom_classes = self._determine_atom_classes()
+        _logger.info("Determined atom classes.")
 
-        #create the opposite atom maps for use in nonbonded force processing
+        #create the opposite atom maps for use in nonbonded force processing; let's omit this from logger
         self._hybrid_to_old_map = {value : key for key, value in self._old_to_hybrid_map.items()}
         self._hybrid_to_new_map = {value : key for key, value in self._new_to_hybrid_map.items()}
 
         #construct dictionary of exceptions in old and new systems
+        _logger.info("Generating old system exceptions dict...")
         self._old_system_exceptions = self._generate_dict_from_exceptions(self._old_system_forces['NonbondedForce'])
+        _logger.info("Generating new system exceptions dict...")
         self._new_system_exceptions = self._generate_dict_from_exceptions(self._new_system_forces['NonbondedForce'])
 
         #copy constraints, checking to make sure they are not changing
+        _logger.info("Handling constraints...")
         self._handle_constraints()
 
         #copy over relevant virtual sites
+        _logger.info("Handling virtual sites...")
         self._handle_virtual_sites()
 
         #call each of the methods to add the corresponding force terms and prepare the forces:
+        _logger.info("Adding bond force terms...")
         self._add_bond_force_terms()
+
+        _logger.info("Adding angle force terms...")
         self._add_angle_force_terms()
+
+        _logger.info("Adding torsion force terms...")
         self._add_torsion_force_terms()
-        self._add_nonbonded_force_terms()
+
+        if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
+            _logger.info("Adding nonbonded force terms...")
+            self._add_nonbonded_force_terms()
 
         #call each force preparation method to generate the actual interactions that we need:
+        _logger.info("Handling harmonic bonds...")
         self.handle_harmonic_bonds()
+
+        _logger.info("Handling harmonic angles...")
         self.handle_harmonic_angles()
+
+        _logger.info("Handling torsion forces...")
         self.handle_periodic_torsion_force()
-        self.handle_nonbonded()
+
+        if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
+            _logger.info("Handling nonbonded forces...")
+            self.handle_nonbonded()
+
+        if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
+            _logger.info("Handling unique_new/old interaction exceptions...")
+            self.handle_old_new_exceptions()
+
 
         #get positions for the hybrid
         self._hybrid_positions = self._compute_hybrid_positions()
@@ -209,8 +271,10 @@ class HybridTopologyFactory(object):
             hybrid_atom_map = getattr(self, '_{}_to_hybrid_map'.format(system_name))
 
             # Loop through virtual sites
+            numVirtualSites = 0
             for particle_idx in range(system.getNumParticles()):
                 if system.isVirtualSite(particle_idx):
+                    numVirtualSites += 1
                     # If it's a virtual site, make sure it is not in the unique or core atoms, since this is currently unsupported
                     hybrid_idx = hybrid_atom_map[particle_idx]
                     if hybrid_idx not in self._atom_classes['environment_atoms']:
@@ -218,6 +282,7 @@ class HybridTopologyFactory(object):
                     else:
                         virtual_site = system.getVirtualSite(particle_idx)
                         self._hybrid_system.setVirtualSite(hybrid_idx, virtual_site)
+        _logger.info(f"\t_handle_virtual_sites: numVirtualSites: {numVirtualSites}")
 
     def _get_core_atoms(self):
         """
@@ -381,6 +446,8 @@ class HybridTopologyFactory(object):
                     # TODO: We can skip this if we have already checked for constraints changing lengths
                     if constraint_lengths[hybrid_atoms] != length:
                         raise Exception('Constraint length is changing for atoms {} in hybrid system: old {} new {}'.format(hybrid_atoms, constraint_lengths[hybrid_atoms], length))
+        _logger.info(f"\t_handle_constraints: constraint_lengths dict: {constraint_lengths}")
+
     def _determine_interaction_group(self, atoms_in_interaction):
         """
         This method determines which interaction group the interaction should fall under. There are four groups:
@@ -486,16 +553,48 @@ class HybridTopologyFactory(object):
         custom_core_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
         custom_core_force.addPerAngleParameter('K_2') # molecule2 spring constant
 
+        #create the force for neglected angles and relevant parameters; the K_1 term will be set to 0
+        if len(self.neglected_new_angle_terms) > 0: #if there is at least one neglected angle term from the geometry engine
+            custom_neglected_new_force = openmm.CustomAngleForce(energy_expression)
+            custom_neglected_new_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
+            custom_neglected_new_force.addPerAngleParameter('K_1') # molecule1 spring constant
+            custom_neglected_new_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
+            custom_neglected_new_force.addPerAngleParameter('K_2') # molecule2 spring constant
+        if len(self.neglected_old_angle_terms) > 0: #if there is at least one neglected angle term from the geometry engine
+            custom_neglected_old_force = openmm.CustomAngleForce(energy_expression)
+            custom_neglected_old_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
+            custom_neglected_old_force.addPerAngleParameter('K_1') # molecule1 spring constant
+            custom_neglected_old_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
+            custom_neglected_old_force.addPerAngleParameter('K_2') # molecule2 spring constant
+
         if self._has_functions:
             custom_core_force.addGlobalParameter('lambda', 0.0)
             custom_core_force.addEnergyParameterDerivative('lambda')
+            if len(self.neglected_new_angle_terms) > 0:
+                custom_neglected_new_force.addGlobalParameter('lambda', 0.0)
+                custom_neglected_new_force.addEnergyParameterDerivative('lambda')
+            if len(self.neglected_old_angle_terms) > 0:
+                custom_neglected_old_force.addGlobalParameter('lambda', 0.0)
+                custom_neglected_old_force.addEnergyParameterDerivative('lambda')
         else:
             custom_core_force.addGlobalParameter('lambda_angles', 0.0)
+            if len(self.neglected_new_angle_terms) > 0:
+                custom_neglected_new_force.addGlobalParameter('lambda_angles', 0.0)
+            if len(self.neglected_new_angle_terms) > 0:
+                custom_neglected_old_force.addGlobalParameter('lambda_angles', 0.0)
 
 
         #add the force to the system and the force dict.
         self._hybrid_system.addForce(custom_core_force)
         self._hybrid_system_forces['core_angle_force'] = custom_core_force
+
+        if len(self.neglected_new_angle_terms) > 0:
+            self._hybrid_system.addForce(custom_neglected_new_force)
+            self._hybrid_system_forces['custom_neglected_new_angle_force'] = custom_neglected_new_force
+        if len(self.neglected_old_angle_terms) > 0:
+            self._hybrid_system.addForce(custom_neglected_old_force)
+            self._hybrid_system_forces['custom_neglected_old_angle_force'] = custom_neglected_old_force
+
 
         #add an angle term for environment/unique interactions--these are never scaled
         standard_angle_force = openmm.HarmonicAngleForce()
@@ -557,19 +656,24 @@ class HybridTopologyFactory(object):
         #Add a regular nonbonded force for all interactions that are not changing.
         standard_nonbonded_force = openmm.NonbondedForce()
         self._hybrid_system.addForce(standard_nonbonded_force)
+        _logger.info(f"\t_add_nonbonded_force_terms: {standard_nonbonded_force} added to hybrid system")
         self._hybrid_system_forces['standard_nonbonded_force'] = standard_nonbonded_force
 
         # Create a CustomNonbondedForce to handle alchemically interpolated nonbonded parameters.
         # Select functional form based on nonbonded method.
+        # TODO: check _nonbonded_custom_ewald and _nonbonded_custom_cutoff since they take arguments that are never used...
         if self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
+            _logger.info("\t_add_nonbonded_force_terms: nonbonded_method is NoCutoff")
             sterics_energy_expression = self._nonbonded_custom_nocutoff()
         elif self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
+            _logger.info("\t_add_nonbonded_force_terms: nonbonded_method is Cutoff(Periodic or NonPeriodic)")
             epsilon_solvent = self._old_system_forces['NonbondedForce'].getReactionFieldDielectric()
             r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
             sterics_energy_expression = self._nonbonded_custom_cutoff(epsilon_solvent, r_cutoff)
             standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            _logger.info("\t_add_nonbonded_force_terms: nonbonded_method is PME or Ewald")
             [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
             delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
             r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
@@ -581,6 +685,8 @@ class HybridTopologyFactory(object):
             raise Exception("Nonbonded method %s not supported yet." % str(self._nonbonded_method))
 
         standard_nonbonded_force.setNonbondedMethod(self._nonbonded_method)
+        _logger.info(f"\t_add_nonbonded_force_terms: {self._nonbonded_method} added to standard nonbonded force")
+
         sterics_energy_expression += self._nonbonded_custom_sterics_common()
 
         sterics_mixing_rules = self._nonbonded_custom_mixing_rules()
@@ -615,13 +721,16 @@ class HybridTopologyFactory(object):
 
 
         sterics_custom_nonbonded_force.setNonbondedMethod(custom_nonbonded_method)
+        _logger.info(f"\t_add_nonbonded_force_terms: {custom_nonbonded_method} added to sterics_custom_nonbonded force")
 
 
         self._hybrid_system.addForce(sterics_custom_nonbonded_force)
         self._hybrid_system_forces['core_sterics_force'] = sterics_custom_nonbonded_force
+        _logger.info(f"\t_add_nonbonded_force_terms: {sterics_custom_nonbonded_force} added to hybrid system")
 
 
         #set the use of dispersion correction to be the same between the new nonbonded force and the old one:
+        #these will be ignored from the _logger for the time being
         if self._old_system_forces['NonbondedForce'].getUseDispersionCorrection():
             self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(True)
             if self._use_dispersion_correction:
@@ -782,7 +891,9 @@ class HybridTopologyFactory(object):
         new_system_bond_force = self._new_system_forces['HarmonicBondForce']
 
         #first, loop through the old system bond forces and add relevant terms
+        _logger.info("\thandle_harmonic_bonds: looping through old_system to add relevant terms...")
         for bond_index in range(old_system_bond_force.getNumBonds()):
+            _logger.info(f"\t\thandle_harmonic_bonds: old bond_index: {bond_index}")
             #get each set of bond parameters
             [index1_old, index2_old, r0_old, k_old] = old_system_bond_force.getBondParameters(bond_index)
 
@@ -794,6 +905,7 @@ class HybridTopologyFactory(object):
             #now check if it is a subset of the core atoms (that is, both atoms are in the core)
             #if it is, we need to find the parameters in the old system so that we can interpolate
             if index_set.issubset(self._atom_classes['core_atoms']):
+                _logger.info(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is a core (to custom bond force).")
                 index1_new = self._topology_proposal.old_to_new_atom_map[index1_old]
                 index2_new = self._topology_proposal.old_to_new_atom_map[index2_old]
                 new_bond_parameters = self._find_bond_parameters(new_system_bond_force, index1_new, index2_new)
@@ -807,9 +919,11 @@ class HybridTopologyFactory(object):
             #check if the index set is a subset of anything besides environemnt (in the case of environment, we just add the bond to the regular bond force)
             # that would mean that this bond is core-unique_old or unique_old-unique_old
             elif not index_set.issubset(self._atom_classes['environment_atoms']):
+                _logger.info(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is a core-unique_old or unique_old-unique old...")
 
                 # If we're not softening bonds, we can just add it to the regular bond force. Likewise if we are only softening new bonds
                 if not self._soften_bonds or self._soften_only_new:
+                    _logger.info(f"\t\t\thandle_harmonic_bonds: no softening (to standard bond force)")
                     self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old,
                                                                               k_old)
                 # Otherwise, we will need to soften one of the endpoints. For unique old atoms, the softening endpoint is at lambda =1
@@ -824,11 +938,14 @@ class HybridTopologyFactory(object):
 
             #otherwise, we just add the same parameters as those in the old system (these are environment atoms, and the parameters are the same)
             else:
+                _logger.info(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is an environment (to standard bond force).")
                 self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old, k_old)
 
 
         #now loop through the new system to get the interactions that are unique to it.
+        _logger.info("\thandle_harmonic_bonds: looping through new_system to add relevant terms...")
         for bond_index in range(new_system_bond_force.getNumBonds()):
+            _logger.info(f"\t\thandle_harmonic_bonds: new bond_index: {bond_index}")
             #get each set of bond parameters
             [index1_new, index2_new, r0_new, k_new] = new_system_bond_force.getBondParameters(bond_index)
 
@@ -840,9 +957,11 @@ class HybridTopologyFactory(object):
             #if the intersection of this set and unique new atoms contains anything, the bond is unique to the new system and must be added
             #all other bonds in the new system have been accounted for already.
             if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
+                _logger.info(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is a core-unique_new or unique_new-unique_new...")
 
                 # If we are softening bonds, we have to use the core bond force, and scale the force constant at lambda = 0:
                 if self._soften_bonds:
+                    _logger.info(f"\t\t\thandle_harmonic_bonds: softening (to custom bond force)")
                     r0_old = r0_new # Do not change the length
                     k_old = k_new * self._bond_softening_constant # Scale the force constant by the requested parameter
 
@@ -852,12 +971,15 @@ class HybridTopologyFactory(object):
 
                 # If we aren't softening bonds, then just add it to the standard bond force
                 else:
+                    _logger.info(f"\t\t\thandle_harmonic_bonds: no softening (to standard bond force)")
                     self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_new, k_new)
 
             #if the bond is in the core, it has probably already been added in the above loop. However, there are some circumstances
             #where it was not (closing a ring). In that case, the bond has not been added and should be added here.
+            #This has some peculiarities to be discussed...
             if index_set.issubset(self._atom_classes['core_atoms']):
-                 if not self._find_bond_parameters(self._hybrid_system_forces['core_bond_force'], index1_hybrid, index2_hybrid):
+                _logger.info(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is a SPECIAL core-core (to custom bond force).")
+                if not self._find_bond_parameters(self._hybrid_system_forces['core_bond_force'], index1_hybrid, index2_hybrid):
                      r0_old = r0_new
                      k_old = 0.0*unit.kilojoule_per_mole/unit.angstrom**2
                      self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
@@ -930,7 +1052,9 @@ class HybridTopologyFactory(object):
 
         1) If the three atoms are all in the core, then we add to the CustomAngleForce and interpolate between the two
             parameters
-        2) Otherwise, we add the angle to a regular angle force.
+        2) If the three atoms contain at least one unique new, check if the angle is in the neglected new list, and if so, interpolate from K_1 = 0;
+            else, if the three atoms contain at least one unique old, check if the angle is in the neglected old list, and if so, interpolate from K_2 = 0.
+        3) Otherwise, we add the angle to a regular angle force.
         """
         old_system_angle_force = self._old_system_forces['HarmonicAngleForce']
         new_system_angle_force = self._new_system_forces['HarmonicAngleForce']
@@ -938,7 +1062,9 @@ class HybridTopologyFactory(object):
         #first, loop through all the angles in the old system to determine what to do with them. We will only use the
         #custom angle force if all atoms are part of "core." Otherwise, they are either unique to one system or never
         #change.
+        _logger.info("\thandle_harmonic_angles: looping through old_system to add relevant terms...")
         for angle_index in range(old_system_angle_force.getNumAngles()):
+            _logger.info(f"\t\thandle_harmonic_angles: old angle_index: {angle_index}")
             old_angle_parameters = old_system_angle_force.getAngleParameters(angle_index)
 
             #get the indices in the hybrid system
@@ -948,6 +1074,7 @@ class HybridTopologyFactory(object):
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
             #interpolate
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                _logger.info(f"\t\thandle_harmonic_angles: angle_index {angle_index} is a core (to custom angle force).")
                 #get the new indices so we can get the new angle parameters
                 new_indices = [self._topology_proposal.old_to_new_atom_map[old_atomid] for old_atomid in old_angle_parameters[:3]]
                 new_angle_parameters = self._find_angle_parameters(new_system_angle_force, new_indices)
@@ -961,37 +1088,52 @@ class HybridTopologyFactory(object):
 
             # Check if the atoms are neither all core nor all environment, which would mean they involve unique old interactions
             elif not hybrid_index_set.issubset(self._atom_classes['environment_atoms']):
+                _logger.info(f"\t\thandle_harmonic_angles: angle_index {angle_index} is an environment or core with unique_old...")
 
                 # Check if we are softening angles, and not softening only new angles:
                 if self._soften_angles and not self._soften_only_new:
+                    _logger.info(f"\t\t\thandle_harmonic_angles: softening (to custom angle force)")
+
 
                     # If we are, then we need to generate the softened parameters (at lambda=1 for old atoms)
                     # We do this by using the same equilibrium angle, and scaling the force constant at the non-interacting
                     # endpoint:
-                    hybrid_force_parameters = [old_angle_parameters[3], old_angle_parameters[4], old_angle_parameters[3],
-                                               self._angle_softening_constant * old_angle_parameters[4]]
-
-                    # Add this interaction to the alchemical angle force
-                    self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2],
-                                                                            hybrid_force_parameters)
+                    if angle_index in self.neglected_old_angle_terms:
+                        _logger.info("\t\t\tsoften angles on but angle is in neglected old, so softening constant is set to zero.")
+                        hybrid_force_parameters = [old_angle_parameters[3], old_angle_parameters[4], old_angle_parameters[3], 0.0 * old_angle_parameters[4]]
+                        self._hybrid_system_forces['custom_neglected_old_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
+                    else:
+                        _logger.info(f"\t\t\thandle_harmonic_angles: softening (to custom angle force)")
+                        hybrid_force_parameters = [old_angle_parameters[3], old_angle_parameters[4], old_angle_parameters[3], self._angle_softening_constant * old_angle_parameters[4]]
+                        self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
 
 
                 # If not, we can just add this to the standard angle force
                 else:
-                    self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0],
-                                                                                hybrid_index_list[1],
-                                                                                hybrid_index_list[2],
-                                                                                old_angle_parameters[3],
-                                                                                old_angle_parameters[4])
+                    if angle_index in self.neglected_old_angle_terms:
+                        _logger.info(f"\t\t\tangle in neglected_old_angle_terms; K_2 is set to zero")
+                        hybrid_force_parameters = [old_angle_parameters[3], old_angle_parameters[4], old_angle_parameters[3], 0.0 * old_angle_parameters[4]]
+                        self._hybrid_system_forces['custom_neglected_old_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
+
+                    else:
+                        _logger.info(f"\t\t\thandle_harmonic_bonds: no softening (to standard angle force)")
+                        self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0],
+                                                                                    hybrid_index_list[1],
+                                                                                    hybrid_index_list[2],
+                                                                                    old_angle_parameters[3],
+                                                                                    old_angle_parameters[4])
+
             #otherwise, only environment atoms are in this interaction, so add it to the standard angle force
             else:
+                _logger.info(f"\t\thandle_harmonic_angles: angle_index {angle_index} is an environment (to standard angle force)")
                 self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], old_angle_parameters[3],
                                                                             old_angle_parameters[4])
 
         #finally, loop through the new system force to add any unique new angles
+        _logger.info("\thandle_harmonic_angles: looping through new_system to add relevant terms...")
         for angle_index in range(new_system_angle_force.getNumAngles()):
+            _logger.info(f"\t\thandle_harmonic_angles: new angle_index: {angle_index}")
             new_angle_parameters = new_system_angle_force.getAngleParameters(angle_index)
 
             #get the indices in the hybrid system
@@ -1000,25 +1142,38 @@ class HybridTopologyFactory(object):
 
             #if the intersection of this hybrid set with the unique new atoms is nonempty, it must be added:
             if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
+                _logger.info(f"\t\thandle_harmonic_bonds: angle_index {bond_index} is a core-unique_new or unique_new-unique_new...")
 
                 # Check to see if we are softening angles:
                 if self._soften_angles:
+                    _logger.info(f"\t\t\thandle_harmonic_bonds: softening (to custom angle force)")
 
-                    # If so, generate the parameters for the alchemical angle by scaling the force constant at the dummy endpoint (lambda=0 for new atoms)
-                    hybrid_force_parameters = [new_angle_parameters[3], new_angle_parameters[4] * self._angle_softening_constant, new_angle_parameters[3], new_angle_parameters[4]]
-
-                    # Then add the angle to the alchemical force:
-                    self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2],
-                                                                            hybrid_force_parameters)
+                    if angle_index in self.neglected_new_angle_terms:
+                        _logger.info("\t\t\tsoften angles on but angle is in neglected new, so softening constant is set to zero.")
+                        hybrid_force_parameters = [new_angle_parameters[3], new_angle_parameters[4] * 0.0, new_angle_parameters[3], new_angle_parameters[4]]
+                        self._hybrid_system_forces['custom_neglected_new_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
+                    else:
+                        _logger.info(f"\t\t\thandle_harmonic_angles: softening (to custom angle force)")
+                        hybrid_force_parameters = [new_angle_parameters[3], new_angle_parameters[4] * self._angle_softening_constant, new_angle_parameters[3], new_angle_parameters[4]]
+                        self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
+                                                                                hybrid_index_list[2],
+                                                                                hybrid_force_parameters)
                 # Otherwise, just add to the nonalchemical force
                 else:
-                    self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2], new_angle_parameters[3],
-                                                                            new_angle_parameters[4])
+                    if angle_index in self.neglected_new_angle_terms:
+                        _logger.info(f"\t\t\tangle in neglected_old_angle_terms; K_1 is set to zero")
+                        hybrid_force_parameters = [new_angle_parameters[3], 0.0 * new_angle_parameters[4], new_angle_parameters[3], old_angle_parameters[4]]
+                        self._hybrid_system_forces['custom_neglected_new_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
+                    else:
+                        _logger.info(f"\t\t\thandle_harmonic_bonds: no softening (to standard angle force)")
+                        self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
+                                                                                hybrid_index_list[2], new_angle_parameters[3],
+                                                                                new_angle_parameters[4])
 
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                _logger.info(f"\t\thandle_harmonic_angles: angle_index {angle_index} is a core (to custom angle force).")
                 if not self._find_angle_parameters(self._hybrid_system_forces['core_angle_force'], hybrid_index_list):
+                    _logger.info(f"\t\t\thandle_harmonic_angles: angle_index {angle_index} NOT previously added...adding now...THERE IS A CONSIDERATION NOT BEING MADE!")
                     hybrid_force_parameters = [new_angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2, new_angle_parameters[3], new_angle_parameters[4]]
                     self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2],
@@ -1037,8 +1192,11 @@ class HybridTopologyFactory(object):
 
         #we need to keep track of what torsions we added so that we do not double count.
         added_torsions = []
+        _logger.info("\thandle_periodic_torsion_forces: looping through old_system to add relevant terms...")
         for torsion_index in range(old_system_torsion_force.getNumTorsions()):
+            _logger.info(f"\t\thandle_harmonic_angles: old torsion_index: {torsion_index}")
             torsion_parameters = old_system_torsion_force.getTorsionParameters(torsion_index)
+
 
             #get the indices in the hybrid system
             hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in torsion_parameters[:4]]
@@ -1047,12 +1205,13 @@ class HybridTopologyFactory(object):
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
             #interpolate
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                _logger.info(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core (to custom torsion force).")
                 torsion_indices = torsion_parameters[:4]
 
                 #if we've already added these indices (they may appear >once for high periodicities)
                 #then just continue to the next torsion.
                 if torsion_indices in added_torsions:
-                    continue
+                    continue #it doesn't matter if the torsion indices are already in the new hybrid torsion force object...some torsions have high periodicity
                 #get the new indices so we can get the new angle parameters, as well as all old parameters of the old torsion
                 #The reason we do it like this is to take care of varying periodicity between new and old system.
                 torsion_parameters_list = self._find_torsion_parameters(old_system_torsion_force, torsion_indices)
@@ -1075,11 +1234,15 @@ class HybridTopologyFactory(object):
 
             #otherwise, just add the parameters to the regular force:
             else:
+                #TODO: make considerations for environment-core valence interactions.  THESE will be important in protein mutation studies...
+                _logger.info(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core-unique_old or unique_old-unique_old  (to standard torsion force).")
                 self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
                                                                             torsion_parameters[5], torsion_parameters[6])
 
+        _logger.info("\thandle_periodic_torsion_forces: looping through new_system to add relevant terms...")
         for torsion_index in range(new_system_torsion_force.getNumTorsions()):
+            _logger.info(f"\t\thandle_harmonic_angles: new torsion_index: {torsion_index}")
             torsion_parameters = new_system_torsion_force.getTorsionParameters(torsion_index)
 
             #get the indices in the hybrid system:
@@ -1088,6 +1251,7 @@ class HybridTopologyFactory(object):
 
             #if any are part of the unique new atoms, we will add them to the standard torsion force:
             if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
+                _logger.info(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is core-unique_new or unique_new-unique_new (to standard torsion force).")
                 self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
                                                                             torsion_parameters[5], torsion_parameters[6])
@@ -1108,73 +1272,94 @@ class HybridTopologyFactory(object):
         self._hybrid_system_forces['standard_nonbonded_force'].addGlobalParameter("lambda_electrostatics_insert", 0.0)
 
         #We have to loop through the particles in the system, because nonbonded force does not accept index
+        _logger.info("\thandle_nonbonded: looping through all particles in hybrid...")
         for particle_index in range(self._hybrid_system.getNumParticles()):
 
             if particle_index in self._atom_classes['unique_old_atoms']:
+                _logger.info(f"\t\thandle_nonbonded: particle {particle_index} is a unique_old")
                 #get the parameters in the old system
                 old_index = hybrid_to_old_map[particle_index]
                 [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics.
-                check_index = self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, 0.0*epsilon, 1, 0])
+                check_index = self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, 0.0*epsilon, 1, 0]) #turning off sterics in forward direction
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
-                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, 0.0*epsilon)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, 0.0*epsilon) #add charge to standard_nonbonded force
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
-                # Charge will be turned off at lambda_electrostatics_delete = 0, on at lambda_electrostatics_delete = 1
+                # Charge will be turned off at lambda_electrostatics_delete = 0, on at lambda_electrostatics_delete = 1; kill charge with lambda_electrostatics_delete = 0 --> 1
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_delete', particle_index, -charge, 0*sigma, 0*epsilon)
 
             elif particle_index in self._atom_classes['unique_new_atoms']:
+                _logger.info(f"\t\thandle_nonbonded: particle {particle_index} is a unique_new")
                 #get the parameters in the new system
                 new_index = hybrid_to_new_map[particle_index]
                 [charge, sigma, epsilon] = new_system_nonbonded_force.getParticleParameters(new_index)
 
                 #add the particle to the hybrid custom sterics and electrostatics
-                check_index = self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, 0.0*epsilon, sigma, epsilon, 0, 1])
+                check_index = self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, 0.0*epsilon, sigma, epsilon, 0, 1]) # turning on sterics in forward direction
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Add particle to the regular nonbonded force, but Lennard-Jones will be handled by CustomNonbondedForce
-                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, sigma, 0.0)
+                check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(0.0, sigma, 0.0) #charge starts at zero
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
-                # Charge will be turned off at lambda_electrostatics_insert = 0, on at lambda_electrostatics_insert = 1
+                # Charge will be turned off at lambda_electrostatics_insert = 0, on at lambda_electrostatics_insert = 1; add charge with lambda_electrostatics_insert = 0 --> 1
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_insert', particle_index, +charge, 0, 0)
 
             elif particle_index in self._atom_classes['core_atoms']:
+                _logger.info(f"\t\thandle_nonbonded: particle {particle_index} is a core")
                 #get the parameters in the new and old systems:
                 old_index = hybrid_to_old_map[particle_index]
                 [charge_old, sigma_old, epsilon_old] = old_system_nonbonded_force.getParticleParameters(old_index)
                 new_index = hybrid_to_new_map[particle_index]
                 [charge_new, sigma_new, epsilon_new] = new_system_nonbonded_force.getParticleParameters(new_index)
 
-                #add the particle to the custom forces, interpolating between the two parameters
+                #add the particle to the custom forces, interpolating between the two parameters; add steric params and zero electrostatics to core_sterics per usual
                 check_index = self._hybrid_system_forces['core_sterics_force'].addParticle([sigma_old, epsilon_old, sigma_new, epsilon_new, 0, 0])
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
-                #still add the particle to the regular nonbonded force, but with zeroed out parameters.
+                #still add the particle to the regular nonbonded force, but with zeroed out parameters; add old charge to standard_nonbonded and zero sterics
                 check_index = self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge_old, 0.5*(sigma_old+sigma_new), 0.0)
                 assert (particle_index == check_index ), "Attempting to add incorrect particle to hybrid system"
 
                 # Charge is charge_old at lambda_electrostatics = 0, charge_new at lambda_electrostatics = 1
                 # TODO: We could also interpolate the Lennard-Jones here instead of core_sterics force so that core_sterics_force could just be softcore
+                # interpolate between old and new charge with lambda_electrostatics core; make sure to keep sterics off
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticleParameterOffset('lambda_electrostatics_core', particle_index, (charge_new - charge_old), 0, 0)
 
             #otherwise, the particle is in the environment
             else:
+                _logger.info(f"\t\thandle_nonbonded: particle {particle_index} is an envronment")
                 #the parameters will be the same in new and old system, so just take the old parameters
                 old_index = hybrid_to_old_map[particle_index]
                 [charge, sigma, epsilon] = old_system_nonbonded_force.getParticleParameters(old_index)
 
-                #add the particle to the hybrid custom sterics and electrostatics, but they dont change
+                #add the particle to the hybrid custom sterics, but they dont change; electrostatics are ignored
                 self._hybrid_system_forces['core_sterics_force'].addParticle([sigma, epsilon, sigma, epsilon, 0, 0])
 
-                #add the environment atoms to the regular nonbonded force as well:
+                #add the environment atoms to the regular nonbonded force as well: should we be adding steric terms here, too?
                 self._hybrid_system_forces['standard_nonbonded_force'].addParticle(charge, sigma, epsilon)
 
+
+
+        # Now loop pairwise through (unique_old, unique_new) and add exceptions so that they never interact electrostatically (place into Nonbonded Force)
+        unique_old_atoms = self._atom_classes['unique_old_atoms']
+        unique_new_atoms = self._atom_classes['unique_new_atoms']
+
+        for old in unique_old_atoms:
+            for new in unique_new_atoms:
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(old, new, 0.0*unit.elementary_charge**2, 1.0*unit.nanometers, 0.0*unit.kilojoules_per_mole)
+
+        _logger.info("\thandle_nonbonded: Handling Interaction Groups...")
         self._handle_interaction_groups()
+
+        _logger.info("\thandle_nonbonded: Handling Hybrid Exceptions...")
         self._handle_hybrid_exceptions()
+
+        _logger.info("\thandle_nonbonded: Handling Original Exceptions...")
         self._handle_original_exceptions()
 
     def _generate_dict_from_exceptions(self, force):
@@ -1197,6 +1382,7 @@ class HybridTopologyFactory(object):
         for exception_index in range(force.getNumExceptions()):
             [index1, index2, chargeProd, sigma, epsilon] = force.getExceptionParameters(exception_index)
             exceptions_dict[(index1, index2)] = [chargeProd, sigma, epsilon]
+        _logger.info(f"\t_generate_dict_from_exceptions: Exceptions Dict: {exceptions_dict}" )
 
         return exceptions_dict
 
@@ -1215,6 +1401,9 @@ class HybridTopologyFactory(object):
         unmodified nonbonded force.
 
         Must be called after particles are added to the Nonbonded forces
+        TODO: we should also be adding the following interaction groups...
+        7) Unique-new - Unique-new
+        8) Unique-old - Unique-old
         """
         #get the force objects for convenience:
         sterics_custom_force = self._hybrid_system_forces['core_sterics_force']
@@ -1237,6 +1426,10 @@ class HybridTopologyFactory(object):
         sterics_custom_force.addInteractionGroup(core_atoms, environment_atoms)
 
         sterics_custom_force.addInteractionGroup(core_atoms, core_atoms)
+
+        sterics_custom_force.addInteractionGroup(unique_new_atoms, unique_new_atoms)
+
+        sterics_custom_force.addInteractionGroup(unique_old_atoms, unique_old_atoms)
 
     def _handle_hybrid_exceptions(self):
         """
@@ -1264,25 +1457,29 @@ class HybridTopologyFactory(object):
 
             #now we check if the pair is in the exception dictionary
             if old_index_atom_pair in self._old_system_exceptions:
+                _logger.info(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {old_index_atom_pair} is an old system exception")
                 [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair]
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0) # TODO: check if we should leave modified sigma, epsilon should be zeroed explicitly
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #check if the pair is in the reverse order and use that if so
             elif old_index_atom_pair[::-1] in self._old_system_exceptions:
+                _logger.info(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {old_index_atom_pair[::-1]} is an old system exception")
                 [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair[::-1]]
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0) # TODO: same for this
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
-            else:
-                [charge0, sigma0, epsilon0] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[0])
-                [charge1, sigma1, epsilon1] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[1])
-                chargeProd = charge0*charge1
-                epsilon = unit.sqrt(epsilon0*epsilon1)
-                sigma = 0.5*(sigma0+sigma1)
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
-                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+            # TODO: this implies that the old-old nonbonded interactions (those which are not exceptions) are always self-interacting throughout lambda protocol...
+            # else:
+            #     _logger.info(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {old_index_atom_pair} is NOT an old exception...perhaps this is a problem!")
+            #     [charge0, sigma0, epsilon0] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[0])
+            #     [charge1, sigma1, epsilon1] = self._old_system_forces['NonbondedForce'].getParticleParameters(old_index_atom_pair[1])
+            #     chargeProd = charge0*charge1
+            #     epsilon = unit.sqrt(epsilon0*epsilon1)
+            #     sigma = 0.5*(sigma0+sigma1)
+            #     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+            #     self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
         #add back the interactions of the new unique atoms, unless there are exceptions
         for atom_pair in unique_new_pairs:
@@ -1291,25 +1488,28 @@ class HybridTopologyFactory(object):
 
             #now we check if the pair is in the exception dictionary
             if new_index_atom_pair in self._new_system_exceptions:
+                _logger.info(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {new_index_atom_pair} is a new system exception")
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair]
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #check if the pair is present in the reverse order and use that if so
             elif new_index_atom_pair[::-1] in self._new_system_exceptions:
+                _logger.info(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {new_index_atom_pair[::-1]} is a new system exception")
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair[::-1]]
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
-            else:
-                [charge0, sigma0, epsilon0] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[0])
-                [charge1, sigma1, epsilon1] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[1])
-                chargeProd = charge0*charge1
-                epsilon = unit.sqrt(epsilon0*epsilon1)
-                sigma = 0.5*(sigma0+sigma1)
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
-                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+            # else:
+            #     _logger.info(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {new_index_atom_pair} is NOT a new exception...perhaps this is a problem!")
+            #     [charge0, sigma0, epsilon0] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[0])
+            #     [charge1, sigma1, epsilon1] = self._new_system_forces['NonbondedForce'].getParticleParameters(new_index_atom_pair[1])
+            #     chargeProd = charge0*charge1
+            #     epsilon = unit.sqrt(epsilon0*epsilon1)
+            #     sigma = 0.5*(sigma0+sigma1)
+            #     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+            #     self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
     def _handle_original_exceptions(self):
         """
@@ -1337,21 +1537,25 @@ class HybridTopologyFactory(object):
             #in this case, the interaction is only covered by the regular nonbonded force, and as such will be copied to that force
             #in the unique-old case, it is handled elsewhere due to internal peculiarities regarding exceptions
             if index_set.issubset(self._atom_classes['environment_atoms']):
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is an environment exception pair")
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #we have already handled unique old - unique old exceptions
             elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) == 2:
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_old-unique_old exception pair (already handled).")
                 continue
 
             #otherwise, check if one of the atoms in the set is in the unique_old_group and the other is not:
             elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) == 1:
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_old-core or unique_old-environment exception pair.")
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old*0.0, sigma_old, epsilon_old*0.0)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
             #In this case, we need to get the parameters from the exception in the other (new) system, and interpolate between the two
             else:
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a core-core or core-environment exception pair.")
                 #first get the new indices.
                 index1_new = hybrid_to_new_map[index1_hybrid]
                 index2_new = hybrid_to_new_map[index2_hybrid]
@@ -1392,16 +1596,19 @@ class HybridTopologyFactory(object):
             #if it's a subset of unique_new_atoms, then this is an intra-unique interaction and should have its exceptions
             #specified in the regular nonbonded force. However, this is handled elsewhere as above due to pecularities with exception handling
             if index_set.issubset(self._atom_classes['unique_new_atoms']):
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_new-unique_new exception pair (already handled).")
                 continue
 
             #look for the final class- interactions between uniquenew-core and uniquenew-environment. They are treated
             #similarly: they are simply on and constant the entire time (as a valence term)
             elif len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_new-core or unique_new-environment exception pair.")
+                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new*0.0, sigma_new, epsilon_new*0.0)
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #however, there may be a core exception that exists in one system but not the other (ring closure)
             elif index_set.issubset(self._atom_classes['core_atoms']):
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a core-core exception pair.")
 
                 # get the old indices
                 try:
@@ -1437,6 +1644,90 @@ class HybridTopologyFactory(object):
 
                     self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
+    def handle_old_new_exceptions(self):
+        """
+        Find the exceptions associated with old-old and old-core interactions, as well as new-new and new-core interactions.  Theses exceptions will be placed in
+        CustomBondedForce that will interpolate electrostatics and a softcore potential.
+        """
+        from openmmtools.constants import ONE_4PI_EPS0 # OpenMM constant for Coulomb interactions (implicitly in md_unit_system units)
+
+        old_new_nonbonded_exceptions = "U_electrostatics + U_sterics;"
+        old_new_nonbonded_exceptions += "U_electrostatics = (lambda_electrostatics_insert * unique_new + unique_old * (1 - lambda_electrostatics_delete)) * ONE_4PI_EPS0*chargeProd/r;"
+        old_new_nonbonded_exceptions += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
+
+        old_new_nonbonded_exceptions += self._nonbonded_custom_nocutoff()
+        old_new_nonbonded_exceptions +=self._nonbonded_custom_sterics_common()
+        old_new_nonbonded_exceptions += self._nonbonded_custom_mixing_rules()
+
+        """
+        U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;
+        sterics_addition = "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
+        sterics_addition += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
+        sterics_addition += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
+
+
+        sterics_addition += "lambda_alpha = new_interaction*(1-lambda_sterics_insert) + old_interaction*lambda_sterics_delete;"
+        sterics_addition += "lambda_sterics = core_interaction*lambda_sterics_core + new_interaction*lambda_sterics_insert + old_interaction*lambda_sterics_delete;"
+        sterics_addition += "core_interaction = delta(unique_old1+unique_old2+unique_new1+unique_new2);new_interaction = max(unique_new1, unique_new2);old_interaction = max(unique_old1, unique_old2);"
+
+        sterics_mixing_rules = "epsilonA = sqrt(epsilonA1*epsilonA2);" # mixing rule for epsilon
+        sterics_mixing_rules += "epsilonB = sqrt(epsilonB1*epsilonB2);" # mixing rule for epsilon
+        sterics_mixing_rules += "sigmaA = 0.5*(sigmaA1 + sigmaA2);" # mixing rule for sigma
+        sterics_mixing_rules += "sigmaB = 0.5*(sigmaB1 + sigmaB2);" # mixing rule for sigma
+        """
+
+        nonbonded_exceptions_force = openmm.CustomBondForce(old_new_nonbonded_exceptions)
+        self._hybrid_system.addForce(nonbonded_exceptions_force)
+        _logger.info(f"\t_handle_old_new_exceptions: {standard_nonbonded_force} added to hybrid system")
+
+        #for reference, set name in force dict
+        self._hybrid_system_forces['old_new_exceptions_force'] = nonbonded_exceptions_force
+
+        nonbonded_exceptions_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
+        nonbonded_exceptions_force.addGlobalParameter("lambda_electrostatics_insert", 0.0) # electrostatics
+        nonbonded_exceptions_force.addGlobalParameter("lambda_electrostatics_delete", 0.0) # electrostatics
+
+        for parameter in ['chargeProd','sigmaA', 'epsilonA', 'sigmaB', 'epsilonB', 'unique_old', 'unique_new']:
+            nonbonded_exceptions_force.addPerBondParameter(parameter)
+
+        #prepare for exceptions loop by grabbing nonbonded forces, hybrid_to_old/new maps
+        old_system_nonbonded_force = self._old_system_forces['NonbondedForce']
+        new_system_nonbonded_force = self._new_system_forces['NonbondedForce']
+        hybrid_to_old_map = {value: key for key, value in self._old_to_hybrid_map.items()}
+        hybrid_to_new_map = {value: key for key, value in self._new_to_hybrid_map.items()}
+
+        #first, loop through the old system's exceptions and add them to the hybrid appropriately:
+        for exception_pair, exception_parameters in self._old_system_exceptions.items():
+
+            [index1_old, index2_old] = exception_pair
+            [chargeProd_old, sigma_old, epsilon_old] = exception_parameters
+
+            #get hybrid indices:
+            index1_hybrid = self._old_to_hybrid_map[index1_old]
+            index2_hybrid = self._old_to_hybrid_map[index2_old]
+            index_set = {index1_hybrid, index2_hybrid}
+
+            #otherwise, check if one of the atoms in the set is in the unique_old_group and the other is not:
+            if len(index_set.intersection(self._atom_classes['unique_old_atoms'])) > 0 and (chargeProd_old.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_old.value_in_unit_system(unit.md_unit_system) != 0):
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_old-core or unique_old-environment exception pair.")
+                nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, sigma_old, epsilon_old*0.0, 1, 0])
+
+        #now loop through the new system's exceptions and add them to the hybrid appropriately
+        for exception_pair, exception_parameters in self._new_system_exceptions.items():
+            [index1_new, index2_new] = exception_pair
+            [chargeProd_new, sigma_new, epsilon_new] = exception_parameters
+
+            #get hybrid indices:
+            index1_hybrid = self._new_to_hybrid_map[index1_new]
+            index2_hybrid = self._new_to_hybrid_map[index2_new]
+
+            index_set = {index1_hybrid, index2_hybrid}
+
+            #look for the final class- interactions between uniquenew-core and uniquenew-environment. They are treated
+            #similarly: they are simply on and constant the entire time (as a valence term)
+            if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0 and (chargeProd_old.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_old.value_in_unit_system(unit.md_unit_system) != 0):
+                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_new-core or unique_new-environment exception pair.")
+                nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old*0.0, sigma_old, epsilon_old, 0, 1])
 
     def _find_exception(self, force, index1, index2):
         """
