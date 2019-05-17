@@ -54,7 +54,7 @@ class HybridTopologyFactory(object):
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False, neglected_new_angle_terms = [], neglected_old_angle_terms = [], forward_1_4_proposal_terms = [[]], reverse_1_4_proposal_terms = [[]]):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False, neglected_new_angle_terms = [], neglected_old_angle_terms = []):
         """
         Initialize the Hybrid topology factory.
 
@@ -110,8 +110,6 @@ class HybridTopologyFactory(object):
         #new attributes from the modified geometry engine
         self.neglected_new_angle_terms = neglected_new_angle_terms
         self.neglected_old_angle_terms = neglected_old_angle_terms
-        self.forward_1_4_proposal_terms = forward_1_4_proposal_terms
-        self.reverse_1_4_proposal_terms = reverse_1_4_proposal_terms
 
 
         if bond_softening_constant != 1.0:
