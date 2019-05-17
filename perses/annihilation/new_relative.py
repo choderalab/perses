@@ -1140,7 +1140,7 @@ class HybridTopologyFactory(object):
 
             #if the intersection of this hybrid set with the unique new atoms is nonempty, it must be added:
             if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                _logger.info(f"\t\thandle_harmonic_bonds: angle_index {bond_index} is a core-unique_new or unique_new-unique_new...")
+                _logger.info(f"\t\thandle_harmonic_bonds: angle_index {angle_index} is a core-unique_new or unique_new-unique_new...")
 
                 # Check to see if we are softening angles:
                 if self._soften_angles:
@@ -1645,7 +1645,7 @@ class HybridTopologyFactory(object):
     def handle_old_new_exceptions(self):
         """
         Find the exceptions associated with old-old and old-core interactions, as well as new-new and new-core interactions.  Theses exceptions will be placed in
-        CustomBondedForce that will interpolate electrostatics and a softcore potential.
+        CustomBondForce that will interpolate electrostatics and a softcore potential.
         """
         from openmmtools.constants import ONE_4PI_EPS0 # OpenMM constant for Coulomb interactions (implicitly in md_unit_system units)
 
@@ -1676,7 +1676,7 @@ class HybridTopologyFactory(object):
 
         nonbonded_exceptions_force = openmm.CustomBondForce(old_new_nonbonded_exceptions)
         self._hybrid_system.addForce(nonbonded_exceptions_force)
-        _logger.info(f"\t_handle_old_new_exceptions: {standard_nonbonded_force} added to hybrid system")
+        _logger.info(f"\t_handle_old_new_exceptions: {nonbonded_exceptions_force} added to hybrid system")
 
         #for reference, set name in force dict
         self._hybrid_system_forces['old_new_exceptions_force'] = nonbonded_exceptions_force
@@ -1707,7 +1707,7 @@ class HybridTopologyFactory(object):
 
             #otherwise, check if one of the atoms in the set is in the unique_old_group and the other is not:
             if len(index_set.intersection(self._atom_classes['unique_old_atoms'])) > 0 and (chargeProd_old.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_old.value_in_unit_system(unit.md_unit_system) != 0):
-                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_old-core or unique_old-environment exception pair.")
+                _logger.info(f"\t\thandle_old_new_exceptions: {exception_pair} is a unique_old exception pair.")
                 nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, sigma_old, epsilon_old*0.0, 1, 0])
 
         #now loop through the new system's exceptions and add them to the hybrid appropriately
@@ -1724,7 +1724,7 @@ class HybridTopologyFactory(object):
             #look for the final class- interactions between uniquenew-core and uniquenew-environment. They are treated
             #similarly: they are simply on and constant the entire time (as a valence term)
             if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0 and (chargeProd_old.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_old.value_in_unit_system(unit.md_unit_system) != 0):
-                _logger.info(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_new-core or unique_new-environment exception pair.")
+                _logger.info(f"\t\t_handle_old_new_exceptions: {exception_pair} is a unique_new exception pair.")
                 nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old*0.0, sigma_old, epsilon_old, 0, 1])
 
     def _find_exception(self, force, index1, index2):
