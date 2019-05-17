@@ -253,7 +253,7 @@ class HybridTopologyFactory(object):
         if 'NonbondedForce' in self._old_system_forces or 'NonbondedForce' in self._new_system_forces:
             _logger.info("Handling unique_new/old interaction exceptions...")
             if len(self._old_system_exceptions.keys()) == 0 and len(self._new_system_exceptions.keys()) == 0:
-                _logger.("There are no old/new system exceptions.")
+                _logger.info("There are no old/new system exceptions.")
             else:
                 _loger.info("There are old or new system exceptions...proceeding.")
                 self.handle_old_new_exceptions()
