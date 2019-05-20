@@ -16,7 +16,7 @@ InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'c
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("new_relative")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.WARNING)
 ###########################################
 
 class HybridTopologyFactory(object):
@@ -54,7 +54,7 @@ class HybridTopologyFactory(object):
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False, neglected_new_angle_terms = [], neglected_old_angle_terms = [], forward_1_4_proposal_terms = [[]], reverse_1_4_proposal_terms = [[]]):
+    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False, neglected_new_angle_terms = [], neglected_old_angle_terms = []):
         """
         Initialize the Hybrid topology factory.
 
@@ -110,9 +110,6 @@ class HybridTopologyFactory(object):
         #new attributes from the modified geometry engine
         self.neglected_new_angle_terms = neglected_new_angle_terms
         self.neglected_old_angle_terms = neglected_old_angle_terms
-        self.forward_1_4_proposal_terms = forward_1_4_proposal_terms
-        self.reverse_1_4_proposal_terms = reverse_1_4_proposal_terms
-
 
         if bond_softening_constant != 1.0:
             self._bond_softening_constant = bond_softening_constant
@@ -255,7 +252,7 @@ class HybridTopologyFactory(object):
             if len(self._old_system_exceptions.keys()) == 0 and len(self._new_system_exceptions.keys()) == 0:
                 _logger.info("There are no old/new system exceptions.")
             else:
-                _loger.info("There are old or new system exceptions...proceeding.")
+                _logger.info("There are old or new system exceptions...proceeding.")
                 self.handle_old_new_exceptions()
 
 
@@ -559,12 +556,14 @@ class HybridTopologyFactory(object):
 
         #create the force for neglected angles and relevant parameters; the K_1 term will be set to 0
         if len(self.neglected_new_angle_terms) > 0: #if there is at least one neglected angle term from the geometry engine
+            _logger.info("\t_add_angle_force_terms: there are > 0 neglected new angles: adding CustomAngleForce")
             custom_neglected_new_force = openmm.CustomAngleForce(energy_expression)
             custom_neglected_new_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
             custom_neglected_new_force.addPerAngleParameter('K_1') # molecule1 spring constant
             custom_neglected_new_force.addPerAngleParameter('theta0_2') # molecule2 equilibrium angle
             custom_neglected_new_force.addPerAngleParameter('K_2') # molecule2 spring constant
         if len(self.neglected_old_angle_terms) > 0: #if there is at least one neglected angle term from the geometry engine
+            _logger.info("\t_add_angle_force_terms: there are > 0 neglected old angles: adding CustomAngleForce")
             custom_neglected_old_force = openmm.CustomAngleForce(energy_expression)
             custom_neglected_old_force.addPerAngleParameter('theta0_1') # molecule1 equilibrium angle
             custom_neglected_old_force.addPerAngleParameter('K_1') # molecule1 spring constant
@@ -982,8 +981,8 @@ class HybridTopologyFactory(object):
             #where it was not (closing a ring). In that case, the bond has not been added and should be added here.
             #This has some peculiarities to be discussed...
             if index_set.issubset(self._atom_classes['core_atoms']):
-                _logger.info(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is a SPECIAL core-core (to custom bond force).")
                 if not self._find_bond_parameters(self._hybrid_system_forces['core_bond_force'], index1_hybrid, index2_hybrid):
+                     _logger.info(f"\t\thandle_harmonic_bonds: bond_index {bond_index} is a SPECIAL core-core (to custom bond force).")
                      r0_old = r0_new
                      k_old = 0.0*unit.kilojoule_per_mole/unit.angstrom**2
                      self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
@@ -1722,7 +1721,7 @@ class HybridTopologyFactory(object):
             #similarly: they are simply on and constant the entire time (as a valence term)
             if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
                 _logger.info(f"\t\thandle_old_new_exceptions: {exception_pair} is a unique_new exception pair.")
-                nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_new, sigma_new, epsilon_new*0.0, sigma_new, epsilon_new*0.0, 0, 1])
+                nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_new, sigma_new, epsilon_new*0.0, sigma_new, epsilon_new, 0, 1])
 
 
     def _find_exception(self, force, index1, index2):

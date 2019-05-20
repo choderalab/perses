@@ -977,6 +977,7 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
+    solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
     solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
     barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
