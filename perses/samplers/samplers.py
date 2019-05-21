@@ -1160,3 +1160,33 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
 
     def __init__(self, *args, hybrid_factory=None, **kwargs):
         super(HybridRepexSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
+        self._factory = hybrid_factory
+
+    def setup(self, n_states, temperature, storage_file):
+        hybrid_system = self._factory.hybrid_system
+
+        initial_hybrid_positions = self._factory.hybrid_positions
+        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
+
+
+        thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
+        compound_thermodynamic_state = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
+
+        thermodynamic_state_list = []
+
+        lambda_values = np.linspace(0.,1.,n_states)
+        for lambda_val in lambda_values:
+            compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
+            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
+            thermodynamic_state_list.append(compound_thermodynamic_state_copy)
+
+        #nonalchemical_thermodynamic_states = [
+        #    ThermodynamicState(self._factory._old_system, temperature=temperature),
+        #    ThermodynamicState(self._factory._new_system, temperature=temperature)]
+        sampler_state = SamplerState(initial_hybrid_positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
+
+        reporter = storage_file
+
+        self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state,
+                    #            storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
+                    storage=reporter, unsampled_thermodynamic_states=None)

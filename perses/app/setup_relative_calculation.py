@@ -3,10 +3,10 @@ import numpy as np
 import pickle
 import os
 import sys
-import logging
 import simtk.unit as unit
+import logging
 
-from perses.samplers.samplers import HybridSAMSSampler
+from perses.samplers.samplers import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
 
@@ -14,7 +14,7 @@ from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 
 
-#logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 def getSetupOptions(filename):
     """
@@ -236,17 +236,27 @@ def run_setup(setup_options):
                                           checkpoint_interval=checkpoint_interval)
 
             #TODO expose more of these options in input
-            hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-                                                                                         collision_rate=5.0 / unit.picosecond,
-                                                                                         n_steps=n_steps_per_move_application,
-                                                                                         reassign_velocities=False,
-                                                                                         n_restart_attempts=6,
-                                                                                         splitting="V R R R O R R R V"),
-                                           hybrid_factory=htf[phase], online_analysis_interval=10,
-                                           online_analysis_minimum_iterations=10)
-            hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+            if setup_options['fe_type'] == 'sams':
+                hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
+                                                                                             collision_rate=5.0 / unit.picosecond,
+                                                                                             n_steps=n_steps_per_move_application,
+                                                                                             reassign_velocities=False,
+                                                                                             n_restart_attempts=6,
+                                                                                             splitting="V R R R O R R R V"),
+                                               hybrid_factory=htf[phase], online_analysis_interval=10,
+                                               online_analysis_minimum_iterations=10)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+            elif setup_options['fe_type'] == 'repex':
+                hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
+                                                                                             collision_rate=5.0 / unit.picosecond,
+                                                                                             n_steps=n_steps_per_move_application,
+                                                                                             reassign_velocities=False,
+                                                                                             n_restart_attempts=6,
+                                                                                             splitting="V R R R O R R R V"),
+                                                                                             hybrid_factory=htf[phase])
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
 
-        return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_sams_samplers': hss}
+            return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_sams_samplers': hss}
 
 if __name__ == "__main__":
     try:
@@ -314,7 +324,7 @@ if __name__ == "__main__":
             for lambda_state, reduced_potential_difference in ne_fep._reduced_potential_differences.items():
                 np.save(endpoint_work_paths[lambda_state], np.array(reduced_potential_difference))
 
-    else:
+    elif setup_options['fe_type'] == 'sams':
         np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
                 setup_dict['hybrid_topology_factories'])
 
@@ -334,4 +344,18 @@ if __name__ == "__main__":
             print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
             print(f"{phase} phase has a free energy of {free_energies[phase]}")
 
+    elif setup_options['fe_type'] == 'repex':
+        np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+                setup_dict['hybrid_topology_factories'])
+
+        hss = setup_dict['hybrid_sams_samplers']
+        logZ = dict()
+        free_energies = dict()
+        for phase in setup_options['phases']:
+            print(f'Running {phase} phase')
+            hss_run = hss[phase]
+            hss_run.minimize()
+            hss_run.equilibrate(n_equilibration_iterations)
+            hss_run.extend(setup_options['n_cycles'])
+            print(f"Finished phase {phase}")
 
