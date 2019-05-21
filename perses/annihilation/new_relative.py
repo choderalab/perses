@@ -87,11 +87,6 @@ class HybridTopologyFactory(object):
         neglected_old_angle_terms : list
             list of indices from the HarmonicAngleForce of the old_system for which the geometry engine neglected.
             Hence, these angles must be alchemically deleted for the unique old atoms (reverse lambda protocol)
-        forward_1_4_proposal_terms : list
-            list of 1,4 terms associated with unique_new atoms and unique_new/core atoms.  These will be grown in with a custom bonded force
-        reverse_1_4_proposal_terms : list
-            list of 1,4 terms associated with unique_old atoms and unique_old/core atoms.  These will be deleted with a custom bonded force
-
 
         .. todo :: Document how positions for hybrid system are constructed
 
