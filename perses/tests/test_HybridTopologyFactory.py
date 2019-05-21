@@ -35,14 +35,14 @@ Test to assess whether the HybridTopologyFactory is bookkeeping all energies at
 lambda = 0, 1 states as compared to nonalchemical endstates given a single transformation.
 
 The following tests will be conducted...
-    1. a solvated small molecule transformation (propane --> butane) will be generated; it will be asserted that the nonalchemical zero state is equal to the alchemical zero state less the forward valence energy.
+    1. a solvated small molecule transformation (current_mol = 'toluene', proposed_mol = '1,2-bis(trifluoromethyl) benzene') will be generated; it will be asserted that the nonalchemical zero state is equal to the alchemical zero state less the forward valence energy.
        It will also be asserted that the alchemical one state is equal to the nonalchemical one state less  the reverse valence energy.
 """
 
 
 def energy_bookkeeping(top_proposal, old_positions):
     """
-    This function returns the energy difference between the lambda = 0, 1 nonalchemical and alchemical states, corrected for the new and old valence energies. 
+    This function returns the energy difference between the lambda = 0, 1 nonalchemical and alchemical states, corrected for the new and old valence energies.
     """
     from perses.tests.utils import generate_vacuum_topology_proposal
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -109,7 +109,7 @@ def energy_bookkeeping(top_proposal, old_positions):
 
     return nonalch_zero_rp - alch_zero_rp + forward_added_valence_energy, nonalch_one_rp - alch_one_rp + reverse_subtracted_valence_energy
 
-def test_HybridTopologyFactory(current_mol = 'propane', proposed_mol = 'butane'):
+def test_HybridTopologyFactory(current_mol = 'toluene', proposed_mol = '1,2-bis(trifluoromethyl) benzene'):
 
     #Just test the solvated system
     from perses.tests.utils import generate_solvated_hybrid_test_topology
@@ -125,4 +125,6 @@ def test_HybridTopologyFactory(current_mol = 'propane', proposed_mol = 'butane')
 
     return zero_rp_diff, one_rp_diff
 
-#test_HybridTopologyFactory()
+# zero_rp_diff, one_rp_diff = test_HybridTopologyFactory()
+# print(zero_rp_diff)
+# print(one_rp_diff)
