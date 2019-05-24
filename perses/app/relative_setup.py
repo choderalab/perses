@@ -37,7 +37,8 @@ class RelativeFEPSetup(object):
     """
     def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
                  protein_pdb_filename=None,receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
-                 temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None):
+                 temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
+                 hmass=4*unit.amus):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -65,6 +66,7 @@ class RelativeFEPSetup(object):
         self._temperature = temperature
         self._barostat_period = 50
         self._padding = solvent_padding
+        self._hmass = hmass
 
         self._proposal_phase = None
 
@@ -162,9 +164,9 @@ class RelativeFEPSetup(object):
             else:
                 barostat = None
             self._system_generator = SystemGenerator(forcefield_files, barostat=barostat,
-                                                     forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
+                                                     forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass})
         else:
-            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
+            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass})
 
         self._system_generator._forcefield.loadFile(StringIO(ffxml))
 

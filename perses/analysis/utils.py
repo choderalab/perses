@@ -1,4 +1,7 @@
 import numpy as np
+import logging
+
+_logger = logging.getLogger("analysis/utils")
 
 def open_netcdf(filename):
     from netCDF4 import Dataset
@@ -28,20 +31,12 @@ def get_offline_free_energies(filename,offline_frequency=10):
 
     return fe, err
 
-def plot_relative(filenameA, filenameB,offline_frequency=10):
-    import matplotlib.pyplot as plt
+def get_t0(filename):
 
-    feA , errA = get_offline_free_energies(filenameA)
-    feB , errB = get_offline_free_energies(filenameB)
-
-    dG = feA - feB
-    ddG = (errA**2 + errB**2)**0.5
-
-    # plotting
-    plt.plot(fe, linewidth=0.75)
-    plt.fill_between(range(len(fe)), fe - err, fe + err, alpha=0.2)
-    plt.xlabel('iteration')
-    plt.ylabel('free energy / units??')
-
-
+    ncfile = open_netcdf(filename)
+    t0 = np.asarray(ncfile.groups['online_analysis'].variables['t0'])[0]
+    # todo need a huge error warning if t0 = 0 as that means sams hasn't moved from first to second stage
+    if t0 == 0:
+        _logger.warning(f"t0 for this file is zero, which means that stage 2 was not reached within the simulation")
+    return t0
 

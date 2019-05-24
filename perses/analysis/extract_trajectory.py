@@ -7,7 +7,7 @@ Functions to extract trajectory from a perses relative calculation
 
 import numpy as np
 import mdtraj as md
-from perses.scripts.utils import open_netcdf
+from perses.analysis.utils import open_netcdf
 
 def get_hybrid_topology(file):
     hybrid_factory = np.load(file)
