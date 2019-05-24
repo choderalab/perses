@@ -20,6 +20,7 @@ import copy
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 from openmmtools import integrators
 
+istravis = os.environ.get('TRAVIS', None) == 'true'
 #############################################
 # CONSTANTS
 #############################################
