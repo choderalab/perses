@@ -41,6 +41,20 @@ def getSetupOptions(filename):
         setup_options['phases'] = ['complex','solvent']
         print('No phases provided - running complex and solvent as default')
 
+    if setup_options['fe_type'] == 'sams':
+        # check if some parameters are provided, otherwise use defaults
+        if 'flatness-criteria' not in setup_options:
+            setup_options['flatness-criteria'] = 'minimum-visits'
+        if 'offline-freq' not in setup_options:
+            setup_options['offline-freq'] = 10 
+        if 'gamma0' not in setup_options:
+            setup_options['gamma0'] = 1.
+        if 'beta_factor' not in setup_options:
+            setup_options['beta_factor'] = 0.8
+    elif setup_options['fe_type'] == 'repex':
+        if 'offline-freq' not in setup_options:
+            setup_options['offline-freq'] = 10 
+
     trajectory_directory = setup_options['trajectory_directory']
     assert (os.path.exists(trajectory_directory) == False), 'Output directory already exists. Refusing to overwrite'
     os.makedirs(trajectory_directory)
@@ -243,8 +257,9 @@ def run_setup(setup_options):
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=6,
                                                                                              splitting="V R R R O R R R V"),
-                                               hybrid_factory=htf[phase], online_analysis_interval=10,
-                                               online_analysis_minimum_iterations=10)
+                                               hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
+                                               online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
+                                               gamma0=setup_options['gamma0'],beta_factor=setup_options['beta_factor'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
@@ -253,10 +268,10 @@ def run_setup(setup_options):
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=6,
                                                                                              splitting="V R R R O R R R V"),
-                                                                                             hybrid_factory=htf[phase])
+                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
 
-            return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_sams_samplers': hss}
+        return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_sams_samplers': hss}
 
 if __name__ == "__main__":
     try:
