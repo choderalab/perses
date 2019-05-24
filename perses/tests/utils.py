@@ -994,7 +994,7 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
 
     if not propose_geometry:
-        return topology_proposal, solvated_positions
+        return topology_proposal, solvated_positions, None
 
     #generate new positions with geometry engine
     new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
