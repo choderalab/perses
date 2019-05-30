@@ -643,7 +643,7 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     platform = openmm.Platform.getPlatformByName('Reference')
     for (state, pos, box_vectors) in attrib_list:
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context, integrator = state.create_context(integrator, platform)
+        context = state.create_context(integrator, platform)
         samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
         samplerstate.apply_to_context(context)
         rp = state.reduced_potential(context)
