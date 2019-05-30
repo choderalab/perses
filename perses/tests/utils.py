@@ -643,7 +643,7 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     rp_list = []
     for (state, pos, box_vectors) in attrib_list:
         context, integrator = cache.global_context_cache.get_context(state)
-        samplerstate = SamplerState(positions = pos, box_vectors = box_vectors)
+        samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
         samplerstate.apply_to_context(context)
         rp = state.reduced_potential(context)
         rp_list.append(rp)
