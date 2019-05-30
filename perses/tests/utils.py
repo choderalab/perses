@@ -618,7 +618,6 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     one_state_energy_difference : float
         reduced potential difference of the nonalchemical and alchemical lambda = 1 state (corrected for valence energy).
     """
-    import openmmtools.cache as cache
     import copy
 
     #create copies of old/new systems and set the dispersion correction
@@ -641,8 +640,10 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
                     (nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
 
     rp_list = []
+    platform = openmm.Platform.getPlatformByName('Reference')
     for (state, pos, box_vectors) in attrib_list:
-        context, integrator = cache.global_context_cache.get_context(state)
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context, integrator = state.create_context(integrator, platform)
         samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
         samplerstate.apply_to_context(context)
         rp = state.reduced_potential(context)
