@@ -5,6 +5,7 @@ Functions to plot free energy maps for sets of ligands
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
+from scipy.stats import linregress
 
 
 def pathway(nodes):
@@ -78,17 +79,29 @@ def cycle_closure(G, steps, verbose=False):
 
 
 def plot_comparison(x,y,X,Y, title='', shaded=True,color='blue'):
+
     errors = {'dg': 'ddg', 'exp': 'experr', 'calc': 'calcerr'}
 
     plt.figure(figsize=(10, 10))
 
+
+    xs = []
+    ys = []
     for edge in X.edges():
-        xval = get_attr(X,edge[0], edge[1], x)
-        yval = get_attr(Y,edge[0], edge[1], y)
-        xerr = get_attr(X,edge[0], edge[1], errors[x])
-        yerr = get_attr(Y,edge[0], edge[1], errors[y])
-        plt.scatter(xval, yval, color=color)
-        plt.errorbar(xval, yval, xerr=xerr, yerr=yerr, color=color)
+        if Y.has_edge(edge[0], edge[1]):
+            xval = get_attr(X,edge[0], edge[1], x)
+            yval = get_attr(Y,edge[0], edge[1], y)
+            xerr = get_attr(X,edge[0], edge[1], errors[x])
+            yerr = get_attr(Y,edge[0], edge[1], errors[y])
+            if xval < 0:
+                xval = -xval
+                yval = -yval
+            plt.scatter(xval, yval, color=color)
+            plt.errorbar(xval, yval, xerr=xerr, yerr=yerr, color=color)
+            xs.append(xval)
+            ys.append(yval)
+
+    slope, intercept, r_value, _value, std_err = linregress(xs, ys)
 
     xlim = plt.gca().get_xlim()
     ylim = plt.gca().get_ylim()
@@ -103,5 +116,9 @@ def plot_comparison(x,y,X,Y, title='', shaded=True,color='blue'):
 
     plt.xlabel(x + ' / kT')
     plt.ylabel(y + ' / kT')
+    plt.text(limits[0]+1, limits[1]-1, f"$R^2$ = {r_value**2:.2f}")
     plt.title(title)
     plt.show()
+
+
+    return r_value**2, std_err
