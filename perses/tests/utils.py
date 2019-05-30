@@ -511,7 +511,7 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
     modeller = app.Modeller(top_old, pos_old)
-    modeller.addSolvent(forcefield, model='tip3p', padding=2.0*unit.angstrom)
+    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
     solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
@@ -563,7 +563,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
 
     from perses.utils.openeye import createOEMolFromSMILES
     from perses.utils.data import get_data_filename
-   
+
     host_guest = testsystems.HostGuestVacuum()
     unsolv_old_system, old_positions, top_old = host_guest.system, host_guest.positions, host_guest.topology
 
