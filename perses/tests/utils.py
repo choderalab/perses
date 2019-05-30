@@ -636,8 +636,8 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     # compute reduced energies
     #for the nonalchemical systems...
     attrib_list = [(nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
-                    (alch_zero, HTF._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
-                    (alch_one, HTF._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    (alch_zero, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    (alch_one, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
                     (nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
 
     rp_list = []
