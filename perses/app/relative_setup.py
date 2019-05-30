@@ -479,15 +479,18 @@ class RelativeFEPSetup(object):
         modeller.delete(hs)
         modeller.addHydrogens(forcefield=self._system_generator._forcefield)
         if not vacuum:
-            _logger.info("preparing to add solvent")
+            _logger.info(f"\tpreparing to add solvent")
             modeller.addSolvent(self._system_generator._forcefield, model=model, padding=self._padding)
         else:
-            _logger.info("Skipping solvation of vacuum perturbation")
+            _logger.info(f"\tSkipping solvation of vacuum perturbation")
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
-        _logger.info("solvent added, parameterizing")
+
+        # canonicalize the solvated positions: turn tuples into np.array
+        solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
+        _logger.info(f"\tparameterizing...")
         solvated_system = self._system_generator.build_system(solvated_topology)
-        _logger.info("System parameterized")
+        _logger.info(f"\tSystem parameterized")
         return solvated_topology, solvated_positions, solvated_system
 
     @property
