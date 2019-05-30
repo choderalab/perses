@@ -626,8 +626,9 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     top_proposal._old_system.getForce(3).setUseDispersionCorrection(False)
     top_proposal._new_system.getForce(3).setUseDispersionCorrection(False)
 
-    #create copy of hybrid system
+    #create copy of hybrid system, define old and new positions
     hybrid_system = copy.deepcopy(htf.hybrid_system)
+    old_positions, new_positions = htf._old_positions, htf._new_positions
 
     #generate endpoint thermostates
     nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal)
@@ -637,7 +638,7 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     attrib_list = [(nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
                     (alch_zero, HTF._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
                     (alch_one, HTF._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
-                    (nonalch_one, _new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
+                    (nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
 
     rp_list = []
     for (state, pos, box_vectors) in attrib_list:
