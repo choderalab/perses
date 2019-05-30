@@ -35,6 +35,7 @@ from openmmtools import alchemy, states
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
+ENERGY_THRESHOLD = 1e-1
 
 ################################################################################
 # UTILITIES
@@ -593,3 +594,63 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
 
     return topology_proposal, old_positions, new_positions
+
+def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, ENERGY_THRESHOLD = 1e-1):
+    """
+    Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
+    equal to the difference in valence energy (forward and reverse).
+
+    Parameters
+    ----------
+    topology_proposal : perses.topology_proposal.TopologyProposal object
+        top_proposal for relevant transformation
+    htf : perses.new_relative.HybridTopologyFactory object
+        hybrid top factory for setting alchemical hybrid states
+    added_energy : float
+        reduced added valence energy
+    subtracted_energy: float
+        reduced subtracted valence energy
+
+    Returns
+    -------
+    zero_state_energy_difference : float
+        reduced potential difference of the nonalchemical and alchemical lambda = 0 state (corrected for valence energy).
+    one_state_energy_difference : float
+        reduced potential difference of the nonalchemical and alchemical lambda = 1 state (corrected for valence energy).
+    """
+    import openmmtools.cache as cache
+    import copy
+
+    #create copies of old/new systems and set the dispersion correction
+    top_proposal = copy.deepcopy(topology_proposal)
+    top_proposal._old_system.getForce(3).setUseDispersionCorrection(False)
+    top_proposal._new_system.getForce(3).setUseDispersionCorrection(False)
+
+    #create copy of hybrid system
+    hybrid_system = copy.deepcopy(htf.hybrid_system)
+
+    #generate endpoint thermostates
+    nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal)
+
+    # compute reduced energies
+    #for the nonalchemical systems...
+    attrib_list = [(nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
+                    (alch_zero, HTF._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    (alch_one, HTF._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    (nonalch_one, _new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
+
+    rp_list = []
+    for (state, pos, box_vectors) in attrib_list:
+        context, integrator = cache.global_context_cache.get_context(state)
+        samplerstate = SamplerState(positions = pos, box_vectors = box_vectors)
+        samplerstate.apply_to_context(context)
+        rp = state.reduced_potential(context)
+        rp_list.append(rp)
+        del context, integrator
+
+    nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
+    assert abs(nonalch_zero_rp - alch_zero_rp + added_energy) < ENERGY_THRESHOLD, f"The zero state alchemical and nonalchemical energy absolute difference {abs(nonalch_zero_rp - alch_zero_rp + added_energy)} is greater than the threshold of {ENERGY_THRESHOLD}."
+    assert abs(nonalch_one_rp - alch_one_rp + subtracted_energy) < ENERGY_THRESHOLD, f"The one state alchemical and nonalchemical energy absolute difference {abs(nonalch_one_rp - alch_one_rp + subtracted_energy)} is greater than the threshold of {ENERGY_THRESHOLD}."
+
+
+    return abs(nonalch_zero_rp - alch_zero_rp + added_energy), abs(nonalch_one_rp - alch_one_rp + subtracted_energy)
