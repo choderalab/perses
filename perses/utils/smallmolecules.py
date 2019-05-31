@@ -51,7 +51,7 @@ def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
     from perses.tests.utils import has_undefined_stereocenters, enumerate_undefined_stereocenters
     sanitized_smiles_set = set()
-    OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
+    OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
     for smiles in smiles_list:
         molecule = OEGraphMol()
         OESmilesToMol(molecule, smiles)
@@ -221,6 +221,3 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
-
-
-

@@ -6,18 +6,19 @@ import sys
 import simtk.unit as unit
 import logging
 
-#from perses.samplers.samplers import HybridSAMSSampler, HybridRepexSampler
+from perses.samplers.samplers import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.new_relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
 
 from openmmtools import mcmc
-#from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
+from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("setup_relative_calculation")
 _logger.setLevel(logging.INFO)
 
 ENERGY_THRESHOLD = 1e-1
+from openmmtools.constants import kB
 
 def getSetupOptions(filename):
     """
@@ -299,7 +300,7 @@ def run_setup(setup_options):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy)
+            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature))
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
@@ -313,32 +314,32 @@ def run_setup(setup_options):
             _logger.info(f'\tstorage_name: {storage_name}')
             _logger.info(f'\tselection_indices {selection_indices}')
             _logger.info(f'\tcheckpoint interval {checkpoint_interval}')
-        #     reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
-        #                                   checkpoint_interval=checkpoint_interval)
-        #
-        #     #TODO expose more of these options in input
-        #     if setup_options['fe_type'] == 'sams':
-        #         hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-        #                                                                                      collision_rate=5.0 / unit.picosecond,
-        #                                                                                      n_steps=n_steps_per_move_application,
-        #                                                                                      reassign_velocities=False,
-        #                                                                                      n_restart_attempts=6,
-        #                                                                                      splitting="V R R R O R R R V"),
-        #                                        hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
-        #                                        online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-        #                                        gamma0=setup_options['gamma0'],beta_factor=setup_options['beta_factor'])
-        #         hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
-        #     elif setup_options['fe_type'] == 'repex':
-        #         hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
-        #                                                                                      collision_rate=5.0 / unit.picosecond,
-        #                                                                                      n_steps=n_steps_per_move_application,
-        #                                                                                      reassign_velocities=False,
-        #                                                                                      n_restart_attempts=6,
-        #                                                                                      splitting="V R R R O R R R V"),
-        #                                                                                      hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
-        #         hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
-        #
-        # return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
+            reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
+                                          checkpoint_interval=checkpoint_interval)
+
+            #TODO expose more of these options in input
+            if setup_options['fe_type'] == 'sams':
+                hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
+                                                                                             collision_rate=5.0 / unit.picosecond,
+                                                                                             n_steps=n_steps_per_move_application,
+                                                                                             reassign_velocities=False,
+                                                                                             n_restart_attempts=6,
+                                                                                             splitting="V R R R O R R R V"),
+                                               hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
+                                               online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
+                                               gamma0=setup_options['gamma0'],beta_factor=setup_options['beta_factor'])
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+            elif setup_options['fe_type'] == 'repex':
+                hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
+                                                                                             collision_rate=5.0 / unit.picosecond,
+                                                                                             n_steps=n_steps_per_move_application,
+                                                                                             reassign_velocities=False,
+                                                                                             n_restart_attempts=6,
+                                                                                             splitting="V R R R O R R R V"),
+                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+
+        return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
 if __name__ == "__main__":
     _logger.info("Beginning Setup...")
@@ -354,124 +355,124 @@ if __name__ == "__main__":
     _logger.info(f"Running setup...")
     setup_dict = run_setup(setup_options)
 
-    # trajectory_prefix = setup_options['trajectory_prefix']
-    # trajectory_directory = setup_options['trajectory_directory']
-    # #write out topology proposals
-    # _logger.info(f"Writing topology proposal {trajectory_prefix}topology_proposals.npy to {trajectory_directory}...")
-    # np.save(os.path.join(setup_options['trajectory_directory'], trajectory_prefix+"topology_proposals.npy"),
-    #         setup_dict['topology_proposals'])
-    #
-    #
-    # n_equilibration_iterations = setup_options['n_equilibration_iterations']
-    # _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
-    # if setup_options['fe_type'] == 'nonequilibrium':
-    #     _logger.info(f"Detecting nonequilibrium as fe_type...(this is neither logged nor debugged properly).")
-    #     n_cycles = setup_options['n_cycles']
-    #     n_iterations_per_cycle = setup_options['n_iterations_per_cycle']
-    #     total_iterations = n_cycles*n_iterations_per_cycle
-    #
-    #     ne_fep = setup_dict['ne_fep']
-    #     for phase in setup_options['phases']:
-    #         ne_fep_run = ne_fep[phase]
-    #         hybrid_factory = ne_fep_run._factory
-    #         np.save(os.path.join(trajectory_directory, "%s_%s_hybrid_factory.npy" % (trajectory_prefix, phase)),
-    #                 hybrid_factory)
-    #
-    #         print("equilibrating")
-    #         ne_fep_run.equilibrate(n_iterations=n_equilibration_iterations)
-    #
-    #         print("equilibration complete")
-    #         for i in range(n_cycles):
-    #             ne_fep_run.run(n_iterations=n_iterations_per_cycle)
-    #             print(i)
-    #
-    #         print("calculation complete")
-    #         df, ddf = ne_fep_run.current_free_energy_estimate
-    #
-    #         print("The free energy estimate is %f +/- %f" % (df, ddf))
-    #
-    #         endpoint_file_prefix = os.path.join(trajectory_directory, "%s_%s_endpoint{endpoint_idx}.npy" %
-    #                                             (trajectory_prefix, phase))
-    #
-    #         endpoint_work_paths = [endpoint_file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0, 1]]
-    #
-    #         # try to write out the ne_fep object as a pickle
-    #         try:
-    #             pickle_outfile = open(os.path.join(trajectory_directory, "%s_%s_ne_fep.pkl" %
-    #                                                (trajectory_prefix, phase)), 'wb')
-    #         except Exception as e:
-    #             pass
-    #
-    #         try:
-    #             pickle.dump(ne_fep, pickle_outfile)
-    #         except Exception as e:
-    #             print(e)
-    #             print("Unable to save run object as a pickle")
-    #         finally:
-    #             pickle_outfile.close()
-    #
-    #         # save the endpoint perturbations
-    #         for lambda_state, reduced_potential_difference in ne_fep._reduced_potential_differences.items():
-    #             np.save(endpoint_work_paths[lambda_state], np.array(reduced_potential_difference))
-    #
-    # elif setup_options['fe_type'] == 'sams':
-    #     _logger.info(f"Detecting sams as fe_type...")
-    #     _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-    #     np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
-    #             setup_dict['hybrid_topology_factories'])
-    #
-    #     hss = setup_dict['hybrid_samplers']
-    #     logZ = dict()
-    #     free_energies = dict()
-    #     _logger.info(f"Iterating through phases for sams...")
-    #     for phase in setup_options['phases']:
-    #         _logger.info(f'\tRunning {phase} phase...')
-    #         hss_run = hss[phase]
-    #
-    #         _logger.info(f"\t\tminimizing...\n\n")
-    #         hss_run.minimize()
-    #         _logger.info(f"\n\n")
-    #
-    #         _logger.info(f"\t\tequilibrating...\n\n")
-    #         hss_run.equilibrate(n_equilibration_iterations)
-    #         _logger.info(f"\n\n")
-    #
-    #         _logger.info(f"\t\textending simulation...\n\n")
-    #         hss_run.extend(setup_options['n_cycles'])
-    #         _logger.info(f"\n\n")
-    #
-    #         logZ[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
-    #         free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
-    #         _logger.info(f"\t\tFinished phase {phase}")
-    #
-    #     for phase in free_energies:
-    #         print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
-    #         print(f"{phase} phase has a free energy of {free_energies[phase]}")
-    #
-    # elif setup_options['fe_type'] == 'repex':
-    #     _logger.info(f"Detecting repex as fe_type...")
-    #     _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-    #     np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
-    #             setup_dict['hybrid_topology_factories'])
-    #
-    #     hss = setup_dict['hybrid_samplers']
-    #     logZ = dict()
-    #     free_energies = dict()
-    #     _logger.info(f"Iterating through phases for repex...")
-    #     for phase in setup_options['phases']:
-    #         print(f'Running {phase} phase')
-    #         hss_run = hss[phase]
-    #
-    #         _logger.info(f"\t\tminimizing...\n\n")
-    #         hss_run.minimize()
-    #         _logger.info(f"\n\n")
-    #
-    #         _logger.info(f"\t\tequilibrating...\n\n")
-    #         hss_run.equilibrate(n_equilibration_iterations)
-    #         _logger.info(f"\n\n")
-    #
-    #         _logger.info(f"\t\textending simulation...\n\n")
-    #         hss_run.extend(setup_options['n_cycles'])
-    #         _logger.info(f"\n\n")
-    #
-    #         _logger.info(f"\t\tFinished phase {phase}")
+    trajectory_prefix = setup_options['trajectory_prefix']
+    trajectory_directory = setup_options['trajectory_directory']
+    #write out topology proposals
+    _logger.info(f"Writing topology proposal {trajectory_prefix}topology_proposals.npy to {trajectory_directory}...")
+    np.save(os.path.join(setup_options['trajectory_directory'], trajectory_prefix+"topology_proposals.npy"),
+            setup_dict['topology_proposals'])
+
+
+    n_equilibration_iterations = setup_options['n_equilibration_iterations']
+    _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
+    if setup_options['fe_type'] == 'nonequilibrium':
+        _logger.info(f"Detecting nonequilibrium as fe_type...(this is neither logged nor debugged properly).")
+        n_cycles = setup_options['n_cycles']
+        n_iterations_per_cycle = setup_options['n_iterations_per_cycle']
+        total_iterations = n_cycles*n_iterations_per_cycle
+
+        ne_fep = setup_dict['ne_fep']
+        for phase in setup_options['phases']:
+            ne_fep_run = ne_fep[phase]
+            hybrid_factory = ne_fep_run._factory
+            np.save(os.path.join(trajectory_directory, "%s_%s_hybrid_factory.npy" % (trajectory_prefix, phase)),
+                    hybrid_factory)
+
+            print("equilibrating")
+            ne_fep_run.equilibrate(n_iterations=n_equilibration_iterations)
+
+            print("equilibration complete")
+            for i in range(n_cycles):
+                ne_fep_run.run(n_iterations=n_iterations_per_cycle)
+                print(i)
+
+            print("calculation complete")
+            df, ddf = ne_fep_run.current_free_energy_estimate
+
+            print("The free energy estimate is %f +/- %f" % (df, ddf))
+
+            endpoint_file_prefix = os.path.join(trajectory_directory, "%s_%s_endpoint{endpoint_idx}.npy" %
+                                                (trajectory_prefix, phase))
+
+            endpoint_work_paths = [endpoint_file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0, 1]]
+
+            # try to write out the ne_fep object as a pickle
+            try:
+                pickle_outfile = open(os.path.join(trajectory_directory, "%s_%s_ne_fep.pkl" %
+                                                   (trajectory_prefix, phase)), 'wb')
+            except Exception as e:
+                pass
+
+            try:
+                pickle.dump(ne_fep, pickle_outfile)
+            except Exception as e:
+                print(e)
+                print("Unable to save run object as a pickle")
+            finally:
+                pickle_outfile.close()
+
+            # save the endpoint perturbations
+            for lambda_state, reduced_potential_difference in ne_fep._reduced_potential_differences.items():
+                np.save(endpoint_work_paths[lambda_state], np.array(reduced_potential_difference))
+
+    elif setup_options['fe_type'] == 'sams':
+        _logger.info(f"Detecting sams as fe_type...")
+        _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
+        np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+                setup_dict['hybrid_topology_factories'])
+
+        hss = setup_dict['hybrid_samplers']
+        logZ = dict()
+        free_energies = dict()
+        _logger.info(f"Iterating through phases for sams...")
+        for phase in setup_options['phases']:
+            _logger.info(f'\tRunning {phase} phase...')
+            hss_run = hss[phase]
+
+            _logger.info(f"\t\tminimizing...\n\n")
+            hss_run.minimize()
+            _logger.info(f"\n\n")
+
+            _logger.info(f"\t\tequilibrating...\n\n")
+            hss_run.equilibrate(n_equilibration_iterations)
+            _logger.info(f"\n\n")
+
+            _logger.info(f"\t\textending simulation...\n\n")
+            hss_run.extend(setup_options['n_cycles'])
+            _logger.info(f"\n\n")
+
+            logZ[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
+            free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
+            _logger.info(f"\t\tFinished phase {phase}")
+
+        for phase in free_energies:
+            print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
+            print(f"{phase} phase has a free energy of {free_energies[phase]}")
+
+    elif setup_options['fe_type'] == 'repex':
+        _logger.info(f"Detecting repex as fe_type...")
+        _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
+        np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+                setup_dict['hybrid_topology_factories'])
+
+        hss = setup_dict['hybrid_samplers']
+        logZ = dict()
+        free_energies = dict()
+        _logger.info(f"Iterating through phases for repex...")
+        for phase in setup_options['phases']:
+            print(f'Running {phase} phase')
+            hss_run = hss[phase]
+
+            _logger.info(f"\t\tminimizing...\n\n")
+            hss_run.minimize()
+            _logger.info(f"\n\n")
+
+            _logger.info(f"\t\tequilibrating...\n\n")
+            hss_run.equilibrate(n_equilibration_iterations)
+            _logger.info(f"\n\n")
+
+            _logger.info(f"\t\textending simulation...\n\n")
+            hss_run.extend(setup_options['n_cycles'])
+            _logger.info(f"\n\n")
+
+            _logger.info(f"\t\tFinished phase {phase}")

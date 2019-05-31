@@ -285,5 +285,5 @@ def createOEMolFromSDF(sdf_filename, index=0):
 
 def createSMILESfromOEMol(molecule):
     smiles = oechem.OECreateSmiString(molecule,
-                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens)
     return smiles

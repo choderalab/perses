@@ -192,7 +192,8 @@ class RelativeFEPSetup(object):
         self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_smiles_old, self._ligand_smiles_new], self._system_generator, residue_name='MOL')
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
-        self._geometry_engine = FFAllAngleGeometryEngine()
+        # NOTE: we are conducting the geometry proposal without any neglected angles
+        self._geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
 
         # if we are running multiple phases, we only want to generate one topology proposal, and use the same one for the other legs
         # this is tracked using _proposal_phase
@@ -209,7 +210,7 @@ class RelativeFEPSetup(object):
 
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
-                                                                                self._complex_topology_old_solvated)
+                                                                                self._complex_topology_old_solvated, self._ligand_oemol_old)
             self._proposal_phase = 'complex'
 
             _logger.info(f"conducting geometry proposal...")
@@ -233,7 +234,7 @@ class RelativeFEPSetup(object):
 
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
-                                                                                    self._ligand_topology_old_solvated)
+                                                                                    self._ligand_topology_old_solvated, self._ligand_oemol_old)
                 self._proposal_phase = 'solvent'
             else:
                 _logger.info('Using the topology proposal from the complex leg')
@@ -241,7 +242,6 @@ class RelativeFEPSetup(object):
                     self._complex_topology_proposal, self._complex_positions_old_solvated)
 
             _logger.info(f"conducting geometry proposal...")
-            _logger.info(f"_ligand_positions_old_solvated: {self._ligand_positions_old_solvated}")
             self._ligand_positions_new_solvated, self._ligand_logp_proposal_solvated = self._geometry_engine.propose(self._solvent_topology_proposal,
                                                                                     self._ligand_positions_old_solvated, beta)
             self._ligand_logp_reverse_solvated = self._geometry_engine.logp_reverse(self._solvent_topology_proposal, self._ligand_positions_new_solvated, self._ligand_positions_old_solvated, beta)
@@ -262,7 +262,7 @@ class RelativeFEPSetup(object):
                 self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
                                                                                                          self._ligand_positions_old,vacuum=True)
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
-                                                                                self._vacuum_topology_old)
+                                                                                self._vacuum_topology_old, self._ligand_oemol_old)
                 self._proposal_phase = 'vacuum'
             elif self._proposal_phase == 'complex':
                 _logger.info('Using the topology proposal from the complex leg')
@@ -694,7 +694,7 @@ class NonequilibriumFEPSetup(object):
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol,
                                                                      self._system_generator, residue_name="MOL",
                                                                      atom_map=atom_map)
-        self._geometry_engine = FFAllAngleGeometryEngine()
+        self._geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
             self._complex_topology_old, self._complex_positions_old)

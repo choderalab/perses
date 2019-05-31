@@ -595,7 +595,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
 
     return topology_proposal, old_positions, new_positions
 
-def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, ENERGY_THRESHOLD = 1e-1):
+def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-1):
     """
     Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
     equal to the difference in valence energy (forward and reverse).
@@ -625,8 +625,14 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     top_proposal._old_system.getForce(3).setUseDispersionCorrection(False)
     top_proposal._new_system.getForce(3).setUseDispersionCorrection(False)
 
-    #create copy of hybrid system, define old and new positions
+    #create copy of hybrid system, define old and new positions, and turn off dispersion correction
     hybrid_system = copy.deepcopy(htf.hybrid_system)
+    hybrid_system_n_forces = hybrid_system.getNumForces()
+    for force_index in range(hybrid_system_n_forces):
+        forcename = hybrid_system.getForce(force_index).__class__.__name__
+        if forcename == 'NonbondedForce':
+            hybrid_system.getForce(force_index).setUseDispersionCorrection(False)
+
     old_positions, new_positions = htf._old_positions, htf._new_positions
 
     #generate endpoint thermostates
@@ -642,14 +648,21 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
     rp_list = []
     platform = openmm.Platform.getPlatformByName('Reference')
     for (state, pos, box_vectors) in attrib_list:
+        #print("\t\t\t{}".format(state))
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
         context = state.create_context(integrator, platform)
         samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
         samplerstate.apply_to_context(context)
         rp = state.reduced_potential(context)
         rp_list.append(rp)
+        #energy_comps = compute_potential_components(context)
+        #for name, force in energy_comps:
+        #    print("\t\t\t{}: {}".format(name, force))
+        #print(f'added forces:{sum([energy*beta for name, energy in energy_comps])}')
+        #print(f'rp: {rp}')
         del context, integrator
 
+    #print(f"added_energy: {added_energy}; subtracted_energy: {subtracted_energy}")
     nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
     assert abs(nonalch_zero_rp - alch_zero_rp + added_energy) < ENERGY_THRESHOLD, f"The zero state alchemical and nonalchemical energy absolute difference {abs(nonalch_zero_rp - alch_zero_rp + added_energy)} is greater than the threshold of {ENERGY_THRESHOLD}."
     assert abs(nonalch_one_rp - alch_one_rp + subtracted_energy) < ENERGY_THRESHOLD, f"The one state alchemical and nonalchemical energy absolute difference {abs(nonalch_one_rp - alch_one_rp + subtracted_energy)} is greater than the threshold of {ENERGY_THRESHOLD}."
