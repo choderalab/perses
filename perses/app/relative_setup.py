@@ -113,7 +113,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"\tsuccessfully generated topologies for both oemols.")
 
             elif self._ligand_input[-3:] == 'sdf': #
-                _logger.info(f"Detected .sdf format.  Proceeding (but without checkpoints...this may be buggy).") #TODO: write checkpoints for sdf format
+                _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
                 self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index)
                 self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index)
 
@@ -121,18 +121,23 @@ class RelativeFEPSetup(object):
                 mol_list.append(self._ligand_oemol_new)
 
                 self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
+                _logger.info(f"\tsuccessfully extracted positions from OEMOL.")
 
                 ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
+                _logger.info(f"\tsuccessfully generated ffxml from molecules.")
 
                 self._ligand_oemol_old.SetTitle("MOL")
                 self._ligand_oemol_new.SetTitle("MOL")
+                _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
 
                 self._ligand_smiles_old = createSMILESfromOEMol(self._ligand_oemol_old)
                 self._ligand_smiles_new = createSMILESfromOEMol(self._ligand_oemol_new)
+                _logger.info(f"\tsuccessfully created SMILES for both ligand OEMOLs.")
 
                 # replace this with function that will generate the system etc. so that vacuum can be performed
                 self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
                 self._ligand_topology_new = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_new)
+                _logger.info(f"\tsuccessfully generated topologies for both OEMOLs.")
             else:
                 print(f'RelativeFEPSetup can only handle .smi or .sdf files currently')
 
