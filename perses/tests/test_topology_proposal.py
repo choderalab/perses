@@ -640,7 +640,7 @@ def test_molecular_atom_mapping():
     """
     from openeye import oechem
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-    from perses.tests.utils import createOEMolFromSMILES
+    from openmoltools.openeye import smiles_to_oemol
     from perses.tests.utils import render_atom_mapping
     from itertools import combinations
 

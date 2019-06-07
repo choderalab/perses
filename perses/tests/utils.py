@@ -563,7 +563,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
 
-    from perses.utils.openeye import createOEMolFromSMILES
+    from openmoltools.openeye import smiles_to_oemol
     from perses.utils.data import get_data_filename
 
     host_guest = testsystems.HostGuestVacuum()
@@ -571,7 +571,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
 
     ligand_topology = [res for res in top_old.residues()]
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
-    proposed_mol = createOEMolFromSMILES('C1CC2(CCC1(CC2)C)C')
+    proposed_mol = smiles_to_oemol('C1CC2(CCC1(CC2)C)C')
 
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)

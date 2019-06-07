@@ -54,7 +54,7 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
 
     return molecule
 
-def createOEMolFromSMILES(smiles, title='MOL',max_confs=1):
+def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     """
     Generate an oemol from a SMILES string
 
@@ -183,7 +183,7 @@ def createSystemFromSMILES(smiles,title='MOL'):
     smiles = smiles[0]
 
     # Create OEMol
-    molecule = createOEMolFromSMILES(smiles,title=title)
+    molecule = smiles_to_oemol(smiles,title=title)
 
     # generate openmm system, positions and topology
     system, positions, topology = OEMol_to_omm_ff(molecule)
