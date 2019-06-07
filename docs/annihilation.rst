@@ -196,7 +196,7 @@ Below is a very simple example script that constructs a :py:class:`HybridTopolog
     
     #import needed functionality
     from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-    from perses.annihilation.new_relative import HybridTopologyFactory
+    from perses.annihilation.relative import HybridTopologyFactory
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
     

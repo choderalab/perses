@@ -180,7 +180,7 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_n
 
     """
     from perses.annihilation import NCMCGHMCAlchemicalIntegrator
-    from perses.annihilation.new_relative import HybridTopologyFactory
+    from perses.annihilation.relative import HybridTopologyFactory
 
     #make the hybrid topology factory:
     factory = HybridTopologyFactory(topology_proposal, positions, positions)
@@ -349,7 +349,7 @@ def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nstep
     }
     # Initialize engine
     from perses.annihilation import NCMCGHMCAlchemicalIntegrator
-    from perses.annihilation.new_relative import HybridTopologyFactory
+    from perses.annihilation.relative import HybridTopologyFactory
 
     #The current and "proposed" positions are the same, since the molecule is not changed.
     factory = HybridTopologyFactory(topology_proposal, positions, positions)
