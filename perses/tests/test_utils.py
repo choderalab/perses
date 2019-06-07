@@ -53,7 +53,7 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
 
         return molecule
 
-    def test_createOEMolFromIUPAC(iupac='bosutinib',title='MOL'):
+    def test_iupac_to_oemol(iupac='bosutinib',title='MOL'):
         """
         Generating an OEMol of ethane from simple SMILES string
 
@@ -64,8 +64,8 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
         title : str, default 'MOL'
             title for OEMol object
         """
-        from perses.utils.openeye import createOEMolFromIUPAC
-        molecule = createOEMolFromIUPAC(iupac)
+        from openmoltools.openeye import iupac_to_oemol
+        molecule = iupac_to_oemol(iupac)
 
         # checking that it has returned an OEMol with a non-zero number of atoms
         assert (molecule.NumAtoms() > 0), "createOEMolFromSMILES has returned an empty molecule"
@@ -178,7 +178,7 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
         import simtk.unit as unit
         from openeye import oechem
 
-        oemol = test_createOEMolFromIUPAC(iupac)
+        oemol = test_iupac_to_oemol(iupac)
         positions = test_extractPositionsFromOEMol(oemol)
 
         # shifting all of the positions by 1. A
@@ -195,4 +195,3 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
 
         # check that the two systems have the same numbers of atoms
         assert (oemol.NumAtoms() == smiles_oemol.NumAtoms()), "Discrepancy between molecule generated from IUPAC and SMILES"
-

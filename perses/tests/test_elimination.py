@@ -68,12 +68,14 @@ def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"
     """
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
 
-    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import createSystemFromIUPAC
+    from openmoltools.openeye import iupac_to_oemol
 
-    mol = createOEMolFromIUPAC(mol_name)
+
+    mol = iupac_to_oemol(mol_name)
     m, system, positions, topology = createSystemFromIUPAC(mol_name)
 
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    refmol = iupac_to_oemol(ref_mol_name)
 
     #map one of the rings
     atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
@@ -93,12 +95,15 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createSystemFromIUPAC, get_data_filename
+    from openmoltools.openeye import iupac_to_oemol
 
-    mol = createOEMolFromIUPAC(mol_name)
+
+
+    mol = iupac_to_oemol(mol_name)
     m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
 
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    refmol = iupac_to_oemol(ref_mol_name)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
@@ -133,13 +138,14 @@ def generate_solvated_hybrid_topology(mol_name="naphthalene", ref_mol_name="benz
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import createSystemFromIUPAC
+    from openmoltools.openeye import iupac_to_oemol
     from perses.utils.data import get_data_filename
 
-    mol = createOEMolFromIUPAC(mol_name)
+    mol = iupac_to_oemol(mol_name)
     m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
 
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    refmol = iupac_to_oemol(ref_mol_name)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')

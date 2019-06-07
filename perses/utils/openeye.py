@@ -54,50 +54,6 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
 
     return molecule
 
-def createOEMolFromIUPAC(iupac_name,max_confs=1):
-    """
-    Generate an OEMol object using an IUPAC code
-
-    Parameters
-    ----------
-    iupac_name : str
-        standard IUPAC name of a molecule
-    max_confs : int, default 1
-        maximum number of conformers to generate
-
-    Returns
-    -------
-    molecule : openeye.oechem.OEMol
-        OEMol object of the molecule
-    """
-    from openeye import oeiupac, oeomega
-
-    # Create molecule.
-    molecule = oechem.OEMol()
-    oeiupac.OEParseIUPACName(molecule, iupac_name)
-
-    # Set title.
-    molecule.SetTitle(iupac_name)
-
-    # Assign aromaticity and hydrogens.
-    oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
-    oechem.OEAddExplicitHydrogens(molecule)
-
-    # Create atom names.
-    oechem.OETriposAtomNames(molecule)
-
-    # Create bond types
-    oechem.OETriposBondTypeNames(molecule)
-
-    # Assign geometry
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(max_confs)
-    omega.SetIncludeInput(False)
-    omega.SetStrictStereo(True)
-    omega(molecule)
-
-    return molecule
-
 def createOEMolFromSMILES(smiles, title='MOL',max_confs=1):
     """
     Generate an oemol from a SMILES string
@@ -194,7 +150,7 @@ def createSystemFromIUPAC(iupac_name):
     """
 
     # Create OEMol
-    molecule = createOEMolFromIUPAC(iupac_name)
+    molecule = iupac_to_oemol(iupac_name)
 
     # generate openmm system, positions and topology
     system, positions, topology = OEMol_to_omm_ff(molecule)
@@ -287,3 +243,19 @@ def createSMILESfromOEMol(molecule):
     smiles = oechem.OECreateSmiString(molecule,
                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
     return smiles
+
+
+def calculate_mol_similarity(molA, molB):
+    """
+    Function to calculate the similarity between two oemol objects
+    should be used to utils/openeye.py or openmoltools
+    :param molA: oemol object of molecule A
+    :param molB: oemol object of molecule B
+    :return: float, tanimoto score of the two molecules, between 0 and 1
+    """
+    fpA = oegraphsim.OEFingerPrint()
+    fpB = oegraphsim.OEFingerPrint()
+    oegraphsim.OEMakeFP(fpA, molA, oegraphsim.OEFPType_MACCS166)
+    oegraphsim.OEMakeFP(fpB, molB, oegraphsim.OEFPType_MACCS166)
+
+    return oegraphsim.OETanimoto(fpA, fpB)

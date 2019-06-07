@@ -2091,7 +2091,8 @@ class NullTestSystem(PersesTestSystem):
         exen_samplers = dict()
 
 
-        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromIUPAC
+        from perses.tests.utils import oemol_to_omm_ff, get_data_filename
+        from openmoltools.openeye import iupac_to_oemol
         from perses.samplers.samplers import ExpandedEnsembleSampler
 
         for key in environments:
@@ -2106,7 +2107,7 @@ class NullTestSystem(PersesTestSystem):
             system_generators[key] = system_generator
 
             proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
-            initial_molecule = createOEMolFromIUPAC(iupac_name=self.mol_name)
+            initial_molecule = iupac_to_oemol(iupac_name=self.mol_name)
             initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
 
             if key == "explicit":

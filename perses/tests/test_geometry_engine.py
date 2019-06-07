@@ -2002,14 +2002,15 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
     """
     from openmoltools import forcefield_generators
     from perses.rjmc.topology_proposal import SystemGenerator, TopologyProposal, SmallMoleculeSetProposalEngine
-    from perses.utils.openeye import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import createSystemFromIUPAC
+    from openmoltools.openeye import iupac_to_oemol
     from perses.utils.data import get_data_filename
     from perses.rjmc import geometry
     from perses.utils.smallmolecules import render_atom_mapping
     import tqdm
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
+    proposed_mol = iupac_to_oemol(proposed_mol_name)
 
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
