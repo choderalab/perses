@@ -1,1 +1,1 @@
-from perses.analysis.analysis import Analysis
+from perses.analysis import * 

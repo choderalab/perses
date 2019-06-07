@@ -2,6 +2,10 @@
 Functions to plot free energy maps for sets of ligands
 
 """
+
+__author__ = 'Hannah E. Bruce Macdonald'
+
+
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt

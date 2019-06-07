@@ -39,4 +39,3 @@ def get_t0(filename):
     if t0 == 0:
         _logger.warning(f"t0 for this file is zero, which means that stage 2 was not reached within the simulation")
     return t0
-
