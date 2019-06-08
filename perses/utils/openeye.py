@@ -54,49 +54,6 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
 
     return molecule
 
-def smiles_to_oemol(smiles, title='MOL',max_confs=1):
-    """
-    Generate an oemol from a SMILES string
-
-    Parameters
-    ----------
-    smiles : str
-        SMILES string of molecule
-    title : str, default 'MOL'
-        title of OEMol molecule
-    max_confs : int, default 1
-        maximum number of conformers to generate
-
-    Returns
-    -------
-    molecule : openeye.oechem.OEMol
-        OEMol object of the molecule
-    """
-    from openeye import oeiupac, oeomega
-
-    # Create molecule
-    molecule = oechem.OEMol()
-    oechem.OESmilesToMol(molecule, smiles)
-
-    # Set title.
-    molecule.SetTitle(title)
-
-    # Assign aromaticity and hydrogens.
-    oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
-    oechem.OEAddExplicitHydrogens(molecule)
-
-    # Create atom names.
-    oechem.OETriposAtomNames(molecule)
-
-    # Assign geometry
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(max_confs)
-    omega.SetIncludeInput(False)
-    omega.SetStrictStereo(True)
-    omega(molecule)
-
-    return molecule
-
 
 def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     """
@@ -238,12 +195,6 @@ def createOEMolFromSDF(sdf_filename, index=0):
     # we'll always take the first for now
     mol_to_return = mol_list[index]
     return mol_to_return
-
-def createSMILESfromOEMol(molecule):
-    smiles = oechem.OECreateSmiString(molecule,
-                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-    return smiles
-
 
 def calculate_mol_similarity(molA, molB):
     """

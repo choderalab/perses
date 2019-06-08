@@ -116,8 +116,10 @@ class RelativeFEPSetup(object):
                 self._ligand_oemol_old.SetTitle("MOL")
                 self._ligand_oemol_new.SetTitle("MOL")
 
-                self._ligand_smiles_old = createSMILESfromOEMol(self._ligand_oemol_old)
-                self._ligand_smiles_new = createSMILESfromOEMol(self._ligand_oemol_new)
+                self._ligand_smiles_old = oechem.oecreatesmistring(self._ligand_oemol_old,
+                             oechem.oesmilesflag_default | oechem.oesmilesflag_hydrogens)
+                self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
+                            oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
 
                 # replace this with function that will generate the system etc. so that vacuum can be performed
                 self._ligand_topology_old = forcefield_generators.generateTopologyFromOEMol(self._ligand_oemol_old)
@@ -885,11 +887,11 @@ class NonequilibriumSwitchingFEP(object):
 
         # use default functions if none specified
         if forward_functions == None:
-            self._forward_functions = python_hybrid_functions 
+            self._forward_functions = python_hybrid_functions
         else:
             self._forward_functions = forward_functions
 
-        self._reverse_functions = python_reverse_functions 
+        self._reverse_functions = python_reverse_functions
 
         # setup splitting string:
         self._neq_splitting_string = neq_splitting_string
@@ -1206,5 +1208,3 @@ class NonequilibriumSwitchingFEP(object):
 
         ddf_overall = np.sqrt(ddf0 ** 2 + ddf1 ** 2 + ddf ** 2)
         return -df0 + df + df1, ddf_overall
-
-
