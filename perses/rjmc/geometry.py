@@ -17,7 +17,7 @@ from perses.storage import NetCDFStorage, NetCDFStorageView
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("geometry")
-_logger.setLevel(logging.WARNING)
+_logger.setLevel(logging.DEBUG)
 
 ################################################################################
 # Suppress matplotlib logging
@@ -149,8 +149,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.nproposed = 0 # number of times self.propose() has been called
         self.verbose = verbose
         self.use_sterics = use_sterics
-        if self.use_sterics: #not currently supported
-            raise Exception("steric contributions are not currently supported.")
+        # if self.use_sterics: #not currently supported
+        #     raise Exception("steric contributions are not currently supported.")
 
         self._n_bond_divisions = n_bond_divisions
         self._n_angle_divisions = n_angle_divisions
@@ -562,25 +562,26 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         atoms_with_positions_reduced_potential_components = [(force, energy*beta) for force, energy in compute_potential_components(atoms_with_positions_context)]
         _logger.info(f"reduced potential components before atom placement:")
         for item in atoms_with_positions_reduced_potential_components:
-            _logger.info(f"\t{item[0]}: {item[1]}")
+            _logger.info(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"reduced energy before atom placement: {atoms_with_positions_reduced_potential}")
 
         _logger.info(f"reduced potential of final system:")
         for item in final_context_components:
-            _logger.info(f"\t{item[0]}: {item[1]}")
+            _logger.info(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"final reduced energy {final_context_reduced_potential}")
 
         _logger.info(f"reduced potential components added:")
         added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
         for item in added_energy_components:
-            _logger.info(f"\t{item[0]}: {item[1]}")
+            _logger.info(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"total reduced energy added from growth system: {reduced_potential_energy}")
 
         _logger.info(f"sum of energies: {atoms_with_positions_reduced_potential + reduced_potential_energy}")
         _logger.info(f"magnitude of difference in the energies: {abs(final_context_reduced_potential - atoms_with_positions_reduced_potential - reduced_potential_energy)}")
 
         energy_mismatch_ratio = (atoms_with_positions_reduced_potential + reduced_potential_energy) / (final_context_reduced_potential)
-        assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
+        if not self.use_sterics:
+            assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
 
         # Final log proposal:
         _logger.info("Final logp_proposal: {}".format(logp_proposal))
@@ -590,6 +591,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         check_dimensionality(logp_proposal, float)
         check_dimensionality(new_positions, unit.nanometers)
+
+        if self.use_sterics:
+            return logp_proposal, new_positions, rjmc_info, 0.0, reduced_potential_energy, []
 
         return logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms
 
@@ -1695,6 +1699,7 @@ class GeometrySystemGenerator(object):
         neglected_angle_terms : list of ints
             The indices of the HarmonicAngleForce parameters which are neglected for the purpose of minimizing work variance.  This will be empty if neglect_angles == False.
         """
+        import copy
         # TODO: Rename `growth_indices` (which is really a list of Atom objects) to `atom_growth_order` or `atom_addition_order`
 
         # Check that we're not using the reserved name
@@ -1756,7 +1761,6 @@ class GeometrySystemGenerator(object):
             growth_system.addParticle(reference_system.getParticleMass(i))
             atoms_with_positions_system.addParticle(reference_system.getParticleMass(i))
 
-        # We don't need to copy constraints, since we will not be running dynamics with this system
 
         # Virtual sites are, in principle, automatically supported
 
@@ -1871,12 +1875,12 @@ class GeometrySystemGenerator(object):
                 _logger.info(f"\t\tthere are {reference_nonbonded_force.getNumExceptions()} in the reference Nonbonded force")
                 for exception_index in range(reference_nonbonded_force.getNumExceptions()):
                     p1, p2, chargeprod, sigma, epsilon = reference_nonbonded_force.getExceptionParameters(exception_index)
-                    #_logger.info(f"\t\t\texception params for particles {p1} and {p2}: (chargeprod, sigma, epsilon) = ({chargeprod}, {sigma}, {epsilon})")
                     growth_idx = self._calculate_growth_idx([p1, p2], growth_indices)
+                    _logger.debug(f"\t\t\t{p1} and {p2} with charge {chargeprod} and epsilon {epsilon} have a growth index of {growth_idx}")
                     # Only need to add terms that are nonzero and involve newly added atoms.
                     if (growth_idx > 0) and ((chargeprod.value_in_unit_system(unit.md_unit_system) != 0.0) or (epsilon.value_in_unit_system(unit.md_unit_system) != 0.0)):
                         custom_bond_force.addBond(p1, p2, [chargeprod, sigma, epsilon, growth_idx])
-                        _logger.info(f"\t\t\tadding particles {p1} and {p2} (growth_idx = {growth_idx}) to custom bond force.")
+                        _logger.debug(f"\t\t\tadding particles {p1} and {p2} (growth_idx = {growth_idx}) to custom bond force.")
             else:
                 _logger.info("\t\tthere are no Exceptions in the reference system.")
 
@@ -1893,23 +1897,18 @@ class GeometrySystemGenerator(object):
             _logger.info("\t\tsetting nonbonded method, cutoff, switching function, and switching distance to custom nonbonded force...")
             if reference_nonbonded_force_method in [0,1]: #if Nonbonded method is NoCutoff or CutoffNonPeriodic
                 modified_sterics_force.setNonbondedMethod(reference_nonbonded_force_method)
+                modified_sterics_force.setCutoffDistance(reference_nonbonded_force_cutoff)
             elif reference_nonbonded_force_method in [2,3,4]:
                 modified_sterics_force.setNonbondedMethod(2)
+                modified_sterics_force.setCutoffDistance(reference_nonbonded_force_cutoff)
+                modified_sterics_force.setUseSwitchingFunction(reference_nonbonded_force_switching_function)
+                modified_sterics_force.setSwitchingDistance(reference_nonbonded_force_switching_distance)
             else:
                 raise Exception(f"reference force nonbonded method {reference_nonbonded_force_method} is NOT supported for custom nonbonded force!")
 
-            modified_sterics_force.setCutoffDistance(reference_nonbonded_force_cutoff)
-            modified_sterics_force.setUseSwitchingFunction(reference_nonbonded_force_switching_function)
-            modified_sterics_force.setSwitchingDistance(reference_nonbonded_force_switching_distance)
-
-
             # define atoms_with_positions_Nonbonded_Force
-            atoms_with_positions_nonbonded_force = openmm.NonbondedForce()
-
-            atoms_with_positions_nonbonded_force.setNonbondedMethod(reference_nonbonded_force_method)
-            atoms_with_positions_nonbonded_force.setCutoffDistance(reference_nonbonded_force_cutoff)
-            atoms_with_positions_nonbonded_force.setUseSwitchingFunction(reference_nonbonded_force_switching_function)
-            atoms_with_positions_nonbonded_force.setSwitchingDistance(reference_nonbonded_force_switching_distance)
+            atoms_with_positions_nonbonded_force = copy.deepcopy(reference_nonbonded_force)
+            atoms_with_positions_nonbonded_force.setUseDispersionCorrection(False)
             atoms_with_positions_system.addForce(atoms_with_positions_nonbonded_force)
 
             # Add particle parameters to the custom nonbonded force...and add interactions to the atoms_with_positions_nonbonded_force if growth_index == 0
@@ -1918,12 +1917,8 @@ class GeometrySystemGenerator(object):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
                 growth_idx = self._calculate_growth_idx([particle_index], growth_indices)
                 modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
-                if (growth_idx > 0): # add particle to the atoms_with_positions_nonbonded_force if it is old
-                    atoms_with_positions_nonbonded_force.addParticle(charge * 0.0, sigma, epsilon * 0.0)
-                else: #if the particle is old
-                    atoms_with_positions_nonbonded_force.addParticle(charge, sigma, epsilon)
-
-
+                if particle_index in growth_indices:
+                    atoms_with_positions_nonbonded_force.setParticleParameters(particle_index, charge*0.0, sigma, epsilon*0.0)
 
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
@@ -1933,9 +1928,11 @@ class GeometrySystemGenerator(object):
                 modified_sterics_force.addExclusion(p1, p2)
 
                 #we also have to add the exceptions to the atoms_with_positions_nonbonded_force
-                if len(set([p1, p2]).intersection(set(old_particle_indices))) == 2:
+                #if len(set([p1, p2]).intersection(set(old_particle_indices))) == 2:
+                if len(set([p1,p2]).intersection(set(growth_indices))) > 0:
+                    _logger.debug(f"\t\t\tparticle {p1} and/or {p2}  are new indices and have an exception of {chargeprod} and {epsilon}.  setting to zero.")
                     #then both particles are old, so we can add the exception to the atoms_with_positions_nonbonded_force
-                    atoms_with_positions_nonbonded_force.addException(p1, p2, chargeprod, sigma, epsilon)
+                    atoms_with_positions_nonbonded_force.setExceptionParameters(exception_index, p1, p2, chargeprod * 0.0, sigma, epsilon * 0.0)
 
 
             # Only compute interactions of new particles with all other particles
