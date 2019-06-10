@@ -486,14 +486,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # Propose a torsion angle and calcualate its log probability
             if direction=='forward':
                 # Note that (r, theta) are dimensionless here
-                phi, logp_phi = self._propose_torsion(context, torsion_atom_indices, new_positions, r, theta, beta, self._n_torsion_divisions, bond, angle)
+                phi, logp_phi = self._propose_torsion(context, torsion_atom_indices, new_positions, r, theta, beta, self._n_torsion_divisions)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
                 _logger.info(f"\tproposing forward torsion of {phi}.")
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
                 # Note that (r, theta, phi) are dimensionless here
-                logp_phi = self._torsion_logp(context, torsion_atom_indices, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions, bond, angle)
+                logp_phi = self._torsion_logp(context, torsion_atom_indices, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions)
             _logger.info(f"\tlogp_phi = {logp_phi}")
 
             # Compute potential energy
@@ -1448,7 +1448,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(phis, float)
         return xyzs_quantity, phis, bin_width
 
-    def _torsion_log_pmf(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle):
+    def _torsion_log_pmf(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions):
         """
         Calculate the torsion log probability using OpenMM, including all energetic contributions for the atom being driven
 
@@ -1480,8 +1480,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             phis[i] is the torsion angle left bin edges at which the log probability logp_torsions[i] was calculated
         bin_width : float implicitly in radian
             The bin width for torsions
-        logq : list of floats
-            list of -beta*potential energy for potential energies from torsion scan
 
         .. todo :: In future, this approach will be improved by eliminating discrete quadrature.
 
@@ -1546,9 +1544,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(logp_torsions, float)
         assert check_dimensionality(phis, float)
         assert check_dimensionality(bin_width, float)
-        return logp_torsions, phis, bin_width, logq
+        return logp_torsions, phis, bin_width
 
-    def _propose_torsion(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle):
+    def _propose_torsion(self, growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions):
         """
         Propose a torsion angle using OpenMM
 
@@ -1588,7 +1586,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute probability mass function for all possible proposed torsions
-        logp_torsions, phis, bin_width, logq = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle)
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions)
 
         # Draw a torsion bin and a torsion uniformly within that bin
         index = np.random.choice(range(len(phis)), p=np.exp(logp_torsions))
@@ -1603,7 +1601,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         assert check_dimensionality(logp, float)
         return phi, logp
 
-    def _torsion_logp(self, growth_context, torsion_atom_indices, positions, r, theta, phi, beta, n_divisions, bond, angle):
+    def _torsion_logp(self, growth_context, torsion_atom_indices, positions, r, theta, phi, beta, n_divisions):
         """
         Calculate the logp of a torsion using OpenMM
 
@@ -1641,7 +1639,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         check_dimensionality(beta, 1.0 / unit.kilojoules_per_mole)
 
         # Compute torsion probability mass function
-        logp_torsions, phis, bin_width, logq = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions, bond, angle)
+        logp_torsions, phis, bin_width = self._torsion_log_pmf(growth_context, torsion_atom_indices, positions, r, theta, beta, n_divisions)
 
         # Determine which bin the torsion falls within
         index = np.argmin(np.abs(phi-phis)) # WARNING: This assumes both phi and phis have domain of [-pi,+pi)

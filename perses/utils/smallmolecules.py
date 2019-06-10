@@ -103,11 +103,11 @@ def canonicalize_SMILES(smiles_list):
 
     # Round-trip each molecule to a Topology to end up in canonical form
     from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue, generateTopologyFromOEMol
-    from perses.utils.openeye import createOEMolFromSMILES
+    from openmoltools.openeye import smiles_to_oemol
     from openeye import oechem
     canonical_smiles_list = list()
     for smiles in smiles_list:
-        molecule = createOEMolFromSMILES(smiles)
+        molecule = smiles_to_oemol(smiles)
         topology = generateTopologyFromOEMol(molecule)
         residues = [ residue for residue in topology.residues() ]
         new_molecule = generateOEMolFromTopologyResidue(residues[0])
@@ -221,6 +221,3 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
-
-
-

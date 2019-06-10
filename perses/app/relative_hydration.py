@@ -1,6 +1,6 @@
 import simtk.openmm as openmm
 import simtk.unit as unit
-from perses.annihilation.new_relative import HybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory
 import numpy as np
 from perses.tests.utils import generate_solvated_hybrid_test_topology
 

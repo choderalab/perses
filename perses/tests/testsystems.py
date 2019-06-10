@@ -1711,13 +1711,14 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # # Parametrize and generate residue templates for small molecule set
         from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
         from io import StringIO
-        from perses.utils.openeye import createOEMolFromSMILES, extractPositionsFromOEMol
+        from perses.utils.openeye import extractPositionsFromOEMol
+        from openmoltools.openeye import smiles_to_oemol
         forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
         # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
         # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
         from openmoltools import forcefield_generators ## IVY
         forcefield.registerTemplateGenerator(gaffTemplateGenerator) ## IVY
-        d_smiles_to_oemol = {smiles : createOEMolFromSMILES(smiles, "MOL_%d" % i)for i, smiles in enumerate(molecules)}
+        d_smiles_to_oemol = {smiles : smiles_to_oemol(smiles, "MOL_%d" % i)for i, smiles in enumerate(molecules)}
         # ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
         #
         # f = open('clinical-kinase-inhibitors.xml', 'w')
@@ -1740,7 +1741,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # smiles = sanitizeSMILES([smiles])[0]
         # print("sanitized: ", smiles)
         # molecule = smiles_to_oemol(smiles, title=d_smiles_to_oemol[smiles].GetTitle())
-        molecule = createOEMolFromSMILES(smiles)
+        molecule = smiles_to_oemol(smiles)
 
         topologies['vacuum'] = generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMol(molecule)
@@ -1943,9 +1944,10 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
         # Create molecule in vacuum.
-        from perses.utils.openeye import createOEMolFromSMILES, extractPositionsFromOEMol
+        from perses.utils.openeye import extractPositionsFromOEMol
+        from openmoltools.openeye import smiles_to_oemol
         smiles = molecules[0] # current sampler state
-        molecule = createOEMolFromSMILES(smiles)
+        molecule = smiles_to_oemol(smiles)
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMol(molecule)
 
@@ -2091,7 +2093,8 @@ class NullTestSystem(PersesTestSystem):
         exen_samplers = dict()
 
 
-        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromIUPAC
+        from perses.tests.utils import oemol_to_omm_ff, get_data_filename
+        from openmoltools.openeye import iupac_to_oemol
         from perses.samplers.samplers import ExpandedEnsembleSampler
 
         for key in environments:
@@ -2106,7 +2109,7 @@ class NullTestSystem(PersesTestSystem):
             system_generators[key] = system_generator
 
             proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
-            initial_molecule = createOEMolFromIUPAC(iupac_name=self.mol_name)
+            initial_molecule = iupac_to_oemol(iupac_name=self.mol_name)
             initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
 
             if key == "explicit":

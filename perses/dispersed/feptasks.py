@@ -24,7 +24,7 @@ import openmmtools.integrators as integrators
 import openmmtools.states as states
 import numpy as np
 import mdtraj as md
-from perses.annihilation.new_relative import HybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory
 import mdtraj.utils as mdtrajutils
 import pickle
 import simtk.unit as unit

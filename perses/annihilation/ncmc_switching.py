@@ -6,7 +6,7 @@ import traceback
 from simtk import openmm, unit
 from perses.dispersed.feptasks import NonequilibriumSwitchingMove, compute_reduced_potential, ExternalNonequilibriumSwitchingMove
 from perses.storage import NetCDFStorageView
-from perses.annihilation.new_relative import HybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory
 from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
 from openmmtools.cache import LRUCache, global_context_cache
@@ -202,7 +202,7 @@ class NCMCEngine(object):
 
         Returns
         -------
-        hybrid_factory : perses.annihilation.new_relative.HybridTopologyFactory
+        hybrid_factory : perses.annihilation.relative.HybridTopologyFactory
             a factory object containing the hybrid system
         """
         try:
