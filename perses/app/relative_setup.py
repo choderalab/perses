@@ -172,7 +172,7 @@ class RelativeFEPSetup(object):
 
         self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_smiles_old, self._ligand_smiles_new], self._system_generator, residue_name='MOL')
 
-        self._geometry_engine = FFAllAngleGeometryEngine()
+        self._geometry_engine = FFAllAngleGeometryEngine(neglect_angles=False)
 
         # if we are running multiple phases, we only want to generate one topology proposal, and use the same one for the other legs
         # this is tracked using _proposal_phase
@@ -645,7 +645,7 @@ class NonequilibriumFEPSetup(object):
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol,
                                                                      self._system_generator, residue_name="MOL",
                                                                      atom_map=atom_map)
-        self._geometry_engine = FFAllAngleGeometryEngine()
+        self._geometry_engine = FFAllAngleGeometryEngine(neglect_angles=False)
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
             self._complex_topology_old, self._complex_positions_old)

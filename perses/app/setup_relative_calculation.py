@@ -255,7 +255,7 @@ def run_setup(setup_options):
                                                                                              collision_rate=5.0 / unit.picosecond,
                                                                                              n_steps=n_steps_per_move_application,
                                                                                              reassign_velocities=False,
-                                                                                             n_restart_attempts=6,
+                                                                                             n_restart_attempts=20,
                                                                                              splitting="V R R R O R R R V"),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
@@ -266,7 +266,7 @@ def run_setup(setup_options):
                                                                                              collision_rate=5.0 / unit.picosecond,
                                                                                              n_steps=n_steps_per_move_application,
                                                                                              reassign_velocities=False,
-                                                                                             n_restart_attempts=6,
+                                                                                             n_restart_attempts=20,
                                                                                              splitting="V R R R O R R R V"),
                                                                                              hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
