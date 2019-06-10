@@ -7,7 +7,7 @@ Utility functions for simulations using openeye toolkits
 __author__ = 'John D. Chodera'
 
 
-from openeye import oechem
+from openeye import oechem,oegraphsim
 import simtk.unit as unit
 import numpy as np
 
@@ -136,6 +136,7 @@ def createSystemFromSMILES(smiles,title='MOL'):
     """
     # clean up smiles string
     from perses.utils.smallmolecules import sanitizeSMILES
+    from openmoltools.openeye import smiles_to_oemol    
     smiles = sanitizeSMILES([smiles])
     smiles = smiles[0]
 
