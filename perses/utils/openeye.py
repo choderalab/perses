@@ -109,6 +109,8 @@ def createSystemFromIUPAC(iupac_name):
     # Create OEMol
     molecule = iupac_to_oemol(iupac_name)
 
+    molecule = generate_conformers(molecule, max_confs=1)
+
     # generate openmm system, positions and topology
     system, positions, topology = OEMol_to_omm_ff(molecule)
 
@@ -136,12 +138,14 @@ def createSystemFromSMILES(smiles,title='MOL'):
     """
     # clean up smiles string
     from perses.utils.smallmolecules import sanitizeSMILES
-    from openmoltools.openeye import smiles_to_oemol    
+    from openmoltools.openeye import smiles_to_oemol, generate_conformers 
     smiles = sanitizeSMILES([smiles])
     smiles = smiles[0]
 
     # Create OEMol
     molecule = smiles_to_oemol(smiles,title=title)
+
+    molecule = generate_conformers(molecule, max_confs=1)
 
     # generate openmm system, positions and topology
     system, positions, topology = OEMol_to_omm_ff(molecule)
