@@ -327,7 +327,7 @@ def run_setup(setup_options):
                                                                                              splitting="V R R R O R R R V"),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                               gamma0=setup_options['gamma0'],beta_factor=setup_options['beta_factor'])
+                                               gamma0=setup_options['gamma0'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
