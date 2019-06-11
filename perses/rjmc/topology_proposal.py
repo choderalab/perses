@@ -39,7 +39,6 @@ except ImportError:
 ################################################################################
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
-#OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
 #DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
 #DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
@@ -2304,12 +2303,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
+        from perses.utils.openeye import createSMILESfromOEMol
         # Determine SMILES string for current small molecule
         if current_mol is None:
             current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
         else:
-            # TODO: Make sure we're using canonical mol to smiles conversion
-            current_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            current_mol_smiles = createSMILESfromOEMol(current_mol)
 
         # Remove the small molecule from the current Topology object
         current_receptor_topology = self._remove_small_molecule(current_topology)
@@ -2326,6 +2325,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         else:
             # TODO: Make sure we're using canonical mol to smiles conversion
             proposed_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            proposed_mol_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(proposed_mol_smiles)
             logp_proposal = 0.0
 
         # Build the new Topology object, including the proposed molecule
@@ -2711,8 +2711,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         try:
             current_smiles_idx = self._smiles_list.index(molecule_smiles)
         except ValueError as e:
-            msg = "Current SMILES string '%s' not found in canonical molecule set.\n"
-            msg += "Molecule set: %s" % self._smiles_list
+            msg = f"Current SMILES string {molecule_smiles} not found in canonical molecule set.\nMolecule set: {self._smiles_list}"
             raise Exception(msg)
 
         # Propose a new molecule
