@@ -40,7 +40,7 @@ class RelativeFEPSetup(object):
     def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
                  protein_pdb_filename=None,receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
-                 hmass=4*unit.amus):
+                 hmass=4*unit.amus, neglect_angles = False):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -63,6 +63,8 @@ class RelativeFEPSetup(object):
             Temperature to use for the Langevin integrator
         solvent_padding : Quantity, units of length
             The amount of padding to use when adding solvent
+        neglect_angles : bool
+            Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -200,7 +202,7 @@ class RelativeFEPSetup(object):
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         # NOTE: we are conducting the geometry proposal without any neglected angles
-        self._geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
+        self._geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = neglect_angles)
 
         # if we are running multiple phases, we only want to generate one topology proposal, and use the same one for the other legs
         # this is tracked using _proposal_phase
@@ -227,6 +229,8 @@ class RelativeFEPSetup(object):
             self._complex_logp_reverse = self._geometry_engine.logp_reverse(self._complex_topology_proposal, self._complex_positions_new_solvated, self._complex_positions_old_solvated, beta)
             self._complex_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
             self._complex_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+            self._complex_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
+            self._complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
 
 
         if 'solvent' in phases:
@@ -254,6 +258,8 @@ class RelativeFEPSetup(object):
             self._ligand_logp_reverse_solvated = self._geometry_engine.logp_reverse(self._solvent_topology_proposal, self._ligand_positions_new_solvated, self._ligand_positions_old_solvated, beta)
             self._solvated_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
             self._solvated_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+            self._solvated_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
+            self._solvated_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
 
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
@@ -287,6 +293,8 @@ class RelativeFEPSetup(object):
             self._vacuum_logp_reverse = self._geometry_engine.logp_reverse(self._vacuum_topology_proposal, self._vacuum_positions_new, self._vacuum_positions_old, beta)
             self._vacuum_added_valence_energy = self._geometry_engine.forward_final_context_reduced_potential - self._geometry_engine.forward_atoms_with_positions_reduced_potential
             self._vacuum_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
+            self._vacuum_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
+            self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
 
     def _setup_complex_phase(self,protein_pdb_filename,receptor_mol2_filename,mol_list):
         """
@@ -701,11 +709,10 @@ class NonequilibriumFEPSetup(object):
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol,
                                                                      self._system_generator, residue_name="MOL",
                                                                      atom_map=atom_map)
-<<<<<<< HEAD
+
         self._geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
-=======
-        self._geometry_engine = FFAllAngleGeometryEngine(neglect_angles=False)
->>>>>>> ab754e749460c5f9285582f2348892c9c6e30f68
+
+
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
             self._complex_topology_old, self._complex_positions_old)
