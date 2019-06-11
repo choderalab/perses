@@ -132,8 +132,8 @@ class RelativeFEPSetup(object):
                 self._ligand_oemol_new.SetTitle("MOL")
                 _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
 
-                self._ligand_smiles_old = oechem.oecreatesmistring(self._ligand_oemol_old,
-                             oechem.oesmilesflag_default | oechem.oesmilesflag_hydrogens)
+                self._ligand_smiles_old = oechem.OECreateSmiString(self._ligand_oemol_old,
+                            oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
                 self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
                 _logger.info(f"\tsuccessfully created SMILES for both ligand OEMOLs.")
@@ -709,6 +709,7 @@ class NonequilibriumFEPSetup(object):
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol,
                                                                      self._system_generator, residue_name="MOL",
                                                                      atom_map=atom_map)
+
 
         self._geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
 
