@@ -130,7 +130,7 @@ class RelativeFEPSetup(object):
                 self._ligand_oemol_new.SetTitle("MOL")
                 _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
 
-                self._ligand_smiles_old = oechem.oecreatesmistring(self._ligand_oemol_old,
+                self._ligand_smiles_old = oechem.OECreateSmiString(self._ligand_oemol_old,
                              oechem.oesmilesflag_default | oechem.oesmilesflag_hydrogens)
                 self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
                             oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
