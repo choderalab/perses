@@ -196,7 +196,7 @@ Below is a very simple example script that constructs a :py:class:`HybridTopolog
     
     #import needed functionality
     from topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-    from perses.annihilation.new_relative import HybridTopologyFactory
+    from perses.annihilation.relative import HybridTopologyFactory
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
     
@@ -210,7 +210,7 @@ Below is a very simple example script that constructs a :py:class:`HybridTopolog
     
     #create the benzene molecule and system, as well as a molecule of catechol
     m, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(mol_name)
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    refmol = iupac_to_oemol(ref_mol_name)
 
     #The SmallMoleculeSetProposalEngine class needs smiles strings
     initial_smiles = oechem.OEMolToSmiles(m)

@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from perses.dispersed import feptasks
 from perses.utils.openeye import *
 from perses.utils.data import load_smi
-from perses.annihilation.new_relative import HybridTopologyFactory
+from perses.annihilation.relative import HybridTopologyFactory
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator,SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -130,8 +130,10 @@ class RelativeFEPSetup(object):
                 self._ligand_oemol_new.SetTitle("MOL")
                 _logger.info(f"\tsetting both molecule oemol titles to 'MOL'.")
 
-                self._ligand_smiles_old = createSMILESfromOEMol(self._ligand_oemol_old)
-                self._ligand_smiles_new = createSMILESfromOEMol(self._ligand_oemol_new)
+                self._ligand_smiles_old = oechem.oecreatesmistring(self._ligand_oemol_old,
+                             oechem.oesmilesflag_default | oechem.oesmilesflag_hydrogens)
+                self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
+                            oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
                 _logger.info(f"\tsuccessfully created SMILES for both ligand OEMOLs.")
 
                 # replace this with function that will generate the system etc. so that vacuum can be performed
@@ -699,7 +701,11 @@ class NonequilibriumFEPSetup(object):
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol,
                                                                      self._system_generator, residue_name="MOL",
                                                                      atom_map=atom_map)
+<<<<<<< HEAD
         self._geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
+=======
+        self._geometry_engine = FFAllAngleGeometryEngine(neglect_angles=False)
+>>>>>>> ab754e749460c5f9285582f2348892c9c6e30f68
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
             self._complex_topology_old, self._complex_positions_old)

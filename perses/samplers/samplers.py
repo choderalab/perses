@@ -30,7 +30,8 @@ from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
-from perses.utils.openeye import createOEMolFromSMILES
+from openmoltools.openeye import smiles_to_oemol
+
 
 ################################################################################
 # LOGGER
@@ -184,7 +185,7 @@ class ExpandedEnsembleSampler(object):
         for option_name in option_names:
             if option_name not in options:
                 options[option_name] = None
-        
+
         if options['splitting']:
             self._ncmc_splitting = options['splitting']
         else:
@@ -252,7 +253,7 @@ class ExpandedEnsembleSampler(object):
         ---------
         system : openmm.System
             The OpenMM system for which to create the thermodynamic state
-        
+
         Returns
         -------
         new_thermodynamic_state : openmmtools.states.ThermodynamicState
@@ -290,7 +291,7 @@ class ExpandedEnsembleSampler(object):
             PDBFile.writeFile(topology_proposal.new_topology, new_positions, file=self.geometry_pdbfile)
             self.geometry_pdbfile.flush()
 
-        new_sampler_state = SamplerState(new_positions, box_vectors=old_sampler_state.box_vectors)  
+        new_sampler_state = SamplerState(new_positions, box_vectors=old_sampler_state.box_vectors)
 
         return new_sampler_state, geometry_logp_propose
 
@@ -391,7 +392,7 @@ class ExpandedEnsembleSampler(object):
         logP_initial_nonalchemical = - initial_reduced_potential
 
         new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, sampler_state)
-        
+
         #if we aren't doing any switching, then skip running the NCMC engine at all.
         if self._switching_nsteps == 0:
             ncmc_old_sampler_state = sampler_state
@@ -626,7 +627,8 @@ class SAMSSampler(object):
 
         """
         from scipy.misc import logsumexp
-        from perses.tests.utils import createOEMolFromSMILES
+        from openmoltools.openeye import smiles_to_oemol
+
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
@@ -707,7 +709,7 @@ class SAMSSampler(object):
         -------
         correction_factor : float
         """
-        mol = createOEMolFromSMILES(smiles)
+        mol = smiles_to_oemol(smiles)
         num_heavy = 0
         num_light = 0
 

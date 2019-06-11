@@ -31,51 +31,7 @@ def test_get_data_filename(datafile='data/gaff2.xml'):
 # functions testing perses.utils.openeye
 
 if not istravis:  # cannot test functions that rely on openeye modules on travis without license file
-    def test_createOEMolFromSMILES(smiles='CC', title='MOL'):
-        """
-        Generating an OEMol of ethane from simple SMILES string
-
-        Paramters
-        ---------
-        smiles : str, default 'CC'
-            smiles string of molecule
-        title : str, default 'MOL'
-            title for OEMol object
-        """
-        from perses.utils.openeye import createOEMolFromSMILES
-        molecule = createOEMolFromSMILES(smiles,title)
-
-        # checking that it has returned an OEMol with a non-zero number of atoms
-        assert (molecule.NumAtoms() > 0), "createOEMolFromSMILES has returned an empty molecule"
-
-        # checking that the OEMol has been correctly titled
-        assert (molecule.GetTitle() == title), "createOEMolFromSMILES has not titled OEMol object correctly"
-
-        return molecule
-
-    def test_createOEMolFromIUPAC(iupac='bosutinib',title='MOL'):
-        """
-        Generating an OEMol of ethane from simple SMILES string
-
-        Paramters
-        ---------
-        iupac : str, default 'ethane'
-            iupac name of molecule
-        title : str, default 'MOL'
-            title for OEMol object
-        """
-        from perses.utils.openeye import createOEMolFromIUPAC
-        molecule = createOEMolFromIUPAC(iupac)
-
-        # checking that it has returned an OEMol with a non-zero number of atoms
-        assert (molecule.NumAtoms() > 0), "createOEMolFromSMILES has returned an empty molecule"
-
-        # checking that the OEMol has been correctly titled
-        assert (molecule.GetTitle() == iupac), "createOEMolFromSMILES has not titled OEMol object correctly"
-
-        return molecule
-
-    def test_extractPositionsFromOEMol(molecule=test_createOEMolFromSMILES()):
+    def test_extractPositionsFromOEMol(molecule=test_smiles_to_oemol()):
         """
         Generates an ethane OEMol from string and checks it returns positions of correct length and units
 
@@ -99,7 +55,7 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
 
         return positions
 
-    def test_giveOpenmmPositionsToOEMol(positions=None, molecule=test_createOEMolFromSMILES()):
+    def test_giveOpenmmPositionsToOEMol(positions=None, molecule=test_smiles_to_oemol()):
         """
         Checks that positions of an OEMol can be updated using openmm positions by shifting a molecule by 1 A
 
@@ -137,7 +93,7 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
         return updated_molecule
 
 
-    def test_OEMol_to_omm_ff(molecule=test_createOEMolFromSMILES()):
+    def test_OEMol_to_omm_ff(molecule=test_smiles_to_oemol()):
         """
         Generating openmm objects for simulation from an OEMol object
 
@@ -178,7 +134,7 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
         import simtk.unit as unit
         from openeye import oechem
 
-        oemol = test_createOEMolFromIUPAC(iupac)
+        oemol = test_iupac_to_oemol(iupac)
         positions = test_extractPositionsFromOEMol(oemol)
 
         # shifting all of the positions by 1. A
@@ -191,8 +147,7 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
 
         smiles = oechem.OECreateSmiString(molecule,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
 
-        smiles_oemol = test_createOEMolFromSMILES(smiles)
+        smiles_oemol = test_smiles_to_oemol(smiles)
 
         # check that the two systems have the same numbers of atoms
         assert (oemol.NumAtoms() == smiles_oemol.NumAtoms()), "Discrepancy between molecule generated from IUPAC and SMILES"
-
