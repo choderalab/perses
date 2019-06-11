@@ -71,6 +71,16 @@ def getSetupOptions(filename):
             _logger.info(f"\t\t\toffline-freq not specified: default to 10.")
 
     trajectory_directory = setup_options['trajectory_directory']
+
+    # check if the neglect_angles is specified in yaml
+
+    if 'neglect_angles' not in setup_options:
+        setup_options['neglect_angles'] = False
+        _logger.info(f"\t'neglect_angles' not specified: default to 'False'.")
+    else:
+        _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
+
+
     _logger.info(f"\ttrajectory_directory detected: {trajectory_directory}.  making dir...")
     assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
     os.makedirs(trajectory_directory)
@@ -189,7 +199,7 @@ def run_setup(setup_options):
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms,
-                                          atom_map=atom_map)
+                                          atom_map=atom_map, neglect_angles = setup_options['neglect_angles'])
         _logger.info(f"\n\n\n")
 
         _logger.info(f"\twriting pickle output...")
@@ -215,6 +225,8 @@ def run_setup(setup_options):
             top_prop['complex_subtracted_valence_energy'] = fe_setup._complex_subtracted_valence_energy
             top_prop['complex_logp_proposal'] = fe_setup._complex_logp_proposal
             top_prop['complex_logp_reverse'] = fe_setup._complex_logp_reverse
+            top_prop['complex_forward_neglected_angles'] = fe_setup._complex_forward_neglected_angles
+            top_prop['complex_reverse_neglected_angles'] = fe_setup._complex_reverse_neglected_angles
         if 'solvent' in phases:
             top_prop['solvent_topology_proposal'] = fe_setup.solvent_topology_proposal
             top_prop['solvent_old_positions'] = fe_setup.solvent_old_positions
@@ -223,6 +235,8 @@ def run_setup(setup_options):
             top_prop['solvent_subtracted_valence_energy'] = fe_setup._solvated_subtracted_valence_energy
             top_prop['solvent_logp_proposal'] = fe_setup._ligand_logp_proposal_solvated
             top_prop['solvent_logp_reverse'] = fe_setup._ligand_logp_reverse_solvated
+            top_prop['solvent_forward_neglected_angles'] = fe_setup._solvated_forward_neglected_angles
+            top_prop['solvent_reverse_neglected_angles'] = fe_setup._solvated_reverse_neglected_angles
         if 'vacuum' in phases:
             top_prop['vacuum_topology_proposal'] = fe_setup.vacuum_topology_proposal
             top_prop['vacuum_old_positions'] = fe_setup.vacuum_old_positions
@@ -231,6 +245,8 @@ def run_setup(setup_options):
             top_prop['vacuum_subtracted_valence_energy'] = fe_setup._vacuum_subtracted_valence_energy
             top_prop['vacuum_logp_proposal'] = fe_setup._vacuum_logp_proposal
             top_prop['vacuum_logp_reverse'] = fe_setup._vacuum_logp_reverse
+            top_prop['complex_forward_neglected_angles'] = fe_setup._vacuum_forward_neglected_angles
+            top_prop['complex_reverse_neglected_angles'] = fe_setup._vacuum_reverse_neglected_angles
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")
@@ -292,7 +308,9 @@ def run_setup(setup_options):
             _logger.info(f"\t\twriting HybridTopologyFactory for phase {phase}...")
             htf[phase] = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
                                                top_prop['%s_old_positions' % phase],
-                                               top_prop['%s_new_positions' % phase])
+                                               top_prop['%s_new_positions' % phase],
+                                               neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
+                                               neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"])
 
            # Define necessary vars to check energy bookkeeping
             _top_prop = top_prop['%s_topology_proposal' % phase]
