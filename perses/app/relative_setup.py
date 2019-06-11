@@ -701,7 +701,11 @@ class NonequilibriumFEPSetup(object):
         self._complex_proposal_engine = TwoMoleculeSetProposalEngine(self._old_ligand_oemol, self._new_ligand_oemol,
                                                                      self._system_generator, residue_name="MOL",
                                                                      atom_map=atom_map)
+<<<<<<< HEAD
         self._geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
+=======
+        self._geometry_engine = FFAllAngleGeometryEngine(neglect_angles=False)
+>>>>>>> ab754e749460c5f9285582f2348892c9c6e30f68
 
         self._complex_topology_old_solvated, self._complex_positions_old_solvated, self._complex_system_old_solvated = self._solvate_system(
             self._complex_topology_old, self._complex_positions_old)
