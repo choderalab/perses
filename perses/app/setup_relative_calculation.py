@@ -245,8 +245,8 @@ def run_setup(setup_options):
             top_prop['vacuum_subtracted_valence_energy'] = fe_setup._vacuum_subtracted_valence_energy
             top_prop['vacuum_logp_proposal'] = fe_setup._vacuum_logp_proposal
             top_prop['vacuum_logp_reverse'] = fe_setup._vacuum_logp_reverse
-            top_prop['complex_forward_neglected_angles'] = fe_setup._vacuum_forward_neglected_angles
-            top_prop['complex_reverse_neglected_angles'] = fe_setup._vacuum_reverse_neglected_angles
+            top_prop['vacuum_forward_neglected_angles'] = fe_setup._vacuum_forward_neglected_angles
+            top_prop['vacuum_reverse_neglected_angles'] = fe_setup._vacuum_reverse_neglected_angles
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")
