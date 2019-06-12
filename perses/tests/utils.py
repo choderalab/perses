@@ -416,7 +416,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     """
 
     from perses.utils.openeye import extractPositionsFromOEMol
-    from openmoltools.openeye import iupac_to_oemol
+    from openmoltools.openeye import iupac_to_oemol, generate_conformers
     from perses.utils.data import get_data_filename
     from perses.utils.smallmolecules import render_atom_mapping
 
@@ -429,6 +429,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
         **system_generator_kwargs)
 
     old_oemol = iupac_to_oemol(current_mol_name)
+    old_oemol = generate_conformers(old_oemol, max_confs = 1)
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
     old_topology = generateTopologyFromOEMol(old_oemol)
     old_positions = extractPositionsFromOEMol(old_oemol)
@@ -436,6 +437,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     old_system = system_generator.build_system(old_topology)
 
     new_oemol = iupac_to_oemol(proposed_mol_name)
+    new_oemol = generate_conformers(new_oemol, max_confs = 1)
     new_smiles = oechem.OEMolToSmiles(new_oemol)
 
     geometry_engine = geometry.FFAllAngleGeometryEngine()
