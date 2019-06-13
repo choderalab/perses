@@ -6,7 +6,7 @@ import sys
 from perses.analysis import utils
 from openeye import oechem, oegraphsim
 #from perses.utils import openeye
-from openmoltools import openeye
+from openmoltools.openeye import smiles_to_oemol, generate_conformers
 import logging
 
 
@@ -23,6 +23,7 @@ class molecule(object):
         self.index = i
         self.smiles, self.name, self.exp, self.experr, self.calc, self.calcerr = details[1:7]
         self.mol = openeye.smiles_to_oemol(self.smiles)
+        self.mol = generate_conformers(self.mol,max_confs=1)
         self.exp = kcal_to_kt(float(self.exp))
         self.experr = kcal_to_kt(float(self.experr))
         self.calc = kcal_to_kt(float(self.calc))

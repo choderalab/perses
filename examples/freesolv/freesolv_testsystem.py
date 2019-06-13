@@ -59,12 +59,13 @@ class HydrationPersesRun(object):
 
         # Create molecule in vacuum.
         from perses.utils.openeye import extractPositionsFromOEMol
-        from openmoltools.openeye import smiles_to_oemol
+        from openmoltools.openeye import smiles_to_oemol, generate_conformers
         if initial_molecule:
             smiles = initial_molecule
         else:
             smiles = np.random.choice(molecules)
         molecule = smiles_to_oemol(smiles)
+        molecule = generate_conformers(molecule, max_confs=1)
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMol(molecule)
 

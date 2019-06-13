@@ -609,10 +609,12 @@ def test_ring_breaking_detection():
 
     """
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-    from openmoltools.openeye import iupac_to_oemol
+    from openmoltools.openeye import iupac_to_oemol, generate_conformers
     from perses.tests.utils import render_atom_mapping
     molecule1 = iupac_to_oemol("naphthalene")
     molecule2 = iupac_to_oemol("benzene")
+    molecule1 = generate_conformers(molecule1,max_confs=1)
+    molecule2 = generate_conformers(molecule2,max_confs=1)
 
     # Allow ring breaking
     new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=True)
@@ -640,7 +642,6 @@ def test_molecular_atom_mapping():
     """
     from openeye import oechem
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-    from openmoltools.openeye import smiles_to_oemol
     from perses.tests.utils import render_atom_mapping
     from itertools import combinations
 

@@ -120,34 +120,34 @@ if not istravis:  # cannot test functions that rely on openeye modules on travis
         return system, positions, topology
 
 
-    def run_oemol_test_suite(iupac='ethane'):
-        """
-        Runs all of the oemol related tests for perses.utils.openeye
-
-        Parameters
-        ---------
-        iupac : str, default 'ethane'
-
-        """
-        import copy
-        import numpy as np
-        import simtk.unit as unit
-        from openeye import oechem
-
-        oemol = test_iupac_to_oemol(iupac)
-        positions = test_extractPositionsFromOEMol(oemol)
-
-        # shifting all of the positions by 1. A
-        new_positions = np.zeros(np.shape(positions))
-        for atom in range(oemol.NumAtoms()):
-            new_positions[atom] = copy.deepcopy(positions[atom]) + [1., 1., 1.]*unit.angstrom
-        new_positions *= unit.angstrom
-
-        molecule = test_giveOpenmmPositionsToOEMol(new_positions,oemol)
-
-        smiles = oechem.OECreateSmiString(molecule,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-
-        smiles_oemol = test_smiles_to_oemol(smiles)
-
-        # check that the two systems have the same numbers of atoms
-        assert (oemol.NumAtoms() == smiles_oemol.NumAtoms()), "Discrepancy between molecule generated from IUPAC and SMILES"
+#    def run_oemol_test_suite(iupac='ethane'):
+#        """
+#        Runs all of the oemol related tests for perses.utils.openeye
+#
+#        Parameters
+#        ---------
+#        iupac : str, default 'ethane'
+#
+#        """
+#        import copy
+#        import numpy as np
+#        import simtk.unit as unit
+#        from openeye import oechem
+#
+#        oemol = test_iupac_to_oemol(iupac)
+#        positions = test_extractPositionsFromOEMol(oemol)
+#
+#        # shifting all of the positions by 1. A
+#        new_positions = np.zeros(np.shape(positions))
+#        for atom in range(oemol.NumAtoms()):
+#            new_positions[atom] = copy.deepcopy(positions[atom]) + [1., 1., 1.]*unit.angstrom
+#        new_positions *= unit.angstrom
+#
+#        molecule = test_giveOpenmmPositionsToOEMol(new_positions,oemol)
+#
+#        smiles = oechem.OECreateSmiString(molecule,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+#
+#        smiles_oemol = test_smiles_to_oemol(smiles)
+#
+#        # check that the two systems have the same numbers of atoms
+#        assert (oemol.NumAtoms() == smiles_oemol.NumAtoms()), "Discrepancy between molecule generated from IUPAC and SMILES"

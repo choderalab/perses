@@ -2721,8 +2721,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         forward_probability = molecule_probabilities[proposed_smiles_idx]
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
         logp = np.log(reverse_probability) - np.log(forward_probability)
-        from openmoltools.openeye import smiles_to_oemol
+        from openmoltools.openeye import smiles_to_oemol, generate_conformers
         proposed_mol = smiles_to_oemol(proposed_smiles, "MOL_%d" %proposed_smiles_idx)
+        proposed_mol = generate_conformers(proposed_mol,max_confs=1)
         return proposed_smiles, proposed_mol, logp
 
     def _calculate_probability_matrix(self, molecule_smiles_list):

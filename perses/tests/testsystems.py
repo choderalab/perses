@@ -1712,7 +1712,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
         from io import StringIO
         from perses.utils.openeye import extractPositionsFromOEMol
-        from openmoltools.openeye import smiles_to_oemol
+        from openmoltools.openeye import smiles_to_oemol, generate_conformers
         forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
         # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
         # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
@@ -1742,6 +1742,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # print("sanitized: ", smiles)
         # molecule = smiles_to_oemol(smiles, title=d_smiles_to_oemol[smiles].GetTitle())
         molecule = smiles_to_oemol(smiles)
+        molecule = generate_conformers(molecule,max_confs=1)
 
         topologies['vacuum'] = generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMol(molecule)
@@ -1945,9 +1946,10 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         # Create molecule in vacuum.
         from perses.utils.openeye import extractPositionsFromOEMol
-        from openmoltools.openeye import smiles_to_oemol
+        from openmoltools.openeye import smiles_to_oemol, generate_conformers
         smiles = molecules[0] # current sampler state
         molecule = smiles_to_oemol(smiles)
+        molecule = generate_conformers(molecule,max_confs=1)
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMol(molecule)
 
@@ -2094,7 +2096,7 @@ class NullTestSystem(PersesTestSystem):
 
 
         from perses.tests.utils import oemol_to_omm_ff, get_data_filename
-        from openmoltools.openeye import iupac_to_oemol
+        from openmoltools.openeye import iupac_to_oemol,generate_conformers
         from perses.samplers.samplers import ExpandedEnsembleSampler
 
         for key in environments:
@@ -2110,6 +2112,7 @@ class NullTestSystem(PersesTestSystem):
 
             proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
             initial_molecule = iupac_to_oemol(iupac_name=self.mol_name)
+            initial_molecule = generate_conformers(initial_molecule,max_confs=1)
             initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
 
             if key == "explicit":

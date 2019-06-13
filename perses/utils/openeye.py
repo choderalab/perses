@@ -8,6 +8,7 @@ __author__ = 'John D. Chodera'
 
 
 from openeye import oechem,oegraphsim
+from openmoltools import iupac_to_oemol, generate_conformers
 import simtk.unit as unit
 import numpy as np
 
@@ -138,7 +139,7 @@ def createSystemFromSMILES(smiles,title='MOL'):
     """
     # clean up smiles string
     from perses.utils.smallmolecules import sanitizeSMILES
-    from openmoltools.openeye import smiles_to_oemol, generate_conformers 
+    from openmoltools.openeye import smiles_to_oemol, generate_conformers
     smiles = sanitizeSMILES([smiles])
     smiles = smiles[0]
 
