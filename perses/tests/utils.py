@@ -387,7 +387,7 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
 
-def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", forcefield_kwargs=None, system_generator_kwargs=None):
+def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", forcefield_kwargs=None, system_generator_kwargs=None, propose_geometry = True):
     """
     Generate a test vacuum topology proposal, current positions, and new positions triplet from two IUPAC molecule names.
 
@@ -432,7 +432,11 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     old_oemol = generate_conformers(old_oemol,max_confs=1)
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
     old_topology = generateTopologyFromOEMol(old_oemol)
+
+    #extract old positions and turn to nanometers
     old_positions = extractPositionsFromOEMol(old_oemol)
+    old_positions = old_positions.in_units_of(unit.nanometers)
+
     old_smiles = oechem.OEMolToSmiles(old_oemol)
     old_system = system_generator.build_system(old_topology)
 
@@ -452,8 +456,11 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
     filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
     render_atom_mapping(filename, old_oemol, new_oemol, topology_proposal.new_to_old_atom_map)
 
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
+    if propose_geometry:
+        #generate new positions with geometry engine
+        new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
+    else:
+        new_positions, _ = None, None
 
     # DEBUG: Zero out bonds and angles for one system
     #print('Zeroing bonds of old system')
