@@ -483,7 +483,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     return topology_proposal, old_positions, new_positions
 
-def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", propose_geometry = True):
+def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", propose_geometry = False):
     """
     Generate a test solvated topology proposal, current positions, and new positions triplet
     from two IUPAC molecule names.
@@ -512,34 +512,49 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     from perses.utils.openeye import createSystemFromIUPAC
     from openmoltools.openeye import iupac_to_oemol, generate_conformers
     from perses.utils.data import get_data_filename
+    from perses.utils.openeye import extractPositionsFromOEMol
 
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    proposed_mol = iupac_to_oemol(proposed_mol_name)
-    proposed_mol = generate_conformers(proposed_mol,max_confs=1)
+    #current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
+    old_oemol = iupac_to_oemol(current_mol_name)
+    old_oemol = generate_conformers(old_oemol,max_confs=1)
+    from openmoltools.forcefield_generators import generateTopologyFromOEMol
+    old_topology = generateTopologyFromOEMol(old_oemol)
 
-    initial_smiles = oechem.OEMolToSmiles(current_mol)
-    final_smiles = oechem.OEMolToSmiles(proposed_mol)
+    #extract old positions and turn to nanometers
+    old_positions = extractPositionsFromOEMol(old_oemol)
+    old_positions = old_positions.in_units_of(unit.nanometers)
+    old_smiles = oechem.OEMolToSmiles(old_oemol)
+
+    gaff_xml_filename = get_data_filename("data/gaff.xml")
+    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
+    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
+    system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
+
+
+    new_oemol = iupac_to_oemol(proposed_mol_name)
+    new_oemol = generate_conformers(new_oemol,max_confs=1)
+    new_smiles = oechem.OEMolToSmiles(new_oemol)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
     forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
-    modeller = app.Modeller(top_old, pos_old)
+    modeller = app.Modeller(old_topology, old_positions)
     modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
     solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
     solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
-    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
 
     solvated_system.addForce(barostat)
 
     gaff_filename = get_data_filename('data/gaff.xml')
 
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
+
     geometry_engine = geometry.FFAllAngleGeometryEngine()
     proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
+        [old_smiles, new_smiles], system_generator, residue_name=current_mol_name)
 
     #generate topology proposal
     topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
