@@ -1161,8 +1161,8 @@ class HybridTopologyFactory(object):
                 # Otherwise, just add to the nonalchemical force
                 else:
                     if angle_index in self.neglected_new_angle_terms:
-                        _logger.debug(f"\t\t\tangle in neglected_old_angle_terms; K_1 is set to zero")
-                        hybrid_force_parameters = [new_angle_parameters[3], 0.0 * new_angle_parameters[4], new_angle_parameters[3], old_angle_parameters[4]]
+                        _logger.debug(f"\t\t\tangle in neglected_new_angle_terms; K_1 is set to zero")
+                        hybrid_force_parameters = [new_angle_parameters[3], 0.0 * new_angle_parameters[4], new_angle_parameters[3], new_angle_parameters[4]]
                         self._hybrid_system_forces['custom_neglected_new_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
                     else:
                         _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening (to standard angle force)")

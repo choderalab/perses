@@ -438,6 +438,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     new_oemol = iupac_to_oemol(proposed_mol_name)
     new_oemol = generate_conformers(new_oemol,max_confs=1)
+
     new_smiles = oechem.OEMolToSmiles(new_oemol)
 
     geometry_engine = geometry.FFAllAngleGeometryEngine()
@@ -661,11 +662,11 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         samplerstate.apply_to_context(context)
         rp = state.reduced_potential(context)
         rp_list.append(rp)
-        #energy_comps = compute_potential_components(context)
-        #for name, force in energy_comps:
-        #    print("\t\t\t{}: {}".format(name, force))
-        #print(f'added forces:{sum([energy*beta for name, energy in energy_comps])}')
-        #print(f'rp: {rp}')
+        energy_comps = compute_potential_components(context)
+        for name, force in energy_comps:
+           print("\t\t\t{}: {}".format(name, force))
+        print(f'added forces:{sum([energy*beta for name, energy in energy_comps])}')
+        print(f'rp: {rp}')
         del context, integrator
 
     #print(f"added_energy: {added_energy}; subtracted_energy: {subtracted_energy}")
