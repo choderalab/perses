@@ -614,6 +614,118 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
 
     return topology_proposal, old_positions, new_positions
 
+def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_iterations = 10, md_steps = 250, compute_timeseries = False, prespecified_conformers = None):
+    """
+    Arguments
+    ----------
+    top_prop : perses.rjmc.topology_proposal.TopologyProposal object
+        topology_proposal
+    geometry_method : int
+        which geometry proposal method to use
+            0: neglect_angles = True (this is supposed to be the zero-variance method)
+            1: neglect_angles = False (this will accumulate variance)
+            2: use_sterics = True (this is experimental)
+    num_iterations: int
+        number of times to run md_steps integrator
+    md_steps: int
+        number of md_steps to run in each num_iteration
+    compute_timeseries = bool (default False)
+        whether to use pymbar detectEquilibration and subsampleCorrelated data from the MD run (the potential energy is the data)
+    prespecified_conformers = None or unit.Quantity(np.array([num_iterations, system.getNumParticles(), 3]), unit = unit.nanometers)
+        whether to input a unit.Quantity of conformers and bypass the conformer_generation/pymbar stage; None will default conduct this phase
+
+    Returns
+    -------
+    conformers : unit.Quantity(np.array([num_iterations, system.getNumParticles(), 3]), unit = unit.nanometers)
+        decorrelated positions of the md run
+    rj_works : list
+        work from each conformer proposal
+    """
+    from openmmtools import integrators
+    from openmoltools.openeye import smiles_to_oemol, generate_conformers
+    import simtk.unit as unit
+    import simtk.openmm as openmm
+    from openmmtools.constants import kB
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    import tqdm
+
+    temperature = 300.0 * unit.kelvin # unit-bearing temperature
+    kT = kB * temperature # unit-bearing thermal energy
+    beta = 1.0/kT # unit-bearing inverse thermal energy
+
+    #first, we must extract the top_prop relevant quantities
+    system, topology = top_prop._old_system, top_prop._old_topology
+
+    if prespecified_conformers == None:
+
+        #now we can specify conformations from MD
+        integrator = integrators.LangevinIntegrator(collision_rate = 1.0/unit.picosecond, timestep = 4.0*unit.femtosecond, temperature = temperature)
+        context = openmm.Context(system, integrator)
+        context.setPositions(positions)
+        openmm.LocalEnergyMinimizer.minimize(context)
+        minimized_positions = context.getState(getPositions = True).getPositions(asNumpy = True)
+        print(f"completed initial minimization")
+        context.setPositions(minimized_positions)
+
+        zeros = np.zeros([num_iterations, int(system.getNumParticles()), 3])
+        conformers = unit.Quantity(zeros, unit=unit.nanometers)
+        rps = np.zeros((num_iterations))
+
+        print(f"conducting md sampling")
+        for iteration in tqdm.trange(num_iterations):
+            integrator.step(md_steps)
+            state = context.getState(getPositions = True, getEnergy = True)
+            new_positions = state.getPositions(asNumpy = True)
+            conformers[iteration,:,:] = new_positions
+
+            rp = state.getPotentialEnergy()*beta
+            rps[iteration] = rp
+
+        del context, integrator
+
+        if compute_timeseries:
+            print(f"computing production and data correlation")
+            from pymbar import timeseries
+            t0, g, Neff = timeseries.detectEquilibration(rps)
+            series = timeseries.subsampleCorrelatedData(np.arange(t0, num_iterations), g = g)
+            print(f"production starts at index {t0} of {num_iterations}")
+            print(f"the number of effective samples is {Neff}")
+            indices = t0 + series
+            print(f"the filtered indices are {indices}")
+
+        else:
+            indices = range(num_iterations)
+    else:
+        conformers = prespecified_conformers
+        indices = range(len(conformers))
+
+    #now we can define a geometry_engine
+    if geometry_method == 0:
+        geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = True)
+    elif geometry_method == 1:
+        geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
+    elif geometry_method == 2:
+        geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=True, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
+    else:
+        raise Exception(f"there is no geometry method for {geometry_method}")
+
+    rj_works = []
+    print(f"conducting geometry proposals...")
+    for indx in tqdm.trange(len(indices)):
+        index = indices[indx]
+        print(f"index {indx}")
+        new_positions, logp_forward = geometry_engine.propose(top_prop, conformers[index], beta)
+        logp_backward = geometry_engine.logp_reverse(top_prop, new_positions, conformers[index], beta)
+        print(f"\tlogp_forward, logp_backward: {logp_forward}, {logp_backward}")
+        added_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
+        subtracted_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
+        print(f"\tadded_energy, subtracted_energy: {added_energy}, {subtracted_energy}")
+        work = logp_forward - logp_backward + added_energy - subtracted_energy
+        rj_works.append(work)
+        print(f"\ttotal work: {work}")
+
+    return conformers, rj_works
+
 def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-1):
     """
     Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
