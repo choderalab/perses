@@ -395,7 +395,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         _logger.info("creating platform, integrators, and contexts; setting growth parameter")
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-        atoms_with_positions_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        self.atoms_with_positions_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         final_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, context)
@@ -403,7 +403,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # In the forward direction, atoms_with_positions_system considers the atoms_with_positions
         # In the reverse direction, atoms_with_positions_system considers the old_positions of atoms in the
-        atoms_with_positions_context = openmm.Context(atoms_with_positions_system, atoms_with_positions_system_integrator, platform)
+        atoms_with_positions_context = openmm.Context(self.atoms_with_positions_system, atoms_with_positions_system_integrator, platform)
         if direction == 'forward':
             _logger.info("setting atoms_with_positions context new positions")
             atoms_with_positions_context.setPositions(new_positions)
