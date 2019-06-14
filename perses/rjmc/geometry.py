@@ -372,7 +372,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         # Define a system for the core atoms before new atoms are placed
-        atoms_with_positions_system = growth_system_generator._atoms_with_positions_system
+        self.atoms_with_positions_system = growth_system_generator._atoms_with_positions_system
 
         # Get the angle terms that are neglected from the growth system
         neglected_angle_terms = growth_system_generator.neglected_angle_terms
@@ -395,7 +395,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         _logger.info("creating platform, integrators, and contexts; setting growth parameter")
         platform = openmm.Platform.getPlatformByName(platform_name)
         integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
-        self.atoms_with_positions_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
+        atoms_with_positions_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         final_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, context)
