@@ -483,19 +483,14 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     return topology_proposal, old_positions, new_positions
 
-def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", propose_geometry = False):
+def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
     """
-    Generate a test solvated topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
-
-    Parameters
+    Arguments
     ----------
     current_mol_name : str, optional
         name of the first molecule
     proposed_mol_name : str, optional
         name of the second molecule
-    propose_geometry : bool, default True
-        whether to propose the geometry proposal
 
     Returns
     -------
@@ -509,62 +504,57 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.utils.openeye import createSystemFromIUPAC
+    from openeye import oechem
     from openmoltools.openeye import iupac_to_oemol, generate_conformers
+    from openmoltools import forcefield_generators
+    import perses.utils.openeye as openeye
     from perses.utils.data import get_data_filename
-    from perses.utils.openeye import extractPositionsFromOEMol
+    from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeSetProposalEngine
+    import simtk.unit as unit
 
-    #current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    old_oemol = iupac_to_oemol(current_mol_name)
-    old_oemol = generate_conformers(old_oemol,max_confs=1)
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    old_topology = generateTopologyFromOEMol(old_oemol)
+    old_oemol, new_oemol = iupac_to_oemol(current_mol_name), iupac_to_oemol(proposed_mol_name)
 
-    #extract old positions and turn to nanometers
-    old_positions = extractPositionsFromOEMol(old_oemol)
-    old_positions = old_positions.in_units_of(unit.nanometers)
-    old_smiles = oechem.OEMolToSmiles(old_oemol)
+    old_smiles = oechem.OECreateSmiString(old_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+    new_smiles = oechem.OECreateSmiString(new_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+
+    old_oemol, old_system, old_positions, old_topology = openeye.createSystemFromSMILES(old_smiles, title = "MOL")
+    new_oemol, new_system, new_positions, new_topology = openeye.createSystemFromSMILES(new_smiles, title = "NEW")
+
+#     old_oemol, old_system, old_positions, old_topology = openeye.createSystemFromIUPAC(current_mol_name)
+#     new_oemol, new_system, new_positions, new_topology = openeye.createSystemFromIUPAC(proposed_mol_name)
+
+
+    ffxml = forcefield_generators.generateForceFieldFromMolecules([old_oemol, new_oemol])
+
+    old_oemol.SetTitle('MOL'); new_oemol.SetTitle('MOL')
+
+    old_topology = forcefield_generators.generateTopologyFromOEMol(old_oemol)
+    new_topology = forcefield_generators.generateTopologyFromOEMol(new_oemol)
+
+    nonbonded_method = app.PME
+    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, 300.0*unit.kelvin, 50)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
-    system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
+    system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],barostat = barostat, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : 4.0*unit.amu})
+    system_generator._forcefield.loadFile(StringIO(ffxml))
 
+    proposal_engine = SmallMoleculeSetProposalEngine([old_smiles, new_smiles], system_generator, residue_name = 'MOL')
 
-    new_oemol = iupac_to_oemol(proposed_mol_name)
-    new_oemol = generate_conformers(new_oemol,max_confs=1)
-    new_smiles = oechem.OEMolToSmiles(new_oemol)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-
+    #now to solvate
     modeller = app.Modeller(old_topology, old_positions)
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
+    modeller.delete(hs)
+    modeller.addHydrogens(forcefield=system_generator._forcefield)
+    modeller.addSolvent(system_generator._forcefield, model='tip3p', padding=9.0*unit.angstroms)
     solvated_topology = modeller.getTopology()
     solvated_positions = modeller.getPositions()
     solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
-    solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
+    solvated_system = system_generator.build_system(solvated_topology)
 
-    solvated_system.addForce(barostat)
+    #now to create proposal
+    top_proposal = proposal_engine.propose(solvated_system, solvated_topology, old_oemol)
 
-    gaff_filename = get_data_filename('data/gaff.xml')
-
-
-    geometry_engine = geometry.FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [old_smiles, new_smiles], system_generator, residue_name=current_mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
-
-    if not propose_geometry:
-        return topology_proposal, solvated_positions, None
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
-    return topology_proposal, solvated_positions, new_positions
+    return top_proposal, solvated_positions, None
 
 def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
     """
