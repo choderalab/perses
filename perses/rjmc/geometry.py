@@ -1917,8 +1917,8 @@ class GeometrySystemGenerator(object):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
                 growth_idx = self._calculate_growth_idx([particle_index], growth_indices)
                 modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
-                if particle_index in growth_indices:
-                    atoms_with_positions_nonbonded_force.setParticleParameters(particle_index, charge*0.0, sigma, epsilon*0.0)
+                # if particle_index in growth_indices:
+                #     atoms_with_positions_nonbonded_force.setParticleParameters(particle_index, charge*0.0, sigma, epsilon*0.0)
 
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
@@ -1932,7 +1932,7 @@ class GeometrySystemGenerator(object):
                 if len(set([p1,p2]).intersection(set(growth_indices))) > 0:
                     _logger.debug(f"\t\t\tparticle {p1} and/or {p2}  are new indices and have an exception of {chargeprod} and {epsilon}.  setting to zero.")
                     #then both particles are old, so we can add the exception to the atoms_with_positions_nonbonded_force
-                    atoms_with_positions_nonbonded_force.setExceptionParameters(exception_index, p1, p2, chargeprod * 0.0, sigma, epsilon * 0.0)
+                    #atoms_with_positions_nonbonded_force.setExceptionParameters(exception_index, p1, p2, chargeprod * 0.0, sigma, epsilon * 0.0)
 
 
             # Only compute interactions of new particles with all other particles
