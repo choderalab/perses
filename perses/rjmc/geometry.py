@@ -1781,10 +1781,10 @@ class GeometrySystemGenerator(object):
             _logger.info(f"\t\tfor bond {bond_index} (i.e. partices {p1} and {p2}), the growth_index is {growth_idx}")
             if growth_idx > 0:
                 modified_bond_force.addBond(p1, p2, [r0, K, growth_idx])
-                _logger.info(f"\t\t\tadding to the growth system")
+                _logger.debug(f"\t\t\tadding to the growth system")
             else:
                 atoms_with_positions_bond_force.addBond(p1, p2, r0, K)
-                _logger.info(f"\t\t\tadding to the the atoms with positions system.")
+                _logger.debug(f"\t\t\tadding to the the atoms with positions system.")
 
         # Create angle force
         # NOTE: here, we are implementing an angle exclusion scheme for angle terms that are coupled to lnZ_phi

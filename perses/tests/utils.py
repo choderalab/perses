@@ -463,7 +463,6 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         solvated_positions = modeller.getPositions()
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
         solvated_system = system_generator.build_system(solvated_topology)
-        solvated_system.addForce(barostat)
 
         #now to create proposal
         top_proposal = proposal_engine.propose(solvated_system, solvated_topology, old_oemol)
