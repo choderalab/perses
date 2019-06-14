@@ -348,6 +348,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
+            self._new_posits = new_positions
 
             # Create modified System object
             _logger.info("creating growth system...")
