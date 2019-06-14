@@ -348,7 +348,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
-            self._new_posits = new_positions
+            self._new_posits = copy.deepcopy(new_positions)
 
             # Create modified System object
             _logger.info("creating growth system...")
@@ -491,6 +491,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
                 _logger.info(f"\tproposing forward torsion of {phi}.")
+                _logger.info(f"\tsetting new_positions[{atom.idx}] to {xyz}. ")
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
                 # Note that (r, theta, phi) are dimensionless here
