@@ -6,6 +6,7 @@ import logging
 import numpy as np
 import parmed
 import copy
+import os
 from unittest import skipIf
 from pkg_resources import resource_filename
 from openmmtools.constants import kB
