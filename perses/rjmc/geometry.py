@@ -1910,7 +1910,7 @@ class GeometrySystemGenerator(object):
 
             # define atoms_with_positions_Nonbonded_Force
             atoms_with_positions_nonbonded_force = copy.deepcopy(reference_nonbonded_force)
-            atoms_with_positions_nonbonded_force.setUseDispersionCorrection(False)
+            #atoms_with_positions_nonbonded_force.setUseDispersionCorrection(False)
             atoms_with_positions_system.addForce(atoms_with_positions_nonbonded_force)
 
             # Add particle parameters to the custom nonbonded force...and add interactions to the atoms_with_positions_nonbonded_force if growth_index == 0
