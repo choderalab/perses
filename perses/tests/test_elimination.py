@@ -97,7 +97,8 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.utils.openeye import createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createSystemFromIUPAC
+    from perses.utils.data import get_data_filename
     from openmoltools.openeye import iupac_to_oemol, generate_conformers
 
 
@@ -352,6 +353,8 @@ def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nstep
         Number of NCMC switching steps, or 0 for instantaneous switching.
     NSIGMA_MAX : float, optional, default=6.0
     """
+    # TODO note - this test is not called anywhere else in package
+    # fix test or delete
     functions = {
         'lambda_sterics' : 'lambda',
         'lambda_electrostatics' : 'lambda',
@@ -464,6 +467,8 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
     geometry : bool, optional, default=None
         If True, will also use geometry engine in the middle of the null transformation.
     """
+    # TODO note - this test is not called anywhere else in package
+    # fix test or delete
     functions = {
         'lambda_sterics' : 'lambda',
         'lambda_electrostatics' : 'lambda',

@@ -24,7 +24,8 @@ import json
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
 import perses.tests.testsystems
-from perses.analysis import Analysis
+from perses.analysis.analysis import Analysis
+from unittest import skipIf
 istravis = os.environ.get('TRAVIS', None) == 'true'
 ################################################################################
 # TEST ANALYSIS
