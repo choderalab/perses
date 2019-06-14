@@ -483,7 +483,7 @@ def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_n
 
     return topology_proposal, old_positions, new_positions
 
-def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
+def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", vacuum = False):
     """
     Arguments
     ----------
@@ -491,6 +491,8 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         name of the first molecule
     proposed_mol_name : str, optional
         name of the second molecule
+    vacuum: bool (default False)
+        whether to render a vacuum or solvated topology_proposal
 
     Returns
     -------
@@ -518,10 +520,13 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     new_smiles = oechem.OECreateSmiString(new_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
 
     old_oemol, old_system, old_positions, old_topology = openeye.createSystemFromSMILES(old_smiles, title = "MOL")
-    new_oemol, new_system, new_positions, new_topology = openeye.createSystemFromSMILES(new_smiles, title = "NEW")
 
-#     old_oemol, old_system, old_positions, old_topology = openeye.createSystemFromIUPAC(current_mol_name)
-#     new_oemol, new_system, new_positions, new_topology = openeye.createSystemFromIUPAC(proposed_mol_name)
+    #correct the old positions
+    old_positions = openeye.extractPositionsFromOEMol(old_oemol)
+    old_positions = old_positions.in_units_of(unit.nanometers)
+
+
+    new_oemol, new_system, new_positions, new_topology = openeye.createSystemFromSMILES(new_smiles, title = "NEW")
 
 
     ffxml = forcefield_generators.generateForceFieldFromMolecules([old_oemol, new_oemol])
@@ -531,8 +536,12 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     old_topology = forcefield_generators.generateTopologyFromOEMol(old_oemol)
     new_topology = forcefield_generators.generateTopologyFromOEMol(new_oemol)
 
-    nonbonded_method = app.PME
-    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, 300.0*unit.kelvin, 50)
+    if not vacuum:
+        nonbonded_method = app.PME
+        barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, 300.0*unit.kelvin, 50)
+    else:
+        nonbonded_method = app.NoCutoff
+        barostat = None
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],barostat = barostat, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : 4.0*unit.amu})
@@ -540,21 +549,28 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
 
     proposal_engine = SmallMoleculeSetProposalEngine([old_smiles, new_smiles], system_generator, residue_name = 'MOL')
 
-    #now to solvate
-    modeller = app.Modeller(old_topology, old_positions)
-    hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
-    modeller.delete(hs)
-    modeller.addHydrogens(forcefield=system_generator._forcefield)
-    modeller.addSolvent(system_generator._forcefield, model='tip3p', padding=9.0*unit.angstroms)
-    solvated_topology = modeller.getTopology()
-    solvated_positions = modeller.getPositions()
-    solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
-    solvated_system = system_generator.build_system(solvated_topology)
+    if not vacuum:
+        #now to solvate
+        modeller = app.Modeller(old_topology, old_positions)
+        hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
+        modeller.delete(hs)
+        modeller.addHydrogens(forcefield=system_generator._forcefield)
+        modeller.addSolvent(system_generator._forcefield, model='tip3p', padding=9.0*unit.angstroms)
+        solvated_topology = modeller.getTopology()
+        solvated_positions = modeller.getPositions()
+        solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
+        solvated_system = system_generator.build_system(solvated_topology)
+        solvated_system.addForce(barostat)
 
-    #now to create proposal
-    top_proposal = proposal_engine.propose(solvated_system, solvated_topology, old_oemol)
+        #now to create proposal
+        top_proposal = proposal_engine.propose(solvated_system, solvated_topology, old_oemol)
 
-    return top_proposal, solvated_positions, None
+        return top_proposal, solvated_positions, None
+
+    else:
+        vacuum_system = system_generator.build_system(old_topology)
+        top_proposal = proposal_engine.propose(vacuum_system, old_topology, old_oemol)
+        return top_proposal, old_positions, None
 
 def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
     """
