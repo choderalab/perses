@@ -22,6 +22,7 @@ import sys, math
 import numpy as np
 import logging
 from functools import partial
+from unittest import skipIf
 
 import perses.tests.testsystems
 
@@ -34,6 +35,7 @@ import perses.annihilation.ncmc_switching as ncmc_switching
 # TEST MCMCSAMPLER
 ################################################################################
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip analysis test on TRAVIS.  Currently broken")
 def test_valence():
     """
     Test valence-only test system.

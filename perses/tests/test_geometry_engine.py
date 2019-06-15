@@ -30,6 +30,7 @@ from openmmtools.constants import kB
 from perses.rjmc import coordinate_numba
 
 from perses.rjmc.geometry import check_dimensionality
+from perses.utils.data import get_data_filename
 
 from nose.tools import nottest #protein mutations will be omitted (for the time being)
 ################################################################################
@@ -818,24 +819,6 @@ def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coord
     del torsion_sys, torsion_context, torsion_integrator
 
     return r, theta, phi
-
-def get_data_filename(relative_path):
-    """Get the full path to one of the reference files shipped for testing
-    In the source distribution, these files are in ``perses/data/*/``,
-    but on installation, they're moved to somewhere in the user's python
-    site-packages directory.
-    Parameters
-    ----------
-    name : str
-        Name of the file to load (with respect to the openmoltools folder).
-    """
-
-    fn = resource_filename('perses', relative_path)
-
-    if not os.path.exists(fn):
-        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
-
-    return fn
 
 def generate_molecule_from_smiles(smiles, idx=0):
     """
@@ -2011,7 +1994,7 @@ def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'pro
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
     proposed_mol = iupac_to_oemol(proposed_mol_name)
-    proposed_mol - generate_conformers(proposed_mol,max_confs=1)
+    proposed_mol = generate_conformers(proposed_mol,max_confs=1)
 
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
