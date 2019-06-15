@@ -86,7 +86,7 @@ class NCMCEngine(object):
         """
         # Handle some defaults.
         if functions == None:
-            functions = python_hybrid_functions
+            functions = RelativeAlchemicalState.lambda_functions 
         if nsteps == None:
             nsteps = default_nsteps
         if timestep == None:

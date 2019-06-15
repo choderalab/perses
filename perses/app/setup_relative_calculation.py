@@ -152,7 +152,7 @@ def run_setup(setup_options):
 
     if "neq_splitting" in setup_options:
         neq_splitting = setup_options['neq_splitting']
-        _logger.info(f"\tneq_splitting: {new_splitting}")
+        _logger.info(f"\tneq_splitting: {neq_splitting}")
 
         try:
             eq_splitting = setup_options['eq_splitting']

@@ -1845,31 +1845,31 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         super(KinaseInhibitorsTestSystem, self).__init__(**kwargs)
 
 #TODO fix this test system
-#class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
-#    """
-#    Library of T4 lysozyme L99A inhibitors in various solvent environments.
-#    """
-#    def read_smiles(self, filename):
-#        import csv
-#        molecules = list()
-#        with open(filename, 'r') as csvfile:
-#            csvreader = csv.reader(csvfile, delimiter='\t', quotechar='"')
-#            for row in csvreader:
-#                name = row[0]
-#                smiles = row[1]
-#                reference = row[2]
-#                molecules.append(smiles)
-#        return molecules
-#
-#    def __init__(self, **kwargs):
-#        # Read SMILES from CSV file of clinical kinase inhibitors.
-#        from pkg_resources import resource_filename
-#        molecules = list()
-#        molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
-#        molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
-#        self.molecules = molecules
-#        # Intialize
-#        super(T4LysozymeInhibitorsTestSystem, self).__init__(**kwargs)
+class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
+    """
+    Library of T4 lysozyme L99A inhibitors in various solvent environments.
+    """
+    def read_smiles(self, filename):
+        import csv
+        molecules = list()
+        with open(filename, 'r') as csvfile:
+            csvreader = csv.reader(csvfile, delimiter='\t', quotechar='"')
+            for row in csvreader:
+                name = row[0]
+                smiles = row[1]
+                reference = row[2]
+                molecules.append(smiles)
+        return molecules
+
+    def __init__(self, **kwargs):
+        # Read SMILES from CSV file of clinical kinase inhibitors.
+        from pkg_resources import resource_filename
+        molecules = list()
+        molecules += self.read_smiles(resource_filename('perses', 'data/L99A-binders.txt'))
+        molecules += self.read_smiles(resource_filename('perses', 'data/L99A-non-binders.txt'))
+        self.molecules = molecules
+        # Intialize
+        super(T4LysozymeInhibitorsTestSystem, self).__init__(**kwargs)
 
 class FusedRingsTestSystem(SmallMoleculeLibraryTestSystem):
     """
