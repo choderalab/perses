@@ -953,7 +953,7 @@ class NonequilibriumSwitchingFEP(object):
 
         # use default functions if none specified
         if forward_functions == None:
-            self._forward_functions = python_hybrid_functions
+            self._forward_functions = RelativeAlchemicalState.lambda_functions 
         else:
             self._forward_functions = forward_functions
 
