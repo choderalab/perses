@@ -626,7 +626,7 @@ class SAMSSampler(object):
             At what iteration number to switch to the optimal gain decay
 
         """
-        from scipy.misc import logsumexp
+        from scipy.special import logsumexp
         from perses.utils.openeye import smiles_to_oemol
 
         # Keep copies of initializing arguments.
