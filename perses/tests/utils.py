@@ -498,7 +498,7 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
 
-    from openmoltools.openeye import smiles_to_oemol, generate_conformers
+    from perses.utils.openeye import smiles_to_oemol
     from perses.utils.data import get_data_filename
 
     host_guest = testsystems.HostGuestVacuum()
@@ -507,7 +507,6 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     ligand_topology = [res for res in top_old.residues()]
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
     proposed_mol = smiles_to_oemol('C1CC2(CCC1(CC2)C)C')
-    proposed_mol = generate_conformers(proposed_mol,max_confs=1)
 
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
@@ -560,7 +559,7 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
         work from each conformer proposal
     """
     from openmmtools import integrators
-    from openmoltools.openeye import smiles_to_oemol, generate_conformers
+    from perses.utils.openeye import smiles_to_oemol
     import simtk.unit as unit
     import simtk.openmm as openmm
     from openmmtools.constants import kB

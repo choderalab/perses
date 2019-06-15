@@ -30,7 +30,7 @@ from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
-from openmoltools.openeye import smiles_to_oemol, generate_conformers
+from perses.utils.openeye import smiles_to_oemol
 
 
 ################################################################################
@@ -627,7 +627,7 @@ class SAMSSampler(object):
 
         """
         from scipy.misc import logsumexp
-        from openmoltools.openeye import smiles_to_oemol,generate_conformers
+        from perses.utils.openeye import smiles_to_oemol
 
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
@@ -710,7 +710,6 @@ class SAMSSampler(object):
         correction_factor : float
         """
         mol = smiles_to_oemol(smiles)
-        mol = generate_conformers(mol,max_confs=1)
         num_heavy = 0
         num_light = 0
 

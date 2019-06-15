@@ -1711,8 +1711,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # # Parametrize and generate residue templates for small molecule set
         from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
         from io import StringIO
-        from perses.utils.openeye import extractPositionsFromOEMol
-        from openmoltools.openeye import smiles_to_oemol, generate_conformers
+        from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
         forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
         # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
         # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
@@ -1742,7 +1741,6 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # print("sanitized: ", smiles)
         # molecule = smiles_to_oemol(smiles, title=d_smiles_to_oemol[smiles].GetTitle())
         molecule = smiles_to_oemol(smiles)
-        molecule = generate_conformers(molecule,max_confs=1)
 
         topologies['vacuum'] = generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMol(molecule)
@@ -1946,11 +1944,9 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
         # Create molecule in vacuum.
-        from perses.utils.openeye import extractPositionsFromOEMol
-        from openmoltools.openeye import smiles_to_oemol, generate_conformers
+        from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
         smiles = molecules[0] # current sampler state
         molecule = smiles_to_oemol(smiles)
-        molecule = generate_conformers(molecule,max_confs=1)
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
         positions['vacuum'] = extractPositionsFromOEMol(molecule)
 

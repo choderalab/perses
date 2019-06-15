@@ -12,6 +12,48 @@ from openmoltools.openeye import iupac_to_oemol, generate_conformers
 import simtk.unit as unit
 import numpy as np
 
+def smiles_to_oemol(smiles, title='MOL',max_confs=1):
+    """
+    Generate an oemol from a SMILES string
+    Parameters
+    ----------
+    smiles : str
+        SMILES string of molecule
+    title : str, default 'MOL'
+        title of OEMol molecule
+    max_confs : int, default 1
+        maximum number of conformers to generate
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol
+        OEMol object of the molecule
+    """
+    from openeye import oeiupac, oeomega
+
+    # Create molecule
+    molecule = oechem.OEMol()
+    oechem.OESmilesToMol(molecule, smiles)
+
+    # Set title.
+    molecule.SetTitle(title)
+
+    # Assign aromaticity and hydrogens.
+    oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+    oechem.OEAddExplicitHydrogens(molecule)
+
+    # Create atom names.
+    oechem.OETriposAtomNames(molecule)
+
+    # Assign geometry
+    omega = oeomega.OEOmega()
+    omega.SetMaxConfs(max_confs)
+    omega.SetIncludeInput(False)
+    omega.SetStrictStereo(True)
+    omega(molecule)
+
+    return molecule
+
+
 def extractPositionsFromOEMol(molecule,units=unit.angstrom):
     """
     Get a molecules coordinates from an openeye.oemol
@@ -139,14 +181,11 @@ def createSystemFromSMILES(smiles,title='MOL'):
     """
     # clean up smiles string
     from perses.utils.smallmolecules import sanitizeSMILES
-    from openmoltools.openeye import smiles_to_oemol, generate_conformers
     smiles = sanitizeSMILES([smiles])
     smiles = smiles[0]
 
     # Create OEMol
     molecule = smiles_to_oemol(smiles,title=title)
-
-    molecule = generate_conformers(molecule, max_confs=1)
 
     # generate openmm system, positions and topology
     system, positions, topology = OEMol_to_omm_ff(molecule)
