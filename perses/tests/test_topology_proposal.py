@@ -15,6 +15,7 @@ from nose.plugins.attrib import attr
 from openmmtools.constants import kB
 from perses.utils.data import get_data_filename
 from perses.utils.openeye import OEMol_to_omm_ff
+from perses.utils.smallmolecules import render_atom_mapping
 
 temperature = 300*unit.kelvin
 # Compute kT and inverse temperature.
@@ -574,7 +575,6 @@ def test_ring_breaking_detection():
     """
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
     from openmoltools.openeye import iupac_to_oemol, generate_conformers
-    from perses.utils.smallmolecules import render_atom_mapping
     molecule1 = iupac_to_oemol("naphthalene")
     molecule2 = iupac_to_oemol("benzene")
     molecule1 = generate_conformers(molecule1,max_confs=1)
@@ -606,7 +606,6 @@ def test_molecular_atom_mapping():
     """
     from openeye import oechem
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-    from perses.utils.smallmolecules import render_atom_mapping
     from itertools import combinations
 
     # Test mappings for JACS dataset ligands
