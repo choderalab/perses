@@ -348,6 +348,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             structure = parmed.openmm.load_topology(top_proposal.new_topology, top_proposal.new_system)
             atoms_with_positions = [structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys()]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, old_positions)
+            self._new_posits = copy.deepcopy(new_positions)
 
             # Create modified System object
             _logger.info("creating growth system...")
@@ -372,7 +373,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             raise ValueError("Parameter 'direction' must be forward or reverse")
 
         # Define a system for the core atoms before new atoms are placed
-        atoms_with_positions_system = growth_system_generator._atoms_with_positions_system
+        self.atoms_with_positions_system = growth_system_generator._atoms_with_positions_system
 
         # Get the angle terms that are neglected from the growth system
         neglected_angle_terms = growth_system_generator.neglected_angle_terms
@@ -403,7 +404,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         # In the forward direction, atoms_with_positions_system considers the atoms_with_positions
         # In the reverse direction, atoms_with_positions_system considers the old_positions of atoms in the
-        atoms_with_positions_context = openmm.Context(atoms_with_positions_system, atoms_with_positions_system_integrator, platform)
+        atoms_with_positions_context = openmm.Context(self.atoms_with_positions_system, atoms_with_positions_system_integrator, platform)
         if direction == 'forward':
             _logger.info("setting atoms_with_positions context new positions")
             atoms_with_positions_context.setPositions(new_positions)
@@ -490,6 +491,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
                 _logger.info(f"\tproposing forward torsion of {phi}.")
+                _logger.info(f"\tsetting new_positions[{atom.idx}] to {xyz}. ")
             else:
                 old_positions_for_torsion = copy.deepcopy(old_positions)
                 # Note that (r, theta, phi) are dimensionless here
@@ -1908,7 +1910,7 @@ class GeometrySystemGenerator(object):
 
             # define atoms_with_positions_Nonbonded_Force
             atoms_with_positions_nonbonded_force = copy.deepcopy(reference_nonbonded_force)
-            atoms_with_positions_nonbonded_force.setUseDispersionCorrection(False)
+            #atoms_with_positions_nonbonded_force.setUseDispersionCorrection(False)
             atoms_with_positions_system.addForce(atoms_with_positions_nonbonded_force)
 
             # Add particle parameters to the custom nonbonded force...and add interactions to the atoms_with_positions_nonbonded_force if growth_index == 0
@@ -1917,8 +1919,8 @@ class GeometrySystemGenerator(object):
                 [charge, sigma, epsilon] = reference_nonbonded_force.getParticleParameters(particle_index)
                 growth_idx = self._calculate_growth_idx([particle_index], growth_indices)
                 modified_sterics_force.addParticle([charge, sigma, epsilon, growth_idx])
-                # if particle_index in growth_indices:
-                #     atoms_with_positions_nonbonded_force.setParticleParameters(particle_index, charge*0.0, sigma, epsilon*0.0)
+                if particle_index in growth_indices:
+                    atoms_with_positions_nonbonded_force.setParticleParameters(particle_index, charge*0.0, sigma, epsilon*0.0)
 
             # Add exclusions, which are active at all times.
             # (1,4) exceptions are always included, since they are part of the valence terms.
@@ -1932,7 +1934,7 @@ class GeometrySystemGenerator(object):
                 if len(set([p1,p2]).intersection(set(growth_indices))) > 0:
                     _logger.debug(f"\t\t\tparticle {p1} and/or {p2}  are new indices and have an exception of {chargeprod} and {epsilon}.  setting to zero.")
                     #then both particles are old, so we can add the exception to the atoms_with_positions_nonbonded_force
-                    #atoms_with_positions_nonbonded_force.setExceptionParameters(exception_index, p1, p2, chargeprod * 0.0, sigma, epsilon * 0.0)
+                    atoms_with_positions_nonbonded_force.setExceptionParameters(exception_index, p1, p2, chargeprod * 0.0, sigma, epsilon * 0.0)
 
 
             # Only compute interactions of new particles with all other particles
