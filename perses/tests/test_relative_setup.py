@@ -87,6 +87,7 @@ def test_run_cdk2_iterations():
     setup_options['solvate'] = False
     setup_options['phase'] = 'solvent'
     setup_options['scheduler_address'] = None
+    setup_options['neglect_angles'] = False
 
     length_of_protocol = setup_options['n_steps_ncmc_protocol']
     write_interval = setup_options['n_steps_per_move_application']

@@ -97,7 +97,7 @@ def test_no_h_map():
         stored_atom_maps = mapper.get_atom_maps(molecule_pair[0], molecule_pair[1])
 
         for i, atom_map in enumerate(stored_atom_maps):
-            utils.render_atom_mapping("/Users/grinawap/test_maps_stored_3/{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
+            render_atom_mapping("{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
 
 
     mapper.generate_and_check_proposal_matrix()
