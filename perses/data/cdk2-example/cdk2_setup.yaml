@@ -2,7 +2,7 @@
 protein_pdb: CDK2_fixed_nohet.pdb
 
 #provide the path to the ligand file with coordinates
-ligand_file: CDK2_ligands.mol2
+ligand_file: CDK2_ligands.sdf
 
 #The ligand file contains multiple ligands. Choose the indices of the ligands
 #between which we should compute a relative free energy
@@ -85,3 +85,5 @@ scheduler_address: null
 #how many iterations to run (n_cycles*n_iterations_per_cycle) (only valid for nonequilibrium switching)
 n_cycles: 5
 n_iterations_per_cycle: 1
+
+neglect_angles: False

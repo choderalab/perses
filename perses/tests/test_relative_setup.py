@@ -80,14 +80,13 @@ def test_run_cdk2_iterations():
     yaml_file = open(yaml_filename, "r")
     setup_options = yaml.safe_load(yaml_file)
     yaml_file.close()
+    print(setup_options)
 
     if not os.path.exists(setup_options['trajectory_directory']):
         os.makedirs(setup_options['trajectory_directory'])
 
     setup_options['solvate'] = False
-    setup_options['phase'] = 'solvent'
     setup_options['scheduler_address'] = None
-    setup_options['neglect_angles'] = False
 
     length_of_protocol = setup_options['n_steps_ncmc_protocol']
     write_interval = setup_options['n_steps_per_move_application']
