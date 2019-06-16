@@ -37,6 +37,7 @@ requirements:
     - dask
     - distributed
     - yank
+    - progressbar2
     - parmed
     - tqdm
 
