@@ -8,6 +8,7 @@ import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
 import yaml
 from unittest import skipIf
+istravis = os.environ.get('TRAVIS', None) == 'true'
 
 default_forward_functions = {
         'lambda_sterics' : 'lambda',
@@ -68,6 +69,7 @@ def test_run_nonequilibrium_switching_move():
         assert context.getParameter("lambda_sterics") == 1.0
         assert integrator.getGlobalVariableByName("lambda") == 1.0
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
 def test_run_cdk2_iterations():
     """
     Ensure that we can instantiate and run the cdk2 ligands in vacuum
@@ -80,7 +82,6 @@ def test_run_cdk2_iterations():
     yaml_file = open(yaml_filename, "r")
     setup_options = yaml.safe_load(yaml_file)
     yaml_file.close()
-    print(setup_options)
 
     if not os.path.exists(setup_options['trajectory_directory']):
         os.makedirs(setup_options['trajectory_directory'])

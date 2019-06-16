@@ -109,7 +109,7 @@ def test_no_h_map():
 
 def test_no_h_map_short(maximum=10):
     """
-    Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens
+    Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens for a few random examples
     """
     from perses.tests.testsystems import KinaseInhibitorsTestSystem
     from perses.rjmc.topology_proposal import SmallMoleculeAtomMapper
@@ -128,14 +128,13 @@ def test_no_h_map_short(maximum=10):
     molecule_smiles = mapper.smiles_list
 
     all_pairs = itertools.combinations(molecule_smiles, 2)
-    to_run = np.random.choice(all_pairs,max)
+    to_run = np.random.choice(all_pairs,maximum)
     
     for molecule_pair in to_run:
         index_1 = molecule_smiles.index(molecule_pair[0])
         index_2 = molecule_smiles.index(molecule_pair[1])
         mol_a = mapper.get_oemol_from_smiles(molecule_pair[0])
         mol_b = mapper.get_oemol_from_smiles(molecule_pair[1])
-        #fresh_atom_maps, _ = mapper._map_atoms(mol_a, mol_b)
         stored_atom_maps = mapper.get_atom_maps(molecule_pair[0], molecule_pair[1])
 
         for i, atom_map in enumerate(stored_atom_maps):
