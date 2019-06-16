@@ -425,7 +425,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         for torsion_atom_indices, proposal_prob in zip(torsion_proposal_order, logp_choice):
 
-            _logger.info(f"Proposing torsion {torsion_atom_indices} with proposal probability {proposal_prob}")
+            _logger.debug(f"Proposing torsion {torsion_atom_indices} with proposal probability {proposal_prob}")
 
             # Get parmed Structure Atom objects associated with torsion
             atom, bond_atom, angle_atom, torsion_atom = [ structure.atoms[index] for index in torsion_atom_indices ]
@@ -1780,7 +1780,7 @@ class GeometrySystemGenerator(object):
         for bond_index in range(reference_bond_force.getNumBonds()):
             p1, p2, r0, K = reference_bond_force.getBondParameters(bond_index)
             growth_idx = self._calculate_growth_idx([p1, p2], growth_indices)
-            _logger.info(f"\t\tfor bond {bond_index} (i.e. partices {p1} and {p2}), the growth_index is {growth_idx}")
+            _logger.debug(f"\t\tfor bond {bond_index} (i.e. partices {p1} and {p2}), the growth_index is {growth_idx}")
             if growth_idx > 0:
                 modified_bond_force.addBond(p1, p2, [r0, K, growth_idx])
                 _logger.debug(f"\t\t\tadding to the growth system")
@@ -1804,7 +1804,7 @@ class GeometrySystemGenerator(object):
         for angle in range(reference_angle_force.getNumAngles()):
             p1, p2, p3, theta0, K = reference_angle_force.getAngleParameters(angle)
             growth_idx = self._calculate_growth_idx([p1, p2, p3], growth_indices)
-            _logger.info(f"\t\tfor angle {angle} (i.e. partices {p1}, {p2}, and {p3}), the growth_index is {growth_idx}")
+            _logger.debug(f"\t\tfor angle {angle} (i.e. partices {p1}, {p2}, and {p3}), the growth_index is {growth_idx}")
 
             if growth_idx > 0:
                 if neglect_angles and (not use_sterics):
@@ -1838,7 +1838,7 @@ class GeometrySystemGenerator(object):
         for torsion in range(reference_torsion_force.getNumTorsions()):
             p1, p2, p3, p4, periodicity, phase, k = reference_torsion_force.getTorsionParameters(torsion)
             growth_idx = self._calculate_growth_idx([p1, p2, p3, p4], growth_indices)
-            _logger.info(f"\t\tfor torsion {torsion} (i.e. partices {p1}, {p2}, {p3}, and {p4}), the growth_index is {growth_idx}")
+            _logger.debug(f"\t\tfor torsion {torsion} (i.e. partices {p1}, {p2}, {p3}, and {p4}), the growth_index is {growth_idx}")
             if growth_idx > 0:
                 modified_torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, phase, k, growth_idx])
                 _logger.info(f"\t\t\tadding to the growth system")
