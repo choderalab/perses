@@ -27,6 +27,10 @@ istravis = os.environ.get('TRAVIS', None) == 'true'
 #########################################
 
 def test_coordinate_conversion():
+    """
+    test that the `_internal_to_cartesian` and `_cartesian_to_internal` functions in `geometry.py` convert with correct
+    dimensionality and within an error of 1e-12 for random inputs
+    """
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     #try to transform random coordinates to and from cartesian
@@ -48,7 +52,8 @@ def test_coordinate_conversion():
         assert np.linalg.norm(xyz-atom_position) < 1.0e-12
 
 def test_openmm_dihedral():
-    """Test FFAllAngleGeometryEngine _internal_to_cartesian and _cartesian_to_internal are consistent with OpenMM torsion angles.
+    """
+    Test FFAllAngleGeometryEngine _internal_to_cartesian and _cartesian_to_internal are consistent with OpenMM torsion angles.
     """
     TORSION_TOLERANCE = 1.0e-4 # permitted disagreement in torsions
 
@@ -115,6 +120,10 @@ def test_openmm_dihedral():
     del context
 
 def test_try_random_itoc():
+    """
+    test whether a perturbed four-atom system gives the same internal and cartesian coords when recomputed with `_internal_to_cartesian`
+    and `_cartesian_to_internal` as compared to the values output by `_get_internal_from_omm`
+    """
     import perses.rjmc.geometry as geometry
     geometry_engine = geometry.FFAllAngleGeometryEngine({'test': 'true'})
     import simtk.openmm as openmm
@@ -134,6 +143,5 @@ def test_try_random_itoc():
         r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
         recomputed_xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         new_r, new_theta, new_phi = _get_internal_from_omm(recomputed_xyz,bond_position, angle_position, torsion_position)
-        crtp = geometry_engine._cartesian_to_internal(recomputed_xyz,bond_position, angle_position, torsion_position)
         assert np.linalg.norm(np.array(atom_position/unit.nanometers) - np.array(recomputed_xyz/unit.nanometers)) < 1e-12, "the difference in recomputed with original cartesians is greater than 1e-12"
         assert np.linalg.norm(np.array([r, theta, phi]) - np.array([new_r, new_theta, new_phi])) < 1e-12, "the difference in recomputed with original sphericals is greater than 1e-12"

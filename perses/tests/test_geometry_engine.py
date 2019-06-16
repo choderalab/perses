@@ -774,6 +774,29 @@ def test_propose_torsion():
         raise Exception(msg)
 
 def _get_internal_from_omm(atom_coords, bond_coords, angle_coords, torsion_coords):
+    """
+    Given four atom positions in cartesians, will output the internal positions in spherical coords
+
+    Arguments
+    ---------
+    atom_coords : unit.Quantity(np.array([x,y,z]), unit = unit.nanometers)
+        x, y, and z cartesians of an atom
+    bond_coords : unit.Quantity(np.array([x,y,z]), unit = unit.nanometers)
+        x, y, and z cartesians of a bond atom
+    angle_coords : unit.Quantity(np.array([x,y,z]), unit = unit.nanometers)
+        x, y, and z cartesians of an angle atom
+    torsion_coords : unit.Quantity(np.array([x,y,z]), unit = unit.nanometers)
+        x, y, and z cartesians of a torsion atom
+
+    Returns
+    -------
+    r : float
+        radial distance in unit.nanometers
+    theta : float
+        bond angle in radians
+    phi : float
+        torsion angle in radians
+    """
     #master system, will be used for all three
     sys = openmm.System()
     platform = openmm.Platform.getPlatformByName("Reference")
