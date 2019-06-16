@@ -1922,7 +1922,7 @@ class AnalyticalBeadSystems(object):
 
 
 
-@nottest
+#@nottest
 def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterations=100):
     """
     Function to assert that the forward and reverse works are equal and opposite, and that the variances of each work distribution is much less
