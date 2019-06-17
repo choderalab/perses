@@ -458,7 +458,7 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
 
     assert abs(rp_list[0] - rp_list[1]) < 1e-6
 
-@skipIf(istravis, "Skip faulty test.")
+
 def test_compare_energies():
     mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]
 
