@@ -11,6 +11,7 @@ from perses.utils.openeye import smiles_to_oemol
 
 
 # functions testing perses.utils.data
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip: using openeye.")
 def test_get_data_filename(datafile='data/gaff2.xml'):
     """
     Checks that function returns real path
@@ -30,7 +31,7 @@ def test_get_data_filename(datafile='data/gaff2.xml'):
 
 
 # functions testing perses.utils.openeye
-
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip: using openeye.")
 def test_extractPositionsFromOEMol(molecule=smiles_to_oemol('CC')):
     """
     Generates an ethane OEMol from string and checks it returns positions of correct length and units
@@ -55,6 +56,7 @@ def test_extractPositionsFromOEMol(molecule=smiles_to_oemol('CC')):
 
     return positions
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip: using openeye.")
 def test_giveOpenmmPositionsToOEMol(positions=None, molecule=smiles_to_oemol('CC')):
     """
     Checks that positions of an OEMol can be updated using openmm positions by shifting a molecule by 1 A
@@ -92,7 +94,7 @@ def test_giveOpenmmPositionsToOEMol(positions=None, molecule=smiles_to_oemol('CC
 
     return updated_molecule
 
-
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip full test on TRAVIS.")
 def test_OEMol_to_omm_ff(molecule=smiles_to_oemol('CC')):
     """
     Generating openmm objects for simulation from an OEMol object
@@ -120,6 +122,7 @@ def test_OEMol_to_omm_ff(molecule=smiles_to_oemol('CC')):
     return system, positions, topology
 
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip full test on TRAVIS.")
 def run_oemol_test_suite(iupac='ethane'):
    """
    Runs all of the oemol related tests for perses.utils.openeye
