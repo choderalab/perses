@@ -1785,7 +1785,7 @@ class AnalyticalBeadSystems(object):
         from perses.rjmc.geometry import FFAllAngleGeometryEngine
         final_positions = []
         logPs = np.zeros([n_replicates, 4])
-        _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = True)
+        _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=10000, n_angle_divisions=1800, n_torsion_divisions=3600, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = True)
         for _replicate_idx in tqdm.trange(n_replicates):
             _old_positions = configurations_initial[_replicate_idx, :, :]
             _new_positions, _lp = _geometry_engine.propose(topology_proposal, _old_positions, beta)
