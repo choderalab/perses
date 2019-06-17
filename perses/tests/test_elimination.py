@@ -523,6 +523,7 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
         raise Exception(msg)
 
 # TODO: Re-enable this test once PointMutationEngine can return size of chemical space
+@nottest #removing peptide mutations for the itme-being
 @skipIf(istravis, "Skip expensive test on travis")
 def test_alchemical_elimination_mutation():
     """
@@ -691,6 +692,7 @@ def test_ncmc_hybrid_explicit_engine_molecule():
             yield f
 
 @skipIf(istravis, "Skip expensive test on travis")
+@nottest #removing peptide mutations for the time-being
 def test_alchemical_elimination_peptide():
     """
     Test alchemical elimination for the alanine dipeptide.
