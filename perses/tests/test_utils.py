@@ -8,6 +8,7 @@ __author__ = 'John D. Chodera'
 import os
 istravis = os.environ.get('TRAVIS', None) == 'true'
 from perses.utils.openeye import smiles_to_oemol
+from unittest import skipIf
 
 
 # functions testing perses.utils.data
