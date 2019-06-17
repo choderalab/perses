@@ -217,8 +217,8 @@ def test_simple_overlap_pairs(pairs=None):
         print('{} -> {}'.format(pair[1],pair[0]))
         test_simple_overlap(pair[1],pair[0])
 
-@nottest
-@skipIf(istravis, "Skip faulty test on travis")
+@nottest #this is, in fact, a helper function that is called in other working tests
+@skipIf(istravis, "Skip helper function on travis")
 def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None, system_generator_kwargs=None):
     """Test that the variance of the hybrid -> real perturbation in vacuum is sufficiently small.
 
@@ -237,9 +237,6 @@ def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None,
         Can also disable 'exception_charge', 'particle_epsilon', 'exception_epsilon', and 'torsions' by setting to False
 
     """
-    # topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2,
-    #     forcefield_kwargs=forcefield_kwargs, system_generator_kwargs=system_generator_kwargs)
-
     topology_proposal, current_positions, new_positions = utils.generate_solvated_hybrid_test_topology(current_mol_name=name1, proposed_mol_name=name2, vacuum = True)
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
     for idx, lambda_result in enumerate(results):
@@ -251,7 +248,6 @@ def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None,
             raise Exception(message)
 
 @skipIf(istravis, "Skip expensive test on travis")
-@nottest
 def test_hostguest_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for host-guest system in vacuum"""
     topology_proposal, current_positions, new_positions = utils.generate_vacuum_hostguest_proposal()
@@ -265,8 +261,8 @@ def test_hostguest_overlap():
             message += str(e)
             raise Exception(message)
 
-@skipIf(istravis, "Skip expensive test on travis")
-@nottest
+@skipIf(istravis, "Skip broken test on travis")
+@nottest # at the moment, the mapping between imatinib and nilotinib is faulty
 def test_difficult_overlap():
     """Test that the variance of the endpoint->nonalchemical perturbation is sufficiently small for imatinib->nilotinib in solvent"""
     name1 = 'imatinib'
