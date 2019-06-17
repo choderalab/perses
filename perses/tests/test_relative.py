@@ -237,8 +237,10 @@ def test_simple_overlap(name1='pentane', name2='butane', forcefield_kwargs=None,
         Can also disable 'exception_charge', 'particle_epsilon', 'exception_epsilon', and 'torsions' by setting to False
 
     """
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2,
-        forcefield_kwargs=forcefield_kwargs, system_generator_kwargs=system_generator_kwargs)
+    # topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name=name1, proposed_mol_name=name2,
+    #     forcefield_kwargs=forcefield_kwargs, system_generator_kwargs=system_generator_kwargs)
+
+    topology_proposal, current_positions, new_positions = utils.generate_solvated_hybrid_test_topology(current_mol_name=name1, proposed_mol_name=name2, vacuum = True)
     results = run_hybrid_endpoint_overlap(topology_proposal, current_positions, new_positions)
     for idx, lambda_result in enumerate(results):
         try:
@@ -491,7 +493,7 @@ def test_position_output():
     import numpy as np
 
     #generate topology proposal
-    topology_proposal, old_positions, new_positions = utils.generate_vacuum_topology_proposal()
+    topology_proposal, old_positions, new_positions = utils.generate_solvated_hybrid_test_topology()
 
     factory = HybridTopologyFactory(topology_proposal, old_positions, new_positions)
 
@@ -502,7 +504,10 @@ def test_position_output():
     assert np.all(np.isclose(new_positions.in_units_of(unit.nanometers), new_positions_factory.in_units_of(unit.nanometers)))
 
 def test_generate_endpoint_thermodynamic_states():
-    topology_proposal, current_positions, new_positions = utils.generate_vacuum_topology_proposal(current_mol_name='propane', proposed_mol_name='pentane')
+    """
+    test whether the hybrid system zero and one thermodynamic states have the appropriate lambda values
+    """
+    topology_proposal, current_positions, new_positions = utils.generate_solvated_hybrid_test_topology(current_mol_name='propane', proposed_mol_name='pentane', vacuum = False)
     hybrid_factory = HybridTopologyFactory(topology_proposal, current_positions, new_positions, use_dispersion_correction=True)
 
     #get the relevant thermodynamic states:
@@ -524,7 +529,7 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
     import openmmtools.cache as cache
 
     #Just test the solvated system
-    top_proposal, old_positions, _ = generate_solvated_hybrid_test_topology(current_mol_name = current_mol, proposed_mol_name = proposed_mol, propose_geometry = False)
+    top_proposal, old_positions, _ = generate_solvated_hybrid_test_topology(current_mol_name = current_mol, proposed_mol_name = proposed_mol)
 
     #remove the dispersion correction
     top_proposal._old_system.getForce(3).setUseDispersionCorrection(False)
