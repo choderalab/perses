@@ -416,6 +416,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     from perses.utils.data import get_data_filename
     from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeSetProposalEngine
     import simtk.unit as unit
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
     old_oemol, new_oemol = iupac_to_oemol(current_mol_name), iupac_to_oemol(proposed_mol_name)
 
@@ -451,6 +452,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     system_generator._forcefield.loadFile(StringIO(ffxml))
 
     proposal_engine = SmallMoleculeSetProposalEngine([old_smiles, new_smiles], system_generator, residue_name = 'MOL')
+    geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
 
     if not vacuum:
         #now to solvate
@@ -466,13 +468,15 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
 
         #now to create proposal
         top_proposal = proposal_engine.propose(solvated_system, solvated_topology, old_oemol)
+        new_positions, _ = geometry_engine.propose(top_proposal, solvated_positions, beta)
 
-        return top_proposal, solvated_positions, None
+        return top_proposal, solvated_positions, new_positions
 
     else:
         vacuum_system = system_generator.build_system(old_topology)
         top_proposal = proposal_engine.propose(vacuum_system, old_topology, old_oemol)
-        return top_proposal, old_positions, None
+        new_positions, _ = geometry_engine.propose(top_proposal, old_positions, beta)
+        return top_proposal, old_positions, new_positions
 
 def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
     """
