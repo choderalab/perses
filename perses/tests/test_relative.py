@@ -412,15 +412,13 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     """
     Make an atom map where the molecule at either lambda endpoint is identical, and check that the energies are also the same.
     """
+    from openmmtools import alchemy, states
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
     from perses.annihilation.relative import HybridTopologyFactory
     import simtk.openmm as openmm
 
     from perses.utils.openeye import createSystemFromIUPAC
     from openmoltools.openeye import iupac_to_oemol,generate_conformers
-
-    mol_name = "naphthalene"
-    ref_mol_name = "benzene"
 
     mol = iupac_to_oemol(mol_name)
     mol = generate_conformers(mol, max_confs=1)
@@ -444,36 +442,22 @@ def compare_energies(mol_name="naphthalene", ref_mol_name="benzene"):
     alchemical_system = factory.hybrid_system
     alchemical_positions = factory.hybrid_positions
 
-    integrator = openmm.VerletIntegrator(1)
     platform = openmm.Platform.getPlatformByName("Reference")
-    context = openmm.Context(alchemical_system, integrator, platform)
 
-    context.setPositions(alchemical_positions)
+    _,_,alch_zero_state, alch_one_state = utils.generate_endpoint_thermodynamic_states(alchemical_system, top_proposal)
 
-    functions = {
-        'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-        'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)',
-        'lambda_bonds' : 'lambda',
-        'lambda_angles' : 'lambda',
-        'lambda_torsions' : 'lambda'
-    }
+    rp_list = []
+    for state in [alch_zero_state, alch_one_state]:
+        integrator = openmm.VerletIntegrator(1)
+        context = state.create_context(integrator, platform)
+        samplerstate = states.SamplerState(positions = alchemical_positions, box_vectors = alchemical_system.getDefaultPeriodicBoxVectors())
+        samplerstate.apply_to_context(context)
+        rp = state.reduced_potential(context)
+        rp_list.append(rp)
+        del context, integrator
 
-    #set all to zero
-    for parm in functions.keys():
-        context.setParameter(parm, 0.0)
+    assert abs(rp_list[0] - rp_list[1]) < 1e-6
 
-    initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
-
-    #set all to one
-    for parm in functions.keys():
-        context.setParameter(parm, 1.0)
-
-    final_energy = context.getState(getEnergy=True).getPotentialEnergy()
-
-    if np.abs(final_energy - initial_energy) > 1.0e-6*unit.kilojoule_per_mole:
-        raise Exception("The energy at the endpoints was not equal for molecule %s" % mol_name)
-
-@nottest
 @skipIf(istravis, "Skip faulty test.")
 def test_compare_energies():
     mols_and_refs = [['naphthalene', 'benzene'], ['pentane', 'propane'], ['biphenyl', 'benzene']]
