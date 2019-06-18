@@ -230,7 +230,7 @@ def run_setup(setup_options):
             top_prop['complex_reverse_neglected_angles'] = fe_setup._complex_reverse_neglected_angles
 
             _logger.info(f"\twriting complex render_atom_mapping...")
-            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_complex_mapping.pdf')
+            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_complex_mapping.png')
             render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup._complex_non_offset_new_to_old_atom_map)
 
         if 'solvent' in phases:
@@ -245,7 +245,7 @@ def run_setup(setup_options):
             top_prop['solvent_reverse_neglected_angles'] = fe_setup._solvated_reverse_neglected_angles
 
             _logger.info(f"\twriting solvent render_atom_mapping...")
-            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_solvent_mapping.pdf')
+            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_solvent_mapping.png')
             render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup._solvent_non_offset_new_to_old_atom_map)
 
         if 'vacuum' in phases:
@@ -260,7 +260,7 @@ def run_setup(setup_options):
             top_prop['vacuum_reverse_neglected_angles'] = fe_setup._vacuum_reverse_neglected_angles
 
             _logger.info(f"\twriting vacuum render_atom_mapping...")
-            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_vacuum_mapping.pdf')
+            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_vacuum_mapping.png')
             render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup._vacuum_non_offset_new_to_old_atom_map)
 
     else:

@@ -494,7 +494,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         if render_atom_mapping:
             from perses.utils.smallmolecules import render_atom_mapping
             print(f"new_to_old: {proposal_engine.non_offset_new_to_old_atom_map}")
-            render_atom_mapping(f"{old_smiles}to{new_smiles}.pdf", old_oemol, new_oemol, proposal_engine.non_offset_new_to_old_atom_map)
+            render_atom_mapping(f"{old_smiles}to{new_smiles}.png", old_oemol, new_oemol, proposal_engine.non_offset_new_to_old_atom_map)
 
         return top_proposal, solvated_positions, new_positions
 
@@ -505,7 +505,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         if render_atom_mapping:
             from perses.utils.smallmolecules import render_atom_mapping
             print(f"new_to_old: {top_proposal._new_to_old_atom_map}")
-            render_atom_mapping(f"{old_smiles}to{new_smiles}.pdf", old_oemol, new_oemol, top_proposal._new_to_old_atom_map)
+            render_atom_mapping(f"{old_smiles}to{new_smiles}.png", old_oemol, new_oemol, top_proposal._new_to_old_atom_map)
         return top_proposal, old_positions, new_positions
 
 def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
