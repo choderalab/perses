@@ -2324,6 +2324,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Find the initial atom index of the small molecule in the current topology
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
+        self.old_mol_start_index = old_mol_start_index
+        self.len_old_mol = len_old_mol
         _logger.info(f"small molecule start index: {old_mol_start_index}")
         _logger.info(f"small molecule has {len_old_mol} atoms.")
 
@@ -2348,6 +2350,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         _logger.info(f"building new topology with proposed molecule and current receptor topology...")
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
+        self.new_mol_start_index = new_mol_start_index
+        self.len_new_mol = len_new_mol
         _logger.info(f"new molecule has a start index of {new_mol_start_index} and {len_new_mol} atoms.")
 
         # Generate an OpenMM System from the proposed Topology
@@ -2361,6 +2365,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr,
                                                   bond_expr=self.bond_expr, verbose=self.verbose,
                                                   allow_ring_breaking=self._allow_ring_breaking)
+            self.non_offset_new_to_old_atom_map = mol_atom_map #setting this as an attribute for easy access when rendering atom map
         else:
             _logger.info(f"atom map is pre-determined as {mol_atom_map}")
             mol_atom_map = self._atom_map
