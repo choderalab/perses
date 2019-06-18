@@ -231,7 +231,7 @@ def run_setup(setup_options):
 
             _logger.info(f"\twriting complex render_atom_mapping...")
             atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_complex_mapping.png')
-            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup._complex_non_offset_new_to_old_atom_map)
+            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
 
         if 'solvent' in phases:
             top_prop['solvent_topology_proposal'] = fe_setup.solvent_topology_proposal
@@ -246,7 +246,7 @@ def run_setup(setup_options):
 
             _logger.info(f"\twriting solvent render_atom_mapping...")
             atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_solvent_mapping.png')
-            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup._solvent_non_offset_new_to_old_atom_map)
+            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
 
         if 'vacuum' in phases:
             top_prop['vacuum_topology_proposal'] = fe_setup.vacuum_topology_proposal
@@ -261,7 +261,7 @@ def run_setup(setup_options):
 
             _logger.info(f"\twriting vacuum render_atom_mapping...")
             atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_vacuum_mapping.png')
-            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup._vacuum_non_offset_new_to_old_atom_map)
+            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")

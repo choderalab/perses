@@ -220,7 +220,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
                                                                                 self._complex_topology_old_solvated, self._ligand_oemol_old)
-            self._complex_non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
+            self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
             self._proposal_phase = 'complex'
 
@@ -248,7 +248,7 @@ class RelativeFEPSetup(object):
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
                                                                                     self._ligand_topology_old_solvated, self._ligand_oemol_old)
-                self._solvent_non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
+                self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
             else:
                 _logger.info('Using the topology proposal from the complex leg')
@@ -279,7 +279,7 @@ class RelativeFEPSetup(object):
                                                                                                          self._ligand_positions_old,vacuum=True)
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
                                                                                 self._vacuum_topology_old, self._ligand_oemol_old)
-                self.vacuum_non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
+                self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'vacuum'
             elif self._proposal_phase == 'complex':
                 _logger.info('Using the topology proposal from the complex leg')
