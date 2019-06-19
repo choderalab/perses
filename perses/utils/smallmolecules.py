@@ -6,6 +6,7 @@ Utility functions for handing small molecules
 
 __author__ = 'John D. Chodera'
 
+import numpy as np
 
 def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
     """
@@ -221,3 +222,57 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
+
+
+def generate_ligands_figure(molecules,figsize=None,filename='ligands.png'):
+    """ Plot an image with all of the ligands passed in
+
+    Parameters
+    ----------
+    molecules : list
+        list of openeye.oemol objects
+    figsize : list or tuple
+        list or tuple of len() == 2 of the horizontal and vertical lengths of image
+    filename : string
+        name of file to save the image
+
+    Returns
+    -------
+
+    """
+    from openeye import oechem,oedepict
+
+    to_draw = []
+    for lig in molecules:
+        oedepict.OEPrepareDepiction(lig)
+        to_draw.append(oechem.OEGraphMol(lig))
+
+    dim = int(np.ceil(len(to_draw)**0.5))
+
+    if figsize is None:
+        x_len = 1000*dim
+        y_len = 500*dim
+        image = oedepict.OEImage(x_len, y_len)
+    else:
+        assert ( len(figsize) == 2 ), "figsize arguement should be a tuple or list of length 2"
+        image = oedepict.OEImage(figsize[0],figsize[1])
+
+    rows, cols = dim, dim
+    grid = oedepict.OEImageGrid(image, rows, cols)
+
+    opts = oedepict.OE2DMolDisplayOptions(grid.GetCellWidth(), grid.GetCellHeight(), oedepict.OEScale_AutoScale)
+
+    minscale = float("inf")
+    for mol in to_draw:
+        minscale = min(minscale, oedepict.OEGetMoleculeScale(mol, opts))
+    #     print(mol.GetTitle())
+
+    opts.SetScale(minscale)
+    for idx, cell in enumerate(grid.GetCells()):
+        mol = to_draw[idx]
+        disp = oedepict.OE2DMolDisplay(mol, opts)
+        oedepict.OERenderMolecule(cell, disp)
+
+    oedepict.OEWriteImage(filename, image)
+
+    return
