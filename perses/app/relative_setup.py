@@ -219,7 +219,7 @@ class RelativeFEPSetup(object):
 
             _logger.info(f"creating TopologyProposal...")
             self._complex_topology_proposal = self._proposal_engine.propose(self._complex_system_old_solvated,
-                                                                                self._complex_topology_old_solvated, self._ligand_oemol_old)
+                                                                                self._complex_topology_old_solvated, current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
             self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
 
             self._proposal_phase = 'complex'
@@ -247,7 +247,7 @@ class RelativeFEPSetup(object):
 
                 _logger.info(f"creating TopologyProposal")
                 self._solvent_topology_proposal = self._proposal_engine.propose(self._ligand_system_old_solvated,
-                                                                                    self._ligand_topology_old_solvated, self._ligand_oemol_old)
+                                                                                    self._ligand_topology_old_solvated,current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'solvent'
             else:
@@ -278,7 +278,7 @@ class RelativeFEPSetup(object):
                 self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
                                                                                                          self._ligand_positions_old,vacuum=True)
                 self._vacuum_topology_proposal = self._proposal_engine.propose(self._vacuum_system_old,
-                                                                                self._vacuum_topology_old, self._ligand_oemol_old)
+                                                                                self._vacuum_topology_old,current_mol=self._ligand_oemol_old,proposed_mol=self._ligand_oemol_new)
                 self.non_offset_new_to_old_atom_map = self._proposal_engine.non_offset_new_to_old_atom_map
                 self._proposal_phase = 'vacuum'
             elif self._proposal_phase == 'complex':
