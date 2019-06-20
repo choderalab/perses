@@ -149,8 +149,10 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.nproposed = 0 # number of times self.propose() has been called
         self.verbose = verbose
         self.use_sterics = use_sterics
+
         # if self.use_sterics: #not currently supported
         #     raise Exception("steric contributions are not currently supported.")
+
 
         self._n_bond_divisions = n_bond_divisions
         self._n_angle_divisions = n_angle_divisions
@@ -439,6 +441,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 internal_coordinates, detJ = self._cartesian_to_internal(atom_coords, bond_coords, angle_coords, torsion_coords)
                 # Extract dimensionless internal coordinates
                 r, theta, phi = internal_coordinates[0], internal_coordinates[1], internal_coordinates[2] # dimensionless
+
                 _logger.debug(f"\treverse proposal: r = {r}; theta = {theta}; phi = {phi}")
 
             bond = self._get_relevant_bond(atom, bond_atom)
@@ -446,6 +449,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             if bond is not None:
                 if direction == 'forward':
                     r = self._propose_bond(bond, beta, self._n_bond_divisions)
+
                     _logger.debug(f"\tproposing forward bond of {r}.")
 
                 logp_r = self._bond_logp(r, bond, beta, self._n_bond_divisions)
@@ -456,7 +460,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 sigma_r = unit.sqrt((1.0/(beta*k)))
                 r0, k, sigma_r = r0.value_in_unit_system(unit.md_unit_system), k.value_in_unit_system(unit.md_unit_system), sigma_r.value_in_unit_system(unit.md_unit_system)
                 u_r = 0.5*((r - r0)/sigma_r)**2
+
                 _logger.debug(f"\treduced r potential = {u_r}.")
+
             else:
                 if direction == 'forward':
                     constraint = self._get_bond_constraint(atom, bond_atom, top_proposal.new_system)
@@ -465,6 +471,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
                     r = constraint.value_in_unit_system(unit.md_unit_system) #set bond length to exactly constraint
                     _logger.debug(f"\tproposing forward constrained bond of {r} with log probability of 0.0 and implied u_r of 0.0.")
+
                 logp_r = 0.0
                 u_r = 0.0
 
@@ -490,6 +497,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 phi, logp_phi = self._propose_torsion(context, torsion_atom_indices, new_positions, r, theta, beta, self._n_torsion_divisions)
                 xyz, detJ = self._internal_to_cartesian(new_positions[bond_atom.idx], new_positions[angle_atom.idx], new_positions[torsion_atom.idx], r, theta, phi)
                 new_positions[atom.idx] = xyz
+
                 _logger.debug(f"\tproposing forward torsion of {phi}.")
                 _logger.debug(f"\tsetting new_positions[{atom.idx}] to {xyz}. ")
             else:
@@ -497,6 +505,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
                 # Note that (r, theta, phi) are dimensionless here
                 logp_phi = self._torsion_logp(context, torsion_atom_indices, old_positions_for_torsion, r, theta, phi, beta, self._n_torsion_divisions)
             _logger.debug(f"\tlogp_phi = {logp_phi}")
+
 
             # Compute potential energy
             if direction == 'forward':
@@ -508,12 +517,14 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             reduced_potential_energy = beta*state.getPotentialEnergy()
             _logger.debug(f"\taccumulated growth context reduced energy = {reduced_potential_energy}")
 
+
             #Compute change in energy from previous reduced potential
             if growth_parameter_value == 1: # then there is no previous reduced potential so u_phi is simply reduced_potential_energy - u_r - u_theta
                 added_energy = reduced_potential_energy
             else:
                 previous_reduced_potential_energy = energy_logger[-1]
                 added_energy = reduced_potential_energy - previous_reduced_potential_energy
+
             _logger.debug(f"growth index {growth_parameter_value} added reduced energy = {added_energy}.")
 
             atom_placement_dict = {'atom_index': atom.idx,
@@ -536,6 +547,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             # DEBUG: Write PDB file for placed atoms
             atoms_with_positions.append(atom)
             _logger.debug(f"\tatom placed, rjmc_info list updated, and growth_parameter_value incremented.")
+
 
         # assert that the energy of the new positions is ~= atoms_with_positions_reduced_potential + reduced_potential_energy
         # The final context is treated in the same way as the atoms_with_positions_context
