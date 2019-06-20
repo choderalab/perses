@@ -13,7 +13,7 @@ import mdtraj as md
 temperature = 300.0*unit.kelvin
 beta = 1.0 / (temperature*constants.kB)
 
-def createOEMolFromIUPAC(iupac_name='bosutinib'):
+def iupac_to_oemol(iupac_name='bosutinib'):
     from openeye import oechem, oeiupac, oeomega
 
     # Create molecule.
@@ -60,9 +60,10 @@ def createSystemFromIUPAC(iupac_name):
     topology : openmm.app.Topology object
         Topology
     """
-    from perses.tests.utils import get_data_filename, extractPositionsFromOEMOL
+    from perses.utils.data import get_data_filename
+    from perses.utils.openeye import extractPositionsFromOEMol
     # Create OEMol
-    molecule = createOEMolFromIUPAC(iupac_name)
+    molecule = iupac_to_oemol(iupac_name)
 
     # Generate a topology.
     from openmoltools.forcefield_generators import generateTopologyFromOEMol
@@ -88,7 +89,7 @@ def createSystemFromIUPAC(iupac_name):
     system = forcefield.createSystem(topology, removeCMMotion=False)
 
     # Extract positions
-    positions = extractPositionsFromOEMOL(molecule)
+    positions = extractPositionsFromOEMol(molecule)
 
     return (molecule, system, positions, topology)
 
@@ -119,11 +120,11 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     from perses.rjmc.topology_proposal import SystemGenerator, SmallMoleculeSetProposalEngine
     from perses.rjmc import geometry
 
-    from perses.tests.utils import get_data_filename
+    from perses.utils.data import get_data_filename
 
     current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
 
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
+    proposed_mol = iupac_to_oemol(proposed_mol_name)
     proposed_mol.SetTitle("MOL")
 
     initial_smiles = oechem.OEMolToSmiles(current_mol)

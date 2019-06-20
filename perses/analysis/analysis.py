@@ -435,7 +435,7 @@ class Analysis(object):
         # Build a list of all logP components to plot:
         components = list()
         # Always show logP_accept
-        components.append('logP_accept') 
+        components.append('logP_accept')
         # Summarize other logP groups
         for name in ee_sam.variables.keys():
             if name.startswith('logP_groups'):
@@ -456,7 +456,7 @@ class Analysis(object):
                     logps[component][n] = ee_sam.variables[component][n]
                 # Drop NaNs
                 logps[component] = logps[component][~np.isnan(logps[component][:])]
-                    
+
             plt.figure(figsize=(8,12))
             nrows = len(logps.keys())
             ncols = 2
@@ -474,7 +474,7 @@ class Analysis(object):
                 try:
                     col = 1
                     plt.subplot2grid((nrows,ncols),(row,col))
-                    plt.hist(logps[component], range=[-logP_range, +logP_range], bins=nbins)                    
+                    plt.hist(logps[component], range=[-logP_range, +logP_range], bins=nbins)
                     plt.title(component)
                 except Exception as e:
                     print(e)

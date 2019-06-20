@@ -68,12 +68,16 @@ def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"
     """
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC
+    from perses.utils.openeye import createSystemFromIUPAC
+    from openmoltools.openeye import iupac_to_oemol, generate_conformers
 
-    mol = createOEMolFromIUPAC(mol_name)
+
+    mol = iupac_to_oemol(mol_name)
+    mol = generate_conformers(mol, max_confs=1)
     m, system, positions, topology = createSystemFromIUPAC(mol_name)
 
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    refmol = iupac_to_oemol(ref_mol_name)
+    refmol = generate_conformers(refmol, max_confs=1)
 
     #map one of the rings
     atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
@@ -93,12 +97,18 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createSystemFromIUPAC
+    from perses.utils.data import get_data_filename
+    from openmoltools.openeye import iupac_to_oemol, generate_conformers
 
-    mol = createOEMolFromIUPAC(mol_name)
+
+
+    mol = iupac_to_oemol(mol_name)
+    mol = generate_conformers(mol, max_confs=1)
     m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
 
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    refmol = iupac_to_oemol(ref_mol_name)
+    refmol = generate_conformers(refmol, max_confs=1)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
@@ -133,12 +143,16 @@ def generate_solvated_hybrid_topology(mol_name="naphthalene", ref_mol_name="benz
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import createSystemFromIUPAC
+    from openmoltools.openeye import iupac_to_oemol, generate_conformers
+    from perses.utils.data import get_data_filename
 
-    mol = createOEMolFromIUPAC(mol_name)
+    mol = iupac_to_oemol(mol_name)
+    mol = generate_conformers(mol, max_confs=1)
     m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
 
-    refmol = createOEMolFromIUPAC(ref_mol_name)
+    refmol = iupac_to_oemol(ref_mol_name)
+    refmol = generate_conformers(refmol, max_confs=1)
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
     forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
@@ -179,7 +193,7 @@ def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_n
 
     """
     from perses.annihilation import NCMCGHMCAlchemicalIntegrator
-    from perses.annihilation.new_relative import HybridTopologyFactory
+    from perses.annihilation.relative import HybridTopologyFactory
 
     #make the hybrid topology factory:
     factory = HybridTopologyFactory(topology_proposal, positions, positions)
@@ -339,6 +353,8 @@ def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nstep
         Number of NCMC switching steps, or 0 for instantaneous switching.
     NSIGMA_MAX : float, optional, default=6.0
     """
+    # TODO note - this test is not called anywhere else in package
+    # fix test or delete
     functions = {
         'lambda_sterics' : 'lambda',
         'lambda_electrostatics' : 'lambda',
@@ -348,7 +364,7 @@ def check_hybrid_round_trip_elimination(topology_proposal, positions, ncmc_nstep
     }
     # Initialize engine
     from perses.annihilation import NCMCGHMCAlchemicalIntegrator
-    from perses.annihilation.new_relative import HybridTopologyFactory
+    from perses.annihilation.relative import HybridTopologyFactory
 
     #The current and "proposed" positions are the same, since the molecule is not changed.
     factory = HybridTopologyFactory(topology_proposal, positions, positions)
@@ -451,6 +467,8 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
     geometry : bool, optional, default=None
         If True, will also use geometry engine in the middle of the null transformation.
     """
+    # TODO note - this test is not called anywhere else in package
+    # fix test or delete
     functions = {
         'lambda_sterics' : 'lambda',
         'lambda_electrostatics' : 'lambda',
@@ -505,7 +523,8 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
         raise Exception(msg)
 
 # TODO: Re-enable this test once PointMutationEngine can return size of chemical space
-@skipIf(istravis, "Skip expensive test on travis")
+#@nottest #removing peptide mutations for the itme-being
+@skipIf(istravis, "Skip mutations")
 def test_alchemical_elimination_mutation():
     """
     Test alchemical elimination for mutations.
@@ -544,7 +563,7 @@ def test_alchemical_elimination_mutation():
         f.description = "Testing alchemical null transformation of ALA sidechain in alanine dipeptide with %d NCMC steps" % ncmc_nsteps
         yield f
 
-@skipIf(istravis, "Skip expensive test on travis")
+@skipIf(istravis, "Skip neq switching")
 def test_ncmc_alchemical_integrator_stability_molecules():
     """
     Test NCMCAlchemicalIntegrator
@@ -555,7 +574,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
     #    molecule_names = ['pentane']
 
     for molecule_name in molecule_names:
-        from perses.tests.utils import createSystemFromIUPAC
+        from perses.utils.openeye import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
 
         # Eliminate half of the molecule
@@ -592,7 +611,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
 
         del context, ncmc_integrator
 
-@skipIf(istravis, "Skip expensive test on travis")
+@skipIf(istravis, "Skip neq switching")
 def test_ncmc_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
@@ -602,7 +621,7 @@ def test_ncmc_engine_molecule():
     #    molecule_names = ['pentane']
 
     for molecule_name in molecule_names:
-        from perses.tests.utils import createSystemFromIUPAC
+        from perses.utils.openeye import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(molecule_name)
         natoms = system.getNumParticles()
 
@@ -629,7 +648,7 @@ def test_ncmc_engine_molecule():
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (molecule_name, ncmc_nsteps)
             yield f
 
-@skipIf(istravis, "Skip expensive test on travis")
+@skipIf(istravis, "Skip neq switching")
 def test_ncmc_hybrid_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
@@ -640,7 +659,8 @@ def test_ncmc_hybrid_engine_molecule():
         mols_and_refs = [['naphthalene', 'benzene']]
 
     for mol_ref in mols_and_refs:
-        from perses.tests.utils import createSystemFromIUPAC
+        from perses.utils.openeye import createSystemFromIUPAC
+
         [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
 
         topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
@@ -650,7 +670,7 @@ def test_ncmc_hybrid_engine_molecule():
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
             yield f
 
-@skipIf(istravis, "Skip expensive test on travis")
+@skipIf(istravis, "Skip neq switching")
 def test_ncmc_hybrid_explicit_engine_molecule():
     """
     Check alchemical elimination for alanine dipeptide in vacuum with 0, 1, 2, and 50 switching steps.
@@ -661,7 +681,7 @@ def test_ncmc_hybrid_explicit_engine_molecule():
         mols_and_refs = [['naphthalene', 'benzene']]
 
     for mol_ref in mols_and_refs:
-        from perses.tests.utils import createSystemFromIUPAC
+        from perses.utils.openeye import createSystemFromIUPAC
         [molecule, system, positions, topology] = createSystemFromIUPAC(mol_ref[0])
 
         #topology_proposal, new_positions = generate_hybrid_test_topology(mol_name=mol_ref[0], ref_mol_name=mol_ref[1])
@@ -671,7 +691,7 @@ def test_ncmc_hybrid_explicit_engine_molecule():
             f.description = "Testing alchemical null elimination for '%s' with %d NCMC steps" % (mol_ref[0], ncmc_nsteps)
             yield f
 
-@skipIf(istravis, "Skip expensive test on travis")
+@skipIf(istravis, "Skip mutations")
 def test_alchemical_elimination_peptide():
     """
     Test alchemical elimination for the alanine dipeptide.

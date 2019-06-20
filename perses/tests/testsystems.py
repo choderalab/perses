@@ -37,7 +37,7 @@ from openeye import oechem, oeshape, oeomega
 from openmmtools import testsystems
 from openmmtools import states
 from openmmtools.mcmc import MCMCSampler, LangevinSplittingDynamicsMove
-from perses.tests.utils import sanitizeSMILES, canonicalize_SMILES
+from perses.utils.smallmolecules import sanitizeSMILES, canonicalize_SMILES
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from perses.rjmc.topology_proposal import OESMILES_OPTIONS
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
@@ -510,7 +510,7 @@ class T4LysozymeMutationTestSystem(PersesTestSystem):
                 break
 
         from openmoltools import forcefield_generators
-        from perses.tests.utils import extractPositionsFromOEMOL, giveOpenmmPositionsToOEMOL
+        from perses.utils.openeye import extractPositionsFromOEMol, giveOpenmmPositionsToOEMol
         import perses.rjmc.geometry as geometry
         from perses.rjmc.topology_proposal import TopologyProposal
         # create OEMol version of benzene
@@ -1711,7 +1711,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # # Parametrize and generate residue templates for small molecule set
         from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
         from io import StringIO
-        from perses.tests.utils import smiles_to_oemol, extractPositionsFromOEMOL
+        from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
         forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
         # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
         # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
@@ -1743,7 +1743,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         molecule = smiles_to_oemol(smiles)
 
         topologies['vacuum'] = generateTopologyFromOEMol(molecule)
-        positions['vacuum'] = extractPositionsFromOEMOL(molecule)
+        positions['vacuum'] = extractPositionsFromOEMol(molecule)
 
         # Create molecule in solvent.
         modeller = app.Modeller(topologies['vacuum'], positions['vacuum'])
@@ -1844,6 +1844,7 @@ class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
         # Intialize
         super(KinaseInhibitorsTestSystem, self).__init__(**kwargs)
 
+#TODO fix this test system
 class T4LysozymeInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
     """
     Library of T4 lysozyme L99A inhibitors in various solvent environments.
@@ -1943,11 +1944,11 @@ class ValenceSmallMoleculeLibraryTestSystem(PersesTestSystem):
         forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
 
         # Create molecule in vacuum.
-        from perses.tests.utils import createOEMolFromSMILES, extractPositionsFromOEMOL
+        from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
         smiles = molecules[0] # current sampler state
-        molecule = createOEMolFromSMILES(smiles)
+        molecule = smiles_to_oemol(smiles)
         topologies['vacuum'] = forcefield_generators.generateTopologyFromOEMol(molecule)
-        positions['vacuum'] = extractPositionsFromOEMOL(molecule)
+        positions['vacuum'] = extractPositionsFromOEMol(molecule)
 
         # Set up the proposal engines.
         from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
@@ -2091,7 +2092,8 @@ class NullTestSystem(PersesTestSystem):
         exen_samplers = dict()
 
 
-        from perses.tests.utils import oemol_to_omm_ff, get_data_filename, createOEMolFromIUPAC
+        from perses.tests.utils import oemol_to_omm_ff, get_data_filename
+        from openmoltools.openeye import iupac_to_oemol,generate_conformers
         from perses.samplers.samplers import ExpandedEnsembleSampler
 
         for key in environments:
@@ -2106,7 +2108,8 @@ class NullTestSystem(PersesTestSystem):
             system_generators[key] = system_generator
 
             proposal_engine = self.NullProposal(system_generator, residue_name=self.mol_name)
-            initial_molecule = createOEMolFromIUPAC(iupac_name=self.mol_name)
+            initial_molecule = iupac_to_oemol(iupac_name=self.mol_name)
+            initial_molecule = generate_conformers(initial_molecule,max_confs=1)
             initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, self.mol_name)
 
             if key == "explicit":
@@ -2386,7 +2389,7 @@ def check_topologies(testsystem):
             msg = str(e)
             msg += '\n'
             msg += "topology for environment '%s' cannot be built into a system" % environment
-            from perses.tests.utils import show_topology
+            from perses.utils.smallmolecules import show_topology
             show_topology(topology)
             raise Exception(msg)
 

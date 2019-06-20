@@ -10,7 +10,7 @@ class RelativeAlchemicalState(AlchemicalState):
     Relative AlchemicalState to handle all lambda parameters required for relative perturbations
 
     lambda = 1 refers to ON, i.e. fully interacting while
-    lambda = 0 refers to OFF, i.e. non-interacting with the system 
+    lambda = 0 refers to OFF, i.e. non-interacting with the system
 
     all lambda functions will follow from 0 -> 1 following the master lambda
 
@@ -44,8 +44,8 @@ class RelativeAlchemicalState(AlchemicalState):
     class _LambdaParameter(AlchemicalState._LambdaParameter):
         pass
 
-    lambda_sterics_core = _LambdaParameter('lambda_sterics_core') 
-    lambda_electrostatics_core = _LambdaParameter('lambda_electrostatics_core') 
+    lambda_sterics_core = _LambdaParameter('lambda_sterics_core')
+    lambda_electrostatics_core = _LambdaParameter('lambda_electrostatics_core')
     lambda_sterics_insert = _LambdaParameter('lambda_sterics_insert')
     lambda_sterics_delete = _LambdaParameter('lambda_sterics_delete')
     lambda_electrostatics_insert = _LambdaParameter('lambda_electrostatics_insert')
@@ -63,4 +63,3 @@ class RelativeAlchemicalState(AlchemicalState):
        for parameter_name in self.lambda_functions:
            lambda_value = self.lambda_functions[parameter_name](master_lambda)
            setattr(self, parameter_name, lambda_value)
-

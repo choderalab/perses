@@ -35,6 +35,7 @@ from openmmtools import alchemy, states
 temperature = 300.0 * unit.kelvin
 kT = kB * temperature
 beta = 1.0/kT
+ENERGY_THRESHOLD = 1e-1
 
 ################################################################################
 # UTILITIES
@@ -63,98 +64,6 @@ def quantity_is_finite(quantity):
     if np.any( np.isnan( np.array(quantity / quantity.unit) ) ):
         return False
     return True
-
-def show_topology(topology):
-    output = ""
-    for atom in topology.atoms():
-        output += "%8d %5s %5s %3s: bonds " % (atom.index, atom.name, atom.residue.id, atom.residue.name)
-        for bond in atom.residue.bonds():
-            if bond[0] == atom:
-                output += " %8d" % bond[1].index
-            if bond[1] == atom:
-                output += " %8d" % bond[0].index
-        output += '\n'
-    print(output)
-
-def extractPositionsFromOEMOL(molecule):
-    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
-    coords = molecule.GetCoords()
-    for index in range(molecule.NumAtoms()):
-        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
-    return positions
-
-def giveOpenmmPositionsToOEMOL(positions, molecule):
-    assert molecule.NumAtoms() == len(positions)
-    coords = molecule.GetCoords()
-    for key in coords.keys(): # openmm in nm, openeye in A
-        coords[key] = (positions[key][0]/unit.angstrom,positions[key][1]/unit.angstrom,positions[key][2]/unit.angstrom)
-    molecule.SetCoords(coords)
-
-def createOEMolFromIUPAC(iupac_name='bosutinib'):
-    from openeye import oechem, oeiupac, oeomega
-
-    # Create molecule.
-    mol = oechem.OEMol()
-    oeiupac.OEParseIUPACName(mol, iupac_name)
-    mol.SetTitle(iupac_name)
-
-    # Assign aromaticity and hydrogens.
-    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
-    oechem.OEAddExplicitHydrogens(mol)
-
-    # Create atom names.
-    oechem.OETriposAtomNames(mol)
-
-    # Create bond types
-    oechem.OETriposBondTypeNames(mol)
-
-    # Assign geometry
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega.SetIncludeInput(False)
-    omega.SetStrictStereo(True)
-    omega(mol)
-
-    return mol
-
-def createOEMolFromSMILES(smiles='CC', title='MOL'):
-    """
-    Generate an oemol with a geometry
-    """
-    from openeye import oechem, oeiupac, oeomega
-
-    # Create molecule
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, smiles)
-
-    # Set title.
-    mol.SetTitle(title)
-
-    # Assign aromaticity and hydrogens.
-    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
-    oechem.OEAddExplicitHydrogens(mol)
-
-    # Create atom names.
-    oechem.OETriposAtomNames(mol)
-
-    # Assign geometry
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega.SetIncludeInput(False)
-    omega.SetStrictStereo(True)
-    omega(mol)
-
-    return mol
-
-def oemol_to_omm_ff(oemol, molecule_name):
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
-    system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMOL(oemol)
-    return system, positions, topology
 
 def compare_at_lambdas(context, functions):
     """
@@ -188,113 +97,7 @@ def compare_at_lambdas(context, functions):
 
     print("------------------------")
 
-def generate_gaff_xml():
-    """
-    Return a file-like object for `gaff.xml`
-    """
-    from openmoltools import amber
-    gaff_dat_filename = amber.find_gaff_dat()
 
-    # Generate ffxml file contents for parmchk-generated frcmod output.
-    leaprc = StringIO("parm = loadamberparams %s" % gaff_dat_filename)
-    import parmed
-    params = parmed.amber.AmberParameterSet.from_leaprc(leaprc)
-    params = parmed.openmm.OpenMMParameterSet.from_parameterset(params)
-    citations = """\
-    Wang, J., Wang, W., Kollman P. A.; Case, D. A. "Automatic atom type and bond type perception in molecular mechanical calculations". Journal of Molecular Graphics and Modelling , 25, 2006, 247260.
-    Wang, J., Wolf, R. M.; Caldwell, J. W.;Kollman, P. A.; Case, D. A. "Development and testing of a general AMBER force field". Journal of Computational Chemistry, 25, 2004, 1157-1174.
-    """
-    ffxml = str()
-    gaff_xml = StringIO(ffxml)
-    provenance=dict(OriginalFile='gaff.dat', Reference=citations)
-    params.write(gaff_xml, provenance=provenance)
-
-    return gaff_xml
-
-def get_data_filename(relative_path):
-    """Get the full path to one of the reference files shipped for testing
-
-    In the source distribution, these files are in ``perses/data/*/``,
-    but on installation, they're moved to somewhere in the user's python
-    site-packages directory.
-
-    Parameters
-    ----------
-    name : str
-        Name of the file to load (with respect to the openmoltools folder).
-
-    """
-
-    fn = resource_filename('perses', relative_path)
-
-    if not os.path.exists(fn):
-        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
-
-    return fn
-
-def forcefield_directory():
-    """
-    Return the forcefield directory for the additional forcefield files like gaff.xml
-
-    Returns
-    -------
-    forcefield_directory_name : str
-        Directory where OpenMM can find additional forcefield files
-    """
-    forcefield_directory_name = resource_filename("perses", "data")
-    return forcefield_directory_name
-
-def createSystemFromIUPAC(iupac_name):
-    """
-    Create an openmm system out of an oemol
-
-    Parameters
-    ----------
-    iupac_name : str
-        IUPAC name
-
-    Returns
-    -------
-    molecule : openeye.OEMol
-        OEMol molecule
-    system : openmm.System object
-        OpenMM system
-    positions : [n,3] np.array of floats
-        Positions
-    topology : openmm.app.Topology object
-        Topology
-    """
-
-    # Create OEMol
-    molecule = createOEMolFromIUPAC(iupac_name)
-
-    # Generate a topology.
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    topology = generateTopologyFromOEMol(molecule)
-
-    # Initialize a forcefield with GAFF.
-    # TODO: Fix path for `gaff.xml` since it is not yet distributed with OpenMM
-    from simtk.openmm.app import ForceField
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    forcefield = ForceField(gaff_xml_filename)
-
-    # Generate template and parameters.
-    from openmoltools.forcefield_generators import generateResidueTemplate
-    [template, ffxml] = generateResidueTemplate(molecule)
-
-    # Register the template.
-    forcefield.registerResidueTemplate(template)
-
-    # Add the parameters.
-    forcefield.loadFile(StringIO(ffxml))
-
-    # Create the system.
-    system = forcefield.createSystem(topology, removeCMMotion=False)
-
-    # Extract positions
-    positions = extractPositionsFromOEMOL(molecule)
-
-    return (molecule, system, positions, topology)
 
 def get_atoms_with_undefined_stereocenters(molecule, verbose=False):
     """
@@ -307,7 +110,6 @@ def get_atoms_with_undefined_stereocenters(molecule, verbose=False):
     verbose : bool, optional, default=False
         If True, will print verbose output about undefined stereocenters.
 
-    TODO
     ----
     Add handling of chiral bonds:
     https://docs.eyesopen.com/toolkits/python/oechemtk/glossary.html#term-canonical-isomeric-smiles
@@ -368,6 +170,7 @@ def has_undefined_stereocenters(molecule, verbose=False):
     True
 
     """
+    #TODO move to utils
     atoms = get_atoms_with_undefined_stereocenters(molecule, verbose=verbose)
     if len(atoms) > 0:
         return True
@@ -407,6 +210,7 @@ def enumerate_undefined_stereocenters(molecule, verbose=False):
     2
 
     """
+    #TODO move to utils
     from openeye.oechem import OEAtomStereo_RightHanded, OEAtomStereo_LeftHanded, OEAtomStereo_Tetrahedral
     from itertools import product
 
@@ -422,231 +226,11 @@ def enumerate_undefined_stereocenters(molecule, verbose=False):
 
     return molecules
 
-def smiles_to_oemol(smiles_string, title="MOL"):
-    """
-    Convert the SMILES string into an OEMol
-
-    Returns
-    -------
-    oemols : np.array of type object
-    array of oemols
-    """
-    from openeye import oechem, oeomega
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, smiles_string)
-    mol.SetTitle(title)
-    oechem.OEAddExplicitHydrogens(mol)
-    oechem.OETriposAtomNames(mol)
-    oechem.OETriposBondTypeNames(mol)
-    omega = oeomega.OEOmega()
-    omega.SetMaxConfs(1)
-    omega(mol)
-    return mol
-
-def sanitizeSMILES(smiles_list, mode='drop', verbose=False):
-    """
-    Sanitize set of SMILES strings by ensuring all are canonical isomeric SMILES.
-    Duplicates are also removed.
-    Parameters
-    ----------
-    smiles_list : iterable of str
-        The set of SMILES strings to sanitize.
-    mode : str, optional, default='drop'
-        When a SMILES string that does not correspond to canonical isomeric SMILES is found, select the action to be performed.
-        'exception' : raise an `Exception`
-        'drop' : drop the SMILES string
-        'expand' : expand all stereocenters into multiple molecules
-    verbose : bool, optional, default=False
-        If True, print verbose output.
-    Returns
-    -------
-    sanitized_smiles_list : list of str
-         Sanitized list of canonical isomeric SMILES strings.
-    Examples
-    --------
-    Sanitize a simple list.
-    >>> smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
-    Throw an exception if undefined stereochemistry is present.
-    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='exception')
-    Traceback (most recent call last):
-      ...
-    Exception: Molecule '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]' has undefined stereocenters
-    Drop molecules iwth undefined stereochemistry.
-    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
-    >>> len(sanitized_smiles_list)
-    2
-    Expand molecules iwth undefined stereochemistry.
-    >>> sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='expand')
-    >>> len(sanitized_smiles_list)
-    4
-    """
-    from openeye.oechem import OEGraphMol, OESmilesToMol, OECreateIsoSmiString
-    sanitized_smiles_set = set()
-    OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens  ## IVY
-    for smiles in smiles_list:
-        molecule = OEGraphMol()
-        OESmilesToMol(molecule, smiles)
-
-        oechem.OEAddExplicitHydrogens(molecule)
-
-        if verbose:
-            molecule.SetTitle(smiles)
-            oechem.OETriposAtomNames(molecule)
-
-        if has_undefined_stereocenters(molecule, verbose=verbose):
-            if mode == 'drop':
-                if verbose:
-                    print("Dropping '%s' due to undefined stereocenters." % smiles)
-                continue
-            elif mode == 'exception':
-                raise Exception("Molecule '%s' has undefined stereocenters" % smiles)
-            elif mode == 'expand':
-                if verbose:
-                    print('Expanding stereochemistry:')
-                    print('original: %s', smiles)
-                molecules = enumerate_undefined_stereocenters(molecule, verbose=verbose)
-                for molecule in molecules:
-                    # isosmiles = OECreateIsoSmiString(molecule) ## IVY
-                    # sanitized_smiles_set.add(isosmiles) ## IVY
-
-                    smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS)  ## IVY
-                    # smiles_string = oechem.OEMolToSmiles(molecule)
-                    sanitized_smiles_set.add(smiles_string)  ## IVY
-                    if verbose: print('expanded: %s', smiles_string)
-        else:
-            # Convert to OpenEye's canonical isomeric SMILES.
-            # isosmiles = OECreateIsoSmiString(molecule)
-            smiles_string = oechem.OECreateSmiString(molecule, OESMILES_OPTIONS) ## IVY
-            # smiles_string = oechem.OEMolToSmiles(molecule)
-            sanitized_smiles_set.add(smiles_string) ## IVY
-
-    sanitized_smiles_list = list(sanitized_smiles_set)
-    return sanitized_smiles_list
-
-
-def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=1200):
-    """
-    Render the atom mapping to a PDF file.
-
-    Parameters
-    ----------
-    filename : str
-        The PDF filename to write to.
-    molecule1 : openeye.oechem.OEMol
-        Initial molecule
-    molecule2 : openeye.oechem.OEMol
-        Final molecule
-    new_to_old_atom_map : dict of int
-        new_to_old_atom_map[molecule2_atom_index] is the corresponding molecule1 atom index
-    width : int, optional, default=1200
-        Width in pixels
-    height : int, optional, default=1200
-        Height in pixels
-
-    """
-    from openeye import oechem
-
-    # Make copies of the input molecules
-    molecule1, molecule2 = oechem.OEGraphMol(molecule1), oechem.OEGraphMol(molecule2)
-
-    oechem.OEGenerate2DCoordinates(molecule1)
-    oechem.OEGenerate2DCoordinates(molecule2)
-
-    old_atoms_1 = [atom for atom in molecule1.GetAtoms()]
-    old_atoms_2 = [atom for atom in molecule2.GetAtoms()]
-
-    # Add both to an OEGraphMol reaction
-    rmol = oechem.OEGraphMol()
-    rmol.SetRxn(True)
-    def add_molecule(mol):
-        # Add atoms
-        new_atoms = list()
-        old_to_new_atoms = dict()
-        for old_atom in mol.GetAtoms():
-            new_atom = rmol.NewAtom(old_atom.GetAtomicNum())
-            new_atoms.append(new_atom)
-            old_to_new_atoms[old_atom] = new_atom
-        # Add bonds
-        for old_bond in mol.GetBonds():
-            rmol.NewBond(old_to_new_atoms[old_bond.GetBgn()], old_to_new_atoms[old_bond.GetEnd()], old_bond.GetOrder())
-        return new_atoms, old_to_new_atoms
-
-    [new_atoms_1, old_to_new_atoms_1] = add_molecule(molecule1)
-    [new_atoms_2, old_to_new_atoms_2] = add_molecule(molecule2)
-
-    # Label reactant and product
-    for atom in new_atoms_1:
-        atom.SetRxnRole(oechem.OERxnRole_Reactant)
-    for atom in new_atoms_2:
-        atom.SetRxnRole(oechem.OERxnRole_Product)
-
-    # Label mapped atoms
-    index =1
-    for (index2, index1) in new_to_old_atom_map.items():
-        new_atoms_1[index1].SetMapIdx(index)
-        new_atoms_2[index2].SetMapIdx(index)
-        index += 1
-    # Set up image options
-    from openeye import oedepict
-    itf = oechem.OEInterface()
-    oedepict.OEConfigureImageOptions(itf)
-    ext = oechem.OEGetFileExtension(filename)
-    if not oedepict.OEIsRegisteredImageFile(ext):
-        raise Exception('Unknown image type for filename %s' % filename)
-    ofs = oechem.oeofstream()
-    if not ofs.open(filename):
-        raise Exception('Cannot open output file %s' % filename)
-
-    # Setup depiction options
-    oedepict.OEConfigure2DMolDisplayOptions(itf, oedepict.OE2DMolDisplaySetup_AromaticStyle)
-    opts = oedepict.OE2DMolDisplayOptions(width, height, oedepict.OEScale_AutoScale)
-    oedepict.OESetup2DMolDisplayOptions(opts, itf)
-    opts.SetBondWidthScaling(True)
-    opts.SetAtomPropertyFunctor(oedepict.OEDisplayAtomMapIdx())
-    opts.SetAtomColorStyle(oedepict.OEAtomColorStyle_WhiteMonochrome)
-
-    # Depict reaction with component highlights
-    oechem.OEGenerate2DCoordinates(rmol)
-    rdisp = oedepict.OE2DMolDisplay(rmol, opts)
-
-    colors = [c for c in oechem.OEGetLightColors()]
-    highlightstyle = oedepict.OEHighlightStyle_BallAndStick
-    #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
-    oedepict.OERenderMolecule(ofs, ext, rdisp)
-    ofs.close()
-
-
-def canonicalize_SMILES(smiles_list):
-    """Ensure all SMILES strings end up in canonical form.
-    Stereochemistry must already have been expanded.
-    SMILES strings are converted to a OpenEye Topology and back again.
-    Parameters
-    ----------
-    smiles_list : list of str
-        List of SMILES strings
-    Returns
-    -------
-    canonical_smiles_list : list of str
-        List of SMILES strings, after canonicalization.
-    """
-
-    # Round-trip each molecule to a Topology to end up in canonical form
-    from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue, generateTopologyFromOEMol
-    from openeye import oechem
-    canonical_smiles_list = list()
-    for smiles in smiles_list:
-        molecule = smiles_to_oemol(smiles)
-        topology = generateTopologyFromOEMol(molecule)
-        residues = [ residue for residue in topology.residues() ]
-        new_molecule = generateOEMolFromTopologyResidue(residues[0])
-        new_smiles = oechem.OECreateIsoSmiString(new_molecule)
-        canonical_smiles_list.append(new_smiles)
-    return canonical_smiles_list
-
 def test_sanitizeSMILES():
     """
     Test SMILES sanitization.
     """
+    from perses.utils.smallmolecules import sanitizeSMILES
     smiles_list = ['CC', 'CCC', '[H][C@]1(NC[C@@H](CC1CO[C@H]2CC[C@@H](CC2)O)N)[H]']
 
     sanitized_smiles_list = sanitizeSMILES(smiles_list, mode='drop')
@@ -665,29 +249,6 @@ def test_sanitizeSMILES():
         isosmiles = OECreateIsoSmiString(molecule)
         if (smiles != isosmiles):
             raise Exception("Molecule '%s' was not properly round-tripped (result was '%s')" % (smiles, isosmiles))
-
-def describe_oemol(mol):
-    """
-    Render the contents of an OEMol to a string.
-
-    Parameters
-    ----------
-    mol : OEMol
-        Molecule to describe
-
-    Returns
-    -------
-    description : str
-        The description
-    """
-    description = ""
-    description += "ATOMS:\n"
-    for atom in mol.GetAtoms():
-        description += "%8d %5s %5d\n" % (atom.GetIdx(), atom.GetName(), atom.GetAtomicNum())
-    description += "BONDS:\n"
-    for bond in mol.GetBonds():
-        description += "%8d %8d\n" % (bond.GetBgnIdx(), bond.GetEndIdx())
-    return description
 
 def compute_potential(system, positions, platform=None):
     """
@@ -755,32 +316,6 @@ def compute_potential_components(context):
     del context, integrator
     return energy_components
 
-def smiles_to_topology(smiles):
-    """
-    Convert a SMILES string to an OpenMM
-    Topology
-
-    Parameters
-    ----------
-    smiles : str
-        smiles to be made into topology
-
-    Returns
-    -------
-    topology : simtk.openmm.topology.app
-        topology of the smiles
-    mol : OEMol
-        OEMol with explicit hydrogens
-    """
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    mol = oechem.OEMol()
-    oechem.OESmilesToMol(mol, smiles)
-    oechem.OEAddExplicitHydrogens(mol)
-    oechem.OETriposAtomNames(mol)
-    oechem.OETriposBondTypeNames(mol)
-    topology = generateTopologyFromOEMol(mol)
-    return topology, mol
-
 def check_system(system):
     """
     Check OpenMM System object for pathologies, like duplicate atoms in torsions.
@@ -797,12 +332,12 @@ def check_system(system):
         if len(set([i,j,k,l])) < 4:
             msg  = 'Torsion index %d of self._topology_proposal.new_system has duplicate atoms: %d %d %d %d\n' % (index,i,j,k,l)
             msg += 'Serialzed system to system.xml for inspection.\n'
-            from simtk.openmm import XmlSerializer
-            serialized_system = XmlSerializer.serialize(system)
-            outfile = open('system.xml', 'w')
-            outfile.write(serialized_system)
-            outfile.close()
             raise Exception(msg)
+    from simtk.openmm import XmlSerializer
+    serialized_system = XmlSerializer.serialize(system)
+    outfile = open('system.xml', 'w')
+    outfile.write(serialized_system)
+    outfile.close()
 
 def generate_endpoint_thermodynamic_states(system: openmm.System, topology_proposal: TopologyProposal):
     """
@@ -851,101 +386,16 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
-
-def generate_vacuum_topology_proposal(current_mol_name="benzene", proposed_mol_name="toluene", forcefield_kwargs=None, system_generator_kwargs=None):
+def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", vacuum = False):
     """
-    Generate a test vacuum topology proposal, current positions, and new positions triplet from two IUPAC molecule names.
-
-    Constraints are added to the system by default. To override this, set ``forcefield_kwargs = None``.
-
-    Parameters
+    Arguments
     ----------
     current_mol_name : str, optional
         name of the first molecule
     proposed_mol_name : str, optional
         name of the second molecule
-    forcefield_kwargs : dict, optional, default=None
-        Additional arguments to ForceField in addition to
-        'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff
-    system_generator_kwargs : dict, optional, default=None
-        Dict passed onto SystemGenerator
-
-    Returns
-    -------
-    topology_proposal : perses.rjmc.topology_proposal
-        The topology proposal representing the transformation
-    current_positions : np.array, unit-bearing
-        The positions of the initial system
-    new_positions : np.array, unit-bearing
-        The positions of the new system
-    """
-    from openmoltools import forcefield_generators
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
-
-    gaff_filename = get_data_filename('data/gaff.xml')
-    default_forcefield_kwargs = {'removeCMMotion': False, 'nonbondedMethod': app.NoCutoff, 'constraints' : app.HBonds}
-    forcefield_kwargs = default_forcefield_kwargs.update(forcefield_kwargs) if (forcefield_kwargs is not None) else default_forcefield_kwargs
-    system_generator_kwargs = system_generator_kwargs if (system_generator_kwargs is not None) else dict()
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'],
-        forcefield_kwargs=forcefield_kwargs,
-        **system_generator_kwargs)
-
-    old_oemol = createOEMolFromIUPAC(current_mol_name)
-    from openmoltools.forcefield_generators import generateTopologyFromOEMol
-    old_topology = generateTopologyFromOEMol(old_oemol)
-    old_positions = extractPositionsFromOEMOL(old_oemol)
-    old_smiles = oechem.OEMolToSmiles(old_oemol)
-    old_system = system_generator.build_system(old_topology)
-
-    new_oemol = createOEMolFromIUPAC(proposed_mol_name)
-    new_smiles = oechem.OEMolToSmiles(new_oemol)
-
-    geometry_engine = geometry.FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [old_smiles, new_smiles], system_generator, residue_name=current_mol_name)
-
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(old_system, old_topology, current_mol=old_oemol, proposed_mol=new_oemol)
-
-    # show atom mapping
-    filename = str(current_mol_name)+str(proposed_mol_name)+'.pdf'
-    render_atom_mapping(filename, old_oemol, new_oemol, topology_proposal.new_to_old_atom_map)
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
-
-    # DEBUG: Zero out bonds and angles for one system
-    #print('Zeroing bonds of old system')
-    #for force in topology_proposal.old_system.getForces():
-    #    if force.__class__.__name__ == 'HarmonicAngleForce':
-    #        for index in range(force.getNumAngles()):
-    #            p1, p2, p3, angle, K = force.getAngleParameters(index)
-    #            K *= 0.0
-    #            force.setAngleParameters(index, p1, p2, p3, angle, K)
-    #    if False and force.__class__.__name__ == 'HarmonicBondForce':
-    #        for index in range(force.getNumBonds()):
-    #            p1, p2, r0, K = force.getBondParameters(index)
-    #            K *= 0.0
-    #            force.setBondParameters(index, p1, p2, r0, K)
-
-    # DEBUG : Box vectors
-    #box_vectors = np.eye(3) * 100 * unit.nanometers
-    #topology_proposal.old_system.setDefaultPeriodicBoxVectors(box_vectors[0,:], box_vectors[1,:], box_vectors[2,:])
-    #topology_proposal.new_system.setDefaultPeriodicBoxVectors(box_vectors[0,:], box_vectors[1,:], box_vectors[2,:])
-
-    return topology_proposal, old_positions, new_positions
-
-def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene"):
-    """
-    Generate a test solvated topology proposal, current positions, and new positions triplet
-    from two IUPAC molecule names.
-
-    Parameters
-    ----------
-    current_mol_name : str, optional
-        name of the first molecule
-    proposed_mol_name : str, optional
-        name of the second molecule
+    vacuum: bool (default False)
+        whether to render a vacuum or solvated topology_proposal
 
     Returns
     -------
@@ -959,41 +409,74 @@ def generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", propo
     import simtk.openmm.app as app
     from openmoltools import forcefield_generators
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from openeye import oechem
+    from openmoltools.openeye import iupac_to_oemol, generate_conformers
+    from openmoltools import forcefield_generators
+    import perses.utils.openeye as openeye
+    from perses.utils.data import get_data_filename
+    from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator, SmallMoleculeSetProposalEngine
+    import simtk.unit as unit
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
-    current_mol, unsolv_old_system, pos_old, top_old = createSystemFromIUPAC(current_mol_name)
-    proposed_mol = createOEMolFromIUPAC(proposed_mol_name)
+    old_oemol, new_oemol = iupac_to_oemol(current_mol_name), iupac_to_oemol(proposed_mol_name)
 
-    initial_smiles = oechem.OEMolToSmiles(current_mol)
-    final_smiles = oechem.OEMolToSmiles(proposed_mol)
+    old_smiles = oechem.OECreateSmiString(old_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+    new_smiles = oechem.OECreateSmiString(new_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+
+    old_oemol, old_system, old_positions, old_topology = openeye.createSystemFromSMILES(old_smiles, title = "MOL")
+
+    #correct the old positions
+    old_positions = openeye.extractPositionsFromOEMol(old_oemol)
+    old_positions = old_positions.in_units_of(unit.nanometers)
+
+
+    new_oemol, new_system, new_positions, new_topology = openeye.createSystemFromSMILES(new_smiles, title = "NEW")
+
+
+    ffxml = forcefield_generators.generateForceFieldFromMolecules([old_oemol, new_oemol])
+
+    old_oemol.SetTitle('MOL'); new_oemol.SetTitle('MOL')
+
+    old_topology = forcefield_generators.generateTopologyFromOEMol(old_oemol)
+    new_topology = forcefield_generators.generateTopologyFromOEMol(new_oemol)
+
+    if not vacuum:
+        nonbonded_method = app.PME
+        barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, 300.0*unit.kelvin, 50)
+    else:
+        nonbonded_method = app.NoCutoff
+        barostat = None
 
     gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
+    system_generator = SystemGenerator([gaff_xml_filename, 'amber99sbildn.xml', 'tip3p.xml'],barostat = barostat, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : 4.0*unit.amu})
+    system_generator._forcefield.loadFile(StringIO(ffxml))
 
-    modeller = app.Modeller(top_old, pos_old)
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
-    solvated_topology = modeller.getTopology()
-    solvated_positions = modeller.getPositions()
-    solvated_system = forcefield.createSystem(solvated_topology, nonbondedMethod=app.PME, removeCMMotion=False)
-    barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, temperature, 50)
+    proposal_engine = SmallMoleculeSetProposalEngine([old_smiles, new_smiles], system_generator, residue_name = 'MOL')
+    geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
 
-    solvated_system.addForce(barostat)
+    if not vacuum:
+        #now to solvate
+        modeller = app.Modeller(old_topology, old_positions)
+        hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
+        modeller.delete(hs)
+        modeller.addHydrogens(forcefield=system_generator._forcefield)
+        modeller.addSolvent(system_generator._forcefield, model='tip3p', padding=9.0*unit.angstroms)
+        solvated_topology = modeller.getTopology()
+        solvated_positions = modeller.getPositions()
+        solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
+        solvated_system = system_generator.build_system(solvated_topology)
 
-    gaff_filename = get_data_filename('data/gaff.xml')
+        #now to create proposal
+        top_proposal = proposal_engine.propose(solvated_system, solvated_topology, old_oemol)
+        new_positions, _ = geometry_engine.propose(top_proposal, solvated_positions, beta)
 
-    system_generator = SystemGenerator([gaff_filename, 'amber99sbildn.xml', 'tip3p.xml'], barostat=barostat, forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': app.PME})
-    geometry_engine = geometry.FFAllAngleGeometryEngine()
-    proposal_engine = SmallMoleculeSetProposalEngine(
-        [initial_smiles, final_smiles], system_generator, residue_name=current_mol_name)
+        return top_proposal, solvated_positions, new_positions
 
-    #generate topology proposal
-    topology_proposal = proposal_engine.propose(solvated_system, solvated_topology)
-
-    #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, solvated_positions, beta)
-
-    return topology_proposal, solvated_positions, new_positions
+    else:
+        vacuum_system = system_generator.build_system(old_topology)
+        top_proposal = proposal_engine.propose(vacuum_system, old_topology, old_oemol)
+        new_positions, _ = geometry_engine.propose(top_proposal, old_positions, beta)
+        return top_proposal, old_positions, new_positions
 
 def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
     """
@@ -1019,13 +502,15 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     from openmoltools import forcefield_generators
     from openmmtools import testsystems
 
-    from perses.tests.utils import createOEMolFromIUPAC, createSystemFromIUPAC, get_data_filename
+    from perses.utils.openeye import smiles_to_oemol
+    from perses.utils.data import get_data_filename
 
     host_guest = testsystems.HostGuestVacuum()
-    unsolv_old_system, pos_old, top_old = host_guest.system, host_guest.positions, host_guest.topology
+    unsolv_old_system, old_positions, top_old = host_guest.system, host_guest.positions, host_guest.topology
+
     ligand_topology = [res for res in top_old.residues()]
     current_mol = forcefield_generators.generateOEMolFromTopologyResidue(ligand_topology[1]) # guest is second residue in topology
-    proposed_mol = createOEMolFromSMILES('C1CC2(CCC1(CC2)C)C')
+    proposed_mol = smiles_to_oemol('C1CC2(CCC1(CC2)C)C')
 
     initial_smiles = oechem.OEMolToSmiles(current_mol)
     final_smiles = oechem.OEMolToSmiles(proposed_mol)
@@ -1046,6 +531,193 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
     topology_proposal = proposal_engine.propose(solvated_system, top_old, current_mol=current_mol, proposed_mol=proposed_mol)
 
     #generate new positions with geometry engine
-    new_positions, _ = geometry_engine.propose(topology_proposal, pos_old, beta)
+    new_positions, _ = geometry_engine.propose(topology_proposal, old_positions, beta)
 
-    return topology_proposal, pos_old, new_positions
+    return topology_proposal, old_positions, new_positions
+
+def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_iterations = 10, md_steps = 250, compute_timeseries = False, prespecified_conformers = None):
+    """
+    Arguments
+    ----------
+    top_prop : perses.rjmc.topology_proposal.TopologyProposal object
+        topology_proposal
+    geometry_method : int
+        which geometry proposal method to use
+            0: neglect_angles = True (this is supposed to be the zero-variance method)
+            1: neglect_angles = False (this will accumulate variance)
+            2: use_sterics = True (this is experimental)
+    num_iterations: int
+        number of times to run md_steps integrator
+    md_steps: int
+        number of md_steps to run in each num_iteration
+    compute_timeseries = bool (default False)
+        whether to use pymbar detectEquilibration and subsampleCorrelated data from the MD run (the potential energy is the data)
+    prespecified_conformers = None or unit.Quantity(np.array([num_iterations, system.getNumParticles(), 3]), unit = unit.nanometers)
+        whether to input a unit.Quantity of conformers and bypass the conformer_generation/pymbar stage; None will default conduct this phase
+
+    Returns
+    -------
+    conformers : unit.Quantity(np.array([num_iterations, system.getNumParticles(), 3]), unit = unit.nanometers)
+        decorrelated positions of the md run
+    rj_works : list
+        work from each conformer proposal
+    """
+    from openmmtools import integrators
+    from perses.utils.openeye import smiles_to_oemol
+    import simtk.unit as unit
+    import simtk.openmm as openmm
+    from openmmtools.constants import kB
+    from perses.rjmc.geometry import FFAllAngleGeometryEngine
+    import tqdm
+
+    temperature = 300.0 * unit.kelvin # unit-bearing temperature
+    kT = kB * temperature # unit-bearing thermal energy
+    beta = 1.0/kT # unit-bearing inverse thermal energy
+
+    #first, we must extract the top_prop relevant quantities
+    system, topology = top_prop._old_system, top_prop._old_topology
+
+    if prespecified_conformers == None:
+
+        #now we can specify conformations from MD
+        integrator = integrators.LangevinIntegrator(collision_rate = 1.0/unit.picosecond, timestep = 4.0*unit.femtosecond, temperature = temperature)
+        context = openmm.Context(system, integrator)
+        context.setPositions(positions)
+        openmm.LocalEnergyMinimizer.minimize(context)
+        minimized_positions = context.getState(getPositions = True).getPositions(asNumpy = True)
+        print(f"completed initial minimization")
+        context.setPositions(minimized_positions)
+
+        zeros = np.zeros([num_iterations, int(system.getNumParticles()), 3])
+        conformers = unit.Quantity(zeros, unit=unit.nanometers)
+        rps = np.zeros((num_iterations))
+
+        print(f"conducting md sampling")
+        for iteration in tqdm.trange(num_iterations):
+            integrator.step(md_steps)
+            state = context.getState(getPositions = True, getEnergy = True)
+            new_positions = state.getPositions(asNumpy = True)
+            conformers[iteration,:,:] = new_positions
+
+            rp = state.getPotentialEnergy()*beta
+            rps[iteration] = rp
+
+        del context, integrator
+
+        if compute_timeseries:
+            print(f"computing production and data correlation")
+            from pymbar import timeseries
+            t0, g, Neff = timeseries.detectEquilibration(rps)
+            series = timeseries.subsampleCorrelatedData(np.arange(t0, num_iterations), g = g)
+            print(f"production starts at index {t0} of {num_iterations}")
+            print(f"the number of effective samples is {Neff}")
+            indices = t0 + series
+            print(f"the filtered indices are {indices}")
+
+        else:
+            indices = range(num_iterations)
+    else:
+        conformers = prespecified_conformers
+        indices = range(len(conformers))
+
+    #now we can define a geometry_engine
+    if geometry_method == 0:
+        geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = True)
+    elif geometry_method == 1:
+        geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=False, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
+    elif geometry_method == 2:
+        geometry_engine = FFAllAngleGeometryEngine( metadata=None, use_sterics=True, n_bond_divisions=1000, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
+    else:
+        raise Exception(f"there is no geometry method for {geometry_method}")
+
+    rj_works = []
+    print(f"conducting geometry proposals...")
+    for indx in tqdm.trange(len(indices)):
+        index = indices[indx]
+        print(f"index {indx}")
+        new_positions, logp_forward = geometry_engine.propose(top_prop, conformers[index], beta)
+        logp_backward = geometry_engine.logp_reverse(top_prop, new_positions, conformers[index], beta)
+        print(f"\tlogp_forward, logp_backward: {logp_forward}, {logp_backward}")
+        added_energy = geometry_engine.forward_final_context_reduced_potential - geometry_engine.forward_atoms_with_positions_reduced_potential
+        subtracted_energy = geometry_engine.reverse_final_context_reduced_potential - geometry_engine.reverse_atoms_with_positions_reduced_potential
+        print(f"\tadded_energy, subtracted_energy: {added_energy}, {subtracted_energy}")
+        work = logp_forward - logp_backward + added_energy - subtracted_energy
+        rj_works.append(work)
+        print(f"\ttotal work: {work}")
+
+    return conformers, rj_works
+
+def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-1):
+    """
+    Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
+    equal to the difference in valence energy (forward and reverse).
+
+    Parameters
+    ----------
+    topology_proposal : perses.topology_proposal.TopologyProposal object
+        top_proposal for relevant transformation
+    htf : perses.new_relative.HybridTopologyFactory object
+        hybrid top factory for setting alchemical hybrid states
+    added_energy : float
+        reduced added valence energy
+    subtracted_energy: float
+        reduced subtracted valence energy
+
+    Returns
+    -------
+    zero_state_energy_difference : float
+        reduced potential difference of the nonalchemical and alchemical lambda = 0 state (corrected for valence energy).
+    one_state_energy_difference : float
+        reduced potential difference of the nonalchemical and alchemical lambda = 1 state (corrected for valence energy).
+    """
+    import copy
+
+    #create copies of old/new systems and set the dispersion correction
+    top_proposal = copy.deepcopy(topology_proposal)
+    top_proposal._old_system.getForce(3).setUseDispersionCorrection(False)
+    top_proposal._new_system.getForce(3).setUseDispersionCorrection(False)
+
+    #create copy of hybrid system, define old and new positions, and turn off dispersion correction
+    hybrid_system = copy.deepcopy(htf.hybrid_system)
+    hybrid_system_n_forces = hybrid_system.getNumForces()
+    for force_index in range(hybrid_system_n_forces):
+        forcename = hybrid_system.getForce(force_index).__class__.__name__
+        if forcename == 'NonbondedForce':
+            hybrid_system.getForce(force_index).setUseDispersionCorrection(False)
+
+    old_positions, new_positions = htf._old_positions, htf._new_positions
+
+    #generate endpoint thermostates
+    nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal)
+
+    # compute reduced energies
+    #for the nonalchemical systems...
+    attrib_list = [(nonalch_zero, old_positions, top_proposal._old_system.getDefaultPeriodicBoxVectors()),
+                    (alch_zero, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    (alch_one, htf._hybrid_positions, hybrid_system.getDefaultPeriodicBoxVectors()),
+                    (nonalch_one, new_positions, top_proposal._new_system.getDefaultPeriodicBoxVectors())]
+
+    rp_list = []
+    platform = openmm.Platform.getPlatformByName('Reference')
+    for (state, pos, box_vectors) in attrib_list:
+        #print("\t\t\t{}".format(state))
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context = state.create_context(integrator, platform)
+        samplerstate = states.SamplerState(positions = pos, box_vectors = box_vectors)
+        samplerstate.apply_to_context(context)
+        rp = state.reduced_potential(context)
+        rp_list.append(rp)
+        energy_comps = compute_potential_components(context)
+        for name, force in energy_comps:
+           print("\t\t\t{}: {}".format(name, force))
+        print(f'added forces:{sum([energy*beta for name, energy in energy_comps])}')
+        print(f'rp: {rp}')
+        del context, integrator
+
+    #print(f"added_energy: {added_energy}; subtracted_energy: {subtracted_energy}")
+    nonalch_zero_rp, alch_zero_rp, alch_one_rp, nonalch_one_rp = rp_list[0], rp_list[1], rp_list[2], rp_list[3]
+    assert abs(nonalch_zero_rp - alch_zero_rp + added_energy) < ENERGY_THRESHOLD, f"The zero state alchemical and nonalchemical energy absolute difference {abs(nonalch_zero_rp - alch_zero_rp + added_energy)} is greater than the threshold of {ENERGY_THRESHOLD}."
+    assert abs(nonalch_one_rp - alch_one_rp + subtracted_energy) < ENERGY_THRESHOLD, f"The one state alchemical and nonalchemical energy absolute difference {abs(nonalch_one_rp - alch_one_rp + subtracted_energy)} is greater than the threshold of {ENERGY_THRESHOLD}."
+
+
+    return abs(nonalch_zero_rp - alch_zero_rp + added_energy), abs(nonalch_one_rp - alch_one_rp + subtracted_energy)

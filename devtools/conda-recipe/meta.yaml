@@ -20,8 +20,6 @@ requirements:
     - setuptools
     - numpy >=1.14
     - scipy
-    - numexpr
-    - autograd
     - pymbar
     - openmm >=7.3.1
     - parmed
@@ -38,8 +36,8 @@ requirements:
     - openeye-toolkits
     - dask
     - distributed
-    - progressbar2
     - yank
+    - progressbar2
     - parmed
     - tqdm
 

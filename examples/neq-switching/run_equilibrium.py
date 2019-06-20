@@ -7,7 +7,7 @@ from openmoltools import forcefield_generators
 from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.annihilation.ncmc_switching import NCMCEngine
-from perses.tests.utils import extractPositionsFromOEMOL
+from perses.utils.openeye import extractPositionsFromOEMol
 from simtk import openmm, unit
 from io import StringIO
 from simtk.openmm import app

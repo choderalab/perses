@@ -27,6 +27,8 @@ import perses.rjmc.topology_proposal as topology_proposal
 import perses.bias.bias_engine as bias_engine
 import perses.rjmc.geometry as geometry
 import perses.annihilation.ncmc_switching as ncmc_switching
+from unittest import skipIf
+istravis = os.environ.get('TRAVIS', None) == 'true'
 
 ################################################################################
 # TEST STORAGE
@@ -134,6 +136,7 @@ def test_write_object():
 def run_sampler(sampler, niterations):
     sampler.run(niterations)
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
 def test_storage_with_samplers():
     """Test storage layer inside all samplers.
     """

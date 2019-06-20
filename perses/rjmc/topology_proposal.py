@@ -26,7 +26,6 @@ from perses.storage import NetCDFStorageView
 from io import StringIO
 import openmoltools
 import base64
-import logging
 import progressbar
 from typing import List, Dict
 try:
@@ -39,7 +38,6 @@ except ImportError:
 ################################################################################
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
-#OESMILES_OPTIONS = oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
 #DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
 #DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
@@ -50,7 +48,10 @@ DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 # LOGGER
 ################################################################################
 
-_logger = logging.getLogger("proposal_engine")
+import logging
+logging.basicConfig(level = logging.NOTSET)
+_logger = logging.getLogger("geometry")
+_logger.setLevel(logging.DEBUG)
 
 ################################################################################
 # UTILITIES
@@ -1466,7 +1467,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Handle case where there are no matches
         if len(matches) == 0:
-            from perses.tests.utils import describe_oemol
+            from perses.utils.openeye import describe_oemol
             msg = 'No matches found in _get_mol_atom_matches.\n'
             msg += '\n'
             msg += 'oegraphmol_current:\n'
@@ -2264,6 +2265,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Canonicalize all SMILES strings
         self._smiles_list = [SmallMoleculeSetProposalEngine.canonicalize_smiles(smiles) for smiles in set(list_of_smiles)]
+        _logger.info(f"smiles list {list_of_smiles} has been canonicalized to {self._smiles_list}")
 
         self._n_molecules = len(self._smiles_list)
 
@@ -2276,6 +2278,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         if storage is not None:
             self._storage = NetCDFStorageView(storage, modname=self.__class__.__name__)
 
+        _logger.info(f"creating probability matrix...")
         self._probability_matrix = self._calculate_probability_matrix(self._smiles_list)
 
         self._atom_map = atom_map
@@ -2304,43 +2307,62 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         proposal : TopologyProposal object
            topology proposal object
         """
+        _logger.info(f"conducting proposal from {self._smiles_list[0]} to {self._smiles_list[1]}...")
+        from perses.utils.openeye import createSMILESfromOEMol
         # Determine SMILES string for current small molecule
         if current_mol is None:
+            _logger.info(f"current mol was not specified (it is advisable to prespecify an oemol); creating smiles and oemol...")
             current_mol_smiles, current_mol = self._topology_to_smiles(current_topology)
         else:
-            # TODO: Make sure we're using canonical mol to smiles conversion
-            current_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            _logger.info(f"current mol specified; creating associated smiles...")
+            current_mol_smiles = createSMILESfromOEMol(current_mol)
+            _logger.info(f"generated current mol smiles: {current_mol_smiles}")
 
         # Remove the small molecule from the current Topology object
+        _logger.info(f"creating current receptor topology by removing small molecule from current topology...")
         current_receptor_topology = self._remove_small_molecule(current_topology)
 
         # Find the initial atom index of the small molecule in the current topology
         old_mol_start_index, len_old_mol = self._find_mol_start_index(current_topology)
+        _logger.info(f"small molecule start index: {old_mol_start_index}")
+        _logger.info(f"small molecule has {len_old_mol} atoms.")
 
         # Determine atom indices of the small molecule in the current topology
         old_alchemical_atoms = range(old_mol_start_index, len_old_mol)
+        _logger.info(f"old alchemical atom indices: {old_alchemical_atoms}")
 
         # Select the next molecule SMILES given proposal probabilities
         if proposed_mol is None:
+            _logger.info(f"the proposed oemol is not specified; proposing a new molecule from proposal matrix P(M_new | M_old)...")
             proposed_mol_smiles, proposed_mol, logp_proposal = self._propose_molecule(current_system, current_topology, current_mol_smiles)
+            _logger.info(f"proposed mol smiles: {proposed_mol_smiles}")
+            _logger.info(f"logp proposal: {logp_proposal}")
         else:
             # TODO: Make sure we're using canonical mol to smiles conversion
             proposed_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            proposed_mol_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(proposed_mol_smiles)
+            _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
             logp_proposal = 0.0
 
         # Build the new Topology object, including the proposed molecule
+        _logger.info(f"building new topology with proposed molecule and current receptor topology...")
         new_topology = self._build_new_topology(current_receptor_topology, proposed_mol)
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
+        _logger.info(f"new molecule has a start index of {new_mol_start_index} and {len_new_mol} atoms.")
 
         # Generate an OpenMM System from the proposed Topology
+        _logger.info(f"proceeding to build the new system from the new topology...")
         new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
+        _logger.info(f"determining atom map between old and new molecules...")
         if not self._atom_map:
+            _logger.info(f"the atom map is not specified; proceeding to generate an atom map...")
             mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr,
                                                   bond_expr=self.bond_expr, verbose=self.verbose,
                                                   allow_ring_breaking=self._allow_ring_breaking)
         else:
+            _logger.info(f"atom map is pre-determined as {mol_atom_map}")
             mol_atom_map = self._atom_map
 
         # Adjust atom mapping indices for the presence of the receptor
@@ -2409,14 +2431,19 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             molecule
         """
         molecule_name = self._residue_name
+        _logger.info(f"\tmolecule name specified from residue: {self._residue_name}.")
 
         matching_molecules = [res for res in topology.residues() if res.name[:3] == molecule_name[:3]]  # Find residue in topology by searching for residues with name "MOL"
-        if len(matching_molecules) != 1:
+        if len(matching_molecules) > 1:
             raise ValueError("More than one residue with the same name!")
+        if len(matching_molecules) == 0:
+            raise ValueError(f"No residue found with the resname {molecule_name[:3]}")
         mol_res = matching_molecules[0]
         oemol = forcefield_generators.generateOEMolFromTopologyResidue(mol_res)
+        _logger.info(f"\toemol generated!")
         smiles_string = oechem.OECreateSmiString(oemol, OESMILES_OPTIONS)
         final_smiles_string = smiles_string
+        _logger.info(f"\tsmiles generated from oemol: {final_smiles_string}")
         return final_smiles_string, oemol
 
     def compute_state_key(self, topology):
@@ -2481,15 +2508,17 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mol_start_index : int
             The first index of the small molecule
         """
-        _logger.info('Building new Topology object...')
-
+        _logger.info(f"\tsetting proposed oemol title to {self._residue_name}")
         oemol_proposed.SetTitle(self._residue_name)
+        _logger.info(f"\tcreating mol topology from oemol...")
         mol_topology = forcefield_generators.generateTopologyFromOEMol(oemol_proposed)
         new_topology = app.Topology()
+        _logger.info(f"\tappending current receptor topology to new mol topology...")
         append_topology(new_topology, current_receptor_topology)
         append_topology(new_topology, mol_topology)
         # Copy periodic box vectors.
         if current_receptor_topology._periodicBoxVectors != None:
+            _logger.info(f"\tperiodic box vectors of the current receptor is specified; copying to new topology...")
             new_topology._periodicBoxVectors = copy.deepcopy(current_receptor_topology._periodicBoxVectors)
 
         return new_topology
@@ -2708,19 +2737,24 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Retrieve the current molecule index
         try:
             current_smiles_idx = self._smiles_list.index(molecule_smiles)
+            _logger.info(f"\tcurrent smiles index: {current_smiles_idx}")
         except ValueError as e:
-            msg = "Current SMILES string '%s' not found in canonical molecule set.\n"
-            msg += "Molecule set: %s" % self._smiles_list
+            msg = f"Current SMILES string {molecule_smiles} not found in canonical molecule set.\nMolecule set: {self._smiles_list}"
             raise Exception(msg)
 
         # Propose a new molecule
         molecule_probabilities = self._probability_matrix[current_smiles_idx, :]
+        _logger.info(f"\tmolecule probabilities: {molecule_probabilities}")
         proposed_smiles_idx = np.random.choice(range(len(self._smiles_list)), p=molecule_probabilities)
+        _logger.info(f"\tproposed smiles index chosen: {proposed_smiles_idx}")
         reverse_probability = self._probability_matrix[proposed_smiles_idx, current_smiles_idx]
         forward_probability = molecule_probabilities[proposed_smiles_idx]
+        _logger.info(f"\tforward probability: {forward_probability}")
+        _logger.info(f"\treverse probability: {reverse_probability}")
         proposed_smiles = self._smiles_list[proposed_smiles_idx]
+        _logger.info(f"\tproposed smiles: {proposed_smiles}")
         logp = np.log(reverse_probability) - np.log(forward_probability)
-        from perses.tests.utils import smiles_to_oemol
+        from perses.utils.openeye import smiles_to_oemol
         proposed_mol = smiles_to_oemol(proposed_smiles, "MOL_%d" %proposed_smiles_idx)
         return proposed_smiles, proposed_mol, logp
 
@@ -2790,7 +2824,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         safe_smiles
         removed_smiles
         """
-        from perses.tests.utils import smiles_to_topology
+        from perses.tests.utils import createSystemFromSMILES
         import itertools
         from perses.rjmc.geometry import ProposalOrderTools
         from perses.tests.test_geometry_engine import oemol_to_openmm_system
@@ -2802,13 +2836,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             smiles_pairs.add((mol1, mol2))
 
         for smiles_pair in smiles_pairs:
-            topology_1, mol1 = smiles_to_topology(smiles_pair[0])
-            topology_2, mol2 = smiles_to_topology(smiles_pair[1])
-            try:
-                sys1, pos1, top1 = oemol_to_openmm_system(mol1)
-                sys2, pos2, top2 = oemol_to_openmm_system(mol2)
-            except:
-                continue
+            mol1, sys1, pos1, top1 = createSystemFromSMILES(smiles_pair[0])
+            mol2, sys2, pos2, top2 = createSystemFromSMILES(smiles_pair[1])
+
             new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol1, mol2, atom_expr=atom_opts, bond_expr=bond_opts)
             if not new_to_old_atom_map:
                 continue

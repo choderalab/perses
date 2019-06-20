@@ -17,23 +17,21 @@ __author__ = 'John D. Chodera'
 
 from simtk import openmm, unit
 from simtk.openmm import app
-import os, os.path
-import sys, math
 import mdtraj as md
 import numpy as np
 from openmmtools import testsystems
 import copy
 import time
-from openmmtools.constants import kB
-from openmmtools.states import SamplerState, ThermodynamicState
-from openmmtools.mcmc import MCMCSampler
+from openmmtools.states import SamplerState, ThermodynamicState, CompoundThermodynamicState, group_by_compatibility
+from openmmtools.multistate import sams, replicaexchange
+from openmmtools import cache
 
 from perses.annihilation.ncmc_switching import NCMCEngine
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
-from perses.samplers import thermodynamics
-from perses.tests.utils import quantity_is_finite
-from perses.tests.utils import createOEMolFromSMILES
+from perses.utils.openeye import smiles_to_oemol
+
 
 ################################################################################
 # LOGGER
@@ -187,7 +185,7 @@ class ExpandedEnsembleSampler(object):
         for option_name in option_names:
             if option_name not in options:
                 options[option_name] = None
-        
+
         if options['splitting']:
             self._ncmc_splitting = options['splitting']
         else:
@@ -255,7 +253,7 @@ class ExpandedEnsembleSampler(object):
         ---------
         system : openmm.System
             The OpenMM system for which to create the thermodynamic state
-        
+
         Returns
         -------
         new_thermodynamic_state : openmmtools.states.ThermodynamicState
@@ -293,7 +291,7 @@ class ExpandedEnsembleSampler(object):
             PDBFile.writeFile(topology_proposal.new_topology, new_positions, file=self.geometry_pdbfile)
             self.geometry_pdbfile.flush()
 
-        new_sampler_state = SamplerState(new_positions, box_vectors=old_sampler_state.box_vectors)  
+        new_sampler_state = SamplerState(new_positions, box_vectors=old_sampler_state.box_vectors)
 
         return new_sampler_state, geometry_logp_propose
 
@@ -394,7 +392,7 @@ class ExpandedEnsembleSampler(object):
         logP_initial_nonalchemical = - initial_reduced_potential
 
         new_geometry_sampler_state, logP_geometry_forward = self._geometry_forward(topology_proposal, sampler_state)
-        
+
         #if we aren't doing any switching, then skip running the NCMC engine at all.
         if self._switching_nsteps == 0:
             ncmc_old_sampler_state = sampler_state
@@ -628,8 +626,9 @@ class SAMSSampler(object):
             At what iteration number to switch to the optimal gain decay
 
         """
-        from scipy.misc import logsumexp
-        from perses.tests.utils import createOEMolFromSMILES
+        from scipy.special import logsumexp
+        from perses.utils.openeye import smiles_to_oemol
+
         # Keep copies of initializing arguments.
         # TODO: Make deep copies?
         self.sampler = sampler
@@ -710,7 +709,7 @@ class SAMSSampler(object):
         -------
         correction_factor : float
         """
-        mol = createOEMolFromSMILES(smiles)
+        mol = smiles_to_oemol(smiles)
         num_heavy = 0
         num_light = 0
 
@@ -1040,3 +1039,156 @@ class ProtonationStateSampler(object):
         # Update all samplers.
         for iteration in range(niterations):
             self.update()
+
+################################################################################
+# HYBRID SYSTEM SAMPLERS
+################################################################################
+
+
+class HybridCompatibilityMixin(object):
+    """
+    Mixin that allows the MultistateSampler to accommodate the situation where unsampled endpoints
+    have a different number of degrees of freedom.
+    """
+
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
+        self._hybrid_factory = hybrid_factory
+        super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
+
+    def _compute_replica_energies(self, replica_id):
+        """Compute the energy for the replica in every ThermodynamicState."""
+        # Initialize replica energies for each thermodynamic state.
+        energy_thermodynamic_states = np.zeros(self.n_states)
+        energy_unsampled_states = np.zeros(len(self._unsampled_states))
+
+        # Retrieve sampler state associated to this replica.
+        sampler_state = self._sampler_states[replica_id]
+
+        # Determine neighborhood
+        state_index = self._replica_thermodynamic_states[replica_id]
+        neighborhood = self._neighborhood(state_index)
+        # Only compute energies over neighborhoods
+        energy_neighborhood_states = energy_thermodynamic_states[neighborhood]  # Array, can be indexed like this
+        neighborhood_thermodynamic_states = [self._thermodynamic_states[n] for n in neighborhood]  # List
+
+        # Compute energy for all thermodynamic states.
+        for idx, (energies, states) in enumerate([(energy_neighborhood_states, neighborhood_thermodynamic_states),
+                                                  (energy_unsampled_states, self._unsampled_states)]):
+            # Group thermodynamic states by compatibility.
+            compatible_groups, original_indices = group_by_compatibility(states)
+
+            # Are we treating the unsampled states? if so, idx will be one:
+            if idx == 1:
+                unsampled_state = True
+            else:
+                unsampled_state = False
+
+            # Compute the reduced potentials of all the compatible states.
+            for compatible_group, state_indices in zip(compatible_groups, original_indices):
+                # Get the context, any Integrator works.
+                context, integrator = cache.global_context_cache.get_context(compatible_group[0])
+
+                # Are we trying to compute a potential at an unsampled (different number of particles) state?
+                if unsampled_state:
+                    if state_indices[0] == 0:
+                        positions = self._hybrid_factory.old_positions(sampler_state.positions)
+                    elif state_indices[0] == 1:
+                        positions = self._hybrid_factory.new_positions(sampler_state.positions)
+                    else:
+                        raise ValueError("This mixin isn't defined for more than two unsampled states")
+
+                    box_vectors = sampler_state.box_vectors
+
+                    context.setPositions(positions)
+                    context.setPeriodicBoxVectors(*box_vectors)
+                else:
+                    # Update positions and box vectors. We don't need
+                    # to set Context velocities for the potential.
+                    sampler_state.apply_to_context(context, ignore_velocities=True)
+
+                # Compute and update the reduced potentials.
+                compatible_energies = ThermodynamicState.reduced_potential_at_states(context, compatible_group)
+                for energy_idx, state_idx in enumerate(state_indices):
+                    energies[state_idx] = compatible_energies[energy_idx]
+
+        # Return the new energies.
+        return energy_neighborhood_states, energy_unsampled_states
+
+
+class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
+    """
+    SAMSSampler that supports unsampled end states with a different number of positions
+    """
+
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
+        super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
+        self._factory = hybrid_factory
+
+    def setup(self, n_states, temperature, storage_file):
+        hybrid_system = self._factory.hybrid_system
+
+        initial_hybrid_positions = self._factory.hybrid_positions
+        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
+
+
+        thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
+        compound_thermodynamic_state = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
+
+        #thermodynamic_state_list = [compound_thermodynamic_state]
+        thermodynamic_state_list = []
+
+        lambda_values = np.linspace(0.,1.,n_states)
+        for lambda_val in lambda_values:
+            compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
+            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
+            thermodynamic_state_list.append(compound_thermodynamic_state_copy)
+
+        nonalchemical_thermodynamic_states = [
+            ThermodynamicState(self._factory._old_system, temperature=temperature),
+            ThermodynamicState(self._factory._new_system, temperature=temperature)]
+        sampler_state = SamplerState(initial_hybrid_positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
+
+        reporter = storage_file
+
+        self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state,
+        #            storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
+                    storage=reporter, unsampled_thermodynamic_states=None)
+
+
+class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchangeSampler):
+    """
+    ReplicaExchangeSampler that supports unsampled end states with a different number of positions
+    """
+
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
+        super(HybridRepexSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
+        self._factory = hybrid_factory
+
+    def setup(self, n_states, temperature, storage_file):
+        hybrid_system = self._factory.hybrid_system
+
+        initial_hybrid_positions = self._factory.hybrid_positions
+        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
+
+
+        thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
+        compound_thermodynamic_state = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
+
+        thermodynamic_state_list = []
+
+        lambda_values = np.linspace(0.,1.,n_states)
+        for lambda_val in lambda_values:
+            compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
+            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
+            thermodynamic_state_list.append(compound_thermodynamic_state_copy)
+
+        #nonalchemical_thermodynamic_states = [
+        #    ThermodynamicState(self._factory._old_system, temperature=temperature),
+        #    ThermodynamicState(self._factory._new_system, temperature=temperature)]
+        sampler_state = SamplerState(initial_hybrid_positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
+
+        reporter = storage_file
+
+        self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state,
+                    #            storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
+                    storage=reporter, unsampled_thermodynamic_states=None)

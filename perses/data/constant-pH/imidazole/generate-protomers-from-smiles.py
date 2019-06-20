@@ -12,7 +12,8 @@ import traceback
 import numpy as np
 
 from openeye import oechem
-from openmoltools import openeye, schrodinger
+from openmoltools import schrodinger
+from perses.utils.openeye import smiles_to_oemol
 
 MAX_ENERGY_PENALTY = 10.0 # kT
 
@@ -143,7 +144,7 @@ def enumerate_conformations(name, smiles=None, pdbname=None):
     elif smiles:
         # Generate molecule geometry with OpenEye
         print("Generating molecule {}".format(name))
-        oe_molecule = openeye.smiles_to_oemol(smiles)
+        oe_molecule = smiles_to_oemol(smiles)
         # Assign Tripos atom types
         oechem.OETriposAtomTypeNames(oe_molecule)
         oechem.OETriposBondTypeNames(oe_molecule)

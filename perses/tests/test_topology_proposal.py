@@ -13,36 +13,17 @@ except:
     from cStringIO import StringIO
 from nose.plugins.attrib import attr
 from openmmtools.constants import kB
+from perses.utils.data import get_data_filename
+from perses.utils.openeye import OEMol_to_omm_ff
+from perses.utils.smallmolecules import render_atom_mapping
+from unittest import skipIf
 
 temperature = 300*unit.kelvin
 # Compute kT and inverse temperature.
 kT = kB * temperature
 beta = 1.0 / kT
 
-def get_data_filename(relative_path):
-    """Get the full path to one of the reference files shipped for testing
-    In the source distribution, these files are in ``perses/data/*/``,
-    but on installation, they're moved to somewhere in the user's python
-    site-packages directory.
-    Parameters
-    ----------
-    name : str
-        Name of the file to load (with respect to the openmoltools folder).
-    """
-
-    fn = resource_filename('perses', relative_path)
-
-    if not os.path.exists(fn):
-        raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
-
-    return fn
-
-def extractPositionsFromOEMOL(molecule):
-    positions = unit.Quantity(np.zeros([molecule.NumAtoms(), 3], np.float32), unit.angstroms)
-    coords = molecule.GetCoords()
-    for index in range(molecule.NumAtoms()):
-        positions[index,:] = unit.Quantity(coords[index], unit.angstroms)
-    return positions
+istravis = os.environ.get('TRAVIS', None) == 'true'
 
 def generate_initial_molecule(mol_smiles):
     """
@@ -61,16 +42,6 @@ def generate_initial_molecule(mol_smiles):
     omega(mol)
     return mol
 
-def oemol_to_omm_ff(oemol, molecule_name):
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    gaff_xml_filename = get_data_filename('data/gaff.xml')
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    topology = forcefield_generators.generateTopologyFromOEMol(oemol)
-    system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMOL(oemol)
-    return system, positions, topology
-
 def test_small_molecule_proposals():
     """
     Make sure the small molecule proposal engine generates molecules
@@ -86,7 +57,7 @@ def test_small_molecule_proposals():
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine(list_of_smiles, system_generator)
     initial_molecule = generate_initial_molecule('CCCC')
-    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(initial_molecule, "MOL")
+    initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
     proposal = proposal_engine.propose(initial_system, initial_topology)
     for i in range(50):
         #positions are ignored here, and we don't want to run the geometry engine
@@ -102,6 +73,7 @@ def test_small_molecule_proposals():
         assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
 
+@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip full test on TRAVIS.")
 def test_no_h_map():
     """
     Test that the SmallMoleculeAtomMapper can generate maps that exclude hydrogens
@@ -129,16 +101,11 @@ def test_no_h_map():
         #fresh_atom_maps, _ = mapper._map_atoms(mol_a, mol_b)
         stored_atom_maps = mapper.get_atom_maps(molecule_pair[0], molecule_pair[1])
 
-        #for i, atom_map in enumerate(fresh_atom_maps):
-        #    utils.render_atom_mapping("/Users/grinawap/test_maps/{}_{}_map{}_fresh.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
-
         for i, atom_map in enumerate(stored_atom_maps):
-            utils.render_atom_mapping("/Users/grinawap/test_maps_stored_3/{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
+            render_atom_mapping("{}_{}_map{}_permissive.png".format(index_1, index_2, i), mol_b, mol_a, atom_map)
 
 
     mapper.generate_and_check_proposal_matrix()
-
-
 
 def test_two_molecule_proposal_engine():
     """
@@ -152,7 +119,7 @@ def test_two_molecule_proposal_engine():
     system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
     from perses.rjmc.topology_proposal import TwoMoleculeSetProposalEngine
     proposal_engine = TwoMoleculeSetProposalEngine(old_mol, new_mol, system_generator)
-    initial_system, initial_positions, initial_topology = oemol_to_omm_ff(old_mol, "MOL")
+    initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(old_mol)
     # Propose a transformation
     proposal = proposal_engine.propose(initial_system, initial_topology)
     # Check proposal
@@ -609,10 +576,11 @@ def test_ring_breaking_detection():
 
     """
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-    from perses.tests.utils import createOEMolFromIUPAC
-    from perses.tests.utils import render_atom_mapping
-    molecule1 = createOEMolFromIUPAC("naphthalene")
-    molecule2 = createOEMolFromIUPAC("benzene")
+    from openmoltools.openeye import iupac_to_oemol, generate_conformers
+    molecule1 = iupac_to_oemol("naphthalene")
+    molecule2 = iupac_to_oemol("benzene")
+    molecule1 = generate_conformers(molecule1,max_confs=1)
+    molecule2 = generate_conformers(molecule2,max_confs=1)
 
     # Allow ring breaking
     new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=True)
@@ -640,8 +608,6 @@ def test_molecular_atom_mapping():
     """
     from openeye import oechem
     from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
-    from perses.tests.utils import createOEMolFromSMILES
-    from perses.tests.utils import render_atom_mapping
     from itertools import combinations
 
     # Test mappings for JACS dataset ligands
