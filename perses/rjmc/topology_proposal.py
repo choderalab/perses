@@ -42,7 +42,10 @@ OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | 
 #DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
 #DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms
+# DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms
+# DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 ################################################################################
 # LOGGER
@@ -2552,6 +2555,170 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return receptor_topology
 
     @staticmethod
+    def enumerate_cycle_basis(molecule):
+        """Enumerate a closed cycle basis of bonds in molecule.
+
+        This uses cycle_basis from NetworkX:
+        https://networkx.github.io/documentation/networkx-1.10/reference/generated/networkx.algorithms.cycles.cycle_basis.html#networkx.algorithms.cycles.cycle_basis
+
+        Parameters
+        ----------
+        molecule : OEMol
+            The molecule for a closed cycle basis of Bonds is to be identified
+
+        Returns
+        -------
+        bond_cycle_basis : list of list of OEBond
+            bond_cycle_basis[cycle_index] is a list of OEBond objects that define a cycle in the basis
+            You can think of these as the minimal spanning set of ring systems to check.
+        """
+        import networkx as nx
+        g = nx.Graph()
+        for atom in molecule.GetAtoms():
+            g.add_node(atom.GetIdx())
+        for bond in molecule.GetBonds():
+            g.add_edge(bond.GetBgnIdx(), bond.GetEndIdx(), bond=bond)
+        bond_cycle_basis = list()
+        for cycle in nx.cycle_basis(g):
+            bond_cycle = list()
+            for i in range(len(cycle)):
+                atom_index_1 = cycle[i]
+                atom_index_2 = cycle[(i+1)%len(cycle)]
+                edge = g.edges[atom_index_1,atom_index_2]
+                bond = edge['bond']
+                bond_cycle.append(bond)
+            bond_cycle_basis.append(bond_cycle)
+        return bond_cycle_basis
+
+    @staticmethod
+    def enumerate_ring_bonds(molecule, ring_membership, ring_index):
+        """Enumerate OEBond objects in ring."""
+        for bond in molecule.GetBonds():
+            if (ring_membership[bond.GetBgnIdx()] == ring_index) and (ring_membership[bond.GetEndIdx()] == ring_index):
+                yield bond
+
+    @staticmethod
+    def breaks_rings_in_transformation(molecule1, molecule2, atom_map):
+        """Return True if the transformation from molecule1 to molecule2 breaks rings.
+
+        Parameters
+        ----------
+        molecule1 : OEMol
+            Initial molecule whose rings are to be checked for not being broken
+        molecule2 : OEMol
+            Final molecule
+        atom_map : dict of OEAtom : OEAtom
+            atom_map[molecule1_atom] is the corresponding molecule2 atom
+        """
+        for cycle in SmallMoleculeSetProposalEngine.numerate_cycle_basis(molecule1):
+            for bond in cycle:
+                # All bonds in this cycle must also be present in molecule2
+                if not ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
+                    return True # there are no corresponding atoms in molecule2
+                if not atom_map[bond.GetBgn()].GetBond(atom_map[bond.GetEnd()]):
+                    return True # corresponding atoms have no bond in molecule2
+        return False # no rings in molecule1 are broken in molecule2
+
+    @staticmethod
+    def preserves_rings(match, current_mol, proposed_mol):
+        """Returns True if the transformation allows ring systems to be broken or created."""
+        pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
+        target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
+
+        pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
+        if SmallMoleculeSetProposalEngine.breaks_rings_in_transformation(current_mol, proposed_mol, pattern_to_target_map):
+            return False
+
+        target_to_pattern_map = { target_atoms[matchpair.target.GetIdx()] : pattern_atoms[matchpair.pattern.GetIdx()] for matchpair in match.GetAtoms() }
+        if SmallMoleculeSetProposalEngine.breaks_rings_in_transformation(proposed_mol, current_mol, target_to_pattern_map):
+            return False
+
+        return True
+
+    @staticmethod
+    def rank_degenerate_maps(old_mol, new_mol, matches):
+        """
+        If the atom/bond expressions for maximal substructure is relaxed, then the maps with the highest scores will likely be degenerate.
+        Consequently, it is important to reduce the degeneracy with other tests.
+
+        This test will give each match a score wherein every atom matching with the same atomic number (in aromatic rings) will
+        receive a +1 score.
+        """
+        score_list = []
+        for match in matches:
+            counter_arom, counter_aliph = 0, 0
+            for matchpair in match.GetAtoms():
+                old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
+                old_atom, new_atom = old_mol.GetAtom(oechem.OEHasAtomIdx(old_index)), new_mol.GetAtom(oechem.OEHasAtomIdx(new_index))
+
+                if old_atom.IsAromatic() and new_atom.IsAromatic(): #if both are aromatic
+                    if old_atom.GetAtomicNum() == new_atom.GetAtomicNum():
+                        counter_arom += 1
+                else: # TODO: specify whether a single atom is aromatic/aliphatic (for ring form/break purposes)
+                    old_atomic_num, new_atomic_num = old_atom.GetAtomicNum(), new_atom.GetAtomicNum()
+                    if old_atomic_num != 1 and new_atomic_num == old_atomic_num:
+                        counter_aliph += 1
+
+            score_list.append((counter_arom, counter_aliph))
+
+        # return a list of matches with the most aromatic matches
+        max_arom_score = max([tup[0] for tup in score_list])
+        top_arom_matches = [match for index, match in enumerate(matches) if score_list[index][0] == max_arom_score]
+
+        #filter further for aliphatic matches...
+        max_aliph_score = max([tup[1] for tup in score_list])
+        top_aliph_matches = [match for index, match in enumerate(top_arom_matches) if score_list[index][1] == max_aliph_score]
+
+        return top_aliph_matches
+
+    @staticmethod
+    def hydrogen_mapping_exceptions(old_mol, new_mol, match):
+        """
+        Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
+        or aromatic(X) != aromatic(Y)
+        """
+        new_to_old_atom_map = {}
+
+        for matchpair in match.GetAtoms():
+            old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
+            old_atom, new_atom = old_mol.GetAtom(oechem.OEHasAtomIdx(old_index)), new_mol.GetAtom(oechem.OEHasAtomIdx(new_index))
+
+            #Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
+            if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
+                continue
+
+            # If the above is not true, then they are either both hydrogens or both not hydrogens
+            elif old_atom.GetAtomicNum() == 1:
+                bond = list(old_atom.GetBonds())[0] # There is only one for hydrogen
+                bgn = bond.GetBgn()
+                end = bond.GetEnd()
+
+                # Is this atom the beginning of the bond?
+                if bgn.GetIdx() == old_index:
+                    other_atom = end
+                else:
+                    other_atom = bgn
+
+                new_bond = list(new_atom.GetBonds())[0]
+                new_bgn = new_bond.GetBgn()
+                new_end = new_bond.GetEnd()
+
+                if new_bgn.GetIdx() == new_index:
+                    new_other_atom = new_end
+                else:
+                    new_other_atom = new_bgn
+
+                if (new_other_atom.GetAtomicNum() != other_atom.GetAtomicNum()) or (new_other_atom.IsAromatic() != other_atom.IsAromatic()):
+                    # if X-H maps to Y-H where X, Y are the same element but with different aromaticity booleans, then the Hbond constraint difference
+                    # will throw an error in the HybridTopologyFactory class.  map these hydrogens as unique new/old
+                    continue
+
+
+            new_to_old_atom_map[new_index] = old_index
+
+        return new_to_old_atom_map
+
+    @staticmethod
     def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=True):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
@@ -2579,131 +2746,19 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
-        unique = True
+        unique = False
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
-
-        def enumerate_cycle_basis(molecule):
-            """Enumerate a closed cycle basis of bonds in molecule.
-
-            This uses cycle_basis from NetworkX:
-            https://networkx.github.io/documentation/networkx-1.10/reference/generated/networkx.algorithms.cycles.cycle_basis.html#networkx.algorithms.cycles.cycle_basis
-
-            Parameters
-            ----------
-            molecule : OEMol
-                The molecule for a closed cycle basis of Bonds is to be identified
-
-            Returns
-            -------
-            bond_cycle_basis : list of list of OEBond
-                bond_cycle_basis[cycle_index] is a list of OEBond objects that define a cycle in the basis
-                You can think of these as the minimal spanning set of ring systems to check.
-            """
-            import networkx as nx
-            g = nx.Graph()
-            for atom in molecule.GetAtoms():
-                g.add_node(atom.GetIdx())
-            for bond in molecule.GetBonds():
-                g.add_edge(bond.GetBgnIdx(), bond.GetEndIdx(), bond=bond)
-            bond_cycle_basis = list()
-            for cycle in nx.cycle_basis(g):
-                bond_cycle = list()
-                for i in range(len(cycle)):
-                    atom_index_1 = cycle[i]
-                    atom_index_2 = cycle[(i+1)%len(cycle)]
-                    edge = g.edges[atom_index_1,atom_index_2]
-                    bond = edge['bond']
-                    bond_cycle.append(bond)
-                bond_cycle_basis.append(bond_cycle)
-            return bond_cycle_basis
-
-        def enumerate_ring_bonds(molecule, ring_membership, ring_index):
-            """Enumerate OEBond objects in ring."""
-            for bond in molecule.GetBonds():
-                if (ring_membership[bond.GetBgnIdx()] == ring_index) and (ring_membership[bond.GetEndIdx()] == ring_index):
-                    yield bond
-
-        def breaks_rings_in_transformation(molecule1, molecule2, atom_map):
-            """Return True if the transformation from molecule1 to molecule2 breaks rings.
-
-            Parameters
-            ----------
-            molecule1 : OEMol
-                Initial molecule whose rings are to be checked for not being broken
-            molecule2 : OEMol
-                Final molecule
-            atom_map : dict of OEAtom : OEAtom
-                atom_map[molecule1_atom] is the corresponding molecule2 atom
-            """
-            for cycle in enumerate_cycle_basis(molecule1):
-                for bond in cycle:
-                    # All bonds in this cycle must also be present in molecule2
-                    if not ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
-                        return True # there are no corresponding atoms in molecule2
-                    if not atom_map[bond.GetBgn()].GetBond(atom_map[bond.GetEnd()]):
-                        return True # corresponding atoms have no bond in molecule2
-            return False # no rings in molecule1 are broken in molecule2
-
-        def preserves_rings(match):
-            """Returns True if the transformation allows ring systems to be broken or created."""
-            pattern_atoms = { atom.GetIdx() : atom for atom in oegraphmol_current.GetAtoms() }
-            target_atoms = { atom.GetIdx() : atom for atom in oegraphmol_proposed.GetAtoms() }
-
-            pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
-            if breaks_rings_in_transformation(oegraphmol_current, oegraphmol_proposed, pattern_to_target_map):
-                return False
-
-            target_to_pattern_map = { target_atoms[matchpair.target.GetIdx()] : pattern_atoms[matchpair.pattern.GetIdx()] for matchpair in match.GetAtoms() }
-            if breaks_rings_in_transformation(oegraphmol_proposed, oegraphmol_current, target_to_pattern_map):
-                return False
-
-            return True
 
         if allow_ring_breaking is False:
             # Filter the matches to remove any that allow ring breaking
-            matches = [m for m in matches if preserves_rings(m)]
+            matches = [m for m in matches if SmallMoleculeSetProposalEngine.preserves_rings(m, oegraphmol_current, oegraphmol_proposed)]
 
         if not matches:
-            return {}
-        match = max(matches, key=lambda m: m.NumAtoms())
-        new_to_old_atom_map = {}
-        for matchpair in match.GetAtoms():
-            old_index = matchpair.pattern.GetIdx()
-            new_index = matchpair.target.GetIdx()
+            raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
 
-            old_atom = current_molecule.GetAtom(oechem.OEHasAtomIdx(old_index))
-            new_atom = proposed_molecule.GetAtom(oechem.OEHasAtomIdx(new_index))
-
-            #Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
-            if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
-                continue
-
-            # If the above is not true, then they are either both hydrogens or both not hydrogens
-            elif old_atom.GetAtomicNum() == 1:
-                bond = list(old_atom.GetBonds())[0] # There is only one for hydrogen
-                bgn = bond.GetBgn()
-                end = bond.GetEnd()
-
-                # Is this atom the beginning of the bond?
-                if bgn.GetIdx() == old_index:
-                    other_atom = end
-                else:
-                    other_atom = bgn
-
-                new_bond = list(new_atom.GetBonds())[0]
-                new_bgn = new_bond.GetBgn()
-                new_end = new_bond.GetEnd()
-
-                if new_bgn.GetIdx() == new_index:
-                    new_other_atom = new_end
-                else:
-                    new_other_atom = new_bgn
-
-                if new_other_atom.GetAtomicNum() != other_atom.GetAtomicNum():
-                    continue
-
-
-            new_to_old_atom_map[new_index] = old_index
+        top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches) #remove the matches with the lower rank score (filter out bad degeneracies)
+        match = max(top_matches, key=lambda m: m.NumAtoms()) #choose the first atom map with the most atoms mapped
+        new_to_old_atom_map = SmallMoleculeSetProposalEngine.hydrogen_mapping_exceptions(current_molecule, proposed_molecule, match)
 
         return new_to_old_atom_map
 

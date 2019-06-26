@@ -488,7 +488,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         solvated_system = system_generator.build_system(solvated_topology)
 
         #now to create proposal
-        top_proposal = proposal_engine.propose(solvated_system, solvated_topology, old_oemol)
+        top_proposal = proposal_engine.propose(current_system = solvated_system, current_topology = solvated_topology, current_mol = old_oemol, proposed_mol = new_oemol)
         new_positions, _ = geometry_engine.propose(top_proposal, solvated_positions, beta)
 
         if render_atom_mapping:
@@ -500,7 +500,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
 
     else:
         vacuum_system = system_generator.build_system(old_topology)
-        top_proposal = proposal_engine.propose(vacuum_system, old_topology, old_oemol)
+        top_proposal = proposal_engine.propose(current_system = vacuum_system, current_topology = old_topology, current_mol = old_oemol, proposed_mol = new_oemol)
         new_positions, _ = geometry_engine.propose(top_proposal, old_positions, beta)
         if render_atom_mapping:
             from perses.utils.smallmolecules import render_atom_mapping
