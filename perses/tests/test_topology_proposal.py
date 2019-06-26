@@ -641,6 +641,33 @@ def test_molecular_atom_mapping():
             print(msg)
             #        raise Exception(msg)
 
+def test_simple_heterocycle_mapping(iupac_pairs = [('benzene', 'pyridine')]):
+    """
+    Test the ability to map conjugated heterocycles (that preserves all rings).  Will assert that the number of ring members in both molecules is the same.
+    """
+    # TODO: generalize this to test for ring breakage and closure.
+    from openmoltools.openeye import iupac_to_oemol
+    from openeye import oechem
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+
+    for iupac_pair in iupac_pairs:
+        old_oemol, new_oemol = iupac_to_oemol(iupac_pair[0]), iupac_to_oemol(iupac_pair[1])
+        new_to_old_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(old_oemol, new_oemol, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking = False)
+
+        #assert that the number of ring members is consistent in the mapping...
+        num_hetero_maps = 0
+        for new_index, old_index in new_to_old_map.items():
+            old_atom, new_atom = old_oemol.GetAtom(oechem.OEHasAtomIdx(old_index)), new_oemol.GetAtom(oechem.OEHasAtomIdx(new_index))
+            if old_atom.IsInRing() and new_atom.IsInRing():
+                if old_atom.GetAtomicNum() != new_atom.GetAtomicNum():
+                    num_hetero_maps += 1
+
+        assert num_hetero_maps > 0, f"there are no differences in atomic number mappings in {iupac_pair}"
+
+
+
+
+
 if __name__ == "__main__":
 
 #    test_run_point_mutation_propose()
