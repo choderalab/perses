@@ -2610,7 +2610,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         atom_map : dict of OEAtom : OEAtom
             atom_map[molecule1_atom] is the corresponding molecule2 atom
         """
-        for cycle in SmallMoleculeSetProposalEngine.numerate_cycle_basis(molecule1):
+        for cycle in SmallMoleculeSetProposalEngine.enumerate_cycle_basis(molecule1):
             for bond in cycle:
                 # All bonds in this cycle must also be present in molecule2
                 if not ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
