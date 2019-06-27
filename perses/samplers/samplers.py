@@ -1165,6 +1165,9 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
         self._factory = hybrid_factory
 
     def setup(self, n_states, temperature, storage_file):
+
+        from openmmtools.integrators import FIREMinimizationIntegrator
+
         hybrid_system = self._factory.hybrid_system
 
         initial_hybrid_positions = self._factory.hybrid_positions
@@ -1175,20 +1178,44 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
         compound_thermodynamic_state = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
 
         thermodynamic_state_list = []
+        sampler_state_list = []
+
+        integrator = FIREMinimizationIntegrator()
+        context_cache = cache.ContextCache()
+
 
         lambda_values = np.linspace(0.,1.,n_states)
+
+        #starting with the initial positions generated py geometry.py
+        positions = initial_hybrid_positions
         for lambda_val in lambda_values:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
+            # now generating a sampler_state for each thermodyanmic state, with relaxed positions
+            context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy,
+                                                        integrator)
+            # set the positions to the end-point of the previous lambda window
+            context.setPositions(positions)
+
+            context_integrator.step(200)
+
+            state = context.getState(getPositions=True)
+            minimized_hybrid_positions = copy.deepcopy(state.getPositions())
+
+            sampler_state = SamplerState(minimized_hybrid_positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
+            sampler_state_list.append(sampler_state)
+            # save the positions for the next iteration
+            positions = minimized_hybrid_positions
+
         #nonalchemical_thermodynamic_states = [
         #    ThermodynamicState(self._factory._old_system, temperature=temperature),
         #    ThermodynamicState(self._factory._new_system, temperature=temperature)]
-        sampler_state = SamplerState(initial_hybrid_positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
+
 
         reporter = storage_file
 
-        self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state,
+        self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
                     #            storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
                     storage=reporter, unsampled_thermodynamic_states=None)
