@@ -107,10 +107,6 @@ def run_setup(setup_options):
     from perses.tests.utils import validate_endstate_energies
     phases = setup_options['phases']
 
-    if len(phases) != 2:
-        _logger.info(f"\tnumber of phases is NOT 2...complex and solvent will be provided...")
-        phases = ['complex', 'solvent']
-
     known_phases = ['complex','solvent','vacuum']
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
