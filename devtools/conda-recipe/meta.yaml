@@ -11,12 +11,12 @@ build:
 
 requirements:
   build:
-    - python >=3.6
+    - python
     - setuptools
     - numpy >=1.14
 
   run:
-    - python >=3.6
+    - python
     - setuptools
     - numpy >=1.14
     - scipy
