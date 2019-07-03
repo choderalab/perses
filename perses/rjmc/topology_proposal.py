@@ -53,7 +53,7 @@ DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 import logging
 logging.basicConfig(level = logging.NOTSET)
-_logger = logging.getLogger("geometry")
+_logger = logging.getLogger("proposal_generator")
 _logger.setLevel(logging.DEBUG)
 
 ################################################################################
