@@ -54,7 +54,6 @@ script:
 
 env:
   matrix:
-    - python=3.5 CONDA_PY=35 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
     - python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
 
   global:
