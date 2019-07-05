@@ -592,15 +592,14 @@ def test_ring_breaking_detection():
         msg += str(new_to_old_atom_map)
         raise Exception(msg)
 
-    # TODO: remove the exception from the `_get_mol_atom_map` to render this next test useful; at present, error will be raised and fail the test.
-    # new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=False)
-    # if not len(new_to_old_atom_map)==0:
-    #     filename = 'mapping-error.png'
-    #     render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
-    #     msg = 'Napthalene -> benzene transformation with allow_ring_breaking=False is erroneously allowing ring breaking\n'
-    #     msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
-    #     msg += str(new_to_old_atom_map)
-    #     raise Exception(msg)
+    new_to_old_atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(molecule1, molecule2, allow_ring_breaking=False)
+    if not len(new_to_old_atom_map)==0:
+        filename = 'mapping-error.png'
+        render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map)
+        msg = 'Napthalene -> benzene transformation with allow_ring_breaking=False is erroneously allowing ring breaking\n'
+        msg += 'Wrote atom mapping to %s for inspection; please check this.' % filename
+        msg += str(new_to_old_atom_map)
+        raise Exception(msg)
 
 def test_molecular_atom_mapping():
     """

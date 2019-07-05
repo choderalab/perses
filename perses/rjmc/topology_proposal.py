@@ -2754,7 +2754,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             matches = [m for m in matches if SmallMoleculeSetProposalEngine.preserves_rings(m, oegraphmol_current, oegraphmol_proposed)]
 
         if not matches:
-            raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
+            #raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
+            _logger.warn(f"There are no atom map matches that preserve the ring!  It is advisable to conduct a manual atom map.")
+            return {}
 
         top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches) #remove the matches with the lower rank score (filter out bad degeneracies)
         match = max(top_matches, key=lambda m: m.NumAtoms()) #choose the first atom map with the most atoms mapped
