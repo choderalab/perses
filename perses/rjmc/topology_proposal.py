@@ -2665,7 +2665,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # return a list of matches with the most aromatic matches
         max_arom_score = max([tup[0] for tup in score_list.values()])
-        top_arom_match_dict = {index: match for index, match in enumerate(matches) if score_list[index][0] == max_arom_score]
+        top_arom_match_dict = {index: match for index, match in enumerate(matches) if score_list[index][0] == max_arom_score}
 
         #filter further for aliphatic matches...
         max_aliph_score = max([score_list[idx][1] for idx in top_arom_match_dict.keys()])
