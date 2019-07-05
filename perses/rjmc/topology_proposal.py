@@ -930,6 +930,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         This base class is not meant to be invoked directly.
         """
+        _logger.info(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
         self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
@@ -948,6 +949,7 @@ class PolymerProposalEngine(ProposalEngine):
         current_topology : simtk.openmm.app.Topology object
             The current topology
         current_metadata : dict -- OPTIONAL
+
         Returns
         -------
         proposal : TopologyProposal
@@ -1551,7 +1553,7 @@ class PointMutationEngine(PolymerProposalEngine):
         residues_allowed_to_mutate : list(str), optional, default=None
             Contains residue ids
             If not specified, engine assumes all residues (except ACE and NME caps) may be mutated.
-        allowed_mutations : list(tuple), optionaal, default=None
+        allowed_mutations : list(tuple), optional, default=None
             ('residue id to mutate','desired mutant residue name (3-letter code)')
             Example:
                 Desired systems are wild type T4 lysozyme, T4 lysozyme L99A, and T4 lysozyme L99A/M102Q
@@ -2644,8 +2646,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         This test will give each match a score wherein every atom matching with the same atomic number (in aromatic rings) will
         receive a +1 score.
         """
-        score_list = []
-        for match in matches:
+        score_list = {}
+        for idx, match in enumerate(matches):
             counter_arom, counter_aliph = 0, 0
             for matchpair in match.GetAtoms():
                 old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
@@ -2659,15 +2661,15 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                     if old_atomic_num != 1 and new_atomic_num == old_atomic_num:
                         counter_aliph += 1
 
-            score_list.append((counter_arom, counter_aliph))
+            score_list[idx] = (counter_arom, counter_aliph)
 
         # return a list of matches with the most aromatic matches
-        max_arom_score = max([tup[0] for tup in score_list])
-        top_arom_matches = [match for index, match in enumerate(matches) if score_list[index][0] == max_arom_score]
+        max_arom_score = max([tup[0] for tup in score_list.values()])
+        top_arom_match_dict = {index: match for index, match in enumerate(matches) if score_list[index][0] == max_arom_score]
 
         #filter further for aliphatic matches...
-        max_aliph_score = max([tup[1] for tup in score_list])
-        top_aliph_matches = [match for index, match in enumerate(top_arom_matches) if score_list[index][1] == max_aliph_score]
+        max_aliph_score = max([score_list[idx][1] for idx in top_arom_match_dict.keys()])
+        top_aliph_matches = [top_arom_match_dict[idx] for idx in top_arom_match_dict.keys() if score_list[idx][1] == max_aliph_score]
 
         return top_aliph_matches
 
