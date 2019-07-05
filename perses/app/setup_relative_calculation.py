@@ -12,6 +12,7 @@ from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSet
 
 from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
+from perses.utils.smallmolecules import render_atom_mapping
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("setup_relative_calculation")
@@ -227,6 +228,11 @@ def run_setup(setup_options):
             top_prop['complex_logp_reverse'] = fe_setup._complex_logp_reverse
             top_prop['complex_forward_neglected_angles'] = fe_setup._complex_forward_neglected_angles
             top_prop['complex_reverse_neglected_angles'] = fe_setup._complex_reverse_neglected_angles
+
+            _logger.info(f"\twriting complex render_atom_mapping...")
+            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_complex_mapping.png')
+            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
+
         if 'solvent' in phases:
             top_prop['solvent_topology_proposal'] = fe_setup.solvent_topology_proposal
             top_prop['solvent_old_positions'] = fe_setup.solvent_old_positions
@@ -237,6 +243,11 @@ def run_setup(setup_options):
             top_prop['solvent_logp_reverse'] = fe_setup._ligand_logp_reverse_solvated
             top_prop['solvent_forward_neglected_angles'] = fe_setup._solvated_forward_neglected_angles
             top_prop['solvent_reverse_neglected_angles'] = fe_setup._solvated_reverse_neglected_angles
+
+            _logger.info(f"\twriting solvent render_atom_mapping...")
+            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_solvent_mapping.png')
+            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
+
         if 'vacuum' in phases:
             top_prop['vacuum_topology_proposal'] = fe_setup.vacuum_topology_proposal
             top_prop['vacuum_old_positions'] = fe_setup.vacuum_old_positions
@@ -247,6 +258,10 @@ def run_setup(setup_options):
             top_prop['vacuum_logp_reverse'] = fe_setup._vacuum_logp_reverse
             top_prop['vacuum_forward_neglected_angles'] = fe_setup._vacuum_forward_neglected_angles
             top_prop['vacuum_reverse_neglected_angles'] = fe_setup._vacuum_reverse_neglected_angles
+
+            _logger.info(f"\twriting vacuum render_atom_mapping...")
+            atom_map_outfile = os.path.join(os.getcwd(), trajectory_directory, 'render_vacuum_mapping.png')
+            render_atom_mapping(atom_map_outfile, fe_setup._ligand_oemol_old, fe_setup._ligand_oemol_new, fe_setup.non_offset_new_to_old_atom_map)
 
     else:
         _logger.info(f"\tloading topology proposal from yaml setup options...")

@@ -386,16 +386,25 @@ def generate_endpoint_thermodynamic_states(system: openmm.System, topology_propo
 
     return nonalchemical_zero_thermodynamic_state, nonalchemical_one_thermodynamic_state, lambda_zero_thermodynamic_state, lambda_one_thermodynamic_state
 
-def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", vacuum = False):
+def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", proposed_mol_name="benzene", current_mol_smiles = None, proposed_mol_smiles = None, vacuum = False, render_atom_mapping = False):
     """
+    This function will generate a topology proposal, old positions, and new positions with a geometry proposal (either vacuum or solvated) given a set of input iupacs or smiles.
+    The function will (by default) read the iupac names first.  If they are set to None, then it will attempt to read a set of current and new smiles.
+    An atom mapping pdf will be generated if specified.
     Arguments
     ----------
     current_mol_name : str, optional
         name of the first molecule
     proposed_mol_name : str, optional
         name of the second molecule
+    current_mol_smiles : str (default None)
+        current mol smiles
+    proposed_mol_smiles : str (default None)
+        proposed mol smiles
     vacuum: bool (default False)
         whether to render a vacuum or solvated topology_proposal
+    render_atom_mapping : bool (default False)
+        whether to render the atom map of the current_mol_name and proposed_mol_name
 
     Returns
     -------
@@ -410,7 +419,7 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     from openmoltools import forcefield_generators
 
     from openeye import oechem
-    from openmoltools.openeye import iupac_to_oemol, generate_conformers
+    from openmoltools.openeye import iupac_to_oemol, generate_conformers, smiles_to_oemol
     from openmoltools import forcefield_generators
     import perses.utils.openeye as openeye
     from perses.utils.data import get_data_filename
@@ -418,10 +427,22 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
     import simtk.unit as unit
     from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
-    old_oemol, new_oemol = iupac_to_oemol(current_mol_name), iupac_to_oemol(proposed_mol_name)
-
-    old_smiles = oechem.OECreateSmiString(old_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
-    new_smiles = oechem.OECreateSmiString(new_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+    if current_mol_name != None and proposed_mol_name != None:
+        try:
+            old_oemol, new_oemol = iupac_to_oemol(current_mol_name), iupac_to_oemol(proposed_mol_name)
+            old_smiles = oechem.OECreateSmiString(old_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+            new_smiles = oechem.OECreateSmiString(new_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        except:
+            raise Exception(f"either {current_mol_name} or {proposed_mol_name} is not compatible with 'iupac_to_oemol' function!")
+    elif current_mol_smiles != None and proposed_mol_smiles != None:
+        try:
+            old_oemol, new_oemol = smiles_to_oemol(current_mol_smiles), smiles_to_oemol(proposed_mol_smiles)
+            old_smiles = oechem.OECreateSmiString(old_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+            new_smiles = oechem.OECreateSmiString(new_oemol,oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
+        except:
+            raise Exception(f"the variables are not compatible")
+    else:
+        raise Exception(f"either current_mol_name and proposed_mol_name must be specified as iupacs OR current_mol_smiles and proposed_mol_smiles must be specified as smiles strings.")
 
     old_oemol, old_system, old_positions, old_topology = openeye.createSystemFromSMILES(old_smiles, title = "MOL")
 
@@ -467,15 +488,24 @@ def  generate_solvated_hybrid_test_topology(current_mol_name="naphthalene", prop
         solvated_system = system_generator.build_system(solvated_topology)
 
         #now to create proposal
-        top_proposal = proposal_engine.propose(solvated_system, solvated_topology, old_oemol)
+        top_proposal = proposal_engine.propose(current_system = solvated_system, current_topology = solvated_topology, current_mol = old_oemol, proposed_mol = new_oemol)
         new_positions, _ = geometry_engine.propose(top_proposal, solvated_positions, beta)
+
+        if render_atom_mapping:
+            from perses.utils.smallmolecules import render_atom_mapping
+            print(f"new_to_old: {proposal_engine.non_offset_new_to_old_atom_map}")
+            render_atom_mapping(f"{old_smiles}to{new_smiles}.png", old_oemol, new_oemol, proposal_engine.non_offset_new_to_old_atom_map)
 
         return top_proposal, solvated_positions, new_positions
 
     else:
         vacuum_system = system_generator.build_system(old_topology)
-        top_proposal = proposal_engine.propose(vacuum_system, old_topology, old_oemol)
+        top_proposal = proposal_engine.propose(current_system = vacuum_system, current_topology = old_topology, current_mol = old_oemol, proposed_mol = new_oemol)
         new_positions, _ = geometry_engine.propose(top_proposal, old_positions, beta)
+        if render_atom_mapping:
+            from perses.utils.smallmolecules import render_atom_mapping
+            print(f"new_to_old: {top_proposal._new_to_old_atom_map}")
+            render_atom_mapping(f"{old_smiles}to{new_smiles}.png", old_oemol, new_oemol, top_proposal._new_to_old_atom_map)
         return top_proposal, old_positions, new_positions
 
 def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name="MOL"):
@@ -535,12 +565,14 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
 
     return topology_proposal, old_positions, new_positions
 
-def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_iterations = 10, md_steps = 250, compute_timeseries = False, prespecified_conformers = None):
+def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_iterations = 10, md_steps = 250, compute_timeseries = False, md_system = None, prespecified_conformers = None):
     """
     Arguments
     ----------
     top_prop : perses.rjmc.topology_proposal.TopologyProposal object
         topology_proposal
+    md_system : openmm.System object, default None
+        system from which md is conducted; the default is the top_prop._old_system
     geometry_method : int
         which geometry proposal method to use
             0: neglect_angles = True (this is supposed to be the zero-variance method)
@@ -575,7 +607,11 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
     beta = 1.0/kT # unit-bearing inverse thermal energy
 
     #first, we must extract the top_prop relevant quantities
-    system, topology = top_prop._old_system, top_prop._old_topology
+    topology = top_prop._old_topology
+    if md_system == None:
+        system = top_prop._old_system
+    else:
+        system = md_system
 
     if prespecified_conformers == None:
 
