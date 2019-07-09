@@ -208,10 +208,9 @@ class AlanineDipeptideTestSystem(PersesTestSystem):
             }
         proposal_engines = dict()
         chain_id = ' '
-        allowed_mutations = [[('2','VAL')],[('2','LEU')],[('2','ILE')]]
+        allowed_mutations = [('2','VAL'),('2','LEU'),('2','ILE')]
         for environment in environments:
             proposal_engines[environment] = PointMutationEngine(topologies[environment],system_generators[environment], chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
-
         # Generate systems
         systems = dict()
         for environment in environments:

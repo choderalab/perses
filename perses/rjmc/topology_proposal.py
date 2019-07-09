@@ -52,7 +52,7 @@ DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 ################################################################################
 
 import logging
-logging.basicConfig(level = logging.NOTSET)
+logging.basicConfig(level = logging.DEBUG)
 _logger = logging.getLogger("proposal_generator")
 _logger.setLevel(logging.DEBUG)
 
@@ -930,7 +930,6 @@ class PolymerProposalEngine(ProposalEngine):
 
         This base class is not meant to be invoked directly.
         """
-        _logger.info(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
         self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
@@ -957,12 +956,10 @@ class PolymerProposalEngine(ProposalEngine):
             probabilities, as well as old and new topologies and atom
             mapping
         """
-
-        # old_topology : simtk.openmm.app.Topology
+        _logger.info(f"Conducting polymer point mutation proposal...")
         old_topology = app.Topology()
         append_topology(old_topology, current_topology)
 
-        # new_topology : simtk.openmm.app.Topology
         new_topology = app.Topology()
         append_topology(new_topology, current_topology)
 
@@ -974,27 +971,30 @@ class PolymerProposalEngine(ProposalEngine):
             msg = 'PolymerProposalEngine: old_topology has %d atoms, while old_system has %d atoms' % (old_topology_natoms, old_system_natoms)
             raise Exception(msg)
 
-        # metadata : dict, key = 'chain_id' , value : str
         metadata = current_metadata
         if metadata is None:
             metadata = dict()
-        # old_chemical_state_key : str
+
         old_chemical_state_key = self.compute_state_key(old_topology)
+        _logger.debug(f"old chemical state key for chain {self._chain_id}: {old_chemical_state_key}")
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
+        _logger.debug(f"choosing mutant...")
         index_to_new_residues, metadata = self._choose_mutant(old_topology, metadata)
+        _logger.debug(f"index_to_new_residues: {index_to_new_residues}")
 
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter name of proposed residue))
         residue_map = self._generate_residue_map(old_topology, index_to_new_residues)
+        _logger.debug(f"generated residue map")
 
         for (res, new_name) in residue_map:
             if res.name == new_name:
                 del(index_to_new_residues[res.index])
         if len(index_to_new_residues) == 0:
+            _logger.debug(f"no change to the topology proposed; returning old system and topology.")
             atom_map = dict()
             for atom in old_topology.atoms():
                 atom_map[atom.index] = atom.index
-            if self.verbose: print('PolymerProposalEngine: No changes to topology proposed, returning old system and topology')
             topology_proposal = TopologyProposal(new_topology=old_topology, new_system=old_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=old_chemical_state_key, logp_proposal=0.0, new_to_old_atom_map=atom_map)
             return topology_proposal
 
@@ -1004,25 +1004,36 @@ class PolymerProposalEngine(ProposalEngine):
         # Add modified_aa property to residues in old topology
         for res in old_topology.residues():
             res.modified_aa = True if res.index in index_to_new_residues.keys() else False
+        _logger.debug(f"defined res.modified_aa attibutes for residues in old topology")
 
         # Identify differences between old topology and proposed changes
         # excess_atoms : list(simtk.openmm.app.topology.Atom) atoms from existing residue not in new residue
         # excess_bonds : list(tuple (simtk.openmm.app.topology.Atom, simtk.openmm.app.topology.Atom)) bonds from existing residue not in new residue
         # missing_bonds : list(tuple (simtk.openmm.app.topology._TemplateAtomData, simtk.openmm.app.topology._TemplateAtomData)) bonds from new residue not in existing residue
+        _logger.debug(f"")
         excess_atoms, excess_bonds, missing_atoms, missing_bonds = self._identify_differences(old_topology, residue_map)
+        _logger.debug(f"excess atoms: {[atom.name for atom in excess_atoms]}")
+        _logger.debug(f"excess_bonds: {[(atom1.name, atom2.name) for atom1, atom2 in excess_bonds]}")
+        _logger.debug(f"missing atoms: {[[atom.name for atom in missing_atoms[res]] for res in missing_atoms.keys()]}")
+        _logger.debug(f"missing bonds: {[(atom1.name, atom2.name) for atom1, atom2 in missing_bonds]}")
 
         # Delete excess atoms and bonds from old topology
         excess_atoms_bonds = excess_atoms + excess_bonds
         new_topology = self._delete_atoms(old_topology, excess_atoms_bonds)
+        _logger.debug(f"new_topology instantiated with deleted atoms and bonds from old topology")
 
         # Add missing atoms and bonds to new topology
         new_topology = self._add_new_atoms(new_topology, missing_atoms, missing_bonds, residue_map)
+        _logger.debug(f"missing atoms and bonds added to new topology")
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
+        _logger.debug(f"constructing atom map...")
         atom_map = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
+        _logger.debug(f"atom map: {atom_map}")
 
         # new_chemical_state_key : str
         new_chemical_state_key = self.compute_state_key(new_topology)
+        _logger.debug(f"new chemical state key: {new_chemical_state_key}")
         # new_system : simtk.openmm.System
 
         # Copy periodic box vectors from current topology
@@ -1030,15 +1041,16 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Build system
         new_system = self._system_generator.build_system(new_topology)
+        _logger.debug(f"set periodic box vectors and built new system from new topology")
 
         # Adjust logp_propose based on HIS presence
         his_residues = ['HID', 'HIE']
         old_residue = residue_map[0][0]
         proposed_residue = residue_map[0][1]
         if old_residue.name in his_residues and proposed_residue not in his_residues:
-            logp_propose = math.log(2)
+            logp_propose = np.log(2)
         elif old_residue.name not in his_residues and proposed_residue in his_residues:
-            logp_propose = math.log(0.5)
+            logp_propose = np.log(0.5)
         else:
             logp_propose = 0.0
 
@@ -1074,6 +1086,22 @@ class PolymerProposalEngine(ProposalEngine):
         return topology_proposal
 
     def _choose_mutant(self, topology, metadata):
+        """
+        Dummy function in parent (PolymerProposalEngine) class to choose a mutant
+        Arguments
+        ---------
+        topology : simtk.openmm.app.Topology
+            topology of the protein
+        metadata : dict
+            metadata associated with mutant choice
+
+        Returns
+        -------
+        index_to_new_residues : dict
+            dict of {index: new_residue}
+        metadata : dict
+            input metadata
+        """
         index_to_new_residues = dict()
         return index_to_new_residues, metadata
 
@@ -1087,6 +1115,7 @@ class PolymerProposalEngine(ProposalEngine):
         index_to_new_residues : dict
             key : int (index, zero-indexed in chain)
             value : str (three letter residue name)
+
         Returns
         -------
         residue_map : list(tuples)
@@ -1107,6 +1136,7 @@ class PolymerProposalEngine(ProposalEngine):
             The original Topology object to be processed
         residue_map : list(tuples)
             simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue)
+
         Returns
         -------
         excess_atoms : list(simtk.openmm.app.topology.Atom)
@@ -1337,7 +1367,8 @@ class PolymerProposalEngine(ProposalEngine):
         atom_map : dict, key: int (index
             new residues have all correct atoms and bonds for desired mutation
         """
-
+        import os
+        from perses.utils.smallmolecules import render_atom_mapping
         # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
         atom_map = dict()
 
@@ -1372,32 +1403,42 @@ class PolymerProposalEngine(ProposalEngine):
                 if old_residue.index == new_residue.index:
                     old_to_new_residues[old_residue.name] = new_residue
                     break
+        _logger.debug(f"\tconstructed old_to_new_residues: {old_to_new_residues}")
 
         # modified_residues : dict, key : index of old residue, value : proposed residue
         modified_residues = dict()
         for map_entry in residue_map:
             old_residue = map_entry[0]
             modified_residues[old_residue.index] = old_to_new_residues[old_residue.name]
+        _logger.debug(f"\tconstructed modified_residues: {modified_residues}")
 
         # old_residues : dict, key : index of old residue, value : old residue
         old_residues = dict()
         for residue in old_topology.residues():
             if residue.index in index_to_new_residues.keys():
                 old_residues[residue.index] = residue
+        _logger.debug(f"\tconstructed old_residues: {old_residues}")
 
         # Create initial atom map for atoms in new topology that are not part of modified residues
         for atom in new_topology.atoms():
-            if atom.residue in modified_residues.values():
+            if atom.residue in modified_residues.values(): # the residue that the new_topology atom belongs to is a modified residue
                 continue
             try:
-                atom_map[atom.index] = atom.old_index
+                atom_map[atom.index] = atom.old_index # creating mapping for standard atoms... (this must be changed because we only want an atom map for core atoms...)
             except AttributeError:
                 pass
-
+        _logger.debug(f"\tatom map before mutated residue added: {atom_map}")
         # Update atom map with atom mappings for residues that have been modified
-        for index in index_to_new_residues.keys():
+        _logger.debug(f"\tupdating atom map with atom mappings for residues that have been modified...")
+        _logger.debug(f"\tindex_to_new_residues: {index_to_new_residues}")
+        self.index_to_oemols = {} #index: (old, new)
+        for index in index_to_new_residues.keys(): # iterating thorough modified residue indices
+            _logger.debug(f"\t\tindex: {index}")
             old_res = old_residues[index]
             new_res = modified_residues[index]
+            _logger.debug(f"\t\told residue: {old_res}")
+            _logger.debug(f"\t\tnew residue: {new_res}")
+
 
             # Save index of first atom in old residue and new residue
             for atom in old_res.atoms():
@@ -1406,15 +1447,29 @@ class PolymerProposalEngine(ProposalEngine):
             for atom in new_res.atoms():
                 first_atom_index_new = atom.index
                 break
+            _logger.debug(f"\t\tfirst atom old index: {first_atom_index_old}")
+            _logger.debug(f"\t\tfirst atom new index: {first_atom_index_new}")
 
-            old_oemol_res = FFAllAngleGeometryEngine.oemol_from_residue(old_res)
-            new_oemol_res = FFAllAngleGeometryEngine.oemol_from_residue(new_res)
+            _logger.debug(f"\t\tcreating oemol from old residue...")
+            old_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(old_res)
+            new_oemol_res = FFAllAngleGeometryEngine._oemol_from_residue(new_res)
+            self.index_to_oemols[index] = (old_oemol_res, new_oemol_res)
+
             # local_atom_map : dict, key : index of atom in new residue, value : index of atom in old residue.
+            _logger.debug(f"\t\tconducting local atom mapping.")
             local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res, first_atom_index_old, first_atom_index_new)
-            for backbone_name in ['CA','N']:
-                new_index, old_index = match_backbone(old_residues[index], modified_residues[index], backbone_name)
-                local_atom_map[new_index] = old_index
+            _logger.debug(f"\t\trendering local atom map...")
+            local_map_outfile = os.path.join(os.getcwd(), 'render_local_mutant_mapping.png')
+            render_atom_mapping(local_map_outfile, old_oemol_res, new_oemol_res, local_atom_map)
+            self.local_atom_map = local_atom_map
+
+            _logger.debug(f"\t\tmatching backbone CA, N atoms.")
+            # for backbone_name in ['CA','N']:
+            #     new_index, old_index = match_backbone(old_residues[index], modified_residues[index], backbone_name)
+            #     _logger.debug(f"\t\t\tforce backbone match for {backbone_name}: new index: {new_index}, old_index: {old_index}")
+            #     local_atom_map[new_index] = old_index
             atom_map.update(local_atom_map)
+        _logger.debug(f"\tatom map: {atom_map}")
         return atom_map
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule, first_atom_index_old, first_atom_index_new):
@@ -1434,6 +1489,7 @@ class PolymerProposalEngine(ProposalEngine):
         the atom indices in the output oemol (i.e. current_molecule and proposed_molecule) are reset to start at 0.
         Therefore, first_atom_index_old and first_atom_index_new are used to correct the indices such that they match
         the atom indices of the original old and new residues.
+
         Returns
         -------
         new_to_old_atom_map : dict, key : index of atom in new residue, value : index of atom in old residue
@@ -1442,11 +1498,19 @@ class PolymerProposalEngine(ProposalEngine):
         oegraphmol_current = oechem.OEGraphMol(current_molecule)
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule)
 
+        # assert that all atoms in the current and proposed oemols have unique names
+        assert len(list(oegraphmol_current.GetAtoms())) == len([atom.GetName() for atom in oegraphmol_current.GetAtoms()])
+        assert len(list(oegraphmol_proposed.GetAtoms())) == len([atom.GetName() for atom in oegraphmol_proposed.GetAtoms()])
+
+
         # Instantiate Maximum Common Substructures (MCS) object and intialize properties
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
-        atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber
-        bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        # atomexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_Degree | oechem.OEExprOpts_AtomicNumber
+        # bondexpr = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
+        atomexpr = DEFAULT_ATOM_EXPRESSION
+        bondexpr = DEFAULT_BOND_EXPRESSION
         mcs.Init(oegraphmol_current, atomexpr, bondexpr)
+        _logger.debug(f"\t\t\tinstantiated MCS")
 
         def forcibly_matched(mcs, proposed, atom_name):
             old_atom = list(mcs.GetPattern().GetAtoms(atom_name))
@@ -1458,8 +1522,8 @@ class PolymerProposalEngine(ProposalEngine):
             new_atom = new_atom[0]
             return old_atom, new_atom
 
-        # Forcibly match C and O atoms in proposed residue to atoms in current residue
-        for matched_atom_name in ['C','O']:
+        _logger.debug(f"\t\t\tadding match constraints to C, O, H2, O2, HO, CA, and N atoms")
+        for matched_atom_name in ['C','O', 'H2', 'O2', 'HO', 'CA', 'N']:
             force_match = oechem.OEHasAtomName(matched_atom_name)
             old_atom, new_atom = forcibly_matched(mcs, oegraphmol_proposed, force_match)
             this_match = oechem.OEMatchPairAtom(old_atom, new_atom)
@@ -1483,18 +1547,25 @@ class PolymerProposalEngine(ProposalEngine):
             raise Exception(msg)
 
         # Select match and generate atom map
-        match = np.random.choice(matches)
-        new_to_old_atom_map = {}
+        top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(oegraphmol_current, oegraphmol_proposed, matches)
+        match = max(top_matches, key=lambda m: m.NumAtoms()) #choose the first atom map with the most atoms mapped
+        new_to_old_atom_map = SmallMoleculeSetProposalEngine.hydrogen_mapping_exceptions(oegraphmol_current, oegraphmol_proposed, match)
+
         for match_pair in match.GetAtoms():
-            if match_pair.pattern.GetAtomicNum() == 1 and match_pair.target.GetAtomicNum() == 1:  # Do not map hydrogens
-                continue
-            O2_index_current = current_molecule.NumAtoms() - 2
-            O2_index_proposed = proposed_molecule.NumAtoms() -2
+            # if match_pair.pattern.GetAtomicNum() == 1 and match_pair.target.GetAtomicNum() == 1:  # Do not map hydrogens
+            #     continue
+            O2_index_current, O2_index_proposed = current_molecule.NumAtoms() - 2, proposed_molecule.NumAtoms() - 2
+            H2_index_current, H2_index_proposed = current_molecule.NumAtoms() - 3, proposed_molecule.NumAtoms() - 3
+            HO_index_current, HO_index_proposed = current_molecule.NumAtoms() - 1, proposed_molecule.NumAtoms() - 1
             if 'O2' in match_pair.pattern.GetName() and 'O2' in match_pair.target.GetName() and match_pair.pattern.GetIdx() == O2_index_current and match_pair.target.GetIdx() == O2_index_proposed:  # Do not map O2 if its second to last index in atom (this O2 was added to oemol to complete the residue)
-                continue
-            old_index = match_pair.pattern.GetData("topology_index")
-            new_index = match_pair.target.GetData("topology_index")
-            new_to_old_atom_map[new_index] = old_index
+                if match_pair.target.GetIdx() in new_to_old_atom_map.keys(): del new_to_old_atom_map[match_pair.target.GetIdx()]
+            if 'H2' in match_pair.pattern.GetName() and 'H2' in match_pair.target.GetName() and match_pair.pattern.GetIdx() == H2_index_current and match_pair.target.GetIdx() == H2_index_proposed:  # Do not map H2 if its second to last index in atom (this O2 was added to oemol to complete the residue)
+                if match_pair.target.GetIdx() in new_to_old_atom_map.keys(): del new_to_old_atom_map[match_pair.target.GetIdx()]
+            if 'HO' in match_pair.pattern.GetName() and 'HO' in match_pair.target.GetName() and match_pair.pattern.GetIdx() == HO_index_current and match_pair.target.GetIdx() == HO_index_proposed:  # Do not map HO if its second to last index in atom (this O2 was added to oemol to complete the residue)
+                if match_pair.target.GetIdx() in new_to_old_atom_map.keys(): del new_to_old_atom_map[match_pair.target.GetIdx()]
+            # old_index = match_pair.pattern.GetData("topology_index")
+            # new_index = match_pair.target.GetData("topology_index")
+            # new_to_old_atom_map[new_index] = old_index
 
         return new_to_old_atom_map
 
@@ -1575,11 +1646,13 @@ class PointMutationEngine(PolymerProposalEngine):
 
         """
         super(PointMutationEngine,self).__init__(system_generator, chain_id, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change, aggregate=aggregate)
+        _logger.info(f"Instantiating PointMutationEngine...")
 
         assert isinstance(wildtype_topology, app.Topology)
 
         # Check that provided topology has specified chain.
         chain_ids_in_topology = [chain.id for chain in wildtype_topology.chains()]
+        _logger.debug(f"chains in topology: {chain_ids_in_topology}")
         if chain_id not in chain_ids_in_topology:
             raise Exception("Specified chain_id '%s' not found in provided wildtype_topology. Choices are: %s" % (chain_id, str(chain_ids_in_topology)))
 
@@ -1597,24 +1670,67 @@ class PointMutationEngine(PolymerProposalEngine):
         self._metadata = proposal_metadata
 
     def _choose_mutant(self, topology, metadata):
+        """
+        Function in PointMutationEngine to choose a new mutant
+
+        Arguments
+        ---------
+        topology : simtk.openmm.app.Topology
+            topology of the protein
+        metadata : dict
+            metadata associated with mutant choice
+
+        Returns
+        -------
+        index_to_new_residues : dict
+            dict of {index: new_residue}
+        metadata : dict
+            input metadata
+        """
         chain_id = self._chain_id
         old_key = self._compute_mutant_key(topology, chain_id)
+        _logger.debug(f"\told key: {old_key}")
         index_to_new_residues = self._undo_old_mutants(topology, chain_id, old_key)
+        _logger.debug(f"\tindex-to-new-residues dict: {index_to_new_residues} ")
+
         if index_to_new_residues and not self._aggregate:  # Starting state is mutant and mutations should not be aggregated
+            _logger.warning(f"\tthe old wild type topology chain {chain_id} is different from the current topology chain, but further mutations cannot be aggregated.")
             pass  # At this point, index_to_new_residues contains mutations that need to be undone. This iteration will result in WT,
         else:  # Starting state is WT or starting state is mutant and mutations should be aggregated
+            _logger.debug(f"\tthe current topology is WT or mutant AND mutation aggregates are allowed.")
             index_to_new_residues = dict()
             if self._allowed_mutations is not None:
                 allowed_mutations = self._allowed_mutations
+                _logger.debug(f"\tallowed mutations: {allowed_mutations}")
+                _logger.debug(f"\tchoosing mutation from allowed mutations...")
                 index_to_new_residues = self._choose_mutation_from_allowed(topology, chain_id, allowed_mutations, index_to_new_residues, old_key)
             else:
-                # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
+                _logger.debug(f"\t\tno allowed mutations; performing automatic mutation")
                 index_to_new_residues = self._propose_mutation(topology, chain_id, index_to_new_residues)
-        # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
+            _logger.debug(f"\tnew index_to_new_residues: {index_to_new_residues}")
+
         metadata['mutations'] = self._save_mutations(topology, index_to_new_residues)
+        _logger.debug(f"\tsaved mutation as {metadata['mutations']}")
         return index_to_new_residues, metadata
 
     def _undo_old_mutants(self, topology, chain_id, old_key):
+        """
+        Function to find the residue indices in the chain_id with residues that are different from WT.  This is a dict of form {idx : res.name}
+
+        Arguments
+        ---------
+        topology : simtk.openmm.app.Topology
+            topology of the protein
+        chain_id : str
+            id of the chain of interest (this is a PointMutationEngine attribute)
+        old_key : str
+            str of the form generated by self._compute_mutant_key
+
+        Returns
+        -------
+        index_to_new_residues : dict
+            dict of {index: new_residue}
+        """
         index_to_new_residues = dict()
         if old_key == 'WT':
             return index_to_new_residues
@@ -1632,6 +1748,7 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         Used when allowed mutations have been specified
         Assume (for now) uniform probability of selecting each specified mutant
+
         Arguments
         ---------
         topology : simtk.openmm.app.Topology
@@ -1644,6 +1761,7 @@ class PointMutationEngine(PolymerProposalEngine):
             contains information to mutate back to WT as starting point for new mutants
         old_key : str
             chemical_state_key for old topology
+
         Returns
         -------
         index_to_new_residues : dict
@@ -1659,23 +1777,29 @@ class PointMutationEngine(PolymerProposalEngine):
                 chain = anychain
                 chain_found = True
                 break
+
         if not chain_found:
             chains = [chain.id for chain in topology.chains()]
             raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
         residue_id_to_index = {residue.id : residue.index for residue in chain.residues()}
+        _logger.debug(f"\t\tresidue_id_to_index: {residue_id_to_index}")
 
         # Define location probabilities and propose a location/mutant state
         if self._always_change:
+            _logger.debug(f"\t\talways conducting a mutation")
             # location_prob : np.array, probability value for each mutant state at their respective locations in allowed_mutations (uniform).
             if old_key == 'WT':
-                location_prob = [1.0 / len(allowed_mutations)] * len(allowed_mutations)
-                proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
+                _logger.debug(f"\t\tcurrent topoloy is WT")
+                proposed_location = np.random.choice(range(len(allowed_mutations)))
+                _logger.debug(f"\t\tproposed_location: {allowed_mutations[proposed_location]}")
             else:
+                _logger.debug(f"\t\tcurrent topology is already a mutant")
                 current_mutations = []
                 for mutant in old_key.split('-'):
                     residue_id = mutant[3:-3]
                     new_res = mutant[-3:]
                     current_mutations.append((residue_id, new_res))
+                _logger.debug(f"\t\tcurrent mutations: {current_mutations}")
 
                 new_mutations = []
                 for mutation in allowed_mutations:
@@ -1683,32 +1807,35 @@ class PointMutationEngine(PolymerProposalEngine):
                         new_mutations.append(mutation)
                 if not new_mutations:
                     raise Exception("The old topology state contains all allowed mutations (%s). Please specify additional mutations." % allowed_mutations[0])
-
-                location_prob = [1.0 / (len(new_mutations))] * len(new_mutations)
-                proposed_location = np.random.choice(range(len(new_mutations)), p=location_prob)
-
+                _logger.debug(f"\t\tnew potential mutations: {new_mutations}")
+                proposed_location = np.random.choice(range(len(new_mutations)))
         else:
+            _logger.debug(f"\t\tnot always conducting mutation")
             if old_key == 'WT':
-                location_prob = [1.0 / (len(allowed_mutations)+1.0)] * (len(allowed_mutations)+1)
-                proposed_location = np.random.choice(range(len(allowed_mutations) + 1), p=location_prob)
+                _logger.debug(f"\t\tcurrent topology is WT")
+                proposed_location = np.random.choice(range(len(allowed_mutations) + 1))
             else:
                 location_prob = [1.0 / len(allowed_mutations)] * len(allowed_mutations)
-                proposed_location = np.random.choice(range(len(allowed_mutations)), p=location_prob)
+                proposed_location = np.random.choice(range(len(allowed_mutations)))
 
         # If the proposed state is the same as the current state
-        # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         if old_key == 'WT' and proposed_location == len(allowed_mutations):
-            # Choose WT
+            _logger.debug(f"\t\tcurrent topology is WT and no mutation was proposed.  Returning empty index_to_new_residues dict")
             return index_to_new_residues
         elif old_key != 'WT':
+            _logger.debug(f"\t\tcurrent topology is not WT and a mutation was proposed")
             for mutant in old_key.split('-'):
                 residue_id = mutant[3:-3]
                 new_res = mutant[-3:]
                 if allowed_mutations.index((residue_id, new_res)) == proposed_location:
+                    _logger.info(f"\t\tproposed mutation already exists in the current topology.  Returning existing index_to_new_residues dict")
                     return index_to_new_residues
 
         residue_id = allowed_mutations[proposed_location][0]
         residue_name = allowed_mutations[proposed_location][1]
+        _logger.debug(f"\t\tproposed residue id: {residue_id}")
+        _logger.debug(f"\t\tproposed residue name: {residue_name}")
+
         # Verify residue with mutation exists in old topology and is not the first or last residue
         # original_residue : simtk.openmm.app.topology.Residue
         original_residue = ''
@@ -1721,22 +1848,25 @@ class PointMutationEngine(PolymerProposalEngine):
         if original_residue.index == 0 or original_residue.index == topology.getNumResidues() - 1:
             raise Exception("Residue not found. Be sure you are not trying to mutate the first or last residue."
                             " If you wish to modify one of these residues, make sure you have added cap residues to the input topology.")
+        _logger.debug(f"\t\toriginal residue id: {original_residue.id}")
+        _logger.debug(f"\t\toriginal residue name: {original_residue.name}")
 
         # Check if mutated residue's name is same as residue's name in old topology
         if original_residue.name in ['HID', 'HIE']:
             original_residue.name = 'HIS'
         if original_residue.name == residue_name:
+            _logger.info(f"\t\tproposed mutation already exists in the current topology.  Returning existing index_to_new_residues dict")
             return index_to_new_residues
 
         # Save proposed mutation to index_to_new_residues
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         index_to_new_residues[residue_id_to_index[residue_id]] = residue_name
+        _logger.debug(f"\t\tnew index_to_new_residues: {index_to_new_residues}")
 
         # Randomly choose HIS template ('HIS' does not exist as a template)
         if residue_name == 'HIS':
             his_state = ['HIE','HID']
-            his_prob = [1/len(his_state)] * len(his_state)
-            his_choice = np.random.choice(range(len(his_state)), p=his_prob)
+            his_choice = np.random.choice(range(len(his_state)))
             index_to_new_residues[residue_id_to_index[residue_id]] = his_state[his_choice]
         return index_to_new_residues
 
@@ -1764,14 +1894,18 @@ class PointMutationEngine(PolymerProposalEngine):
         chain_found = False
         for anychain in topology.chains():
             if anychain.id == chain_id:
+                _logger.debug(f"\t\tchain match found")
                 chain = anychain
                 chain_found = True
                 residue_id_to_index = {residue.id: residue.index for residue in chain.residues()}
+                _logger.debug(f"\t\tresidue_id_to_index: {residue_id_to_index}")
                 if self._residues_allowed_to_mutate is None:
+                    _logger.debug(f"\t\tno residues allowed to mutate is not specified...allowing all mutations (except indices 0, -1)")
                     chain_residues = [res for res in chain.residues() if res.index != 0 and res.index != topology.getNumResidues()-1]
                     # num_residues : int
                     num_residues = len(chain_residues)
                 else:
+                    _logger.debug(f"\t\tresidues allowed to mutate: {self._residues_allowed_to_mutate}")
                     for res_id in self._residues_allowed_to_mutate:
                         if res_id not in residue_id_to_index.keys():
                             raise Exception(
@@ -1786,33 +1920,37 @@ class PointMutationEngine(PolymerProposalEngine):
 
         # Define location probabilities
         # location_prob : np.array, probability value for each residue location (uniform)
-        location_prob = [1.0/num_residues] * num_residues
 
         # Propose a location at which to mutate the residue
         # proposed_location : int, index of chosen entry in location_prob
-        proposed_location = np.random.choice(range(num_residues), p=location_prob)
+        proposed_location = np.random.choice(range(num_residues))
 
         # Rename residue to HIS if it uses one of the HIS-derived templates
         # original_residue : simtk.openmm.app.topology.Residue
         original_residue = chain_residues[proposed_location]
         if original_residue.name in ['HIE', 'HID']:
             original_residue.name = 'HIS'
+        _logger.debug(f"\t\toriginal residue for proposal: {original_residue.id}, {original_residue.name}")
 
         if self._residues_allowed_to_mutate is None:
             proposed_location = original_residue.index
         else:
             proposed_location = residue_id_to_index[self._residues_allowed_to_mutate[proposed_location]]
 
+        _logger.debug(f"\t\tresidue mutation proposal location: {proposed_location}")
+
         # Define probabilities for amino acid options and choose one
         # amino_prob : np.array, probability value for each amino acid option (uniform)
         aminos = self._aminos
         if self._always_change:
+            _logger.debug(f"\t\t proposed location will always be mutated")
             amino_prob = [1.0/(len(aminos)-1)] * len(aminos)
             amino_prob[aminos.index(original_residue.name)] = 0.0
         else:
             amino_prob = [1.0/len(aminos)] * len(aminos)
         # proposed_amino_index : int, index of three letter residue name in aminos list
         proposed_amino_index = np.random.choice(range(len(aminos)), p=amino_prob)
+        _logger.debug(f"\t\tproposed amino acid with uniform probability: {aminos[proposed_amino_index]}")
 
         # Save proposed mutation to index_to_new_residues
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
@@ -1848,32 +1986,59 @@ class PointMutationEngine(PolymerProposalEngine):
         return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in topology.residues() if r.index in index_to_new_residues]
 
     def _compute_mutant_key(self, topology, chain_id):
+        """
+        Computes the chemical state key of the mutant of interest.
+        Mutant key is of the form (for the chain of interest) '<wt_name><res.id><res.name>-...' where it is iterated over all residues in the chain that are different from WT.
+        If the chain is identical to the wild type, then the mutant key is 'WT'.
+        It is implied that the chains have the same number of residues.
+
+        Arguments
+        ---------
+        topology : simtk.openmm.app.Topology
+            topology of the protein mutant
+        chain_id : str
+            string label for the chain of interest (a PointMutationEngine attribute)
+
+        Returns
+        -------
+        mutant_key : str
+            chemical key for the protein mutant
+        """
         mutant_key = ''
         chain = ''
         wildtype = self._wildtype
         anychains = []
         anywt_chains = []
+
+        # define 'chain' as the topology chain with the same id as chain_id
         for anychain in topology.chains():
             anychains.append(anychain.id)
             if anychain.id == chain_id:
                 chain = anychain
                 break
+
         if not chain:
             raise Exception("Chain %s not found. Available chains: %s" %(chain_id, anychains))
+
+        # define 'wt_chain' as the wildtype_topology chain with the corresponding chain_id
         for anywt_chain in wildtype.chains():
             anywt_chains.append(anywt_chain)
             if anywt_chain.id == chain_id:
                 wt_chain = anywt_chain
                 break
+
         if not wt_chain:
             raise Exception("Chain %s not found. Available chains: %s" %(chain_id, anywt_chains))
+
         for wt_res, res in zip(wt_chain.residues(), chain.residues()):
             if wt_res.name != res.name:
                 if mutant_key:
                     mutant_key+='-'
                 mutant_key += str(wt_res.name)+str(res.id)+str(res.name)
+
         if not mutant_key:
             mutant_key = 'WT'
+
         return mutant_key
 
 class PeptideLibraryEngine(PolymerProposalEngine):

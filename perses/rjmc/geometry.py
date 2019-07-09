@@ -637,39 +637,48 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         # TODO: This seems to be broken. Can we fix it?
         from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
         external_bonds = list(res.external_bonds())
-        for bond in external_bonds:
-            if verbose: print(bond)
+        _logger.debug(f"\t\t\texternal bonds: {[(atom1.name, atom2.name) for (atom1, atom2) in external_bonds]}")
         new_atoms = {}
         highest_index = 0
         if external_bonds:
+            _logger.debug(f"\t\t\tthere exist external bonds; creating topology copy.")
             new_topology = app.Topology()
             new_chain = new_topology.addChain(0)
             new_res = new_topology.addResidue("new_res", new_chain)
-            for atom in res.atoms():
+            _logger.debug(f"\t\t\tplacing atoms in new_res")
+            for idx, atom in enumerate(res.atoms()):
+                _logger.debug(f"\t\t\t\tplacing atom {atom.name} with id {atom.id} and in-protein index {atom.index}")
                 new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
-                new_atom.index = atom.index
+                _logger.debug(f"\t\t\t\tnew_atom index: {new_atom.index}")
+                #new_atom.index = atom.index #same atom indices?
                 new_atoms[atom] = new_atom
                 highest_index = max(highest_index, atom.index)
+            _logger.debug(f"\t\t\tplacing internal bonds in new_res")
             for bond in res.internal_bonds():
                 new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
+                _logger.debug(f"\t\t\t\tadding bond between {new_atoms[bond[0]].name} and {new_atoms[bond[1]].name}")
+            _logger.debug(f"\t\t\tadding external bonds")
+            next_atom_id = max([int(atom.id) for atom in new_topology.atoms()]) + 1
             for bond in res.external_bonds():
+                _logger.debug(f"\t\t\t\tquerying external bond between {bond[0].name} and {bond[1].name}")
                 internal_atom = [atom for atom in bond if atom.residue==res][0]
-                if verbose:
-                    print('internal atom')
-                    print(internal_atom)
+                _logger.debug(f"\t\t\t\tinternal atom is {[internal_atom.name]}")
                 highest_index += 1
                 if internal_atom.name=='N':
-                    if verbose: print('Adding H to N')
-                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_atom.index = -1
+                    _logger.debug(f"\t\t\t\t internal atom is a N; adding an H2 cap...")
+                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, str(next_atom_id))
+                    next_atom_id += 1 # increment the atom id
+                    #new_atom.index = -1
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                 if internal_atom.name=='C':
-                    if verbose: print('Adding OH to C')
-                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, -1)
-                    new_atom.index = -1
+                    _logger.debug(f"\t\t\t\tinternal atom is a C; adding an OH cap...")
+                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, str(next_atom_id))
+                    next_atom_id += 1 #increment atom id
+                    #new_atom.index = -1
                     new_topology.addBond(new_atoms[internal_atom], new_atom)
                     highest_index += 1
-                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, -1)
+                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, str(next_atom_id))
+                    next_atom_id += 1 # increment atom id
                     new_hydrogen.index = -1
                     new_topology.addBond(new_hydrogen, new_atom)
             res_to_use = new_res
@@ -677,7 +686,9 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         else:
             res_to_use = res
         oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
+        _logger.debug(f"\t\t\tcreated oemol from residue")
         oechem.OEAddExplicitHydrogens(oemol)
+        _logger.debug(f"\t\t\tadded explicit hydrogens to oemol")
         return oemol
 
     def _define_no_nb_system(self, system, neglected_angle_terms):
