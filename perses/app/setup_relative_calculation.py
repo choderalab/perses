@@ -70,6 +70,21 @@ def getSetupOptions(filename):
         if 'offline-freq' not in setup_options:
             setup_options['offline-freq'] = 10
             _logger.info(f"\t\t\toffline-freq not specified: default to 10.")
+    elif setup_options['fe_type'] == 'neq': #there are some neq attributes that are not used with the equilibrium samplers...
+        _logger.info(f"\t\tfe_type: neq")
+        if 'n_equilibrium_steps_per_iteration' not in setup_options:
+            _logger.info(f"\t\t\tn_equilibrium_steps_per_iteration not specified: default to 1000.")
+            setup_options['n_equilibrium_steps_per_iteration'] = 1000
+        if 'n_steps_ncmc_protocol' not in setup_options:
+            _logger.info(f"\t\t\tn_steps_ncmc_protocol not specified: default to 100.")
+            setup_options['n_steps_ncmc_protocol'] = 100
+        if 'measure_shadow_work' not in setup_options:
+            _logger.info(f"\t\t\tmeasure_shadow_work not specified: default to False")
+            setup_options['measure_shadow_work'] = False
+        if 'scheduler_address' not in setup_options:
+            _logger.info(f"\t\t\tscheduler_address not specified; default to localhost")
+            setup_options['scheduler_address'] = 'localhost'
+        setup_options['n_steps_per_move_application'] = 1 #setting the writeout to 1 for now
 
     trajectory_directory = setup_options['trajectory_directory']
 
@@ -99,10 +114,9 @@ def run_setup(setup_options):
 
     Returns
     -------
-    fe_setup : NonequilibriumFEPSetup
-        The setup class for this calculation
-    ne_fep : NonequilibriumSwitchingFEP
-        The nonequilibrium driver class
+    setup_dict: dict
+        {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
+        - 'topology_proposals':
     """
     from perses.tests.utils import validate_endstate_energies
     phases = setup_options['phases']
@@ -220,6 +234,7 @@ def run_setup(setup_options):
         top_prop = dict()
         if 'complex' in phases:
             top_prop['complex_topology_proposal'] = fe_setup.complex_topology_proposal
+            top_prop['complex_geometry_engine'] = fe_setup._complex_geometry_engine
             top_prop['complex_old_positions'] = fe_setup.complex_old_positions
             top_prop['complex_new_positions'] = fe_setup.complex_new_positions
             top_prop['complex_added_valence_energy'] = fe_setup._complex_added_valence_energy
@@ -235,6 +250,7 @@ def run_setup(setup_options):
 
         if 'solvent' in phases:
             top_prop['solvent_topology_proposal'] = fe_setup.solvent_topology_proposal
+            top_prop['solvent_geometry_engine'] = fe_setup._solvent_geometry_engine
             top_prop['solvent_old_positions'] = fe_setup.solvent_old_positions
             top_prop['solvent_new_positions'] = fe_setup.solvent_new_positions
             top_prop['solvent_added_valence_energy'] = fe_setup._solvated_added_valence_energy
@@ -250,6 +266,7 @@ def run_setup(setup_options):
 
         if 'vacuum' in phases:
             top_prop['vacuum_topology_proposal'] = fe_setup.vacuum_topology_proposal
+            top_prop['vacuum_geometry_engine'] = fe_setup._vacuum_geometry_engine
             top_prop['vacuum_old_positions'] = fe_setup.vacuum_old_positions
             top_prop['vacuum_new_positions'] = fe_setup.vacuum_new_positions
             top_prop['vacuum_added_valence_energy'] = fe_setup._vacuum_added_valence_energy
@@ -282,6 +299,7 @@ def run_setup(setup_options):
         atom_selection = None
 
     if setup_options['fe_type'] == 'nonequilibrium':
+        _logger.info(f"\tInstantiating nonequilibrium switching FEP")
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
 
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
@@ -289,6 +307,7 @@ def run_setup(setup_options):
 
         ne_fep = dict()
         for phase in phases:
+            _logger.info(f"\t\tphase: {phase}")
             ne_fep[phase] = NonequilibriumSwitchingFEP(top_prop['%s_topology_proposal' % phase],
                                                        top_prop['%s_old_positions' % phase],
                                                        top_prop['%s_new_positions' % phase],
@@ -297,12 +316,14 @@ def run_setup(setup_options):
                                                        nsteps_per_iteration=n_steps_per_move_application,
                                                        temperature=temperature,
                                                        trajectory_directory=trajectory_directory,
-                                                       trajectory_prefix='-'.join([trajectory_prefix, '%s' % phase]),
+                                                       trajectory_prefix=trajectory_prefix,
                                                        atom_selection=atom_selection,
                                                        scheduler_address=scheduler_address, eq_splitting_string=eq_splitting,
                                                        neq_splitting_string=neq_splitting,
                                                        timestep=timestep,
-                                                       measure_shadow_work=measure_shadow_work)
+                                                       measure_shadow_work=measure_shadow_work,
+                                                       neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
+                                                       neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"])
 
         print("Nonequilibrium switching driver class constructed")
 
