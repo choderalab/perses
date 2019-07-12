@@ -731,8 +731,10 @@ class HybridTopologyFactory(object):
         #these will be ignored from the _logger for the time being
         if self._old_system_forces['NonbondedForce'].getUseDispersionCorrection():
             self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(True)
-            if self._use_dispersion_correction:
+            if self._use_dispersion_correction: #this will be expensive for ncmc
                 sterics_custom_nonbonded_force.setUseLongRangeCorrection(True)
+            else:
+                sterics_custom_nonbonded_force.setUseLongRangeCorrection(False)
         else:
             self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(False)
 
