@@ -565,12 +565,14 @@ def generate_vacuum_hostguest_proposal(current_mol_name="B2", proposed_mol_name=
 
     return topology_proposal, old_positions, new_positions
 
-def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_iterations = 10, md_steps = 250, compute_timeseries = False, prespecified_conformers = None):
+def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_iterations = 10, md_steps = 250, compute_timeseries = False, md_system = None, prespecified_conformers = None):
     """
     Arguments
     ----------
     top_prop : perses.rjmc.topology_proposal.TopologyProposal object
         topology_proposal
+    md_system : openmm.System object, default None
+        system from which md is conducted; the default is the top_prop._old_system
     geometry_method : int
         which geometry proposal method to use
             0: neglect_angles = True (this is supposed to be the zero-variance method)
@@ -605,7 +607,11 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
     beta = 1.0/kT # unit-bearing inverse thermal energy
 
     #first, we must extract the top_prop relevant quantities
-    system, topology = top_prop._old_system, top_prop._old_topology
+    topology = top_prop._old_topology
+    if md_system == None:
+        system = top_prop._old_system
+    else:
+        system = md_system
 
     if prespecified_conformers == None:
 
