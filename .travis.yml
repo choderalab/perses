@@ -34,9 +34,10 @@ script:
   - source activate test
   # Add omnia
   - conda config --add channels omnia --add channels conda-forge
-  # Add omnia beta and dev channels
-  - conda config --add channels omnia/label/beta
-  - conda config --add channels omnia/label/dev
+  # Install OpenMM version
+  - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia openmm; fi
+  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia/label/beta openmm; fi
+  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia-dev openmm; fi
   # Add OpenEye channel
   - conda config --add channels openeye
   # Update conda
@@ -54,7 +55,12 @@ script:
 
 env:
   matrix:
-    - python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
+    - python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="latest"
+    - python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="latest"
+    allow_failures:
+      - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
+      - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
+
 
   global:
     - ORGNAME="omnia"
