@@ -59,8 +59,8 @@ matrix:
   allow_failures:
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
-
-
+    
+env:
   global:
     - ORGNAME="omnia"
     - OE_LICENSE="$HOME/oe_license.txt"
