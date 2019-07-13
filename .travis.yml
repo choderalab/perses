@@ -44,10 +44,6 @@ script:
   - source activate test
   # Add omnia
   - conda config --add channels omnia --add channels conda-forge
-  # Install OpenMM version
-  - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia openmm; fi
-  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia/label/beta openmm; fi
-  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia-dev openmm; fi
   # Add OpenEye channel
   - conda config --add channels openeye
   # Update conda
@@ -60,6 +56,10 @@ script:
   - conda install --yes --use-local ${PACKAGENAME}-dev
   # Install testing dependencies
   - conda install --yes --quiet nose nose-timer
+  # Install desired OpenMM version
+  - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia openmm; fi
+  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia/label/beta openmm; fi
+  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia-dev openmm; fi
   # Test the package
   - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
 
