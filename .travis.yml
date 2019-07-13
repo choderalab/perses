@@ -58,8 +58,8 @@ script:
   - conda install --yes --quiet nose nose-timer
   # Install desired OpenMM version
   - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia openmm; fi
-  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia/label/beta openmm; fi
-  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia-dev openmm; fi
+  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c omnia/label/beta openmm; fi
+  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c omnia-dev openmm; fi
   # Test the package
   - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
 
