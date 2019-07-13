@@ -139,7 +139,10 @@ class TestOEGAFFTemplateGenerator(unittest.TestCase):
 
             # Check database contents
             def check_database(generator):
-                db_entries = generator._db.all()
+                from tinydb import TinyDB
+                db = TinyDB(generator._cache)
+                db_entries = db.all()
+                db.close()
                 nentries = len(db_entries)
                 nmolecules = len(self.oemols)
                 assert (nmolecules == nentries), \
