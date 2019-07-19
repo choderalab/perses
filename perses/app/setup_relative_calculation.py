@@ -218,16 +218,13 @@ def run_setup(setup_options):
         _logger.info(f"\n\n\n")
 
         _logger.info(f"\twriting pickle output...")
-        pickle_outfile = open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb')
-
-        try:
-            pickle.dump(fe_setup, pickle_outfile)
-            _logger.info(f"\tsuccessfully dumped pickle.")
-        except Exception as e:
-            print(e)
-            print("\tUnable to save setup object as a pickle")
-        finally:
-            pickle_outfile.close()
+        with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
+            try:
+                pickle.dump(fe_setup, f)
+                _logger.info(f"\tsuccessfully dumped pickle.")
+            except Exception as e:
+                print(e)
+                print("\tUnable to save setup object as a pickle")
 
         _logger.info(f"\tsetup is complete.  Writing proposals and positions for each phase to top_prop dict...")
 
@@ -298,7 +295,7 @@ def run_setup(setup_options):
         _logger.info(f"\tno atom selection detected: default to None.")
         atom_selection = None
 
-    if setup_options['fe_type'] == 'nonequilibrium':
+    if setup_options['fe_type'] == 'neq':
         _logger.info(f"\tInstantiating nonequilibrium switching FEP")
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
 
@@ -309,17 +306,15 @@ def run_setup(setup_options):
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}")
             ne_fep[phase] = NonequilibriumSwitchingFEP(top_prop['%s_topology_proposal' % phase],
+                                                       top_prop['%s_geometry_engine' % phase],
                                                        top_prop['%s_old_positions' % phase],
                                                        top_prop['%s_new_positions' % phase],
-                                                       n_equil_steps=n_equilibrium_steps_per_iteration,
                                                        ncmc_nsteps=n_steps_ncmc_protocol,
-                                                       nsteps_per_iteration=n_steps_per_move_application,
-                                                       temperature=temperature,
+                                                       n_equilibrium_steps_per_iteration = n_equilibrium_steps_per_iteration,
+                                                       temperature = temperature,
                                                        trajectory_directory=trajectory_directory,
                                                        trajectory_prefix=trajectory_prefix,
                                                        atom_selection=atom_selection,
-                                                       scheduler_address=scheduler_address, eq_splitting_string=eq_splitting,
-                                                       neq_splitting_string=neq_splitting,
                                                        timestep=timestep,
                                                        measure_shadow_work=measure_shadow_work,
                                                        neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
@@ -417,12 +412,13 @@ if __name__ == "__main__":
             setup_dict['topology_proposals'])
 
 
-    n_equilibration_iterations = setup_options['n_equilibration_iterations']
+    n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
     _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
-    if setup_options['fe_type'] == 'nonequilibrium':
+    if setup_options['fe_type'] == 'neq':
         _logger.info(f"Detecting nonequilibrium as fe_type...(this is neither logged nor debugged properly).")
         n_cycles = setup_options['n_cycles']
         n_iterations_per_cycle = setup_options['n_iterations_per_cycle']
+        n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
         total_iterations = n_cycles*n_iterations_per_cycle
 
         ne_fep = setup_dict['ne_fep']
@@ -432,13 +428,11 @@ if __name__ == "__main__":
             np.save(os.path.join(trajectory_directory, "%s_%s_hybrid_factory.npy" % (trajectory_prefix, phase)),
                     hybrid_factory)
 
-            print("equilibrating")
-            ne_fep_run.equilibrate(n_iterations=n_equilibration_iterations)
+            print("equilibrating...")
+            ne_fep_run.equilibrate(n_equilibration_iterations)
 
-            print("equilibration complete")
-            for i in range(n_cycles):
-                ne_fep_run.run(n_iterations=n_iterations_per_cycle)
-                print(i)
+            print("annealing...")
+            ne_fep_run.run(n_iterations=n_cycles)
 
             print("calculation complete")
             df, ddf = ne_fep_run.current_free_energy_estimate

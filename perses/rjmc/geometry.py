@@ -17,7 +17,7 @@ from perses.storage import NetCDFStorage, NetCDFStorageView
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("geometry")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.WARNING)
 
 
 
@@ -193,7 +193,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal._old_system)
             atoms_with_positions = [ structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys() ]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, current_positions)
-            logp_proposal, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms = 0.0, None, None, None, None
+            logp_proposal, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms = 0.0, None, 0.0, 0.0, []
+            self.forward_final_growth_system = None
         else:
             _logger.info("propose: unique new atoms detected; proceeding to _logp_propose...")
             logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
@@ -239,7 +240,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if not top_proposal.unique_old_atoms:
             _logger.info("logp_reverse: there are no unique old atoms; logp_proposal = 0.0.")
             #define reverse attributes
-            self.reverse_new_positions, self.reverse_rjmc_info, self.reverse_atoms_with_positions_reduced_potential, self.reverse_final_context_reduced_potential, self.reverse_neglected_angle_terrm = None, None, None, None, None
+            self.reverse_new_positions, self.reverse_rjmc_info, self.reverse_atoms_with_positions_reduced_potential, self.reverse_final_context_reduced_potential, self.reverse_neglected_angle_terrm = new_coordinates, None, 0.0, 0.0, []
+            self.reverse_final_growth_system = None
             return 0.0
 
         # Compute log proposal probability for reverse direction
@@ -397,6 +399,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         final_system_integrator = openmm.VerletIntegrator(1*unit.femtoseconds)
         context = openmm.Context(growth_system, integrator, platform)
         growth_system_generator.set_growth_parameter_index(len(atom_proposal_order)+1, context)
+
+        #create final growth contexts for nonalchemical perturbations...
+        if direction == 'forward':
+            self.forward_final_growth_system = copy.deepcopy(context.getSystem())
+        elif direction == 'reverse':
+            self.reverse_final_growth_system = copy.deepcopy(context.getSystem())
         growth_parameter_value = 1 # Initialize the growth_parameter value before the atom placement loop
 
         # In the forward direction, atoms_with_positions_system considers the atoms_with_positions
