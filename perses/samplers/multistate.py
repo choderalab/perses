@@ -1,8 +1,15 @@
-
 ################################################################################
 # HYBRID SYSTEM SAMPLERS
 ################################################################################
 
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState
+
+from openmmtools.multistate import sams, replicaexchange
+from openmmtools import cache
+from openmmtools.states import SamplerState, ThermodynamicState, CompoundThermodynamicState, group_by_compatibility
+
+import numpy as np
+import copy
 
 class HybridCompatibilityMixin(object):
     """
@@ -206,13 +213,13 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
             # save the positions for the next iteration
             positions = minimized_hybrid_positions
 
-        #nonalchemical_thermodynamic_states = [
-        #    ThermodynamicState(self._factory._old_system, temperature=temperature),
-        #    ThermodynamicState(self._factory._new_system, temperature=temperature)]
+        nonalchemical_thermodynamic_states = [
+            ThermodynamicState(self._factory._old_system, temperature=temperature),
+            ThermodynamicState(self._factory._new_system, temperature=temperature)]
 
 
         reporter = storage_file
 
         self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
-                    #            storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
-                    storage=reporter, unsampled_thermodynamic_states=None)
+                    storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
+        #            storage=reporter, unsampled_thermodynamic_states=None)

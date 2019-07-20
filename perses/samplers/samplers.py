@@ -27,7 +27,6 @@ from openmmtools.multistate import sams, replicaexchange
 from openmmtools import cache
 
 from perses.annihilation.ncmc_switching import NCMCEngine
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.utils.openeye import smiles_to_oemol
