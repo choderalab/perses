@@ -13,6 +13,7 @@ from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSet
 from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 from perses.utils.smallmolecules import render_atom_mapping
+from perses.tests.utils import validate_endstate_energies
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("setup_relative_calculation")
@@ -124,7 +125,6 @@ def run_setup(setup_options):
         {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
         - 'topology_proposals':
     """
-    from perses.tests.utils import validate_endstate_energies
     phases = setup_options['phases']
 
     if len(phases) != 2:
@@ -428,7 +428,6 @@ if __name__ == "__main__":
     n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
     _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
     if setup_options['fe_type'] == 'neq':
-        _logger.info(f"Detecting nonequilibrium as fe_type...(this is neither logged nor debugged properly).")
         n_cycles = setup_options['n_cycles']
         n_iterations_per_cycle = setup_options['n_iterations_per_cycle']
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
@@ -438,8 +437,14 @@ if __name__ == "__main__":
         for phase in setup_options['phases']:
             ne_fep_run = ne_fep[phase]
             hybrid_factory = ne_fep_run._factory
-            np.save(os.path.join(trajectory_directory, "%s_%s_hybrid_factory.npy" % (trajectory_prefix, phase)),
-                    hybrid_factory)
+
+            top_proposal = setup_dict['topology_proposals'][f"{phase}_topology_proposal"]
+            _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
+            _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
+
+            zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature))
+            _logger.info(f"\t\terror in zero state: {zero_state_error}")
+            _logger.info(f"\t\terror in one state: {one_state_error}")
 
             print("equilibrating...")
             ne_fep_run.equilibrate(n_equilibration_iterations)
@@ -448,33 +453,16 @@ if __name__ == "__main__":
             ne_fep_run.run(n_iterations=n_cycles)
 
             print("calculation complete")
-            df, ddf = ne_fep_run.current_free_energy_estimate
-
-            print("The free energy estimate is %f +/- %f" % (df, ddf))
-
-            endpoint_file_prefix = os.path.join(trajectory_directory, "%s_%s_endpoint{endpoint_idx}.npy" %
-                                                (trajectory_prefix, phase))
-
-            endpoint_work_paths = [endpoint_file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0, 1]]
 
             # try to write out the ne_fep object as a pickle
             try:
-                pickle_outfile = open(os.path.join(trajectory_directory, "%s_%s_ne_fep.pkl" %
-                                                   (trajectory_prefix, phase)), 'wb')
-            except Exception as e:
-                pass
+                with open(os.path.join(trajectory_directory, "%s_%s_ne_fep.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+                    pickle.dump(ne_fep_run, f)
 
-            try:
-                pickle.dump(ne_fep, pickle_outfile)
             except Exception as e:
                 print(e)
-                print("Unable to save run object as a pickle")
-            finally:
-                pickle_outfile.close()
-
-            # save the endpoint perturbations
-            for lambda_state, reduced_potential_difference in ne_fep._reduced_potential_differences.items():
-                np.save(endpoint_work_paths[lambda_state], np.array(reduced_potential_difference))
+                print("Unable to save run object as a pickle; saving as npy")
+                np.save(os.path.join(trajectory_directory, "%s_%s_ne_fep.npy" % (trajectory_prefix, phase)), ne_fep_run)
 
     elif setup_options['fe_type'] == 'sams':
         _logger.info(f"Detecting sams as fe_type...")
