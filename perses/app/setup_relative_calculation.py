@@ -78,9 +78,15 @@ def getSetupOptions(filename):
         if 'n_steps_ncmc_protocol' not in setup_options:
             _logger.info(f"\t\t\tn_steps_ncmc_protocol not specified: default to 100.")
             setup_options['n_steps_ncmc_protocol'] = 100
+        if 'ncmc_save_interval' not in setup_options:
+            _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
+            setup_options['ncmc_save_interval'] = None
         if 'measure_shadow_work' not in setup_options:
             _logger.info(f"\t\t\tmeasure_shadow_work not specified: default to False")
             setup_options['measure_shadow_work'] = False
+        if 'write_ncmc_configuration' not in setup_options:
+            _logger.info(f"\t\t\twrite_ncmc_configuration not specified: default to False")
+            setup_options['write_ncmc_configuration'] = False
         if 'scheduler_address' not in setup_options:
             _logger.info(f"\t\t\tscheduler_address not specified; default to localhost")
             setup_options['scheduler_address'] = 'localhost'
@@ -178,7 +184,7 @@ def run_setup(setup_options):
 
     else:
         eq_splitting = "V R O R V"
-        neq_splitting = "V R O H R V"
+        neq_splitting = 'O { V R H R V } O'
         _logger.info(f"\tno splitting strings specified: defaulting to neq: {neq_splitting}, eq: {eq_splitting}.")
 
     if "measure_shadow_work" in setup_options:
@@ -298,6 +304,9 @@ def run_setup(setup_options):
     if setup_options['fe_type'] == 'neq':
         _logger.info(f"\tInstantiating nonequilibrium switching FEP")
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+        ncmc_save_interval = setup_options['ncmc_save_interval']
+        write_ncmc_configuration = setup_options['write_ncmc_configuration']
+
 
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
         scheduler_address = setup_options['scheduler_address']
@@ -315,10 +324,14 @@ def run_setup(setup_options):
                                                        trajectory_directory=trajectory_directory,
                                                        trajectory_prefix=trajectory_prefix,
                                                        atom_selection=atom_selection,
+                                                       eq_splitting_string = eq_splitting,
+                                                       neq_splitting_string = neq_splitting,
                                                        timestep=timestep,
                                                        measure_shadow_work=measure_shadow_work,
                                                        neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
-                                                       neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"])
+                                                       neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
+                                                       ncmc_save_interval = ncmc_save_interval,
+                                                       write_ncmc_configuration = write_ncmc_configuration)
 
         print("Nonequilibrium switching driver class constructed")
 

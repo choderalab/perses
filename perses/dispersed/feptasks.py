@@ -99,7 +99,10 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
                                                                                   measure_heat = measure_heat)
         self._ncmc_nsteps = nsteps_neq
         self._beta = 1.0 / (kB*temperature)
-        self._work_save_interval = work_save_interval
+        if not work_save_interval:
+            self._work_save_interval = self._ncmc_nsteps
+        else:
+            self._work_save_interval = work_save_interval
 
         self._save_configuration = save_configuration
         self._measure_shadow_work = measure_shadow_work
@@ -308,7 +311,7 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
 
 def run_protocol(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState,
-                 alchemical_functions: dict, topology: md.Topology, nstep_neq: int = 1000, work_save_interval: int = 1, splitting: str="V R O H R V",
+                 alchemical_functions: dict, topology: md.Topology, nstep_neq: int = 1000, work_save_interval: int = 1, splitting: str='O { V R H R V } O',
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds, measure_shadow_work: bool=False) -> tuple:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
@@ -329,7 +332,7 @@ def run_protocol(thermodynamic_state: states.ThermodynamicState, sampler_state: 
         The number of nonequilibrium steps in the protocol
     work_save_interval : int
         How often to write the work and, if requested, configurations
-    splitting : str, default "V R O H R V"
+    splitting : str, default 'O { V R H R V } O'
         The splitting string to use for the Langevin integration
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
@@ -394,13 +397,9 @@ def run_protocol(thermodynamic_state: states.ThermodynamicState, sampler_state: 
     if trajectory_filename is not None:
         #if writing configurations was requested, get the trajectory
         if write_configuration:
-            try:
-                trajectory = ne_mc_move.trajectory
-                write_nonequilibrium_trajectory(nonequilibrium_result, trajectory, trajectory_filename)
+                trajectory = ne_mc_move._trajectory
+                write_nonequilibrium_trajectory(trajectory, trajectory_filename)
                 _logger.debug(f"successfully wrote nonequilibrium trajectory to {trajectory_filename}")
-            except NoTrajectoryException:
-                print(f"there is no trajectory filename to which to write")
-                pass
 
     return (cumulative_work, protocol_work, shadow_work)
 
@@ -426,14 +425,12 @@ def run_equilibrium(thermodynamic_state: states.ThermodynamicState, sampler_stat
     n_iterations : int
         The minimum number of times to apply the move. Note that this is not the number of steps of dynamics; it is
         n_iterations*n_steps (which is set in the MCMove).
-    splitting: str, default "V R O H R V"
+    splitting: str, default "V R O R V"
         The splitting string for the dynamics
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
     trajectory_filename : str, optional, default None
         Full filepath of trajectory files. If none, trajectory files are not written.
-    splitting: str, default "V R O H R V"
-        The splitting string for the dynamics
     """
     _logger.debug(f"running equilibrium")
     #get the atom indices we need to subset the topology and positions
