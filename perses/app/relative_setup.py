@@ -585,8 +585,8 @@ class NonequilibriumSwitchingFEP(object):
 
     def __init__(self, topology_proposal, geometry_engine, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=DEFAULT_FORWARD_FUNCTIONS, reverse_functions = DEFAULT_REVERSE_FUNCTIONS, ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
-                 atom_selection="not water", scheduler_address=None, eq_splitting_string="V R O R V", neq_splitting_string = "V R O H R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
-                 neglected_new_angle_terms = [], neglected_old_angle_terms = []):
+                 atom_selection="not water", scheduler_address=None, eq_splitting_string="V R O R V", neq_splitting_string = 'O { V R H R V } O', measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
+                 neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class
 
@@ -621,19 +621,36 @@ class NonequilibriumSwitchingFEP(object):
             all water.
         scheduler_address : str
             address for distributed computing jobs (not currently functional)
-        eq_splitting_string : str, default V R O R V
+        eq_splitting_string : str, default 'V R O R V'
             The integrator splitting to use for equilibrium simulation
+        neq_splitting_string : str, default 'O { V R H R V } O'
+            The integrator splitting to use for nonequilibrium switching simulation
         neglected_new_angle_terms : list, default []
             list of indices from the HarmonicAngleForce of the new_system for which the geometry engine neglected.
             Hence, these angles must be alchemically grown in for the unique new atoms (forward lambda protocol)
         neglected_old_angle_terms : list, default []
             list of indices from the HarmonicAngleForce of the old_system for which the geometry engine neglected.
             Hence, these angles must be alchemically deleted for the unique old atoms (reverse lambda protocol)
+        ncmc_save_interval : int, default None
+            interval with which to write ncmc trajectory.  If None, trajectory will not be saved.
+            We will assert that the ncmc_nsteps % ncmc_save_interval = 0; otherwise, the protocol will not be complete
+        write_ncmc_configuration : bool, default False
+            whether to write ncmc annealing perturbations; if True, will write every ncmc_save_interval iterations
         """
         # construct the hybrid topology factory object
         _logger.info(f"writing HybridTopologyFactory")
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, neglected_new_angle_terms, neglected_old_angle_terms)
         self.geometry_engine = geometry_engine
+        self._ncmc_save_interval = ncmc_nsteps if not ncmc_save_interval else ncmc_save_interval
+
+        #we have to make sure that there is no remainder from ncmc_nsteps % ncmc_save_interval
+        try:
+            assert ncmc_nsteps % self._ncmc_save_interval == 0
+        except ValueError:
+            print(f"The work writing interval must be a factor of the total number of ncmc steps; otherwise, the ncmc protocol is incomplete!")
+
+
+        self._write_ncmc_configuration = write_ncmc_configuration
 
         # setup splitting string:
         self._eq_splitting_string = eq_splitting_string
@@ -779,7 +796,7 @@ class NonequilibriumSwitchingFEP(object):
 
             for endpoint in endpoints: #iterate 0 and 1 (starting with zero)
                 alternate_endpoint = 1 if endpoint == 0 else 0
-                _logger.debug(f"\t\tconducting protocol from lambda = {endpoint}")
+                _logger.debug(f"\t\tconducting protocol from lambda = {endpoint} to lambda = {alternate_endpoint}")
 
                 # run a round of equilibrium at lambda_0(1)
                 _logger.debug(f"\t\tconducting equilibrium run")
@@ -797,7 +814,6 @@ class NonequilibriumSwitchingFEP(object):
                                                                  self._nonalchemical_thermodynamic_states[endpoint],
                                                                  endpoint)
                 _logger.debug(f"\t\t\thybrid {endpoint} reduced energy, nonalchemical {endpoint} reduced_energy, valence: ({hybrid_reduced_potential}, {nonalchemical_reduced_potential}, {valence_energy})")
-
                 nonalchemical_reduced_potentials[endpoint][self._current_iteration] = nonalchemical_reduced_potential
                 added_valence_reduced_potentials[endpoint][self._current_iteration] = valence_energy
                 alchemical_reduced_potentials[endpoint][self._current_iteration] = hybrid_reduced_potential
@@ -805,13 +821,13 @@ class NonequilibriumSwitchingFEP(object):
                 _logger.debug(f"\t\tcollecting corrected energy to the alternate nonalchemical state (i.e. lambda = {alternate_endpoint})")
                 alt_valence_energy, alt_nonalchemical_reduced_potential, alt_hybrid_reduced_potential = feptasks.compute_nonalchemical_perturbation(self._hybrid_thermodynamic_states[alternate_endpoint],
                                                                  self._endpoint_growth_thermostates[endpoint],
-                                                                 self._sampler_states[alternate_endpoint], self._factory,
+                                                                 self._sampler_states[endpoint], self._factory,
                                                                  self._nonalchemical_thermodynamic_states[alternate_endpoint],
                                                                  alternate_endpoint)
                 _logger.debug(f"\t\t\thybrid {alternate_endpoint} reduced energy, nonalchemical {alternate_endpoint} reduced_energy, valence: ({alt_hybrid_reduced_potential}, {alt_nonalchemical_reduced_potential}, {alt_valence_energy})")
                 nonalchemical_reduced_potentials_to[alternate_endpoint][self._current_iteration] = alt_nonalchemical_reduced_potential
                 added_valence_reduced_potentials_to[alternate_endpoint][self._current_iteration] = alt_valence_energy
-                alchemical_reduced_potentials_to[alternate_endpoint][self._current_iteration] = alt_nonalchemical_reduced_potential
+                alchemical_reduced_potentials_to[alternate_endpoint][self._current_iteration] = alt_hybrid_reduced_potential
 
                 # run a round of nonequilibrium switching from 0 --> 1 (1 --> 0):
                 _logger.debug(f"\t\tconducting annealing from lambda = {endpoint}")
@@ -823,11 +839,11 @@ class NonequilibriumSwitchingFEP(object):
                                                                          alchemical_functions = alchemical_functions[endpoint],
                                                                          topology = self._factory._hybrid_topology,
                                                                          nstep_neq = self._ncmc_nsteps,
-                                                                         work_save_interval = 1,
+                                                                         work_save_interval = self._ncmc_save_interval,
                                                                          splitting = self._neq_splitting_string,
                                                                          atom_indices_to_save = self._atom_selection_indices,
                                                                          trajectory_filename = self._neq_traj_filename[endpoint],
-                                                                         write_configuration = False,
+                                                                         write_configuration = self._write_ncmc_configuration,
                                                                          timestep = self._timestep,
                                                                          measure_shadow_work = self._measure_shadow_work)
 
@@ -854,6 +870,8 @@ class NonequilibriumSwitchingFEP(object):
                      'shadow': nonequilibrium_shadow_work}
 
         #energies (used for timeseries and exp estimations)
+        _logger.debug(f"alchemical reduced potentials: {alchemical_reduced_potentials}")
+        _logger.debug(f"alchemical--> reduced potentials: {alchemical_reduced_potentials_to}")
 
         self.equilibrium_energies_dict = {'nonalchemical': nonalchemical_reduced_potentials,
                          'alchemical': alchemical_reduced_potentials,
@@ -929,7 +947,7 @@ class NonequilibriumSwitchingFEP(object):
         free_energies = []
         #defining reduced potential differences of the hybrid systems...
         self._hybrid_reduced_potential_differences = {'0_to_1': -1*(self.equilibrium_energies_dict['alchemical'][0] - self.equilibrium_perturbed_energies_dict['alchemical'][1]),
-                                                      '1_to_0': -1*(self.equilirbium_energies_dict['alchemical'][1] - self.equilibrium_perturbed_energies_dict['alchemical'][0])}
+                                                      '1_to_0': -1*(self.equilibrium_energies_dict['alchemical'][1] - self.equilibrium_perturbed_energies_dict['alchemical'][0])}
         self._nonalchemical_reduced_potential_differences = {'0_to_nonalchemical_0': self.equilibrium_perturbed_energies_dict['nonalchemical'][0] + self.equilibrium_perturbed_energies_dict['valence'][0] - self.equilibrium_energies_dict['alchemical'][0],
                                                              '1_to_nonalchemical_1': self.equilibrium_perturbed_energies_dict['nonalchemical'][1] + self.equilibrium_perturbed_energies_dict['valence'][1] - self.equilibrium_energies_dict['alchemical'][1]}
 
@@ -941,14 +959,14 @@ class NonequilibriumSwitchingFEP(object):
 
         for lambda_endpoint in [0, 1]:
             _logger.debug(f"\tconducting EXP calculations from {lambda_endpoint}")
-            alternate_endpoint = 1 if endpoint == 0 else 0
+            alternate_endpoint = 1 if lambda_endpoint == 0 else 0
 
             eq_energy_array = self.equilibrium_energies_dict['alchemical'][lambda_endpoint]
-            t0, statistical_inefficiency, Neff_max = self.detectEquilibration(eq_energy_array)
+            t0, statistical_inefficiency, Neff_max = pymbar.timeseries.detectEquilibration(eq_energy_array)
             equilibrated_energy_array = eq_energy_array[t0:]
             diff_array = self._hybrid_reduced_potential_differences[f"{lambda_endpoint}_to_{alternate_endpoint}"][t0:]
 
-            uncorrelated_indices = timeseries.subsampleCorrelatedData(equilibrated_energy_array, g=statistical_inefficiency)
+            uncorrelated_indices = pymbar.timeseries.subsampleCorrelatedData(equilibrated_energy_array, g=statistical_inefficiency)
             uncorrelated_diff_array = diff_array[uncorrelated_indices]
             df, ddf_raw = pymbar.EXP(uncorrelated_diff_array) #input to exp are forward works
             ddf_corrected = ddf_raw * np.sqrt(statistical_inefficiency)
@@ -985,9 +1003,9 @@ class NonequilibriumSwitchingFEP(object):
         """
         _logger.debug(f"conducting free energy for W_f and W_r calculation with BAR")
         inefficiencies = []
-        forward_works = self._work_dict[0]['cumulative']
+        forward_works = self.work_dict['cumulative'][0]
         num_forward_runs, num_forward_logs_per_run = forward_works.shape
-        reverse_works = self._work_dict[1]['cumulative']
+        reverse_works = self.work_dict['cumulative'][1]
         num_reverse_runs, num_reverse_logs_per_run = reverse_works.shape
 
         assert num_forward_runs == num_reverse_runs
@@ -995,12 +1013,17 @@ class NonequilibriumSwitchingFEP(object):
         self._total_works = {'forward': forward_works[:,-1], 'reverse': reverse_works[:,-1]}
         self._BAR_alchemical_free_energies = {'df': [], 'ddf': [], 'correlation': []}
 
+        # computing decorrelated timeseries calculation for the forward and reverse total accumulated works;
+        # TODO: figure out why some of the works nan...; at present, we are ignoring these data
         for direction in ['forward', 'reverse']:
-            [t0, g, Neff_max, uncorrelated_data] = feptasks.compute_timeseries(self._total_works[f"{direction}"])
+            _logger.debug(f"conducting timeseries computation for {direction} direction")
+            series = np.array([i for i in self._total_works[f"{direction}"] if not np.isnan(i)])
+            _logger.debug(f"work array: {series}")
+            [t0, g, Neff_max, uncorrelated_data] = feptasks.compute_timeseries(series)
             self._BAR_alchemical_free_energies['correlation'].append([t0, g, Neff_max])
             inefficiencies.append(g)
 
-        df, ddf = pymbar.BAR(self._total_works['forward'], self._total_work['reverse'])
+        df, ddf = pymbar.BAR(self._total_works['forward'], self._total_works['reverse'])
         ddf_corrected = ddf * np.sqrt(max(inefficiencies))
         self._BAR_alchemical_free_energies['df'] = df
         self._BAR_alchemical_free_energies['ddf'] = ddf_corrected
@@ -1018,6 +1041,6 @@ class NonequilibriumSwitchingFEP(object):
         # Make sure the task queue is empty (all pending calcs are complete) before computing free energy
         # Make sure the task queue is empty (all pending calcs are complete) before computing free energy
         self._endpoint_perturbations()
-        [df, ddf] = self._alchemical_free_energy()
+        df, ddf = self._alchemical_free_energy()
 
         return df, ddf
