@@ -504,7 +504,9 @@ def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: stat
     if type(cache.global_context_cache) == cache.DummyContextCache:
         integrator = openmm.VerletIntegrator(1.0) #we won't take any steps, so use a simple integrator
         context, integrator = cache.global_context_cache.get_context(thermodynamic_state, integrator)
+        _logger.debug(f"using dummy context cache")
     else:
+        _logger.debug(f"using global context cache")
         context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
     sampler_state.apply_to_context(context, ignore_velocities = True)
     openmm.LocalEnergyMinimizer.minimize(context, maxIterations = max_iterations)
