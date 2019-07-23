@@ -42,7 +42,7 @@ _logger = logging.getLogger("feptasks")
 _logger.setLevel(logging.DEBUG)
 
 
-cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
+#cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 #Make containers for results from tasklets. This allows us to chain tasks together easily.
 EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('reduced_potential', float)])
 NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', np.array), ('protocol_work', np.array), ('shadow_work', np.array)])
