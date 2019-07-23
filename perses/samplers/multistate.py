@@ -65,8 +65,9 @@ class HybridCompatibilityMixin(object):
 
                     box_vectors = sampler_state.box_vectors
 
-                    context.setPositions(positions)
                     context.setPeriodicBoxVectors(*box_vectors)
+                    context.setPositions(positions)
+
                 else:
                     # Update positions and box vectors. We don't need
                     # to set Context velocities for the potential.
@@ -222,4 +223,3 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
 
         self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
                     storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
-        #            storage=reporter, unsampled_thermodynamic_states=None)
