@@ -1017,13 +1017,13 @@ class NonequilibriumSwitchingFEP(object):
         # TODO: figure out why some of the works nan...; at present, we are ignoring these data
         for direction in ['forward', 'reverse']:
             _logger.debug(f"conducting timeseries computation for {direction} direction")
-            series = np.array([i for i in self._total_works[f"{direction}"] if not np
+            series = np.array([i for i in self._total_works[f"{direction}"] if not np.isnan(i)])
             _logger.debug(f"work array: {series}")
             [t0, g, Neff_max, uncorrelated_data] = feptasks.compute_timeseries(series)
             self._BAR_alchemical_free_energies['correlation'].append([t0, g, Neff_max])
             inefficiencies.append(g)
 
-        df, ddf = pymbar.BAR(self._total_works['forward'], self._total_work['reverse'])
+        df, ddf = pymbar.BAR(self._total_works['forward'], self._total_works['reverse'])
         ddf_corrected = ddf * np.sqrt(max(inefficiencies))
         self._BAR_alchemical_free_energies['df'] = df
         self._BAR_alchemical_free_energies['ddf'] = ddf_corrected
