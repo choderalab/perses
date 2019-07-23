@@ -33,10 +33,10 @@ _logger.setLevel(logging.DEBUG)
 DEFAULT_FORWARD_FUNCTIONS = {
     'lambda_sterics_core': 'lambda',
     'lambda_electrostatics_core': 'lambda',
-    'lambda_sterics_insert': '2 * lambda * step(0.5 - lambda)',
-    'lambda_sterics_delete': '2 * step(lambda - 0.5) * (lambda - 0.5)',
-    'lambda_electrostatics_insert': '2 * step(lambda - 0.5) * (lambda - 0.5)',
-    'lambda_electrostatics_delete': '2 * lambda * step(0.5 - lambda)',
+    'lambda_sterics_insert': 'select(step(0.5 - lambda), 2.0 * lambda, 0.0)',
+    'lambda_sterics_delete': 'select(step(lambda - 0.5), 2.0 * (lambda - 0.5), 0.0)',
+    'lambda_electrostatics_insert': 'select(step(lambda - 0.5), 2.0 * (lambda - 0.5), 0.0)',
+    'lambda_electrostatics_delete': 'select(step(0.5 - lambda), 2.0 * lambda, 0.0)',
     'lambda_bonds': 'lambda',
     'lambda_angles': 'lambda',
     'lambda_torsions': 'lambda'
@@ -45,10 +45,10 @@ DEFAULT_FORWARD_FUNCTIONS = {
 DEFAULT_REVERSE_FUNCTIONS = {
     'lambda_sterics_core': '1.0 - lambda',
     'lambda_electrostatics_core': '1.0 - lambda',
-    'lambda_sterics_insert': '1.0 - 2 * step(lambda - 0.5) * (lambda - 0.5)',
-    'lambda_sterics_delete': '(1.0 - 2 * lambda * step(0.5 - lambda)) * step(0.5 - lambda)',
-    'lambda_electrostatics_insert': '(1.0 - 2 * lambda * step(0.5 - lambda)) * step(0.5 - lambda)',
-    'lambda_electrostatics_delete': '1.0 - 2 * step(lambda - 0.5) * (lambda - 0.5)',
+    'lambda_sterics_insert': '1.0 - select(step(lambda - 0.5), 2.0 * (lambda - 0.5), 0.0)',
+    'lambda_sterics_delete': '1.0 - select(step(0.5 - lambda), 2.0 * lambda, 0.0)',
+    'lambda_electrostatics_insert': '1.0 - select(step(0.5 - lambda), 2.0 * lambda, 0.0)',
+    'lambda_electrostatics_delete': '1.0 - select(step(lambda - 0.5), 2.0 * (lambda - 0.5), 0.0)',
     'lambda_bonds': '1.0 - lambda',
     'lambda_angles': '1.0 - lambda',
     'lambda_torsions': '1.0 - lambda'
@@ -1017,13 +1017,13 @@ class NonequilibriumSwitchingFEP(object):
         # TODO: figure out why some of the works nan...; at present, we are ignoring these data
         for direction in ['forward', 'reverse']:
             _logger.debug(f"conducting timeseries computation for {direction} direction")
-            series = np.array([i for i in self._total_works[f"{direction}"] if not np.isnan(i)])
+            series = np.array([i for i in self._total_works[f"{direction}"] if not np
             _logger.debug(f"work array: {series}")
             [t0, g, Neff_max, uncorrelated_data] = feptasks.compute_timeseries(series)
             self._BAR_alchemical_free_energies['correlation'].append([t0, g, Neff_max])
             inefficiencies.append(g)
 
-        df, ddf = pymbar.BAR(self._total_works['forward'], self._total_works['reverse'])
+        df, ddf = pymbar.BAR(self._total_works['forward'], self._total_work['reverse'])
         ddf_corrected = ddf * np.sqrt(max(inefficiencies))
         self._BAR_alchemical_free_energies['df'] = df
         self._BAR_alchemical_free_energies['ddf'] = ddf_corrected
@@ -1041,6 +1041,6 @@ class NonequilibriumSwitchingFEP(object):
         # Make sure the task queue is empty (all pending calcs are complete) before computing free energy
         # Make sure the task queue is empty (all pending calcs are complete) before computing free energy
         self._endpoint_perturbations()
-        df, ddf = self._alchemical_free_energy()
+        [df, ddf] = self._alchemical_free_energy()
 
         return df, ddf
