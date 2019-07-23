@@ -429,7 +429,6 @@ if __name__ == "__main__":
     _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
     if setup_options['fe_type'] == 'neq':
         n_cycles = setup_options['n_cycles']
-        n_iterations_per_cycle = setup_options['n_iterations_per_cycle']
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
         total_iterations = n_cycles*n_iterations_per_cycle
 
