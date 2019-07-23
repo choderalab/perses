@@ -419,17 +419,23 @@ if __name__ == "__main__":
 
     trajectory_prefix = setup_options['trajectory_prefix']
     trajectory_directory = setup_options['trajectory_directory']
-    #write out topology proposals
-    _logger.info(f"Writing topology proposal {trajectory_prefix}topology_proposals.npy to {trajectory_directory}...")
-    np.save(os.path.join(setup_options['trajectory_directory'], trajectory_prefix+"topology_proposals.npy"),
-            setup_dict['topology_proposals'])
 
+    #write out topology proposals
+    try:
+        _logger.info(f"Writing topology proposal {trajectory_prefix}_topology_proposals.pkl to {trajectory_directory}...")
+        with open(os.path.join(trajectory_directory, "%s_topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
+            pickle.dump(setup_dict['topology_proposals'], f)
+    except Exception as e:
+        print(e)
+        _logger.info("Unable to save run object as a pickle; saving as npy")
+        np.save(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
 
     n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
     _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
     if setup_options['fe_type'] == 'neq':
         n_cycles = setup_options['n_cycles']
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+        temperature = setup_options['temperature'] * unit.kelvin
 
         ne_fep = setup_dict['ne_fep']
         for phase in setup_options['phases']:
