@@ -430,7 +430,6 @@ if __name__ == "__main__":
     if setup_options['fe_type'] == 'neq':
         n_cycles = setup_options['n_cycles']
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
-        total_iterations = n_cycles*n_iterations_per_cycle
 
         ne_fep = setup_dict['ne_fep']
         for phase in setup_options['phases']:
