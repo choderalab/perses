@@ -98,7 +98,7 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
     return molecule
 
 
-def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
+def OEMol_to_omm_ff(molecule, data_filename='data/gaff.xml'):
     """
     Convert an openeye.oechem.OEMol to a openmm system, positions and topology
 
