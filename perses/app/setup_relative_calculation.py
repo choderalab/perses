@@ -322,7 +322,7 @@ def run_setup(setup_options):
                                                        n_equilibrium_steps_per_iteration = n_equilibrium_steps_per_iteration,
                                                        temperature = temperature,
                                                        trajectory_directory=trajectory_directory,
-                                                       trajectory_prefix=trajectory_prefix,
+                                                       trajectory_prefix=f"{trajectory_prefix}_{phase}",
                                                        atom_selection=atom_selection,
                                                        eq_splitting_string = eq_splitting,
                                                        neq_splitting_string = neq_splitting,
