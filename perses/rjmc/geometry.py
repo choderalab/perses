@@ -240,7 +240,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if not top_proposal.unique_old_atoms:
             _logger.info("logp_reverse: there are no unique old atoms; logp_proposal = 0.0.")
             #define reverse attributes
-            self.reverse_new_positions, self.reverse_rjmc_info, self.reverse_atoms_with_positions_reduced_potential, self.reverse_final_context_reduced_potential, self.reverse_neglected_angle_terrm = new_coordinates, None, 0.0, 0.0, []
+            self.reverse_new_positions, self.reverse_rjmc_info, self.reverse_atoms_with_positions_reduced_potential, self.reverse_final_context_reduced_potential, self.reverse_neglected_angle_terms = new_coordinates, None, 0.0, 0.0, []
             self.reverse_final_growth_system = None
             return 0.0
 
