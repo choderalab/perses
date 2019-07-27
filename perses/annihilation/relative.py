@@ -1180,7 +1180,7 @@ class HybridTopologyFactory(object):
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
                 _logger.debug(f"\t\thandle_harmonic_angles: angle_index {angle_index} is a core (to custom angle force).")
                 if not self._find_angle_parameters(self._hybrid_system_forces['core_angle_force'], hybrid_index_list):
-                    _logger.debug(f"\t\t\thandle_harmonic_angles: angle_index {angle_index} NOT previously added...adding now...THERE IS A CONSIDERATION NOT BEING MADE!")
+                    _logger.debug(f"\t\t\thandle_harmonic_angles: angle_index {angle_index} NOT previously added...adding now...This is a core angle force present in new system but not in old system!")
                     hybrid_force_parameters = [new_angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2, new_angle_parameters[3], new_angle_parameters[4]]
                     self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2],
@@ -1262,6 +1262,29 @@ class HybridTopologyFactory(object):
                 self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
                                                                             torsion_parameters[5], torsion_parameters[6])
+
+            #another consideration has to be made for when a core-core-core-core torsion force appears in the new_system but is not present in the old system;
+            #this would not have been caught by the previous `for` loop over the old system core torsions
+            if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core (to custom torsion force).")
+                torsion_indices = torsion_parameters[:4]
+                old_index_list = [self._hybrid_to_old_map[hybr_idx] for hybr_idx in hybrid_index_list]
+                old_index_list_reversed = [i for i in reversed(old_index_list)]
+
+                #if we've already added these indices (they may appear >once for high periodicities)
+                #then just continue to the next torsion.
+                if (old_index_list in added_torsions) or (old_index_list_reversed in added_torsions):
+                    continue
+                new_torsion_parameters_list = self._find_torsion_parameters(new_system_torsion_force, torsion_indices)
+                for torsion_parameters in new_torsion_parameters_list:
+                    #add to the hybrid force:
+                    #the parameters at indices 3 and 4 represent theta0 and k, respectively.
+                    hybrid_force_parameters = [0.0, 0.0, 0.0,torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
+                    self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
+                added_torsions.append(old_index_list)
+                added_torsions.append(old_index_list_reversed)
+
+
 
     def handle_nonbonded(self):
         """
