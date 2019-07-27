@@ -54,7 +54,7 @@ DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("proposal_generator")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.DEBUG)
 
 ################################################################################
 # UTILITIES
@@ -2346,7 +2346,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             _logger.info(f"logp proposal: {logp_proposal}")
         else:
             # TODO: Make sure we're using canonical mol to smiles conversion
-            proposed_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            proposed_mol_smiles = oechem.OEMolToSmiles(proposed_mol)
             proposed_mol_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(proposed_mol_smiles)
             _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
             logp_proposal = 0.0
@@ -2399,7 +2399,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_topology=current_topology, new_topology=new_topology,
             old_system=current_system, new_system=new_system,
             old_alchemical_atoms=old_alchemical_atoms,
-            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
+            old_chemical_state_key=self._residue_name, new_chemical_state_key=self._residue_name)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
         ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
@@ -2827,10 +2827,27 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             return {}
 
         top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches) #remove the matches with the lower rank score (filter out bad degeneracies)
-        match = max(top_matches, key=lambda m: m.NumAtoms()) #choose the first atom map with the most atoms mapped
-        new_to_old_atom_map = SmallMoleculeSetProposalEngine.hydrogen_mapping_exceptions(current_molecule, proposed_molecule, match)
+        _logger.debug(f"\tthere are {len(top_matches)} top matches")
+        max_num_atoms = max([match.NumAtoms() for match in top_matches])
+        _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
+        new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
+        new_to_old_atom_maps = [SmallMoleculeSetProposalEngine.hydrogen_mapping_exceptions(current_molecule, proposed_molecule, match) for match in new_top_matches]
+        _logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
 
-        return new_to_old_atom_map
+        #now all else is equal; we will choose the map with the highest overlap of atom indices
+        index_overlap_numbers = []
+        for map in new_to_old_atom_maps:
+            hit_number = 0
+            for key, value in map.items():
+                if key == value:
+                    hit_number+=1
+            index_overlap_numbers.append(hit_number)
+
+        max_index_overlap_number = max(index_overlap_numbers)
+        max_index = index_overlap_numbers.index(max_index_overlap_number)
+        _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]}")
+
+        return new_to_old_atom_maps[max_index]
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         """
