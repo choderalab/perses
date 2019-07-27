@@ -311,14 +311,16 @@ class HybridTopologyFactory(object):
         unique_new_set = set(self._topology_proposal.unique_new_atoms)
 
         #we derive core atoms from the old topology:
+        name_of_residue = self._topology_proposal.old_chemical_state_key
         core_atoms_from_old = self._determine_core_atoms_in_topology(self._topology_proposal.old_topology,
                                                                      unique_old_set, mapped_old_atoms_set,
-                                                                     self._old_to_hybrid_map)
+                                                                     self._old_to_hybrid_map, name_of_residue)
 
         #we also derive core atoms from the new topology:
+        name_of_residue = self._topology_proposal.new_chemical_state_key
         core_atoms_from_new = self._determine_core_atoms_in_topology(self._topology_proposal.new_topology,
                                                                      unique_new_set, mapped_new_atoms_set,
-                                                                     self._new_to_hybrid_map)
+                                                                     self._new_to_hybrid_map, name_of_residue)
 
         #The union of the two will give the core atoms that can result from either new or old topology
         # TODO: Shouldn't these sets be the same?
@@ -330,7 +332,7 @@ class HybridTopologyFactory(object):
 
         return total_core_atoms, environment_atoms
 
-    def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map):
+    def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map, residue_to_switch):
         """
         Given a topology and its corresponding unique and mapped atoms, return the set of atom indices in the
         hybrid system which would belong to the "core" atom class
@@ -343,6 +345,8 @@ class HybridTopologyFactory(object):
             A set of atoms that are unique to this topology
         mapped_atoms : set of int
             A set of atoms that are mapped to another topology
+        residue_to_switch : str
+            string name of a residue that is being mutated
 
         Returns
         -------
@@ -357,7 +361,8 @@ class HybridTopologyFactory(object):
 
             #if the residue contains an atom index that is unique, then the residue is changing.
             #We determine this by checking if the atom indices of the residue have any intersection with the unique atoms
-            if len(atom_indices_old_system.intersection(unique_atoms)) > 0:
+            #likewise, if the name of the residue matches the residue_to_match, then we look for mapped atoms
+            if len(atom_indices_old_system.intersection(unique_atoms)) > 0 or residue_to_switch == residue.name:
                 #we can add the atoms in this residue which are mapped to the core_atoms set:
                 for atom_index in atom_indices_old_system:
                     if atom_index in mapped_atoms:
