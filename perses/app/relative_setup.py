@@ -1012,6 +1012,7 @@ class NonequilibriumSwitchingFEP(object):
 
         self._total_works = {'forward': forward_works[:,-1], 'reverse': reverse_works[:,-1]}
         self._BAR_alchemical_free_energies = {'df': [], 'ddf': [], 'correlation': []}
+        self._decorrelated_total_works = {}
 
         # computing decorrelated timeseries calculation for the forward and reverse total accumulated works;
         # TODO: figure out why some of the works nan...; at present, we are ignoring these data
@@ -1020,10 +1021,11 @@ class NonequilibriumSwitchingFEP(object):
             series = np.array([i for i in self._total_works[f"{direction}"] if not np.isnan(i)])
             _logger.debug(f"work array: {series}")
             [t0, g, Neff_max, uncorrelated_data] = feptasks.compute_timeseries(series)
-            self._BAR_alchemical_free_energies['correlation'].append([t0, g, Neff_max, uncorrelated_data])
+            self._BAR_alchemical_free_energies['correlation'].append([t0, g, Neff_max])
             inefficiencies.append(g)
+            self._decorrelated_total_works[direction] = uncorrelated_data
 
-        df, ddf = pymbar.BAR(self._BAR_alchemical_free_energies['correlation'][3], self._BAR_alchemical_free_energies['correlation'][7])
+        df, ddf = pymbar.BAR(self._decorrelated_total_works['forward'], self._decorrelated_total_works['reverse'])
         ddf_corrected = ddf * np.sqrt(max(inefficiencies))
         self._BAR_alchemical_free_energies['df'] = df
         self._BAR_alchemical_free_energies['ddf'] = ddf_corrected

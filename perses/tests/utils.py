@@ -683,7 +683,7 @@ def validate_rjmc_work_variance(top_prop, positions, geometry_method = 0, num_it
 
     return conformers, rj_works
 
-def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-1):
+def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_energy, beta = 1.0/kT, ENERGY_THRESHOLD = 1e-6):
     """
     Function to validate that the difference between the nonalchemical versus alchemical state at lambda = 0,1 is
     equal to the difference in valence energy (forward and reverse).
