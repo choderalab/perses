@@ -1020,10 +1020,10 @@ class NonequilibriumSwitchingFEP(object):
             series = np.array([i for i in self._total_works[f"{direction}"] if not np.isnan(i)])
             _logger.debug(f"work array: {series}")
             [t0, g, Neff_max, uncorrelated_data] = feptasks.compute_timeseries(series)
-            self._BAR_alchemical_free_energies['correlation'].append([t0, g, Neff_max])
+            self._BAR_alchemical_free_energies['correlation'].append([t0, g, Neff_max, uncorrelated_data])
             inefficiencies.append(g)
 
-        df, ddf = pymbar.BAR(self._total_works['forward'], self._total_works['reverse'])
+        df, ddf = pymbar.BAR(self._BAR_alchemical_free_energies['correlation'][3], self._BAR_alchemical_free_energies['correlation'][7])
         ddf_corrected = ddf * np.sqrt(max(inefficiencies))
         self._BAR_alchemical_free_energies['df'] = df
         self._BAR_alchemical_free_energies['ddf'] = ddf_corrected
