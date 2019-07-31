@@ -1256,6 +1256,28 @@ class HybridTopologyFactory(object):
                                                                             hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
                                                                             torsion_parameters[5], torsion_parameters[6])
 
+            #another consideration has to be made for when a core-core-core-core torsion force appears in the new_system but is not present in the old system;
+            #this would not have been caught by the previous `for` loop over the old system core torsions
+            if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core (to custom torsion force).")
+                torsion_indices = torsion_parameters[:4]
+                old_index_list = [self._hybrid_to_old_map[hybr_idx] for hybr_idx in hybrid_index_list]
+                old_index_list_reversed = [i for i in reversed(old_index_list)]
+
+                 #if we've already added these indices (they may appear >once for high periodicities)
+                #then just continue to the next torsion.
+                if (old_index_list in added_torsions) or (old_index_list_reversed in added_torsions):
+                    continue
+                new_torsion_parameters_list = self._find_torsion_parameters(new_system_torsion_force, torsion_indices)
+                for torsion_parameters in new_torsion_parameters_list:
+                    #add to the hybrid force:
+                    #the parameters at indices 3 and 4 represent theta0 and k, respectively.
+                    hybrid_force_parameters = [0.0, 0.0, 0.0,torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]
+                    self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
+                added_torsions.append(old_index_list)
+                added_torsions.append(old_index_list_reversed)
+
+
     def handle_nonbonded(self):
         """
 
@@ -1352,6 +1374,7 @@ class HybridTopologyFactory(object):
         for old in unique_old_atoms:
             for new in unique_new_atoms:
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(old, new, 0.0*unit.elementary_charge**2, 1.0*unit.nanometers, 0.0*unit.kilojoules_per_mole)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(old, new) #this is only necessary to avoid the 'All forces must have identical exclusions' rule
 
         _logger.info("\thandle_nonbonded: Handling Interaction Groups...")
         self._handle_interaction_groups()

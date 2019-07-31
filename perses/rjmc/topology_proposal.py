@@ -2346,7 +2346,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             _logger.info(f"logp proposal: {logp_proposal}")
         else:
             # TODO: Make sure we're using canonical mol to smiles conversion
-            proposed_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            proposed_mol_smiles = oechem.OEMolToSmiles(proposed_mol)
             proposed_mol_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(proposed_mol_smiles)
             _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
             logp_proposal = 0.0
@@ -2370,7 +2370,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr,
                                                   bond_expr=self.bond_expr, verbose=self.verbose,
                                                   allow_ring_breaking=self._allow_ring_breaking)
-            self.non_offset_new_to_old_atom_map = mol_atom_map #setting this as an attribute for easy access when rendering atom map
         else:
             _logger.info(f"atom map is pre-determined as {mol_atom_map}")
             mol_atom_map = self._atom_map
@@ -2389,12 +2388,18 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 old_idx = i
             adjusted_atom_map[i] = old_idx
 
+        # now to correct for possible constraint problems
+        adjusted_atom_map = SmallMoleculeSetProposalEngine._constraint_repairs(adjusted_atom_map, current_system, new_system, current_topology, new_topology)
+        non_offset_new_to_old_atom_map = copy.deepcopy(adjusted_atom_map)
+        min_keys, min_values = min(non_offset_new_to_old_atom_map.keys()), min(non_offset_new_to_old_atom_map.values())
+        self.non_offset_new_to_old_atom_map = mol_atom_map
+
         # Create the TopologyProposal onbject
         proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
             old_topology=current_topology, new_topology=new_topology,
             old_system=current_system, new_system=new_system,
             old_alchemical_atoms=old_alchemical_atoms,
-            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles)
+            old_chemical_state_key=self._residue_name, new_chemical_state_key=self._residue_name)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
         ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
@@ -2677,9 +2682,20 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     def hydrogen_mapping_exceptions(old_mol, new_mol, match):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
-        or aromatic(X) != aromatic(Y)
         """
+        # from perses.utils.openeye import OEMol_to_omm_ff
         new_to_old_atom_map = {}
+
+        # #wrapping constraints
+        # old_sys, old_pos, old_top = OEMol_to_omm_ff(old_mol, data_filename='data/gaff.xml')
+        # new_sys, new_pos, new_top = OEMol_to_omm_ff(new_mol, data_filename='data/gaff.xml')
+        # old_constraints, new_constraints = {}, {}
+        # for idx in range(old_sys.getNumConstraints()):
+        #     atom1, atom2, length = old_sys.getConstraintParameters(idx)
+        #     old_constraints[set([atom1, atom2])] = length
+        # for idx in range(new_sys.getNumConstraints()):
+        #     atom1, atom2, length = new_sys.getConstraintParameters(idx)
+        #     new_constraints[set([atom1, atom2])] = length
 
         for matchpair in match.GetAtoms():
             old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
@@ -2689,36 +2705,86 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
                 continue
 
-            # If the above is not true, then they are either both hydrogens or both not hydrogens
-            elif old_atom.GetAtomicNum() == 1:
-                bond = list(old_atom.GetBonds())[0] # There is only one for hydrogen
-                bgn = bond.GetBgn()
-                end = bond.GetEnd()
+            # # If the above is not true, then they are either both hydrogens or both not hydrogens
+            # elif old_atom.GetAtomicNum() == 1:
+            #     assert len(list(old_atom.GetBonds())) == 1, f"This atom has more than one bond"
+            #     bond = list(old_atom.GetBonds())[0] # There is only one for hydrogen
+            #     bgn = bond.GetBgn()
+            #     end = bond.GetEnd()
+            #
+            #     # Is this atom the beginning of the bond?
+            #     if bgn.GetIdx() == old_index:
+            #         other_atom = end
+            #     else:
+            #         other_atom = bgn
+            #
+            #     assert len(list(new_atom.GetBonds())) == 1, f"This atom has more than one bond"
+            #     new_bond = list(new_atom.GetBonds())[0]
+            #     new_bgn = new_bond.GetBgn()
+            #     new_end = new_bond.GetEnd()
+            #
+            #     if new_bgn.GetIdx() == new_index:
+            #         new_other_atom = new_end
+            #     else:
+            #         new_other_atom = new_bgn
 
-                # Is this atom the beginning of the bond?
-                if bgn.GetIdx() == old_index:
-                    other_atom = end
-                else:
-                    other_atom = bgn
+                # old_pair, new_pair = set([bgn.GetIdx(), end.GetIdx()]), set([new_bgn.GetIdx(), new_end.GetIdx()])
+                # assert old_pair in old_constraints.keys(), f"old hydrogen bond ({bgn.GetAtomicNum()} to {end.GetAtomicNum()}) doesn't have a constraint"
+                # assert new_pair in new_constraints.keys(), f"new hydrogen bond ({new_bgn.GetAtomicNum()} to {new_end.GetAtomicNum()}) doesn't have a constraint"
 
-                new_bond = list(new_atom.GetBonds())[0]
-                new_bgn = new_bond.GetBgn()
-                new_end = new_bond.GetEnd()
+                # if old_constraints[old_pair] != new_constraints[new_pair]: #if the old constraint doesn't equal the new constraint, then continue
+                #     continue
 
-                if new_bgn.GetIdx() == new_index:
-                    new_other_atom = new_end
-                else:
-                    new_other_atom = new_bgn
-
-                if (new_other_atom.GetAtomicNum() != other_atom.GetAtomicNum()) or (new_other_atom.IsAromatic() != other_atom.IsAromatic()):
-                    # if X-H maps to Y-H where X, Y are the same element but with different aromaticity booleans, then the Hbond constraint difference
-                    # will throw an error in the HybridTopologyFactory class.  map these hydrogens as unique new/old
-                    continue
+                #now to loop through the indices of the constraints and see if they are conserved; if not, we have to
+                # if (new_other_atom.GetAtomicNum() != other_atom.GetAtomicNum()):
+                #     # if X-H maps to Y-H where X, Y are the same element but with different aromaticity booleans, then the Hbond constraint difference
+                #     # will throw an error in the HybridTopologyFactory class.  map these hydrogens as unique new/old
+                #     continue
 
 
             new_to_old_atom_map[new_index] = old_index
 
         return new_to_old_atom_map
+
+    @staticmethod
+    def _constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology):
+        """
+        Given an adjusted atom map (corresponding to the true indices of the new: old atoms in their respective systems), iterate through all of the
+        atoms in the map that are hydrogen and check if the constraint length changes; if so, we do not map.
+        """
+        old_hydrogens = list(atom.index for atom in old_topology.atoms() if atom.element == app.Element.getByAtomicNumber(1))
+        new_hydrogens = list(atom.index for atom in new_topology.atoms() if atom.element == app.Element.getByAtomicNumber(1))
+        #wrapping constraints
+        old_constraints, new_constraints = {}, {}
+        for idx in range(old_system.getNumConstraints()):
+            atom1, atom2, length = old_system.getConstraintParameters(idx)
+            if atom1 in old_hydrogens:
+                old_constraints[atom1] = length
+            elif atom2 in old_hydrogens:
+                old_constraints[atom2] = length
+
+        for idx in range(new_system.getNumConstraints()):
+            atom1, atom2, length = new_system.getConstraintParameters(idx)
+            if atom1 in new_hydrogens:
+                new_constraints[atom1] = length
+            elif atom2 in new_hydrogens:
+                new_constraints[atom2] = length
+
+        #iterate through the atom indices in the new_to_old map, check bonds for pairs, and remove appropriate matches
+        to_delete = []
+        for new_index, old_index in atom_map.items():
+            if new_index in new_constraints.keys() and old_index in old_constraints.keys(): # both atom indices are hydrogens
+                old_length, new_length = old_constraints[old_index], new_constraints[new_index]
+                if not old_length == new_length: #then we have to remove it from
+                    to_delete.append(new_index)
+
+        for idx in to_delete:
+            del atom_map[idx]
+
+        return atom_map
+
+
+
 
     @staticmethod
     def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=True):
@@ -2761,10 +2827,27 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             return {}
 
         top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches) #remove the matches with the lower rank score (filter out bad degeneracies)
-        match = max(top_matches, key=lambda m: m.NumAtoms()) #choose the first atom map with the most atoms mapped
-        new_to_old_atom_map = SmallMoleculeSetProposalEngine.hydrogen_mapping_exceptions(current_molecule, proposed_molecule, match)
+        _logger.debug(f"\tthere are {len(top_matches)} top matches")
+        max_num_atoms = max([match.NumAtoms() for match in top_matches])
+        _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
+        new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
+        new_to_old_atom_maps = [SmallMoleculeSetProposalEngine.hydrogen_mapping_exceptions(current_molecule, proposed_molecule, match) for match in new_top_matches]
+        _logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
 
-        return new_to_old_atom_map
+        #now all else is equal; we will choose the map with the highest overlap of atom indices
+        index_overlap_numbers = []
+        for map in new_to_old_atom_maps:
+            hit_number = 0
+            for key, value in map.items():
+                if key == value:
+                    hit_number+=1
+            index_overlap_numbers.append(hit_number)
+
+        max_index_overlap_number = max(index_overlap_numbers)
+        max_index = index_overlap_numbers.index(max_index_overlap_number)
+        _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]}")
+
+        return new_to_old_atom_maps[max_index]
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         """
