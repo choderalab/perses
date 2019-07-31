@@ -11,6 +11,9 @@ from openmmtools.states import SamplerState, ThermodynamicState, CompoundThermod
 import numpy as np
 import copy
 
+import logging
+logger = logging.getLogger(__name__)
+
 class HybridCompatibilityMixin(object):
     """
     Mixin that allows the MultistateSampler to accommodate the situation where unsampled endpoints
@@ -37,6 +40,17 @@ class HybridCompatibilityMixin(object):
         energy_neighborhood_states = energy_thermodynamic_states[neighborhood]  # Array, can be indexed like this
         neighborhood_thermodynamic_states = [self._thermodynamic_states[n] for n in neighborhood]  # List
 
+        # determine if the end states are real or hybrid
+        # if the end states are real, we need to account for the different number of particles
+        real_endstates = False
+        n_atoms_hybrid_system = len(sampler_state.positions)
+    
+        for unsampled_state in self._unsampled_states:
+            system = unsampled_state.get_system()
+            if system.getNumParticles() != n_atoms_hybrid_system:
+                logger.debug("Unsampled endstates have different number of atoms than sampler states, therefore assuming they are 'real' systems")
+                real_endstates = True 
+    
         # Compute energy for all thermodynamic states.
         for idx, (energies, states) in enumerate([(energy_neighborhood_states, neighborhood_thermodynamic_states),
                                                   (energy_unsampled_states, self._unsampled_states)]):
@@ -55,7 +69,7 @@ class HybridCompatibilityMixin(object):
                 context, integrator = cache.global_context_cache.get_context(compatible_group[0])
 
                 # Are we trying to compute a potential at an unsampled (different number of particles) state?
-                if unsampled_state:
+                if unsampled_state and real_endstates:
                     if state_indices[0] == 0:
                         positions = self._hybrid_factory.old_positions(sampler_state.positions)
                     elif state_indices[0] == 1:
@@ -159,11 +173,12 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
     ReplicaExchangeSampler that supports unsampled end states with a different number of positions
     """
 
-    def __init__(self, *args, hybrid_factory=None, **kwargs):
+    def __init__(self, *args, hybrid_factory=None, real_endstates=False, **kwargs):
         super(HybridRepexSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
         self._factory = hybrid_factory
+        self._real_endstates = real_endstates
 
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schdeule=None):
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schdeule=None,real_endstates=False):
 
         from openmmtools.integrators import FIREMinimizationIntegrator
 
@@ -214,12 +229,43 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
             # save the positions for the next iteration
             positions = minimized_hybrid_positions
 
-        nonalchemical_thermodynamic_states = [
-            ThermodynamicState(self._factory._old_system, temperature=temperature),
-            ThermodynamicState(self._factory._new_system, temperature=temperature)]
 
+        # adding unsampled endstates, wether these are real systems, with a different number of atoms to the hybrid, or hybrid systems with larger cutoffs
+        if self._real_endstates == True:
+            logger.debug("Simulating endstates that represent the real system. This can increase the variance of the resulting energies")
+            unsampled_endstates = [
+                ThermodynamicState(self._factory._old_system, temperature=temperature),
+                ThermodynamicState(self._factory._new_system, temperature=temperature)]
+        else:
+            unsampled_endstates = [thermodynamic_state_list[0],thermodynamic_state_list[-1]] # taking the first and last states of the alchemical protocol
+
+        # changing the non-bonded method for the unsampled endstates
+        unsampled_dispersion_endstates = []
+        for master_lambda,endstate in zip([0.,1.],unsampled_endstates):
+            context, context_integrator = context_cache.get_context(endstate,integrator)
+            dispersion_system = context.getSystem() 
+            box_vectors = hybrid_system.getDefaultPeriodicBoxVectors()
+            dimensions = [x[i] for i,x in enumerate(box_vectors)]
+            minimum_length = min(dimensions)
+            for force in dispersion_system.getForces():
+                # expanding the cutoff for both the NonbondedForce and CustomNonbondedForce 
+                if 'NonbondedForce' in force.__class__.__name__:
+                    force.setCutoffDistance((minimum_length._value/2.) - 0.5)
+                # use long range correction for the customnonbonded force
+                if force.__class__.__name__ == 'CustomNonbondedForce':
+                    force.setUseLongRangeCorrection(True) 
+                # setting the default GlobalParameters for both end states, so that the long-range dispersion correction is correctly computed
+                if force.__class__.__name__ in ['NonbondedForce','CustomNonbondedForce','CustomBondForce','CustomAngleForce','CustomTorsionForce']:
+                    for parameter_index in range(force.getNumGlobalParameters()):
+                        # finding alchemical global parameters
+                        if force.getGlobalParameterName(parameter_index)[0:7] == 'lambda_':
+                            force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
+                            print(f'{force}')
+                            print(f'{force.getGlobalParameterName(parameter_index)}')
+                            print(f'{master_lambda}')
+            unsampled_dispersion_endstates.append(ThermodynamicState(dispersion_system, temperature=temperature))
 
         reporter = storage_file
 
         self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
-                    storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
+                    storage=reporter, unsampled_thermodynamic_states=unsampled_dispersion_endstates)
