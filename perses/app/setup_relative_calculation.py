@@ -127,8 +127,8 @@ def run_setup(setup_options):
     """
     phases = setup_options['phases']
 
-    if len(phases) != 2:
-        _logger.info(f"\tnumber of phases is NOT 2...complex and solvent will be provided...")
+    if len(phases) > 2:
+        _logger.info(f"\tnumber of phases is greater than 2...complex and solvent will be provided...")
         phases = ['complex', 'solvent']
 
     known_phases = ['complex','solvent','vacuum']
