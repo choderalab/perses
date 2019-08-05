@@ -46,6 +46,7 @@ OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | 
 # DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
+WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 ################################################################################
 # LOGGER
@@ -121,7 +122,7 @@ class SmallMoleculeAtomMapper(object):
     proposals is not disconnected.
     """
 
-    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
+    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, weak_atom_mapping: bool=False, prohibit_hydrogen_mapping: bool=True):
 
         self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
         self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
@@ -132,7 +133,10 @@ class SmallMoleculeAtomMapper(object):
         self._prohibit_hydrogen_mapping = prohibit_hydrogen_mapping
 
         if atom_match_expression is None:
-            self._atom_expr = DEFAULT_ATOM_EXPRESSION
+            if weak_atom_mapping:
+                self._atom_expr = WEAK_ATOM_EXPRESSION
+            else:
+                self._atom_expr = DEFAULT_ATOM_EXPRESSION
         else:
             self._atom_expr = atom_match_expression
 
