@@ -841,7 +841,7 @@ class NonequilibriumSwitchingFEP(object):
 
         # define collection lists for eq and noneq results
         eq_results_collector, neq_results_collector = {l: [] for l in start}, {_direction: [] for _direction in directions} #canonical dict keys for two types of collector objects
-        eq_results_futures, neq_results_futures = dict(), dict()
+        eq_results_futures = dict()
         init_eq_results = {_lambda: EquilibriumResult(sampler_state = self._sampler_states[_lambda], reduced_potentials = [], files = [], timers = {}, nonalchemical_perturbations = {}) for _lambda in start}
 
         equilibrium_trajectory_filenames = self._trajectory_filename
@@ -925,7 +925,7 @@ class NonequilibriumSwitchingFEP(object):
             _logger.debug(f"\t\tinitial lambda of thermodynamic_states: {[self._hybrid_thermodynamic_states[_lambda].lambda_sterics_core for _lambda in start]}")
 
             for _lambda, _direction in zip(start, directions): #iterate once or twice
-                neq_results_futures[_direction] = self.client.submit(feptasks.run_protocol,
+                neq_results_collector[_direction].append(self.client.submit(feptasks.run_protocol,
                                                                      thermodynamic_state = self._hybrid_thermodynamic_states[_lambda],
                                                                      equilibrium_result = eq_results[_lambda],
                                                                      direction = _direction,
@@ -938,9 +938,7 @@ class NonequilibriumSwitchingFEP(object):
                                                                      write_configuration = self._write_ncmc_configuration,
                                                                      timestep = self._timestep,
                                                                      measure_shadow_work = self._measure_shadow_work,
-                                                                     timer = timer)
-
-                neq_results_collector[_direction].append(neq_results_futures[_direction])
+                                                                     timer = timer))
 
             _logger.debug(f"\t\tcompleted annealing from lambda = {start} to lambda = {end}")
 
