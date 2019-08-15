@@ -834,7 +834,7 @@ class NonequilibriumSwitchingFEP(object):
             end = [1,0]
         else:
             directions = [direction]
-            if direction != 'forward' or direction != 'reverse':
+            if direction != 'forward' and direction != 'reverse':
                 raise Exception(f"direction must be 'forward' or 'reverse'; argument was given as {direction}.")
             start = [0] if direction == 'forward' else [1]
             end = [1] if direction == 'forward' else [0]
