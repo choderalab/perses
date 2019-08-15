@@ -1100,14 +1100,18 @@ class NonequilibriumSwitchingFEP(object):
             sampler state with positions and box vectors if applicable
         """
         #pull a random index
+        _logger.debug(f"\tpulling a decorrelated trajectory snapshot...")
         index = random.choice(self._eq_dict[f"{endstate}_decorrelated"])
+        _logger.debug(f"\t\tpulled decorrelated index label {index}")
         files = [key for key in self._eq_files_dict[endstate].keys() if index in self._eq_files_dict[endstate][key]]
+        _logger.debug(f"\t\t files corresponding to index {index}: ")
         assert len(files) == 1, f"files: {files} doesn't have one entry; index: {index}, eq_files_dict: {self._eq_files_dict[endstate]}"
         file = files[0]
         file_index = self._eq_files_dict[endstate][file].index(index)
+        _logger.debug(f"\t\tfile_index: {file_index}")
 
         #now we load file as a traj and create a sampler state with it
-        traj = md.load_frame(file, index)
+        traj = md.load_frame(file, file_index)
         positions = traj.openmm_positions(0)
         box_vectors = traj.openmm_boxes(0)
         sampler_state = SamplerState(positions, box_vectors = box_vectors)
