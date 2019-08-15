@@ -4,21 +4,6 @@ from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
 
-#Add the variables specific to the Alchemical langevin integrator
-#only do this if we're not using the DummyContextCache
-# if type(cache.global_context_cache) == cache.ContextCache:
-#     cache.global_context_cache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.update({
-#          "protocol_work" : 0.0,
-#          "Eold" : 0.0,
-#          "Enew" : 0.0,
-#          "lambda" : 0.0,
-#          "nsteps" : 0.0,
-#          "step" : 0.0,
-#          "n_lambda_steps" : 0.0,
-#          "lambda_step" : 0.0
-#      })
-
-
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
 import openmmtools.states as states
@@ -33,35 +18,37 @@ from perses.tests.utils import compute_potential_components
 from openmmtools.constants import kB
 import pdb
 import logging
-logging.basicConfig(level = logging.DEBUG)
 import tqdm
+from sys import getsizeof
+import time
+from collections import namedtuple
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("feptasks")
 _logger.setLevel(logging.DEBUG)
 
-
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
-#Make containers for results from tasklets. This allows us to chain tasks together easily.
-EquilibriumResult = NamedTuple('EquilibriumResult', [('sampler_state', states.SamplerState), ('reduced_potential', float)])
-NonequilibriumResult = NamedTuple('NonequilibriumResult', [('cumulative_work', np.array), ('protocol_work', np.array), ('shadow_work', np.array)])
+EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
+NonequilibriumResult = namedtuple('NonequilibriumResult', ['sampler_state', 'protocol_work', 'cumulative_work', 'shadow_work', 'timers'])
 
-class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
+class NonequilibriumSwitchingMove():
     """
     This class represents an MCMove that runs a nonequilibrium switching protocol using the AlchemicalNonequilibriumLangevinIntegrator.
     It is simply a wrapper around the aforementioned integrator, which must be provided in the constructor.
 
+    WARNING: take care in writing trajectory file as saving positions to memory is costly.  Either do not write the configuration or save sparse positions.
+
     Parameters
     ----------
-    alchemical_functions : dict
-        Leptop parse-able strings for each parameter in the system...this is specified separately for forward and reverse protocols.
-    splitting : str
+    nsteps : int
+        number of annealing steps in the protocol
+    direction : str
+        whether the protocol runs 'forward' or 'reverse'
+    splitting : str, default 'V R O R V'
         Splitting string for integrator
     temperature : unit.Quantity(float, units = unit.kelvin)
         temperature at which to run the simulation
-    nsteps_neq : int
-        number of steps in the integrator
     timestep : float
         size of timestep (units of time)
     work_save_interval : int, default None
@@ -74,49 +61,91 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         whether to save the ncmc trajectory
     measure_shadow_work : bool, default False
         whether to measure the shadow work from the integrator
+
     Attributes
     ----------
-    current_total_work : float
-        The total work in kT.
+    context_cache : openmmtools.cache.global_context_cache
+        Global context cache to deal with context instantiation
+    _timers : dict
+        dictionary of timers corresponding to various processes in the protocol
+    _direction : str
+        whether the protocol runs 'forward' or 'reverse'
+    _integrator : openmmtools.integrators.LangevinIntegrator
+        integrator for propagation kernel
+    _n_lambda_windows : int
+        number of lambda windows (including 0,1); equal to nsteps + 1
+    _nsteps : int
+        number of annealing steps in protocol
+    _beta : unit.kcal_per_mol**-1
+        inverse temperature
+    _work_save_interval : int
+        how often to save protocol work and trajectory
+    _save_configuration : bool
+        whether to save trajectory
+    _measure_shadow_work : bool
+        whether to measure the shadow work from the LangevinIntegrator
+    _cumulative_work : float
+        total -log(weight) of annealing
+    _shadow_work : float
+        total shadow work accumulated by kernel; if measure_shadow_work == False: _shadow_work = 0.0
+    _protocol_work : numpy.array
+        protocol accumulated works at save snapshots
+    _heat : float
+        total heat gathered by kernel
+    _topology : md.Topology
+        topology or subset defined by the mask to save
+    _subset_atoms : numpy.array
+        atom indices to save
+    _trajectory : md.Trajectory
+        trajectory to save
+    _trajectory_positions : list of simtk.unit.Quantity()
+        particle positions
+    _trajectory_box_lengths : list of triplet float
+        length of box in nm
+    _trajectory_box_angles : list of triplet float
+        angles of box in rads
+    _
     """
 
-    def __init__(self, alchemical_functions: dict, splitting: str, temperature: unit.Quantity, nsteps_neq: int, timestep: unit.Quantity,
+    def __init__(self, nsteps: int, direction: str, splitting: str= 'V R O R V', temperature: unit.Quantity=300*unit.kelvin, timestep: unit.Quantity=1.0*unit.femtosecond,
         work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, save_configuration: bool=False, measure_shadow_work: bool=False, **kwargs):
 
-        super(NonequilibriumSwitchingMove, self).__init__(n_steps=nsteps_neq, **kwargs)
+        start = time.time()
+        self._timers = {} #instantiate timer
+
         self.context_cache = cache.global_context_cache
+
         if measure_shadow_work:
             measure_heat = True
         else:
             measure_heat = False
 
-        self._integrator = integrators.AlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions,
-                                                                                  nsteps_neq=nsteps_neq,
-                                                                                  timestep = timestep,
-                                                                                  temperature=temperature,
-                                                                                  measure_shadow_work = measure_shadow_work,
-                                                                                  splitting = splitting,
-                                                                                  measure_heat = measure_heat)
-        self._ncmc_nsteps = nsteps_neq
+        assert direction == 'forward' or direction == 'reverse', f"The direction of the annealing protocol ({direction}) is invalid; must be specified as 'forward' or 'reverse'"
+
+        self._direction = direction
+
+        self._integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat)
+
+        self._nsteps = nsteps
         self._beta = 1.0 / (kB*temperature)
+
         if not work_save_interval:
-            self._work_save_interval = self._ncmc_nsteps
+            self._work_save_interval = self._nsteps
         else:
             self._work_save_interval = work_save_interval
 
         self._save_configuration = save_configuration
         self._measure_shadow_work = measure_shadow_work
+
         #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
         #work before the end of the protocol as the end
-        if self._ncmc_nsteps % self._work_save_interval != 0:
+        if self._nsteps % self._work_save_interval != 0:
             raise ValueError("The work writing interval must be a factor of the total number of steps")
 
-        self._number_of_step_moves = self._ncmc_nsteps // self._work_save_interval
-
         #use the number of step moves plus one, since the first is always zero
-        self._cumulative_work = np.zeros(self._number_of_step_moves+1)
+        self._cumulative_work = 0.0
         self._shadow_work = 0.0
-        self._protocol_work = np.zeros(self._number_of_step_moves+1)
+        self._protocol_work = [0.0]
         self._heat = 0.0
 
         self._topology = top
@@ -126,25 +155,13 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         #if we have a trajectory, set up some ancillary variables:
         if self._topology is not None:
             n_atoms = self._topology.n_atoms
-            n_iterations = self._number_of_step_moves
-            self._trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
-            self._trajectory_box_lengths = np.zeros([n_iterations, 3])
-            self._trajectory_box_angles = np.zeros([n_iterations, 3])
+            self._trajectory_positions = []
+            self._trajectory_box_lengths = []
+            self._trajectory_box_angles = []
         else:
             self._save_configuration = False
 
-        self._current_total_work = 0.0
-
-    def _get_integrator(self):
-        """
-        Get the integrator associated with this move. In this case, it is simply the integrator passed in to the constructor.
-
-        Returns
-        -------
-        integrator : openmmtools.integrators.AlchemicalNonequilibriumLangevinIntegrator
-            The integrator that is associated with this MCMove
-        """
-        return self._integrator
+        self._timers['instantiate'] = time.time() - start
 
     def apply(self, thermodynamic_state, sampler_state):
         """Propagate the state through the integrator.
@@ -152,8 +169,8 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
 
         Parameters
         ----------
-        thermodynamic_state : openmmtools.states.ThermodynamicState
-           The thermodynamic state to use to propagate dynamics.
+        thermodynamic_state : openmmtools.states.CompoundThermodynamicState
+           The compound thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
         """
@@ -161,158 +178,161 @@ class NonequilibriumSwitchingMove(mcmc.BaseIntegratorMove):
         This updates the SamplerState after the integration. It also logs
         benchmarking information through the utils.Timer class.
 
-        Parameters
-        ----------
-        thermodynamic_state : openmmtools.states.ThermodynamicState
-           The thermodynamic state to use to propagate dynamics.
-        sampler_state : openmmtools.states.SamplerState
-           The sampler state to apply the move to. This is modified.
-
-        Returns
-        -------
-        sampler_state : openmmtools.states.SamplerState
-            The updated sampler state from the context after switching is conducted
-
         See Also
         --------
         openmmtools.utils.Timer
         """
+        start = time.time()
+        thermodynamic_state = copy.deepcopy(thermodynamic_state)
+        sampler_state = copy.deepcopy(sampler_state)
+
         # Check if we have to use the global cache.
         if self.context_cache is None:
             context_cache = cache.global_context_cache
         else:
             context_cache = self.context_cache
 
-        context, integrator = context_cache.get_context(thermodynamic_state, self._integrator)
+        #define the lambda schedule (linear)
+        if self._direction == 'forward':
+            start_lambda = 0.0
+            end_lambda = 1.0
+        elif self._direction == 'reverse':
+            start_lambda = 1.0
+            end_lambda = 0.0
+        else:
+            raise Error(f"direction must be 'forward' or 'reverse'")
 
-        sampler_state.apply_to_context(context, ignore_velocities=False)
+        # define the lambda_schedule
+        lambda_schedule = np.linspace(start_lambda, end_lambda, self._nsteps + 1)[1:]
+
+        # # set the thermodynamic state
+        # thermodynamic_state.set_alchemical_parameters(start_lambda)
+
+        context, integrator = context_cache.get_context(thermodynamic_state, self._integrator)
+        _logger.debug(f"context parameters: {context.getParameters()}")
+        sampler_state.apply_to_context(context)
+        sampler_state.update_from_context(context) #can remove
+        initial_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
+
+        if self._direction == 'forward':
+            assert context.getParameter('lambda_sterics_core') == 0.0, f"Direction was specified as {self._direction} but initial master lambda is defined as {context.getParameter('lambda_sterics_core')}" #lambda_sterics_core maps master_lambda (see lambda_protocol.py)
+        elif self._direction == 'reverse':
+            assert context.getParameter('lambda_sterics_core') == 1.0, f"Direction was specified as {self._direction} but initial master lambda is defined as {context.getParameter('lambda_sterics_core')}" #lambda_sterics_core maps master_lambda (see lambda_protocol.py)
+
 
         # reset the integrator after it is bound to a context and before annealing
         integrator.reset()
 
-        self._cumulative_work[0] = integrator.get_protocol_work(dimensionless=True)
+        #save the initial configuration
+        if self._save_configuration:
+            if self._subset_atoms is None:
+                self._trajectory_positions.append(sampler_state.positions[:, :].value_in_unit_system(unit.md_unit_system))
+            else:
+                self._trajectory_positions.append(sampler_state.positions[self._subset_atoms, :].value_in_unit_system(unit.md_unit_system))
 
-        if self._cumulative_work[0] != 0.0:
-            raise RuntimeError("The initial cumulative work after reset was not zero.")
+            #get the box angles and lengths
+            a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
+            self._trajectory_box_lengths.append([a, b, c])
+            self._trajectory_box_angles.append([alpha, beta, gamma])
 
-        if self._measure_shadow_work:
-            initial_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
+        self._timers['prepare_neq_switching'] = time.time() - start
 
+        timer_list = []
+        iter_tuple = namedtuple('iter_tuple', ['prep_time', 'step_time', 'save_config_time'])
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
-
-        for iteration in range(self._number_of_step_moves):
+        for iteration, master_lambda in zip(range(self._nsteps), lambda_schedule):
+            _logger.debug(f"\tconducting iteration {iteration} at master lambda {master_lambda}")
             try:
-                integrator.step(self._work_save_interval)
-            except Exception as e:
-                self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
-                raise e
-            self._current_protocol_work = integrator.get_protocol_work(dimensionless=True)
-            self._cumulative_work[iteration+1] = self._current_protocol_work
-            self._protocol_work[iteration+1] = self._cumulative_work[iteration+1] - self._cumulative_work[iteration]
+                prep_start = time.time()
+                old_rp = self._beta * sampler_state.potential_energy
+                thermodynamic_state.set_alchemical_parameters(master_lambda)
+                thermodynamic_state.apply_to_context(context)
 
-            #if we have a trajectory, we'll also write to it
-            if self._save_configuration:
-                sampler_state.update_from_context(context)
+                #we will return the updated system and check the parameters manually:
+                    # parameter_dict = {name: context.getParameter(name) for name in ['lambda_sterics_core', 'lambda_electrostatics_core', 'lambda_sterics_insert', 'lambda_sterics_delete', 'lambda_electrostatics_insert', 'lambda_electrostatics_delete', 'lambda_bonds', 'lambda_angles', 'lambda_torsions']}
+                    # _logger.debug(f"thermodynamic state vars: {parameter_dict}")
 
-                #record positions for writing to trajectory
-                #we need to check whether the user has requested to subset atoms (excluding water, for instance)
+                sampler_state.update_from_context(context, ignore_velocities=True)
+                new_rp = self._beta * sampler_state.potential_energy
+                work = new_rp - old_rp
+                self._cumulative_work += work
+                _logger.debug(f"\twork: {work}")
+                prep_time = time.time() - prep_start
 
-                if self._subset_atoms is None:
-                    self._trajectory_positions[iteration, :, :] = sampler_state.positions[:, :].value_in_unit_system(unit.md_unit_system)
+
+                if not master_lambda == end_lambda: #we don't have to propagate dynamics if it is the last iteration
+                    step_start = time.time()
+                    integrator.step(1)
+                    sampler_state.update_from_context(context)
+                    step_time = time.time() - step_start
+
+
+                if (iteration+1) % self._work_save_interval == 0: #we save the protocol work if the remainder is zero
+                    _logger.debug(f"\tconducting work save")
+                    self._protocol_work.append(self._cumulative_work)
+                    timer_list.append((prep_time, step_time))
+
+                    #if we have a trajectory, we'll also write to it
+                    save_start = time.time()
+                    if self._save_configuration:
+
+                        #record positions for writing to trajectory
+                        #we need to check whether the user has requested to subset atoms (excluding water, for instance)
+
+                        if self._subset_atoms is None:
+                            self._trajectory_positions.append(sampler_state.positions[:, :].value_in_unit_system(unit.md_unit_system))
+                        else:
+                            self._trajectory_positions.append(sampler_state.positions[self._subset_atoms, :].value_in_unit_system(unit.md_unit_system))
+
+                        #get the box angles and lengths
+                        a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
+                        self._trajectory_box_lengths.append([a, b, c])
+                        self._trajectory_box_angles.append([alpha, beta, gamma])
+
+                    save_time = time.time() - save_start
+
+                    timer_list.append(iter_tuple(prep_time = prep_time, step_time = step_time, save_config_time = save_time))
+
                 else:
-                    self._trajectory_positions[iteration, :, :] = sampler_state.positions[self._subset_atoms, :].value_in_unit_system(unit.md_unit_system)
+                    _logger.debug(f"\tomitting work save (work save interval is {self._work_save_interval} but iteration is {iteration+1})")
+                    _logger.debug(f"\t result of calc is {(iteration+1) % self._work_save_interval}")
 
-                #get the box angles and lengths
-                a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
-                self._trajectory_box_lengths[iteration, :] = [a, b, c]
-                self._trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
 
-        sampler_state.update_from_context(context)
+
+            except Exception as e:
+                _logger.debug(f"old_rp: {old_rp}, new_rp: {new_rp}")
+                _logger.debug(f"trajectory positions: {np.array(self._trajectory_positions)}")
+                _logger.debug(f"cumulative work: {self._cumulative_work}")
+                raise e
+                #self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
+
+
+        self._timers['neq_switching'] = timer_list
+
+        # assertion for full lambda protocol
+        if self._direction == 'forward':
+            assert master_lambda == 1.0, f"Direction is forward but the end of the protocol returned a master lambda of {master_lambda}"
+            assert context.getParameter('lambda_sterics_core') == 1.0, f"Direction was specified as {self._direction} but final master lambda is defined as {context.getParameter('lambda_sterics_core')}"
+        elif self._direction == 'reverse':
+            assert master_lambda == 0.0, f"Direction is reverse but the end of the protocol returned a master lambda of {master_lambda}"
+            assert context.getParameter('lambda_sterics_core') == 0.0, f"Direction was specified as {self._direction} but initial master lambda is defined as {context.getParameter('lambda_sterics_core')}"
+
 
         if self._save_configuration:
-            self._trajectory = md.Trajectory(self._trajectory_positions, self._topology, unitcell_lengths=self._trajectory_box_lengths, unitcell_angles=self._trajectory_box_angles)
-
-        self._total_work = self._cumulative_work[-1]
+            self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
 
         if self._measure_shadow_work:
             total_heat = integrator.get_heat(dimensionless=True)
             final_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
             total_energy_change = final_energy - initial_energy
-            self._shadow_work = total_energy_change - (total_heat + self._cumulative_work[-1])
-            self._total_work += self._shadow_work
+            self._shadow_work = total_energy_change - (total_heat + self._cumulative_work)
         else:
             self._shadow_work = 0.0
 
 
-    def reset(self):
-        """
-        Reset the work statistics on the associated ContextCache integrator.
-
-        Parameters
-        ----------
-        thermodynamic_state : openmmtools.states.ThermodynamicState
-            the thermodynamic state for which this integrator is cached.
-        """
-        self._integrator.reset()
-        self._current_protocol_work = 0.0
-
-    @property
-    def current_total_work(self):
-        """
-        Get the current total work in kT
-
-        Returns
-        -------
-        current_total_work : float
-            the current total work performed by this move since the last reset()
-        """
-        return self._current_total_work
-
-    @property
-    def trajectory(self):
-        if self._save_configuration is None:
-            raise NoTrajectoryException("Tried to access a trajectory without providing a topology.")
-        elif self._trajectory is None:
-            raise NoTrajectoryException("Tried to access a trajectory on a move that hasn't been used yet.")
-        else:
-            return self._trajectory
-
-    @property
-    def cumulative_work(self):
-        return self._cumulative_work
-
-    @property
-    def shadow_work(self):
-        if not self._measure_shadow_work:
-            raise ValueError("Can't return shadow work if it isn't being measured")
-        return self._shadow_work
-
-    @property
-    def protocol_work(self):
-        return self._protocol_work
-
-    def __getstate__(self):
-        dictionary = super(NonequilibriumSwitchingMove, self).__getstate__()
-        dictionary['integrator'] = pickle.dumps(self._integrator)
-        dictionary['current_total_work'] = self.current_total_work
-        dictionary['measure_shadow_work'] = self._integrator._measure_shadow_work
-        dictionary['measure_heat'] = self._integrator._measure_heat
-        dictionary['metropolized_integrator'] = self._integrator._metropolized_integrator
-        return dictionary
-
-    def __setstate__(self, serialization):
-        super(NonequilibriumSwitchingMove, self).__setstate__(serialization)
-        self._current_total_work = serialization['current_total_work']
-        self._integrator = pickle.loads(serialization['integrator'])
-        integrators.RestorableIntegrator.restore_interface(self._integrator)
-        self._integrator._measure_shadow_work = serialization['measure_shadow_work']
-        self._integrator._measure_heat = serialization['measure_heat']
-        self._integrator._metropolized_integrator = serialization['metropolized_integrator']
-
-
-def run_protocol(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState,
-                 alchemical_functions: dict, topology: md.Topology, nstep_neq: int = 1000, work_save_interval: int = 1, splitting: str='O { V R H R V } O',
-                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds, measure_shadow_work: bool=False) -> tuple:
+def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilibrium_result: EquilibriumResult,
+                 direction: str, topology: md.Topology, nsteps_neq: int = 1000, work_save_interval: int = 1, splitting: str='V R O R V',
+                 atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds, measure_shadow_work: bool=False, timer: bool=True) -> dict:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
     that this will perform an entire protocol, that is, switching lambda completely from 0 to 1, in increments specified
@@ -320,19 +340,19 @@ def run_protocol(thermodynamic_state: states.ThermodynamicState, sampler_state: 
 
     Parameters
     ----------
-    thermodynamic_state : openmmtools.states.ThermodynamicState
+    thermodynamic_state : openmmtools.states.CompoundThermodynamicState
         The thermodynamic state at which to run the protocol
-    sampler_state : openmmtools.states.SamplerState
-        The sampler state from which to run the protocol; this should be an equilibrium sample
-    alchemical_functions : dict
-        The alchemical functions to use for switching
+    equilibrium_result : EquilibriumResult
+        the equilibrium result from which the sampler state will be extracted
+    direction : str
+        whether the protocol runs 'forward' or 'reverse'
     topology : mdtraj.Topology
         An MDtraj topology for the system to generate trajectories
-    nstep_neq : int
+    nsteps_neq : int
         The number of nonequilibrium steps in the protocol
     work_save_interval : int
         How often to write the work and, if requested, configurations
-    splitting : str, default 'O { V R H R V } O'
+    splitting : str, default 'V R O R V'
         The splitting string to use for the Langevin integration
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
@@ -353,6 +373,13 @@ def run_protocol(thermodynamic_state: states.ThermodynamicState, sampler_state: 
     shadow_work : float
         the shadow work accumulated by the discrete integrator
     """
+    timers = {}
+
+    # creating copies in case computation is parallelized
+    thermodynamic_state = copy.deepcopy(thermodynamic_state)
+    sampler_state = copy.deepcopy(equilibrium_result.sampler_state)
+
+
     #get the temperature needed for the simulation
     temperature = thermodynamic_state.temperature
 
@@ -365,10 +392,10 @@ def run_protocol(thermodynamic_state: states.ThermodynamicState, sampler_state: 
         atom_indices = atom_indices_to_save
 
     _logger.debug(f"Instantiating NonequilibriumSwitchingMove class")
-    ne_mc_move = NonequilibriumSwitchingMove(alchemical_functions = alchemical_functions,
+    ne_mc_move = NonequilibriumSwitchingMove(nsteps = nsteps_neq,
+                                             direction = direction,
                                              splitting = splitting,
                                              temperature = temperature,
-                                             nsteps_neq = nstep_neq,
                                              timestep = timestep,
                                              work_save_interval = work_save_interval,
                                              top = subset_topology,
@@ -401,11 +428,25 @@ def run_protocol(thermodynamic_state: states.ThermodynamicState, sampler_state: 
                 write_nonequilibrium_trajectory(trajectory, trajectory_filename)
                 _logger.debug(f"successfully wrote nonequilibrium trajectory to {trajectory_filename}")
 
-    return (cumulative_work, protocol_work, shadow_work)
+    if not timer:
+        timers = {}
+    else:
+        timers = ne_mc_move._timers
 
-def run_equilibrium(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState,
+    neq_result = NonequilibriumResult(sampler_state = sampler_state,
+                                      protocol_work = protocol_work,
+                                      cumulative_work = cumulative_work,
+                                      shadow_work = shadow_work,
+                                      timers = timers)
+
+    return neq_result
+
+def run_equilibrium(thermodynamic_state: states.CompoundThermodynamicState, eq_result: EquilibriumResult,
                     nsteps_equil: int, topology: md.Topology, n_iterations : int,
-                    atom_indices_to_save: List[int] = None, trajectory_filename: str = None, splitting: str="V R O R V", timestep: unit.Quantity=1.0*unit.femtoseconds) -> EquilibriumResult:
+                    atom_indices_to_save: List[int] = None, trajectory_filename: str = None,
+                    splitting: str="V R O R V", timestep: unit.Quantity=1.0*unit.femtoseconds,
+                    max_size: float=1024*1e3, timer: bool=False, _minimize: bool = False, file_iterator: int = 0,
+                    nonalchemical_perturbation_args: dict = None) -> EquilibriumResult:
     """
     Run n_iterations*nsteps_equil integration steps (likely at the lambda 0 state).  n_iterations mcmc moves are conducted in the initial equilibration, returning n_iterations
     reduced potentials.  This is the guess as to the burn-in time for a production.  After which, a single mcmc move of nsteps_equil
@@ -414,10 +455,10 @@ def run_equilibrium(thermodynamic_state: states.ThermodynamicState, sampler_stat
 
     Parameters
     ----------
-    thermodynamic_state : openmmtools.states.ThermodynamicState
+    thermodynamic_state : openmmtools.states.CompoundThermodynamicState
         The thermodynamic state (including context parameters) that should be used
-    sampler_state : openmmtools.states.SamplerState
-        The sampler state (which wraps box vectors and positions) to be equilibrated
+    eq_result : EquilibriumResult
+        The EquilibriumResult from which the sampler_state will be extracted
     nsteps_equil : int
         The number of equilibrium steps that a move should make when apply is called
     topology : mdtraj.Topology
@@ -431,54 +472,140 @@ def run_equilibrium(thermodynamic_state: states.ThermodynamicState, sampler_stat
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
     trajectory_filename : str, optional, default None
         Full filepath of trajectory files. If none, trajectory files are not written.
+    max_size: float
+        maximum size of the trajectory numpy array allowable until it is written to disk
+    timer: bool, default False
+        whether to time all parts of the equilibrium run
+    _minimize : bool, default False
+        whether to minimize the sampler_state before conducting equilibration
+    file_iterator : int, default 0
+        which index to begin writing files
     """
+    timers = {}
+    file_numsnapshots = []
     _logger.debug(f"running equilibrium")
+
+    # creating copies in case computation is parallelized
+    if timer: start = time.time()
+    thermodynamic_state = copy.deepcopy(thermodynamic_state)
+    sampler_state = copy.deepcopy(eq_result.sampler_state)
+    if timer: timers['copy_state'] = time.time() - start
+
+    if _minimize:
+        _logger.debug(f"conducting minimization; (minimize = {_minimize})")
+        if timer: start = time.time()
+        minimize(thermodynamic_state, sampler_state)
+        if timer: timers['minimize'] = time.time() - start
+
     #get the atom indices we need to subset the topology and positions
+    if timer: start = time.time()
     if atom_indices_to_save is None:
         atom_indices = list(range(topology.n_atoms))
         subset_topology = topology
     else:
         subset_topology = topology.subset(atom_indices_to_save)
         atom_indices = atom_indices_to_save
+    if timer: timers['define_topology'] = time.time() - start
 
     n_atoms = subset_topology.n_atoms
 
     #construct the MCMove:
-    mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=nsteps_equil, splitting=splitting)
+    mc_move = mcmc.LangevinSplittingDynamicsMove(n_steps=nsteps_equil, splitting=splitting, timestep = timestep)
     mc_move.n_restart_attempts = 10
 
     #create a numpy array for the trajectory
-    #reduced_potentials = []
-    trajectory_positions = np.zeros([n_iterations, n_atoms, 3])
-    trajectory_box_lengths = np.zeros([n_iterations, 3])
-    trajectory_box_angles = np.zeros([n_iterations, 3])
+    trajectory_positions, trajectory_box_lengths, trajectory_box_angles = list(), list(), list()
+    reduced_potentials = list()
 
     #loop through iterations and apply MCMove, then collect positions into numpy array
     _logger.debug(f"conducting {n_iterations} of production")
+    if timer: eq_times = []
+
+    init_file_iterator = file_iterator
     for iteration in tqdm.trange(n_iterations):
+        if timer: start = time.time()
         _logger.debug(f"\tconducting iteration {iteration}")
         mc_move.apply(thermodynamic_state, sampler_state)
-        #reduced_potential = compute_reduced_potential(thermodynamic_state, sampler_state)
-        #reduced_potentials.append(reduced_potential)
 
-        trajectory_positions[iteration, :,:] = sampler_state.positions[atom_indices, :].value_in_unit_system(unit.md_unit_system)
+        #add reduced potential to reduced_potential_final_frame_list
+        reduced_potentials.append(thermodynamic_state.reduced_potential(sampler_state))
+
+        #trajectory_positions[iteration, :,:] = sampler_state.positions[atom_indices, :].value_in_unit_system(unit.md_unit_system)
+        trajectory_positions.append(sampler_state.positions[atom_indices, :].value_in_unit_system(unit.md_unit_system))
 
         #get the box lengths and angles
         a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
-        trajectory_box_lengths[iteration, :] = [a, b, c]
-        trajectory_box_angles[iteration, :] = [alpha, beta, gamma]
+        trajectory_box_lengths.append([a,b,c])
+        trajectory_box_angles.append([alpha, beta, gamma])
+
+        #if tajectory positions is too large, we have to write it to disk and start fresh
+        if np.array(trajectory_positions).nbytes > max_size:
+            trajectory = md.Trajectory(np.array(trajectory_positions), subset_topology, unitcell_lengths=np.array(trajectory_box_lengths), unitcell_angles=np.array(trajectory_box_angles))
+            if trajectory_filename is not None:
+                new_filename = trajectory_filename[:-2] + f'{file_iterator:04}' + '.h5'
+                file_numsnapshots.append((new_filename, len(trajectory_positions)))
+                file_iterator +=1
+                write_equilibrium_trajectory(trajectory, new_filename)
+
+                #re_initialize the trajectory positions, box_lengths, box_angles
+                trajectory_positions, trajectory_box_lengths, trajectory_box_angles = list(), list(), list()
+
+        if timer: eq_times.append(time.time() - start)
+
+    if timer: timers['run_eq'] = eq_times
     _logger.debug(f"production done")
 
-
-    #construct trajectory object:
-    trajectory = md.Trajectory(trajectory_positions, subset_topology, unitcell_lengths=trajectory_box_lengths, unitcell_angles=trajectory_box_angles)
-
-    #get the reduced potential from the final frame for endpoint perturbations
-    reduced_potential_final_frame = thermodynamic_state.reduced_potential(sampler_state)
-
     #If there is a trajectory filename passed, write out the results here:
+    if timer: start = time.time()
     if trajectory_filename is not None:
-        write_equilibrium_trajectory(trajectory, trajectory_filename)
+        #construct trajectory object:
+        if trajectory_positions != list():
+            #if it is an empty list, then the last iteration satistifed max_size and wrote the trajectory to disk;
+            #in this case, we can just skip this
+            trajectory = md.Trajectory(np.array(trajectory_positions), subset_topology, unitcell_lengths=np.array(trajectory_box_lengths), unitcell_angles=np.array(trajectory_box_angles))
+            if file_iterator == init_file_iterator: #this means that no files have been written yet
+                new_filename = trajectory_filename[:-2] + f'{file_iterator:04}' + '.h5'
+                file_numsnapshots.append((new_filename, len(trajectory_positions)))
+            else:
+                new_filename = trajectory_filename[:-2] + f'{file_iterator+1:04}' + '.h5'
+                file_numsnapshots.append((new_filename, len(trajectory_positions)))
+            write_equilibrium_trajectory(trajectory, new_filename)
+
+    if timer: timers['write_traj'] = time.time() - start
+
+    if timer: start = time.time()
+    if nonalchemical_perturbation_args != None:
+        #then we will conduct a perturbation on the given sampler state with the appropriate arguments
+        valence_energy, nonalchemical_reduced_potential, hybrid_reduced_potential = compute_nonalchemical_perturbation(nonalchemical_perturbation_args['hybrid_thermodynamic_states'][0],
+                                                                                                                       nonalchemical_perturbation_args['_endpoint_growth_thermostates'][0],
+                                                                                                                       sampler_state,
+                                                                                                                       nonalchemical_perturbation_args['factory'],
+                                                                                                                       nonalchemical_perturbation_args['nonalchemical_thermostates'][0],
+                                                                                                                       nonalchemical_perturbation_args['lambdas'][0])
+        alt_valence_energy, alt_nonalchemical_reduced_potential, alt_hybrid_reduced_potential = compute_nonalchemical_perturbation(nonalchemical_perturbation_args['hybrid_thermodynamic_states'][1],
+                                                                                                                       nonalchemical_perturbation_args['_endpoint_growth_thermostates'][1],
+                                                                                                                       sampler_state,
+                                                                                                                       nonalchemical_perturbation_args['factory'],
+                                                                                                                       nonalchemical_perturbation_args['nonalchemical_thermostates'][1],
+                                                                                                                       nonalchemical_perturbation_args['lambdas'][1])
+        nonalch_perturbations = {'valence_energies': (valence_energy, alt_valence_energy),
+                                 'nonalchemical_reduced_potentials': (nonalchemical_reduced_potential, alt_nonalchemical_reduced_potential),
+                                 'hybrid_reduced_potentials': (hybrid_reduced_potential, alt_hybrid_reduced_potential)}
+    else:
+        nonalch_perturbations = {}
+
+    if timer: timers['perturbation'] = time.time() - start
+
+    if not timer:
+        timers = {}
+
+    equilibrium_result = EquilibriumResult(sampler_state = sampler_state,
+                                           reduced_potentials = reduced_potentials,
+                                           files = file_numsnapshots,
+                                           timers = timers,
+                                           nonalchemical_perturbations = nonalch_perturbations)
+
+    return equilibrium_result
 
 
 
@@ -486,6 +613,7 @@ def minimize(thermodynamic_state: states.ThermodynamicState, sampler_state: stat
              max_iterations: int=100) -> states.SamplerState:
     """
     Minimize the given system and state, up to a maximum number of steps.
+    This does not return a copy of the samplerstate; it is simply an update-in-place.
 
     Parameters
     ----------
@@ -641,5 +769,6 @@ def compute_timeseries(reduced_potentials: np.array) -> list:
     A_t_equil = reduced_potentials[t0:]
     uncorrelated_indices = timeseries.subsampleCorrelatedData(A_t_equil, g=g)
     A_t = A_t_equil[uncorrelated_indices]
+    full_uncorrelated_indices = [i+t0 for i in uncorrelated_indices]
 
-    return [t0, g, Neff_max, A_t]
+    return [t0, g, Neff_max, A_t, full_uncorrelated_indices]
