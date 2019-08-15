@@ -652,16 +652,20 @@ class NonequilibriumSwitchingFEP(object):
         """
         #Specific to LSF clusters
         # NOTE: assume that the
+        _logger.debug(f"instantiating NonequilibriumSwitchingFEP...")
         from dask_jobqueue import LSFCluster
         self.cluster = LSFCluster()
         self._adapt = adapt
         self._gpus = gpus
 
         if self._adapt:
+            _logger.debug(f"adapting cluster from 1 to {self._gpus} gpus")
             self.cluster.adapt(minimum = 1, maximum = self._gpus)
         else:
+            _logger.debug(f"scaling cluster to {self._gpus} gpus")
             self.cluster.scale(self._gpus)
 
+        _logger.debug(f"scheduling cluster with client")
         self.client = distributed.Client(self.cluster)
 
         # construct the hybrid topology factory object
@@ -669,6 +673,7 @@ class NonequilibriumSwitchingFEP(object):
         self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, neglected_new_angle_terms, neglected_old_angle_terms)
         self.geometry_engine = geometry_engine
         self._ncmc_save_interval = ncmc_nsteps if not ncmc_save_interval else ncmc_save_interval
+        _logger.debug(f"ncmc save interval set as {self._ncmc_save_interval}")
 
         #we have to make sure that there is no remainder from ncmc_nsteps % ncmc_save_interval
         try:
@@ -1009,8 +1014,9 @@ class NonequilibriumSwitchingFEP(object):
         init_eq_results = {_lambda: EquilibriumResult(sampler_state = self._sampler_states[_lambda], reduced_potentials = [], files = [], timers = {}, nonalchemical_perturbations = {}) for _lambda in endstates}
 
         # run a round of equilibrium
+        _logger.debug(f"iterating through endstates to submit equilibrium jobs")
         for state in endstates: #iterate through the specified endstates
-            _logger.debug(f"equilibrating lambda state {state}")
+            _logger.debug(f"\tequilibrating lambda state {state}")
             if self._write_traj:
                 _logger.debug(f"\twriting traj to {self._trajectory_filename[state]}")
                 equilibrium_trajectory_filename = self._trajectory_filename[state]
@@ -1019,13 +1025,14 @@ class NonequilibriumSwitchingFEP(object):
                 equilibrium_trajectory_filename = None
 
             if self._eq_dict[state] == []:
-                _logger.debug(f"\t\tself._eq_dict[{state}] is empty; initializing file_iterator at 0 ")
+                _logger.debug(f"\tself._eq_dict[{state}] is empty; initializing file_iterator at 0 ")
                 file_iterator = 0
             else:
                 last_file_num = int(self._eq_dict[state][-1][0][-7:-3])
-                _logger.debug(f"\t\tlast file number: {last_file_num}")
+                _logger.debug(f"\tlast file number: {last_file_num}; initiating file iterator as {last_file_num + 1}")
                 file_iterator = last_file_num + 1
 
+            _logger.debug(f"\tsubmitting run_equilibrium task")
             eq_result = self.client.submit(feptasks.run_equilibrium, thermodynamic_state = self._hybrid_thermodynamic_states[state],
                                                eq_result = init_eq_results[state],
                                                nsteps_equil = self._n_equil_steps,
@@ -1039,27 +1046,35 @@ class NonequilibriumSwitchingFEP(object):
                                                timer = timer,
                                                _minimize = minimize,
                                                file_iterator = file_iterator)
-
+            _logger.debug(f"\t collecting task future into eq_result_collector[{state}]")
             eq_result_collector[state] = eq_result
             # self._eq_dict[state].extend(eq_result.files)
             # self._eq_dict[f"{state}_reduced_potentials"].extend(eq_result.reduced_potentials)
             # sampler_states.append(eq_result.sampler_state)
 
+        _logger.debug(f"finished submitting tasks; collecting...")
         for state in endstates:
+            _logger.debug(f"\tcomputing equilibrium task future for state = {state}; collecting files, reduced_potentials, sampler_state, and timers")
             eq_result_collected = eq_result_collector[state].result()
             self._eq_dict[state].extend(eq_result_collected.files)
             self._eq_dict[f"{state}_reduced_potentials"].extend(eq_result_collected.reduced_potentials)
             self._sampler_states[state] = eq_result_collected.sampler_state
             self._eq_timers[state].append(eq_result_collected.timers)
 
+        _logger.debug(f"collections complete.")
         if decorrelate: # if we want to decorrelate all sample
+            _logger.debug(f"decorrelating data")
             for state in endstates:
+                _logger.debug(f"\tdecorrelating lambda = {state} data.")
                 traj_filename = self._trajectory_filename[state]
                 if os.path.exists(traj_filename[:-2] + f'0000' + '.h5'):
+                    _logger.debug(f"\tfound traj filename: {traj_filename[:-2] + f'0000' + '.h5'}; proceeding...")
                     [t0, g, Neff_max, A_t, uncorrelated_indices] = feptasks.compute_timeseries(np.array(self._eq_dict[f"{state}_reduced_potentials"]))
+                    _logger.debug(f"\tt0: {t0}; Neff_max: {Neff_max}; uncorrelated_indices: {uncorrelated_indices}")
                     self._eq_dict[f"{state}_decorrelated"] = uncorrelated_indices
 
                     #now we just have to turn the file tuples into an array
+                    _logger.debug(f"\treorganizing decorrelated data; files w/ num_snapshots are: {self._eq_dict[state]}")
                     iterator, corrected_dict = 0, {}
                     for tupl in self._eq_dict[state]:
                         new_list = [i + iterator for i in range(tupl[1])]
@@ -1067,8 +1082,7 @@ class NonequilibriumSwitchingFEP(object):
                         decorrelated_list = [i for i in new_list if i in uncorrelated_indices]
                         corrected_dict[tupl[0]] = decorrelated_list
                     self._eq_files_dict[state] = corrected_dict
-
-        return eq_result
+                    _logger.debug(f"\t corrected_dict for state {state}: {corrected_dict}")
 
 
     def pull_trajectory_snapshot(self, endstate):
