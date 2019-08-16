@@ -861,7 +861,8 @@ class NonequilibriumSwitchingFEP(object):
                                                 '_endpoint_growth_thermostates': [self._endpoint_growth_thermostates[_lambda_rev], self._endpoint_growth_thermostates[_lambda]],
                                                 'factory': self._factory,
                                                 'nonalchemical_thermostates': [self._nonalchemical_thermodynamic_states[_lambda], self._nonalchemical_thermodynamic_states[_lambda_rev]],
-                                                'lambdas': start}
+                                                'lambdas': [_lambda, _lambda_rev]}
+            _logger.debug(f"\tnonalchemical_perturbation_args for lambda_start = {_lambda}, lambda_end = {_lambda_rev}: {nonalchemical_perturbation_args}")
             nonalchemical_perturbation_args_list[_lambda] = nonalchemical_perturbation_args
 
         for i in range(n_iterations): #iterate forward and/or backward n_iterations times
@@ -885,14 +886,6 @@ class NonequilibriumSwitchingFEP(object):
                 _logger.debug(f"\t\tconducting equilibrium run")
 
                 file_iterators = {_lambda: 0 if self._eq_dict[_lambda] == [] else 1 + int(self._eq_dict[_lambda][-1][0][-7:-3]) for _lambda in start}
-                # for l in start:
-                #     if self._eq_dict[l] == []:
-                #         _logger.debug(f"\t\tself._eq_dict[{l}] is empty; initializing file_iterator at 0 ")
-                #         file_iterators.append(0)
-                #     else:
-                #         last_file_num = int(self._eq_dict[l][-1][0][-7:-3])
-                #         _logger.debug(f"\t\tlast file number: {last_file_num}")
-                #         file_iterators.append(last_file_num + 1)
 
                 for index, _lambda in enumerate(start):
                     eq_results_futures[_lambda] = self.client.submit(feptasks.run_equilibrium,
