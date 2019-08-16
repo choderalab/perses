@@ -50,9 +50,9 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_sterics_delete = _LambdaParameter('lambda_sterics_delete')
     lambda_electrostatics_insert = _LambdaParameter('lambda_electrostatics_insert')
     lambda_electrostatics_delete = _LambdaParameter('lambda_electrostatics_delete')
-    lambda_bonds = _LambdaParameter('lambda_bonds')
-    lambda_angles = _LambdaParameter('lambda_angles')
-    lambda_torsions = _LambdaParameter('lambda_torsions')
+    # lambda_bonds = _LambdaParameter('lambda_bonds')
+    # lambda_angles = _LambdaParameter('lambda_angles')
+    # lambda_torsions = _LambdaParameter('lambda_torsions')
 
     def set_alchemical_parameters(self, master_lambda):
        """Set each lambda value according to the lambda_functions protocol.
