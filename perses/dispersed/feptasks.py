@@ -128,6 +128,7 @@ class NonequilibriumSwitchingMove():
 
         self._nsteps = nsteps
         self._beta = 1.0 / (kB*temperature)
+        self._temperature = temperature
 
         if not work_save_interval:
             self._work_save_interval = self._nsteps
@@ -209,8 +210,8 @@ class NonequilibriumSwitchingMove():
         # thermodynamic_state.set_alchemical_parameters(start_lambda)
 
         context, integrator = context_cache.get_context(thermodynamic_state, self._integrator)
-        _logger.debug(f"context parameters: {context.getParameters()}")
-        sampler_state.apply_to_context(context)
+        sampler_state.apply_to_context(context, ignore_velocities=True)
+        context.setVelocitiesToTemperature(thermodynamic_state.temperature) #randomize velocities @ temp
         sampler_state.update_from_context(context) #can remove
         initial_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
 
@@ -247,11 +248,7 @@ class NonequilibriumSwitchingMove():
                 old_rp = self._beta * sampler_state.potential_energy
                 thermodynamic_state.set_alchemical_parameters(master_lambda)
                 thermodynamic_state.apply_to_context(context)
-
-                #we will return the updated system and check the parameters manually:
-                    # parameter_dict = {name: context.getParameter(name) for name in ['lambda_sterics_core', 'lambda_electrostatics_core', 'lambda_sterics_insert', 'lambda_sterics_delete', 'lambda_electrostatics_insert', 'lambda_electrostatics_delete', 'lambda_bonds', 'lambda_angles', 'lambda_torsions']}
-                    # _logger.debug(f"thermodynamic state vars: {parameter_dict}")
-
+                #context.setVelocitiesToTemperature(thermodynamic_state.temperature) #resample velocities
                 sampler_state.update_from_context(context, ignore_velocities=True)
                 new_rp = self._beta * sampler_state.potential_energy
                 work = new_rp - old_rp
@@ -263,8 +260,10 @@ class NonequilibriumSwitchingMove():
                 if not master_lambda == end_lambda: #we don't have to propagate dynamics if it is the last iteration
                     step_start = time.time()
                     integrator.step(1)
-                    sampler_state.update_from_context(context)
+                    sampler_state.update_from_context(context, ignore_velocities=True)
                     step_time = time.time() - step_start
+                else:
+                    sampler_state.update_from_context(context) #don't ignore velocities
 
 
                 if (iteration+1) % self._work_save_interval == 0: #we save the protocol work if the remainder is zero
