@@ -663,7 +663,7 @@ class NonequilibriumSwitchingFEP(object):
 
             if self._adapt:
                 _logger.debug(f"adapting cluster from 1 to {self._gpus} gpus")
-                self.cluster.adapt(minimum = 1, maximum = self._gpus)
+                self.cluster.adapt(minimum = 4, maximum = self._gpus)
             else:
                 _logger.debug(f"scaling cluster to {self._gpus} gpus")
                 self.cluster.scale(self._gpus)
