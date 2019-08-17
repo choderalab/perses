@@ -7,31 +7,78 @@ from openmmtools.alchemy import AlchemicalState
 
 
 class LambdaProtocol():
+
+    default_functions = {'lambda_sterics_core':
+                         lambda x: x,
+                         'lambda_electrostatics_core':
+                         lambda x: x,
+                         'lambda_sterics_insert':
+                         lambda x: 2.0 * x if x < 0.5 else 1.0,
+                         'lambda_sterics_delete':
+                         lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
+                         'lambda_electrostatics_insert':
+                         lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
+                         'lambda_electrostatics_delete':
+                         lambda x: 2.0 * x if x < 0.5 else 1.0,
+                         'lambda_bonds':
+                         lambda x: x,
+                         'lambda_angles':
+                         lambda x: x,
+                         'lambda_torsions':
+                         lambda x: x
+                         }
     # lambda components for each component,
     # all run from 0 -> 1 following master lambda
     def __init__(self, type='default', protocol=None):
         self.type = type
-        if protocol is None:
+        self.protocol = protocol
+        if self.protocol is None:
             if self.type == 'default':
-                self.functions = {'lambda_sterics_core':
-                                  lambda x: x,
-                                  'lambda_electrostatics_core':
-                                  lambda x: x,
-                                  'lambda_sterics_insert':
-                                  lambda x: 2.0 * x if x < 0.5 else 1.0,
-                                  'lambda_sterics_delete':
-                                  lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
-                                  'lambda_electrostatics_insert':
-                                  lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
-                                  'lambda_electrostatics_delete':
-                                  lambda x: 2.0 * x if x < 0.5 else 1.0,
-                                  'lambda_bonds':
-                                  lambda x: x,
-                                  'lambda_angles':
-                                  lambda x: x,
-                                  'lambda_torsions':
-                                  lambda x: x
-                                  }
+                self.functions = LambdaProtocol.default_functions
+
+
+        self._validate_functions()
+
+    def _validate_functions(self,n=10):
+        """Ensures that all the lambda functions adhere to the rules:
+            - must begin at 0.
+            - must finish at 1.
+            - must be monotonically increasing
+
+        Parameters
+        ----------
+        n : int, default 10
+            number of grid points used to check monotonicity
+
+        Returns
+        -------
+
+        """
+        # the individual lambda functions that must be defined for
+        required_functions = list(LambdaProtocol.default_functions.keys())
+
+        for function in required_functions:
+            if function in self.functions:
+                continue
+            else:
+                print('function {function} is missing from lambda_functions')
+                print('adding default {function} from LambdaProtocol.default_functions')
+                self.functions[function] = LambdaProtocol.default_functions[function]
+            # assert that the function starts and ends at 0 and 1 respectively
+            assert (self.functions[function][0.] == 0.
+                    ), 'lambda functions must start at 0'
+            assert (self.functions[function][1.] == 1.
+                    ), 'lambda functions must end at 1'
+
+        # now validatate that it's monotonic
+        global_lambda = np.linspace(0., 1., n)
+        sub_lambda = [self.functions[function][l] for l in global_lambda]
+        difference = np.diff(sub_lambda)
+        assert (all(i >= 0. for i in difference)), 'lambda_schdeule must be monotonically increasing'
+        return
+
+    def get_functions(self):
+        return self.functions
 
 
 class RelativeAlchemicalState(AlchemicalState):
@@ -68,7 +115,7 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_electrostatics_delete = _LambdaParameter('lambda_electrostatics_delete')
 
     def set_alchemical_parameters(self, global_lambda,
-                                  lambda_functions=LambdaProtocol()):
+                                  lambda_protocol=LambdaProtocol()):
        """Set each lambda value according to the lambda_functions protocol.
        The undefined parameters (i.e. those being set to None) remain
        undefined.
@@ -77,6 +124,6 @@ class RelativeAlchemicalState(AlchemicalState):
        lambda_value : float
            The new value for all defined parameters.
        """
-       for parameter_name in lambda_functions:
-           lambda_value = lambda_functions[parameter_name](global_lambda)
+       for parameter_name in lambda_protocol.functions:
+           lambda_value = lambda_protocol.functions[parameter_name](global_lambda)
            setattr(self, parameter_name, lambda_value)
