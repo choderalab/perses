@@ -67,7 +67,7 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_electrostatics_insert = _LambdaParameter('lambda_electrostatics_insert')
     lambda_electrostatics_delete = _LambdaParameter('lambda_electrostatics_delete')
 
-    def set_alchemical_parameters(self, master_lambda,
+    def set_alchemical_parameters(self, global_lambda,
                                   lambda_functions=LambdaProtocol()):
        """Set each lambda value according to the lambda_functions protocol.
        The undefined parameters (i.e. those being set to None) remain
@@ -78,5 +78,5 @@ class RelativeAlchemicalState(AlchemicalState):
            The new value for all defined parameters.
        """
        for parameter_name in lambda_functions:
-           lambda_value = lambda_functions[parameter_name](master_lambda)
+           lambda_value = lambda_functions[parameter_name](global_lambda)
            setattr(self, parameter_name, lambda_value)
