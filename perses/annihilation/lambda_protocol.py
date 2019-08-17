@@ -5,6 +5,35 @@ import logging
 import traceback
 from openmmtools.alchemy import AlchemicalState
 
+
+class LambdaProtocol():
+    # lambda components for each component,
+    # all run from 0 -> 1 following master lambda
+    def __init__(self, type='default', protocol=None):
+        self.type = type
+        if protocol is None:
+            if self.type == 'default':
+                self.functions = {'lambda_sterics_core':
+                                  lambda x: x,
+                                  'lambda_electrostatics_core':
+                                  lambda x: x,
+                                  'lambda_sterics_insert':
+                                  lambda x: 2.0 * x if x < 0.5 else 1.0,
+                                  'lambda_sterics_delete':
+                                  lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
+                                  'lambda_electrostatics_insert':
+                                  lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
+                                  'lambda_electrostatics_delete':
+                                  lambda x: 2.0 * x if x < 0.5 else 1.0,
+                                  'lambda_bonds':
+                                  lambda x: x,
+                                  'lambda_angles':
+                                  lambda x: x,
+                                  'lambda_torsions':
+                                  lambda x: x
+                                  }
+
+
 class RelativeAlchemicalState(AlchemicalState):
     """
     Relative AlchemicalState to handle all lambda parameters required for relative perturbations
@@ -27,19 +56,6 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_electrostatics_insert
     lambda_electrostatics_delete
     """
-    
-    # lambda components for each component, all run from 0 -> 1 following master lambda
-    lambda_functions = {
-        'lambda_sterics_core': lambda x: x,
-        'lambda_electrostatics_core': lambda x: x,
-        'lambda_sterics_insert': lambda x: 2.0*x if x< 0.5 else 1.0,
-        'lambda_sterics_delete': lambda x: 0.0 if x < 0.5 else 2.0*(x-0.5),
-        'lambda_electrostatics_insert': lambda x:0.0 if x < 0.5 else 2.0*(x-0.5),
-        'lambda_electrostatics_delete': lambda x: 2.0*x if x< 0.5 else 1.0,
-        'lambda_bonds': lambda x: x,
-        'lambda_angles': lambda x: x,
-        'lambda_torsions': lambda x: x
-    }
 
     class _LambdaParameter(AlchemicalState._LambdaParameter):
         pass
@@ -51,7 +67,8 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_electrostatics_insert = _LambdaParameter('lambda_electrostatics_insert')
     lambda_electrostatics_delete = _LambdaParameter('lambda_electrostatics_delete')
 
-    def set_alchemical_parameters(self, master_lambda):
+    def set_alchemical_parameters(self, master_lambda,
+                                  lambda_functions=LambdaProtocol()):
        """Set each lambda value according to the lambda_functions protocol.
        The undefined parameters (i.e. those being set to None) remain
        undefined.
@@ -60,6 +77,6 @@ class RelativeAlchemicalState(AlchemicalState):
        lambda_value : float
            The new value for all defined parameters.
        """
-       for parameter_name in self.lambda_functions:
-           lambda_value = self.lambda_functions[parameter_name](master_lambda)
+       for parameter_name in lambda_functions:
+           lambda_value = lambda_functions[parameter_name](master_lambda)
            setattr(self, parameter_name, lambda_value)
