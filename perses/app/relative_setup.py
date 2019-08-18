@@ -597,7 +597,9 @@ class NonequilibriumSwitchingFEP(object):
                  atom_selection="not water", scheduler_address=None, eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
                  neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False, LSF = True, gpus = 2, adapt = False):
         """
-        Create an instance of the NonequilibriumSwitchingFEP driver class
+        Create an instance of the NonequilibriumSwitchingFEP driver class.
+        NOTE : defining self.client and self.cluster renders this class non-pickleable; call self.deactivate_client() to close the cluster/client
+               objects to render this pickleable. 
 
         Parameters
         ----------
