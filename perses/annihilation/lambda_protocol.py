@@ -35,7 +35,25 @@ class LambdaProtocol():
         if self.protocol is None:
             if self.type == 'default':
                 self.functions = LambdaProtocol.default_functions
-
+            elif self.type == 'namd':
+                self.functions {'lambda_sterics_core':
+                                lambda x: x,
+                                'lambda_electrostatics_core':
+                                lambda x: x,
+                                'lambda_sterics_insert':
+                                lambda x: (3. / 2.) * x if x < (2. / 3.) else 1.0,
+                                'lambda_sterics_delete':
+                                lambda x: 0.0 if x < (1. / 3.) else (x - (1. / 3.)) * (3. / 2.),
+                                'lambda_electrostatics_insert':
+                                lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
+                                'lambda_electrostatics_delete':
+                                lambda x: 2.0 * x if x < 0.5 else 1.0,
+                                'lambda_bonds':
+                                lambda x: x,
+                                'lambda_angles':
+                                lambda x: x,
+                                'lambda_torsions':
+                                lambda x: x}
 
         self._validate_functions()
 
@@ -72,7 +90,7 @@ class LambdaProtocol():
 
         # now validatate that it's monotonic
         global_lambda = np.linspace(0., 1., n)
-        sub_lambda = [self.functions[function][l] for l in global_lambda]
+        sub_lambda = [self.functions[function](l) for l in global_lambda]
         difference = np.diff(sub_lambda)
         assert (all(i >= 0. for i in difference)), 'lambda_schdeule must be monotonically increasing'
         return
