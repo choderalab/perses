@@ -757,6 +757,12 @@ class NonequilibriumSwitchingFEP(object):
         self._added_valence_reduced_potentials = {'from_0': [], 'from_1': [], 'to_0': [], 'to_1': []}
         self._alchemical_reduced_potentials = {'from_0': [], 'from_1': [], 'to_0': [], 'to_1': []}
 
+        self._alchemical_reduced_potential_differences = {'forward': [], 'reverse': []}
+        self._nonalchemical_reduced_potential_differences = {0: [], 1: []} # W_f is work from 0(1)_alch to 0(1)_nonalch
+        self._EXP = {'forward': [], 'reverse': [], 0: [], 1: []}
+        self._BAR = []
+
+
         #instantiate nonequilibrium work dicts: the keys indicate from which equilibrium thermodynamic state the neq_switching is conducted FROM (as opposed to TO)
         self._nonequilibrium_cum_work = {'forward': [], 'reverse': []}
         self._nonequilibrium_prot_work = {'forward': [], 'reverse': []}
@@ -1143,7 +1149,7 @@ class NonequilibriumSwitchingFEP(object):
 
         return timeseries_array[t0:], g, Neff_max
 
-    def _endpoint_perturbations(self):
+    def _endpoint_perturbations(self, direction = None, num_subsamples = 100):
         """
         Compute the correlation-adjusted free energy at the endpoints to the nonalchemical systems,
         corrected nonalchemical systems, and alchemical endpoints with EXP
@@ -1157,95 +1163,66 @@ class NonequilibriumSwitchingFEP(object):
         """
         _logger.debug(f"conducting EXP averaging on hybrid reduced potentials and the valence_adjusted endpoint potentials...")
         free_energies = []
+
         #defining reduced potential differences of the hybrid systems...
-        self._hybrid_reduced_potential_differences = {'0_to_1': -1*(self.equilibrium_energies_dict['alchemical'][0] - self.equilibrium_perturbed_energies_dict['alchemical'][1]),
-                                                      '1_to_0': -1*(self.equilibrium_energies_dict['alchemical'][1] - self.equilibrium_perturbed_energies_dict['alchemical'][0])}
-        self._nonalchemical_reduced_potential_differences = {'0_to_nonalchemical_0': self.equilibrium_perturbed_energies_dict['nonalchemical'][0] + self.equilibrium_perturbed_energies_dict['valence'][0] - self.equilibrium_energies_dict['alchemical'][0],
-                                                             '1_to_nonalchemical_1': self.equilibrium_perturbed_energies_dict['nonalchemical'][1] + self.equilibrium_perturbed_energies_dict['valence'][1] - self.equilibrium_energies_dict['alchemical'][1]}
+        if direction == None:
+            directions = ['forward', 'reverse']
+        else:
+            if direction != 'forward' and direction != 'reverse':
+                raise Exception(f"direction must be 'forward' or 'reverse'; direction argument was given as {direction}")
+        for _direction in directions:
+            if direction == 'forward':
+                start_lambda, end_lambda = 0, 1
+            else:
+                start_lambda, end_lambda = 1, 0
 
-        #conducting endpoint perturbations: will compute exp averaging from equilibrium at 0-->1, and 1-->0 for the hybrid energies AND the valence corrected nonalchemical energies
-        template = {'df': [], 'ddf': [], 'correlation': []}
-        self._EXP_alchemical_free_energies = {'0_to_1': copy.deepcopy(template), '1_to_0': copy.deepcopy(template)}
-        self._EXP_to_nonalchemical_free_energies = {'0': copy.deepcopy(template), '1': copy.deepcopy(template)}
+            if self._alchemical_reduced_potentials[f"from_{start_lambda}"] == [] or self._alchemical_reduced_potentials[f"to_{end_lambda}"] == []:
+                raise Exception(f"direction of perturbation calculation was {_direction} but alchemical reduced potentials returned an empty list")
+            if self._nonalchemical_reduced_potentials[f"from_{start_lambda}"] == []:
+                raise Exception(f"direction of perturbation calculation was {_direction} but nonalchemical reduced potentials returned an empty list")
 
+            alchemical_reduced_potential_differences = [i-j for i, j in zip(self._alchemical_reduced_potentials[f"to_{end_lambda}"], self._alchemical_reduced_potentials[f"from_{start_lambda}"])]
+            nonalchemical_reduced_potential_differences = [i-j for i, j in zip(self._nonalchemical_reduced_potentials[f"from_{start_lambda}"], self._alchemical_reduced_potentials[f"from_{start_lambda}"])]
 
-        for lambda_endpoint in [0, 1]:
-            _logger.debug(f"\tconducting EXP calculations from {lambda_endpoint}")
-            alternate_endpoint = 1 if lambda_endpoint == 0 else 0
+            #now to decorrelate the differences:
+            [alch_t0, alch_g, alch_Neff_max, alch_A_t, alch_full_uncorrelated_indices] = feptask.compute_timeseries(np.array(alchemical_reduced_potential_differences))
+            [nonalch_t0, nonalch_g, nonalch_Neff_max, nonalch_A_t, nonalch_full_uncorrelated_indices] = feptask.compute_timeseries(np.array(nonalchemical_reduced_potential_differences))
 
-            eq_energy_array = self.equilibrium_energies_dict['alchemical'][lambda_endpoint]
-            t0, statistical_inefficiency, Neff_max = pymbar.timeseries.detectEquilibration(eq_energy_array)
-            equilibrated_energy_array = eq_energy_array[t0:]
-            diff_array = self._hybrid_reduced_potential_differences[f"{lambda_endpoint}_to_{alternate_endpoint}"][t0:]
+            _logger.debug(f"alchemical decorrelation_results for {_direction}: (t0: {alch_t0}, g: {alch_g}, Neff_max: {alch_Neff_max})")
+            _logger.debug(f"nonalchemical decorrelation_results for {start_lambda}: (t0: {nonalch_t0}, g: {nonalch_g}, Neff_max: {nonalch_Neff_max})")
 
-            uncorrelated_indices = pymbar.timeseries.subsampleCorrelatedData(equilibrated_energy_array, g=statistical_inefficiency)
-            uncorrelated_diff_array = diff_array[uncorrelated_indices]
-            df, ddf_raw = pymbar.EXP(uncorrelated_diff_array) #input to exp are forward works
-            ddf_corrected = ddf_raw * np.sqrt(statistical_inefficiency)
-            _logger.debug(f"\t\tt0, inefficiency, Neff: {t0}, {statistical_inefficiency}, {Neff_max}")
-            _logger.debug(f"\t\tdf, ddf: ({df}, {ddf_corrected})")
+            self._alchemical_reduced_potential_differences[_direction] = np.array([alchemical_reduced_potential_differences[i] for i in alch_full_uncorrelated_indices])
+            self._nonalchemical_reduced_potential_differences[start_lambda] = np.array([nonalchemical_reduced_potential_differences[i] for i in nonalch_full_uncorrelated_indices])
 
-            #now to record to the overly complicated dictionaries...
-            self._EXP_alchemical_free_energies[f"{lambda_endpoint}_to_{alternate_endpoint}"]["correlation"] = [t0, statistical_inefficiency, Neff_max]
-            self._EXP_alchemical_free_energies[f"{lambda_endpoint}_to_{alternate_endpoint}"]["df"] = df
-            self._EXP_alchemical_free_energies[f"{lambda_endpoint}_to_{alternate_endpoint}"]["ddf"] = ddf_corrected
+            #now to bootstrap results
+            alchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._alchemical_reduced_potential_differences[_direction], size = (len(self._alchemical_reduced_potential_differences[_direction]))), compute_uncertainty=False) for _ in range(len(num_subsamples))])
+            self._EXP[_direction] = (np.average(alchemical_exp_results), np.std(alchemical_exp_results)/np.sqrt(num_subsamples))
+            _logger.debug(f"alchemical exp result for {_direction}: {self._EXP[_direction]}")
 
-            #now to compute the to_nonalchemical free energies:
-            nonalch_diff_array = self._nonalchemical_reduced_potential_differences[f"{lambda_endpoint}_to_nonalchemical_{lambda_endpoint}"][t0:]
-            uncorrelated_nonalch_diff_array = nonalch_diff_array[uncorrelated_indices]
-            nonalch_df, nonalch_ddf = pymbar.EXP(uncorrelated_nonalch_diff_array)
-            nonalch_ddf_corrected = nonalch_ddf * np.sqrt(statistical_inefficiency)
+            nonalchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._nonalchemical_reduced_potential_differences[start_lambda], size = (len(self._nonalchemical_reduced_potential_differences[start_lambda]))), compute_uncertainty=False) for _ in range(len(num_subsamples))])
+            self._EXP[start_lambda] = (np.average(nonalchemical_exp_results), np.std(nonalchemical_exp_results)/np.sqrt(num_subsamples))
+            _logger.debug(f"nonalchemical exp result for {start_lambda}: {self._EXP[start_lambda]}")
 
-            # and record results
-            self._EXP_to_nonalchemical_free_energies[f"{lambda_endpoint}"]["correlation"] = [t0, statistical_inefficiency, Neff_max]
-            self._EXP_to_nonalchemical_free_energies[f"{lambda_endpoint}"]["df"] = nonalch_df
-            self._EXP_to_nonalchemical_free_energies[f"{lambda_endpoint}"]["ddf"] = nonalch_ddf_corrected
-
-
-    def _alchemical_free_energy(self):
+    def _alchemical_free_energy(self, num_subsamples = 100):
         """
-        Use BAR to compute the free energy between lambda 0 and lambda1
-
-        Returns
-        -------
-        df : float
-            Free energy, kT
-        ddf_corrected : float
-            Error in free energy, kT
+        Compute (by bootstrapping) the BAR estimate for forward and reverse protocols.
         """
-        _logger.debug(f"conducting free energy for W_f and W_r calculation with BAR")
-        inefficiencies = []
-        forward_works = self.work_dict['cumulative'][0]
-        num_forward_runs, num_forward_logs_per_run = forward_works.shape
-        reverse_works = self.work_dict['cumulative'][1]
-        num_reverse_runs, num_reverse_logs_per_run = reverse_works.shape
 
-        assert num_forward_runs == num_reverse_runs
+        for _direction in ['forward', 'reverse']:
+            if self._nonequilibrium_cum_work[_direction] == []:
+                raise Exception(f"Attempt to compute BAR estimate failed because self._nonequilibrium_cum_work[{_direction}] has no work values")
 
-        self._total_works = {'forward': forward_works[:,-1], 'reverse': reverse_works[:,-1]}
-        self._BAR_alchemical_free_energies = {'df': [], 'ddf': [], 'correlation': []}
-        self._decorrelated_total_works = {}
+        work_subsamples = {'forward': [np.random.choice(self._nonequilibrium_cum_work['forward'], size = (len(self._nonequilibrium_cum_work['forward']))) for _ in range(num_subsamples)],
+                           'reverse': [np.random.choice(self._nonequilibrium_cum_work['reverse'], size = (len(self._nonequilibrium_cum_work['reverse']))) for _ in range(num_subsamples)]}
 
-        # computing decorrelated timeseries calculation for the forward and reverse total accumulated works;
-        # TODO: figure out why some of the works nan...; at present, we are ignoring these data
-        for direction in ['forward', 'reverse']:
-            _logger.debug(f"conducting timeseries computation for {direction} direction")
-            series = np.array([i for i in self._total_works[f"{direction}"] if not np.isnan(i)])
-            _logger.debug(f"work array: {series}")
-            [t0, g, Neff_max, uncorrelated_data, full_uncorrelated_indices] = feptasks.compute_timeseries(series)
-            self._BAR_alchemical_free_energies['correlation'].append([t0, g, Neff_max])
-            inefficiencies.append(g)
-            self._decorrelated_total_works[direction] = uncorrelated_data
+        bar_estimates = np.array([pymbar.BAR(forward_sample, reverse_sample, compute_uncertainty=False) for forward_sample, reverse_sample in zip(work_subsamples['forward'], work_subsamples['reverse'])])
+        df, ddf = np.average(bar_estimates), np.std(bar_estimates) / np.sqrt(num_subsamples)
+        self._BAR = [df, ddf]
+        return (df, ddf)
 
-        df, ddf = pymbar.BAR(self._decorrelated_total_works['forward'], self._decorrelated_total_works['reverse'])
-        ddf_corrected = ddf * np.sqrt(max(inefficiencies))
-        self._BAR_alchemical_free_energies['df'] = df
-        self._BAR_alchemical_free_energies['ddf'] = ddf_corrected
 
-        _logger.debug(f"df, ddf: {df}, {ddf}")
-        _logger.debug(f"correlations: {self._BAR_alchemical_free_energies['correlation']}")
 
-        return df, ddf_corrected
+
 
     @property
     def current_free_energy_estimate(self):
