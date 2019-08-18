@@ -595,7 +595,7 @@ class NonequilibriumSwitchingFEP(object):
     def __init__(self, topology_proposal, geometry_engine, pos_old, new_positions, use_dispersion_correction=False,
                  forward_functions=DEFAULT_FORWARD_FUNCTIONS, reverse_functions = DEFAULT_REVERSE_FUNCTIONS, ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
                  atom_selection="not water", scheduler_address=None, eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
-                 neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False, LSF = True, gpus = 4, adapt = False):
+                 neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False, LSF = True, gpus = 2, adapt = False):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class
 
@@ -655,26 +655,7 @@ class NonequilibriumSwitchingFEP(object):
         #Specific to LSF clusters
         # NOTE: assume that the
         _logger.debug(f"instantiating NonequilibriumSwitchingFEP...")
-        if LSF:
-            from dask_jobqueue import LSFCluster
-            self.cluster = LSFCluster()
-            self._adapt = adapt
-            self._gpus = gpus
-
-            if self._adapt:
-                _logger.debug(f"adapting cluster from 1 to {self._gpus} gpus")
-                self.cluster.adapt(minimum = 4, maximum = self._gpus)
-            else:
-                _logger.debug(f"scaling cluster to {self._gpus} gpus")
-                self.cluster.scale(self._gpus)
-
-            _logger.debug(f"scheduling cluster with client")
-            self.client = distributed.Client(self.cluster)
-        else:
-            self.client = distributed.Client()
-            self._adapt = False
-            self._gpus = 0
-            self.cluster = self.client.cluster
+        self.activate_client(LSF = LSF, gpus = gpus, adapt = adapt)
 
         # construct the hybrid topology factory object
         _logger.info(f"writing HybridTopologyFactory")
@@ -813,6 +794,51 @@ class NonequilibriumSwitchingFEP(object):
             self._atom_selection_indices = None
 
         _logger.info(f"constructed")
+
+    def activate_client(self, LSF = True, gpus = 2, adapt = False):
+        """
+        NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
+
+        Arguments
+        ----------
+        LSF: bool, default True
+            whether to use the LSFCuster
+        gpus: int, default 4 (number of GPUs in a lilac node)
+            number of GPUs to run in parallel
+        adapt: bool, default False
+            whether to adapt the cluster size dynamically; if True, default minimum is 2 and maximum is gpus
+        """
+        if LSF:
+            from dask_jobqueue import LSFCluster
+            self.cluster = LSFCluster()
+            self._adapt = adapt
+            self._gpus = gpus
+
+            if self._adapt:
+                _logger.debug(f"adapting cluster from 1 to {self._gpus} gpus")
+                self.cluster.adapt(minimum = 4, maximum = self._gpus)
+            else:
+                _logger.debug(f"scaling cluster to {self._gpus} gpus")
+                self.cluster.scale(self._gpus)
+
+            _logger.debug(f"scheduling cluster with client")
+            self.client = distributed.Client(self.cluster)
+        else:
+            self.client = distributed.Client()
+            self._adapt = False
+            self._gpus = 0
+            self.cluster = self.client.cluster
+
+
+    def deactivate_client(self):
+        """
+        NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
+        This must be called before pickling
+        """
+        self.cluster.close()
+        self.client.close()
+        self.client, self.cluster = None, None
+
 
     def run(self, n_iterations=5, full_protocol = True, direction = None, timer = False):
         """
