@@ -100,6 +100,9 @@ def getSetupOptions(filename):
         if 'n_cycles' not in setup_options:
             _logger.info(f"\t\t\tn_cycles is not specified; default to 100")
             setup_options['n_cycles'] = 100
+        if 'LSF' not in setup_options:
+            _logger.info(f"\t\t\tLSF is not specified; default to True")
+            setup_options['LSF'] = True
         setup_options['n_steps_per_move_application'] = 1 #setting the writeout to 1 for now
 
     trajectory_directory = setup_options['trajectory_directory']
@@ -320,6 +323,7 @@ def run_setup(setup_options):
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
         gpus = setup_options['gpus']
         adapt = setup_options['adapt']
+        LSF = setup_options['LSF']
 
         ne_fep = dict()
         for phase in phases:
@@ -342,7 +346,7 @@ def run_setup(setup_options):
                                                        neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                        ncmc_save_interval = ncmc_save_interval,
                                                        write_ncmc_configuration = write_ncmc_configuration,
-                                                       LSF = True,
+                                                       LSF = LSF,
                                                        gpus = gpus,
                                                        adapt = adapt)
 
