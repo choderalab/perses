@@ -1,11 +1,10 @@
 from __future__ import print_function
 import numpy as np
-import copy
 import logging
 import traceback
 from openmmtools.alchemy import AlchemicalState
 
-logging.basicConfig(level = logging.NOTSET)
+logging.basicConfig(level=logging.NOTSET)
 _logger = logging.getLogger("lambda_protocol")
 _logger.setLevel(logging.DEBUG)
 
@@ -64,7 +63,7 @@ class LambdaProtocol():
             if self.type == 'default':
                 self.functions = LambdaProtocol.default_functions
             elif self.type == 'namd':
-                self.functions {'lambda_sterics_core':
+                self.functions = {'lambda_sterics_core':
                                 lambda x: x,
                                 'lambda_electrostatics_core':
                                 lambda x: x,
@@ -83,6 +82,7 @@ class LambdaProtocol():
                                 'lambda_torsions':
                                 lambda x: x}
             elif self.type == 'quarters':
+                # TODO put this in
                 self.functions =
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
