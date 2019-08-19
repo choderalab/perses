@@ -83,7 +83,25 @@ class LambdaProtocol():
                                 lambda x: x}
             elif self.type == 'quarters':
                 # TODO put this in
-                self.functions =
+                self.functions = {'lambda_sterics_core':
+                                  lambda x: x,
+                                  'lambda_electrostatics_core':
+                                  lambda x: x,
+                                  'lambda_sterics_insert':
+                                  lambda x: 0. if x < 0.5 else 1 if x > 0.75 else 4 * (x - 0.5),
+                                  'lambda_sterics_delete':
+                                  lambda x: 0. if x < 0.25 else 1 if x > 0.5 else 4 * (x - 0.25),
+                                  'lambda_electrostatics_insert':
+                                  lambda x: 0. if x < 0.75 else 4 * (x - 0.75),
+                                  'lambda_electrostatics_delete':
+                                  lambda x: 4.0 * x if x < 0.25 else 1.0,
+                                  'lambda_bonds':
+                                  lambda x: x,
+                                  'lambda_angles':
+                                  lambda x: x,
+                                  'lambda_torsions':
+                                  lambda x: x}
+
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
                                   recognised. Allowed values are 'default',
