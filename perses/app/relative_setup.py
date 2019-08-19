@@ -595,7 +595,7 @@ class NonequilibriumSwitchingFEP(object):
     def __init__(self, topology_proposal, geometry_engine, pos_old, new_positions, use_dispersion_correction=False,
                  ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
                  atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
-                 neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False, LSF = True, gpus = 2, adapt = False):
+                 neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class.
         NOTE : defining self.client and self.cluster renders this class non-pickleable; call self.deactivate_client() to close the cluster/client
@@ -645,17 +645,10 @@ class NonequilibriumSwitchingFEP(object):
             We will assert that the ncmc_nsteps % ncmc_save_interval = 0; otherwise, the protocol will not be complete
         write_ncmc_configuration : bool, default False
             whether to write ncmc annealing perturbations; if True, will write every ncmc_save_interval iterations
-        LSF: bool, default True
-            whether to use the LSFCuster
-        gpus: int, default 4 (number of GPUs in a lilac node)
-            number of GPUs to run in parallel
-        adapt: bool, default False
-            whether to adapt the cluster size dynamically; if True, default minimum is 1 and maximum is GPUs
         """
         #Specific to LSF clusters
         # NOTE: assume that the
         _logger.debug(f"instantiating NonequilibriumSwitchingFEP...")
-        self.activate_client(LSF = LSF, gpus = gpus, adapt = adapt)
 
         # construct the hybrid topology factory object
         _logger.info(f"writing HybridTopologyFactory")

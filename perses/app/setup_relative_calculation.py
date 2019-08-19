@@ -196,7 +196,7 @@ def run_setup(setup_options):
 
     else:
         eq_splitting = "V R O R V"
-        neq_splitting = 'O { V R H R V } O'
+        neq_splitting = "V R O R V"
         _logger.info(f"\tno splitting strings specified: defaulting to neq: {neq_splitting}, eq: {eq_splitting}.")
 
     if "measure_shadow_work" in setup_options:
@@ -321,9 +321,6 @@ def run_setup(setup_options):
 
 
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
-        gpus = setup_options['gpus']
-        adapt = setup_options['adapt']
-        LSF = setup_options['LSF']
 
         ne_fep = dict()
         for phase in phases:
@@ -345,10 +342,7 @@ def run_setup(setup_options):
                                                        neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
                                                        neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                        ncmc_save_interval = ncmc_save_interval,
-                                                       write_ncmc_configuration = write_ncmc_configuration,
-                                                       LSF = LSF,
-                                                       gpus = gpus,
-                                                       adapt = adapt)
+                                                       write_ncmc_configuration = write_ncmc_configuration)
 
         print("Nonequilibrium switching driver class constructed")
 
@@ -468,6 +462,12 @@ if __name__ == "__main__":
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
+            print("activating client...")
+            gpus = setup_options['gpus']
+            adapt = setup_options['adapt']
+            LSF = setup_options['LSF']
+            ne_fep_run.activate_client(LSF = LSF, gpus = gpus, adapt = adapt)
+
             print("equilibrating...")
             ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
 
@@ -480,6 +480,7 @@ if __name__ == "__main__":
             try:
                 with open(os.path.join(trajectory_directory, "%s_%s_ne_fep.pkl" % (trajectory_prefix, phase)), 'wb') as f:
                     pickle.dump(ne_fep_run, f)
+                    print("pickle save successful; terminating.")
 
             except Exception as e:
                 print(e)
