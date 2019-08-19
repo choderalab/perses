@@ -599,7 +599,7 @@ class NonequilibriumSwitchingFEP(object):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class.
         NOTE : defining self.client and self.cluster renders this class non-pickleable; call self.deactivate_client() to close the cluster/client
-               objects to render this pickleable. 
+               objects to render this pickleable.
 
         Parameters
         ----------
@@ -812,24 +812,23 @@ class NonequilibriumSwitchingFEP(object):
         """
         if LSF:
             from dask_jobqueue import LSFCluster
-            self.cluster = LSFCluster()
+            cluster = LSFCluster()
             self._adapt = adapt
             self._gpus = gpus
 
             if self._adapt:
                 _logger.debug(f"adapting cluster from 1 to {self._gpus} gpus")
-                self.cluster.adapt(minimum = 4, maximum = self._gpus)
+                cluster.adapt(minimum = 4, maximum = self._gpus)
             else:
                 _logger.debug(f"scaling cluster to {self._gpus} gpus")
-                self.cluster.scale(self._gpus)
+                cluster.scale(self._gpus)
 
             _logger.debug(f"scheduling cluster with client")
-            self.client = distributed.Client(self.cluster)
+            self.client = distributed.Client(cluster)
         else:
             self.client = distributed.Client()
             self._adapt = False
             self._gpus = 0
-            self.cluster = self.client.cluster
 
 
     def deactivate_client(self):
@@ -837,9 +836,8 @@ class NonequilibriumSwitchingFEP(object):
         NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
         This must be called before pickling
         """
-        self.cluster.close()
         self.client.close()
-        self.client, self.cluster = None, None
+        self.client = None
 
 
     def run(self, n_iterations=5, full_protocol = True, direction = None, timer = False):
@@ -1213,8 +1211,8 @@ class NonequilibriumSwitchingFEP(object):
             nonalchemical_reduced_potential_differences = [i-j for i, j in zip(self._nonalchemical_reduced_potentials[f"from_{start_lambda}"], self._alchemical_reduced_potentials[f"from_{start_lambda}"])]
 
             #now to decorrelate the differences:
-            [alch_t0, alch_g, alch_Neff_max, alch_A_t, alch_full_uncorrelated_indices] = feptask.compute_timeseries(np.array(alchemical_reduced_potential_differences))
-            [nonalch_t0, nonalch_g, nonalch_Neff_max, nonalch_A_t, nonalch_full_uncorrelated_indices] = feptask.compute_timeseries(np.array(nonalchemical_reduced_potential_differences))
+            [alch_t0, alch_g, alch_Neff_max, alch_A_t, alch_full_uncorrelated_indices] = feptasks.compute_timeseries(np.array(alchemical_reduced_potential_differences))
+            [nonalch_t0, nonalch_g, nonalch_Neff_max, nonalch_A_t, nonalch_full_uncorrelated_indices] = feptasks.compute_timeseries(np.array(nonalchemical_reduced_potential_differences))
 
             _logger.debug(f"alchemical decorrelation_results for {_direction}: (t0: {alch_t0}, g: {alch_g}, Neff_max: {alch_Neff_max})")
             _logger.debug(f"nonalchemical decorrelation_results for {start_lambda}: (t0: {nonalch_t0}, g: {nonalch_g}, Neff_max: {nonalch_Neff_max})")
@@ -1223,11 +1221,11 @@ class NonequilibriumSwitchingFEP(object):
             self._nonalchemical_reduced_potential_differences[start_lambda] = np.array([nonalchemical_reduced_potential_differences[i] for i in nonalch_full_uncorrelated_indices])
 
             #now to bootstrap results
-            alchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._alchemical_reduced_potential_differences[_direction], size = (len(self._alchemical_reduced_potential_differences[_direction]))), compute_uncertainty=False) for _ in range(len(num_subsamples))])
+            alchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._alchemical_reduced_potential_differences[_direction], size = (len(self._alchemical_reduced_potential_differences[_direction]))), compute_uncertainty=False) for _ in range(num_subsamples)])
             self._EXP[_direction] = (np.average(alchemical_exp_results), np.std(alchemical_exp_results)/np.sqrt(num_subsamples))
             _logger.debug(f"alchemical exp result for {_direction}: {self._EXP[_direction]}")
 
-            nonalchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._nonalchemical_reduced_potential_differences[start_lambda], size = (len(self._nonalchemical_reduced_potential_differences[start_lambda]))), compute_uncertainty=False) for _ in range(len(num_subsamples))])
+            nonalchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._nonalchemical_reduced_potential_differences[start_lambda], size = (len(self._nonalchemical_reduced_potential_differences[start_lambda]))), compute_uncertainty=False) for _ in range(num_subsamples)])
             self._EXP[start_lambda] = (np.average(nonalchemical_exp_results), np.std(nonalchemical_exp_results)/np.sqrt(num_subsamples))
             _logger.debug(f"nonalchemical exp result for {start_lambda}: {self._EXP[start_lambda]}")
 
