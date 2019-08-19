@@ -593,8 +593,8 @@ class NonequilibriumSwitchingFEP(object):
     """
 
     def __init__(self, topology_proposal, geometry_engine, pos_old, new_positions, use_dispersion_correction=False,
-                 forward_functions=DEFAULT_FORWARD_FUNCTIONS, reverse_functions = DEFAULT_REVERSE_FUNCTIONS, ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
-                 atom_selection="not water", scheduler_address=None, eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
+                 ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
+                 atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
                  neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False, LSF = True, gpus = 2, adapt = False):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class.
@@ -630,8 +630,6 @@ class NonequilibriumSwitchingFEP(object):
         atom_selection : str, default not water
             MDTraj selection syntax for which atomic coordinates to save in the trajectories. Default strips
             all water.
-        scheduler_address : str
-            address for distributed computing jobs (not currently functional)
         eq_splitting_string : str, default 'V R O R V'
             The integrator splitting to use for equilibrium simulation
         neq_splitting_string : str, default 'V R O R V'
@@ -693,9 +691,6 @@ class NonequilibriumSwitchingFEP(object):
         self._current_iteration = 0
         self._endpoint_growth_thermostates = dict()
         self._timestep = timestep
-
-        self._forward_functions = forward_functions
-        self._reverse_functions = reverse_functions
 
         #instantiate growth system thermodynamic and samplerstates
         assert not self.geometry_engine.use_sterics, f"The geometry engine has use_sterics...this is not currently supported."
@@ -818,7 +813,7 @@ class NonequilibriumSwitchingFEP(object):
 
             if self._adapt:
                 _logger.debug(f"adapting cluster from 1 to {self._gpus} gpus")
-                cluster.adapt(minimum = 4, maximum = self._gpus)
+                cluster.adapt(minimum = 2, maximum = self._gpus)
             else:
                 _logger.debug(f"scaling cluster to {self._gpus} gpus")
                 cluster.scale(self._gpus)
@@ -1069,7 +1064,6 @@ class NonequilibriumSwitchingFEP(object):
                                                nsteps_equil = self._n_equil_steps,
                                                topology = self._factory.hybrid_topology,
                                                n_iterations = n_equilibration_iterations,
-                                               atom_indices_to_save = self._atom_selection_indices,
                                                trajectory_filename = equilibrium_trajectory_filename,
                                                splitting = self._eq_splitting_string,
                                                timestep = self._timestep,

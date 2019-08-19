@@ -77,8 +77,8 @@ def getSetupOptions(filename):
             _logger.info(f"\t\t\tn_equilibrium_steps_per_iteration not specified: default to 1000.")
             setup_options['n_equilibrium_steps_per_iteration'] = 1000
         if 'n_steps_ncmc_protocol' not in setup_options:
-            _logger.info(f"\t\t\tn_steps_ncmc_protocol not specified: default to 100.")
-            setup_options['n_steps_ncmc_protocol'] = 100
+            _logger.info(f"\t\t\tn_steps_ncmc_protocol not specified: default to 25000.")
+            setup_options['n_steps_ncmc_protocol'] = 25000
         if 'ncmc_save_interval' not in setup_options:
             _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
             setup_options['ncmc_save_interval'] = None
@@ -88,9 +88,18 @@ def getSetupOptions(filename):
         if 'write_ncmc_configuration' not in setup_options:
             _logger.info(f"\t\t\twrite_ncmc_configuration not specified: default to False")
             setup_options['write_ncmc_configuration'] = False
-        if 'scheduler_address' not in setup_options:
-            _logger.info(f"\t\t\tscheduler_address not specified; default to localhost")
-            setup_options['scheduler_address'] = 'localhost'
+        if 'gpus' not in setup_options:
+            _logger.info(f"\t\t\tgpus is not specified; default to 100")
+            setup_options['gpus'] = 100
+        if 'adapt' not in setup_options:
+            _logger.info(f"\t\t\tadapt is not specified; default to True")
+            setup_options['adapt'] = True
+        if 'max_file_size' not in setup_options:
+            _logger.info(f"\t\t\tmax_file_size is not specified; default to 10MB")
+            setup_options['max_file_size'] = 10*1024e3
+        if 'n_cycles' not in setup_options:
+            _logger.info(f"\t\t\tn_cycles is not specified; default to 100")
+            setup_options['n_cycles'] = 100
         setup_options['n_steps_per_move_application'] = 1 #setting the writeout to 1 for now
 
     trajectory_directory = setup_options['trajectory_directory']
@@ -309,15 +318,16 @@ def run_setup(setup_options):
 
 
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
-        scheduler_address = setup_options['scheduler_address']
+        gpus = setup_options['gpus']
+        adapt = setup_options['adapt']
 
         ne_fep = dict()
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}")
-            ne_fep[phase] = NonequilibriumSwitchingFEP(top_prop['%s_topology_proposal' % phase],
-                                                       top_prop['%s_geometry_engine' % phase],
-                                                       top_prop['%s_old_positions' % phase],
-                                                       top_prop['%s_new_positions' % phase],
+            ne_fep[phase] = NonequilibriumSwitchingFEP(topology_proposal = top_prop['%s_topology_proposal' % phase],
+                                                       geometry_engine = top_prop['%s_geometry_engine' % phase],
+                                                       pos_old = top_prop['%s_old_positions' % phase],
+                                                       new_positions = top_prop['%s_new_positions' % phase],
                                                        ncmc_nsteps=n_steps_ncmc_protocol,
                                                        n_equilibrium_steps_per_iteration = n_equilibrium_steps_per_iteration,
                                                        temperature = temperature,
@@ -326,12 +336,15 @@ def run_setup(setup_options):
                                                        atom_selection=atom_selection,
                                                        eq_splitting_string = eq_splitting,
                                                        neq_splitting_string = neq_splitting,
-                                                       timestep=timestep,
                                                        measure_shadow_work=measure_shadow_work,
+                                                       timestep=timestep,
                                                        neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
                                                        neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                        ncmc_save_interval = ncmc_save_interval,
-                                                       write_ncmc_configuration = write_ncmc_configuration)
+                                                       write_ncmc_configuration = write_ncmc_configuration,
+                                                       LSF = True,
+                                                       gpus = gpus,
+                                                       adapt = adapt)
 
         print("Nonequilibrium switching driver class constructed")
 
@@ -432,10 +445,11 @@ if __name__ == "__main__":
 
     n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
     _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
+
     if setup_options['fe_type'] == 'neq':
-        n_cycles = setup_options['n_cycles']
-        n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
         temperature = setup_options['temperature'] * unit.kelvin
+        max_file_size = setup_options['max_file_size']
+        n_cycles = setup_options['n_cycles']
 
         ne_fep = setup_dict['ne_fep']
         for phase in setup_options['phases']:
@@ -451,12 +465,12 @@ if __name__ == "__main__":
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
             print("equilibrating...")
-            ne_fep_run.equilibrate(n_equilibration_iterations)
+            ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
 
             print("annealing...")
-            ne_fep_run.run(n_iterations=n_cycles)
-
-            print("calculation complete")
+            ne_fep_run.run(n_iterations = n_cycles, full_protocol = False, timer = True)
+            print("calculation complete; deactivating client")
+            ne_fep_run.deactivate_client()
 
             # try to write out the ne_fep object as a pickle
             try:
