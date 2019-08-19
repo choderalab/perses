@@ -1,6 +1,7 @@
 from __future__ import print_function
 import numpy as np
 import logging
+import copy
 import traceback
 from openmmtools.alchemy import AlchemicalState
 
@@ -9,7 +10,7 @@ _logger = logging.getLogger("lambda_protocol")
 _logger.setLevel(logging.DEBUG)
 
 
-class LambdaProtocol():
+class LambdaProtocol(object):
     """Protocols for perturbing each of the compent energy terms in alchemical
     free energy simulations.
     """
@@ -36,15 +37,15 @@ class LambdaProtocol():
 
     # lambda components for each component,
     # all run from 0 -> 1 following master lambda
-    def __init__(self, type='default', protocol=None):
+    def __init__(self, type='default', functions=None):
         """Instantiates lambda protocol to be used in a free energy calculation.
         Can either be user defined, using protocol, or using one of the preset
         options : default, namd or quarters.
-        If both `protocol` and `type` are set, then `type` is ignored
+        If both `functions` and `type` are set, then `type` is ignored
         If `type` is not recognised, then it is set to default
 
         All protocols must be monotonic, from 0 to 1. Any energy term not defined
-        in `protocol` will be set to the function in `default_functions`
+        in `functions` will be set to the function in `default_functions`
 
         Parameters
         ----------
@@ -58,10 +59,14 @@ class LambdaProtocol():
         -------
         """
         self.type = type
-        self.protocol = protocol
-        if self.protocol is None:
+        self.functions = copy.deepcopy(functions)
+        if self.functions is not None:
+            self.type = 'user-defined'
+
+
+        if self.functions is None:
             if self.type == 'default':
-                self.functions = LambdaProtocol.default_functions
+                self.functions = copy.deepcopy(LambdaProtocol.default_functions)
             elif self.type == 'namd':
                 self.functions = {'lambda_sterics_core':
                                 lambda x: x,
@@ -130,23 +135,21 @@ class LambdaProtocol():
         required_functions = list(LambdaProtocol.default_functions.keys())
 
         for function in required_functions:
-            if function in self.functions:
-                continue
-            else:
-                _logger.warning('function {function} is missing from lambda_functions')
-                _logger.warning('adding default {function} from LambdaProtocol.default_functions')
+            if function not in self.functions:
+                _logger.warning(f'function {function} is missing from lambda_functions')
+                _logger.warning(f'adding default {function} from LambdaProtocol.default_functions')
                 self.functions[function] = LambdaProtocol.default_functions[function]
             # assert that the function starts and ends at 0 and 1 respectively
-            assert (self.functions[function][0.] == 0.
+            assert (self.functions[function](0.) == 0.
                     ), 'lambda functions must start at 0'
-            assert (self.functions[function][1.] == 1.
+            assert (self.functions[function](1.) == 1.
                     ), 'lambda functions must end at 1'
 
-        # now validatate that it's monotonic
-        global_lambda = np.linspace(0., 1., n)
-        sub_lambda = [self.functions[function](l) for l in global_lambda]
-        difference = np.diff(sub_lambda)
-        assert (all(i >= 0. for i in difference)), 'lambda_schdeule must be monotonically increasing'
+            # now validatate that it's monotonic
+            global_lambda = np.linspace(0., 1., n)
+            sub_lambda = [self.functions[function](l) for l in global_lambda]
+            difference = np.diff(sub_lambda)
+            assert (all(i >= 0. for i in difference) == True), 'lambda_schdeule must be monotonically increasing'
         return
 
     def get_functions(self):

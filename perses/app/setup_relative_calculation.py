@@ -345,7 +345,7 @@ def run_setup(setup_options):
 
             # generating lambda protocol
             lambda_protocol = LambdaProtocol(type=setup_options['protocol-type'],
-                                             lambda_protocol=setup_options['lambda_protocol'])
+                                             functions=setup_options['lambda_protocol'])
 
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
