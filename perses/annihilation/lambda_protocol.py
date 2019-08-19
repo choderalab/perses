@@ -5,8 +5,15 @@ import logging
 import traceback
 from openmmtools.alchemy import AlchemicalState
 
+logging.basicConfig(level = logging.NOTSET)
+_logger = logging.getLogger("lambda_protocol")
+_logger.setLevel(logging.DEBUG)
+
 
 class LambdaProtocol():
+    """Protocols for perturbing each of the compent energy terms in alchemical
+    free energy simulations.
+    """
 
     default_functions = {'lambda_sterics_core':
                          lambda x: x,
@@ -27,9 +34,30 @@ class LambdaProtocol():
                          'lambda_torsions':
                          lambda x: x
                          }
+
     # lambda components for each component,
     # all run from 0 -> 1 following master lambda
     def __init__(self, type='default', protocol=None):
+        """Instantiates lambda protocol to be used in a free energy calculation.
+        Can either be user defined, using protocol, or using one of the preset
+        options : default, namd or quarters.
+        If both `protocol` and `type` are set, then `type` is ignored
+        If `type` is not recognised, then it is set to default
+
+        All protocols must be monotonic, from 0 to 1. Any energy term not defined
+        in `protocol` will be set to the function in `default_functions`
+
+        Parameters
+        ----------
+        type : str, default='default'
+            one of the predefined lambda protocols ['default','namd','quarters']
+        protocol : dict
+            dictionary of lambda functions for each of the energy components,
+            for both inserted and deleted and core atom types.
+
+        Returns
+        -------
+        """
         self.type = type
         self.protocol = protocol
         if self.protocol is None:
@@ -54,6 +82,14 @@ class LambdaProtocol():
                                 lambda x: x,
                                 'lambda_torsions':
                                 lambda x: x}
+            elif self.type == 'quarters':
+                self.functions =
+            else:
+                _logger.warning(f"""LambdaProtocol type : {self.type} not
+                                  recognised. Allowed values are 'default',
+                                  'namd' and 'quarters'. Setting LambdaProtocol
+                                  functions to default. """)
+                self.functions = LambdaProtocol.default_functions
 
         self._validate_functions()
 
@@ -79,8 +115,8 @@ class LambdaProtocol():
             if function in self.functions:
                 continue
             else:
-                print('function {function} is missing from lambda_functions')
-                print('adding default {function} from LambdaProtocol.default_functions')
+                _logger.warning('function {function} is missing from lambda_functions')
+                _logger.warning('adding default {function} from LambdaProtocol.default_functions')
                 self.functions[function] = LambdaProtocol.default_functions[function]
             # assert that the function starts and ends at 0 and 1 respectively
             assert (self.functions[function][0.] == 0.
