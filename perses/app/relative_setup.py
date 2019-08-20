@@ -594,7 +594,7 @@ class NonequilibriumSwitchingFEP(object):
 
     def __init__(self, topology_proposal, geometry_engine, pos_old, new_positions, use_dispersion_correction=False,
                  ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
-                 atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "O { V R H R V } O", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
+                 atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
                  neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class.
@@ -632,7 +632,7 @@ class NonequilibriumSwitchingFEP(object):
             all water.
         eq_splitting_string : str, default 'V R O R V'
             The integrator splitting to use for equilibrium simulation
-        neq_splitting_string : str, default 'O { V R H R V } O'
+        neq_splitting_string : str, default 'V R O R V'
             The integrator splitting to use for nonequilibrium switching simulation
         neglected_new_angle_terms : list, default []
             list of indices from the HarmonicAngleForce of the new_system for which the geometry engine neglected.

@@ -46,7 +46,7 @@ class NonequilibriumSwitchingMove():
         number of annealing steps in the protocol
     direction : str
         whether the protocol runs 'forward' or 'reverse'
-    splitting : str, default 'O { V R H R V } O'
+    splitting : str, default 'V R O R V'
         Splitting string for integrator
     temperature : unit.Quantity(float, units = unit.kelvin)
         temperature at which to run the simulation
@@ -110,7 +110,7 @@ class NonequilibriumSwitchingMove():
     _
     """
 
-    def __init__(self, nsteps: int, direction: str, splitting: str= 'O { V R H R V } O', temperature: unit.Quantity=300*unit.kelvin, timestep: unit.Quantity=1.0*unit.femtosecond,
+    def __init__(self, nsteps: int, direction: str, splitting: str= 'V R O R V', temperature: unit.Quantity=300*unit.kelvin, timestep: unit.Quantity=1.0*unit.femtosecond,
         work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, save_configuration: bool=False, measure_shadow_work: bool=False, **kwargs):
 
         start = time.time()
@@ -334,7 +334,7 @@ class NonequilibriumSwitchingMove():
 
 
 def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilibrium_result: EquilibriumResult,
-                 direction: str, topology: md.Topology, nsteps_neq: int = 1000, work_save_interval: int = 1, splitting: str='O { V R H R V } O',
+                 direction: str, topology: md.Topology, nsteps_neq: int = 1000, work_save_interval: int = 1, splitting: str='V R O R V',
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds, measure_shadow_work: bool=False, timer: bool=True) -> dict:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
@@ -355,7 +355,7 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
         The number of nonequilibrium steps in the protocol
     work_save_interval : int
         How often to write the work and, if requested, configurations
-    splitting : str, default 'O { V R H R V } O'
+    splitting : str, default 'V R O R V'
         The splitting string to use for the Langevin integration
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
