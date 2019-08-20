@@ -216,8 +216,9 @@ class NonequilibriumSwitchingMove():
         context, integrator = context_cache.get_context(thermodynamic_state, self._integrator)
         sampler_state.apply_to_context(context, ignore_velocities=True)
         context.setVelocitiesToTemperature(thermodynamic_state.temperature) #randomize velocities @ temp
-        sampler_state.update_from_context(context, ignore_velocities=True) #can remove
-        initial_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
+        init_state = context.getState(getEnergy=True)
+        initial_energy = self._beta * (init_state.getPotentialEnergy() + init_state.getKineticEnergy())
+        sampler_state.update_from_context(context, ignore_velocities=True)
 
         if self._direction == 'forward':
             assert context.getParameter('lambda_sterics_core') == 0.0, f"Direction was specified as {self._direction} but initial master lambda is defined as {context.getParameter('lambda_sterics_core')}" #lambda_sterics_core maps master_lambda (see lambda_protocol.py)
@@ -248,12 +249,11 @@ class NonequilibriumSwitchingMove():
             _logger.debug(f"\tconducting iteration {iteration} at master lambda {master_lambda}")
             try:
                 prep_start = time.time()
-                old_rp = self._beta * sampler_state.potential_energy
+                old_rp = self._beta * context.getState(getEnergy=True).getPotentialEnergy()
                 thermodynamic_state.set_alchemical_parameters(master_lambda)
                 thermodynamic_state.apply_to_context(context)
                 #context.setVelocitiesToTemperature(thermodynamic_state.temperature) #resample velocities
-                sampler_state.update_from_context(context, ignore_velocities=True)
-                new_rp = self._beta * sampler_state.potential_energy
+                new_rp = self._beta * context.getState(getEnergy=True).getPotentialEnergy()
                 work = new_rp - old_rp
                 self._cumulative_work += work
                 _logger.debug(f"\twork: {work}")
@@ -263,17 +263,15 @@ class NonequilibriumSwitchingMove():
                 if not master_lambda == end_lambda: #we don't have to propagate dynamics if it is the last iteration
                     step_start = time.time()
                     integrator.step(1)
-                    sampler_state.update_from_context(context, ignore_velocities=True)
                     step_time = time.time() - step_start
-                else:
-                    sampler_state.update_from_context(context) #don't ignore velocities
-
 
                 if (iteration+1) % self._work_save_interval == 0: #we save the protocol work if the remainder is zero
                     _logger.debug(f"\tconducting work save")
+                    #_logger.debug(f"\tsampler state: {vars(sampler_state)}")
                     self._protocol_work.append(self._cumulative_work)
                     timer_list.append((prep_time, step_time))
-                    self._kinetic_energy.append(self._beta * sampler_state.kinetic_energy)
+                    self._kinetic_energy.append(self._beta * context.getState(getEnergy=True).getKineticEnergy())
+                    sampler_state.update_from_context(context, ignore_velocities=True) #save bandwidth by not updating the velocities
 
                     #if we have a trajectory, we'll also write to it
                     save_start = time.time()
@@ -326,7 +324,8 @@ class NonequilibriumSwitchingMove():
 
         if self._measure_shadow_work:
             total_heat = integrator.get_heat(dimensionless=True)
-            final_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
+            final_state = context.getState(getEnergy=True)
+            final_energy = self._beta * (final_state.getPotentialEnergy() + final_state.getKineticEnergy())
             total_energy_change = final_energy - initial_energy
             self._shadow_work = total_energy_change - (total_heat + self._cumulative_work)
         else:
