@@ -31,6 +31,7 @@ _logger.setLevel(logging.DEBUG)
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
 NonequilibriumResult = namedtuple('NonequilibriumResult', ['sampler_state', 'protocol_work', 'cumulative_work', 'shadow_work', 'timers'])
+iter_tuple = namedtuple('iter_tuple', ['prep_time', 'step_time', 'save_config_time'])
 
 class NonequilibriumSwitchingMove():
     """
@@ -239,7 +240,6 @@ class NonequilibriumSwitchingMove():
         self._timers['prepare_neq_switching'] = time.time() - start
 
         timer_list = []
-        iter_tuple = namedtuple('iter_tuple', ['prep_time', 'step_time', 'save_config_time'])
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
         for iteration, master_lambda in zip(range(self._nsteps), lambda_schedule):
             _logger.debug(f"\tconducting iteration {iteration} at master lambda {master_lambda}")
