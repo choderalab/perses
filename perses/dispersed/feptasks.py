@@ -30,7 +30,7 @@ _logger.setLevel(logging.DEBUG)
 
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
-NonequilibriumResult = namedtuple('NonequilibriumResult', ['sampler_state', 'protocol_work', 'cumulative_work', 'shadow_work', 'timers'])
+NonequilibriumResult = namedtuple('NonequilibriumResult', ['sampler_state', 'protocol_work', 'cumulative_work', 'shadow_work', 'kinetic_energies','timers'])
 iter_tuple = namedtuple('iter_tuple', ['prep_time', 'step_time', 'save_config_time'])
 
 class NonequilibriumSwitchingMove():
@@ -46,7 +46,7 @@ class NonequilibriumSwitchingMove():
         number of annealing steps in the protocol
     direction : str
         whether the protocol runs 'forward' or 'reverse'
-    splitting : str, default 'V R O R V'
+    splitting : str, default 'O { V R H R V } O'
         Splitting string for integrator
     temperature : unit.Quantity(float, units = unit.kelvin)
         temperature at which to run the simulation
@@ -93,6 +93,8 @@ class NonequilibriumSwitchingMove():
         protocol accumulated works at save snapshots
     _heat : float
         total heat gathered by kernel
+    _kinetic_energy : list[float]
+        reduced kinetic energies after propagation step which save every _work_save_interval (except last interval since there is no propagation step)
     _topology : md.Topology
         topology or subset defined by the mask to save
     _subset_atoms : numpy.array
@@ -108,7 +110,7 @@ class NonequilibriumSwitchingMove():
     _
     """
 
-    def __init__(self, nsteps: int, direction: str, splitting: str= 'V R O R V', temperature: unit.Quantity=300*unit.kelvin, timestep: unit.Quantity=1.0*unit.femtosecond,
+    def __init__(self, nsteps: int, direction: str, splitting: str= 'O { V R H R V } O', temperature: unit.Quantity=300*unit.kelvin, timestep: unit.Quantity=1.0*unit.femtosecond,
         work_save_interval: int=None, top: md.Topology=None, subset_atoms: np.array=None, save_configuration: bool=False, measure_shadow_work: bool=False, **kwargs):
 
         start = time.time()
@@ -149,6 +151,7 @@ class NonequilibriumSwitchingMove():
         self._shadow_work = 0.0
         self._protocol_work = [0.0]
         self._heat = 0.0
+        self._kinetic_energy = []
 
         self._topology = top
         self._subset_atoms = subset_atoms
@@ -213,7 +216,7 @@ class NonequilibriumSwitchingMove():
         context, integrator = context_cache.get_context(thermodynamic_state, self._integrator)
         sampler_state.apply_to_context(context, ignore_velocities=True)
         context.setVelocitiesToTemperature(thermodynamic_state.temperature) #randomize velocities @ temp
-        sampler_state.update_from_context(context) #can remove
+        sampler_state.update_from_context(context, ignore_velocities=True) #can remove
         initial_energy = self._beta * (sampler_state.potential_energy + sampler_state.kinetic_energy)
 
         if self._direction == 'forward':
@@ -270,6 +273,7 @@ class NonequilibriumSwitchingMove():
                     _logger.debug(f"\tconducting work save")
                     self._protocol_work.append(self._cumulative_work)
                     timer_list.append((prep_time, step_time))
+                    self._kinetic_energy.append(self._beta * sampler_state.kinetic_energy)
 
                     #if we have a trajectory, we'll also write to it
                     save_start = time.time()
@@ -330,7 +334,7 @@ class NonequilibriumSwitchingMove():
 
 
 def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilibrium_result: EquilibriumResult,
-                 direction: str, topology: md.Topology, nsteps_neq: int = 1000, work_save_interval: int = 1, splitting: str='V R O R V',
+                 direction: str, topology: md.Topology, nsteps_neq: int = 1000, work_save_interval: int = 1, splitting: str='O { V R H R V } O',
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds, measure_shadow_work: bool=False, timer: bool=True) -> dict:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
@@ -351,7 +355,7 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
         The number of nonequilibrium steps in the protocol
     work_save_interval : int
         How often to write the work and, if requested, configurations
-    splitting : str, default 'V R O R V'
+    splitting : str, default 'O { V R H R V } O'
         The splitting string to use for the Langevin integration
     atom_indices_to_save : list of int, default None
         list of indices to save (when excluding waters, for instance). If None, all indices are saved.
@@ -412,6 +416,9 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
     #get the protocol work
     protocol_work = ne_mc_move._protocol_work
 
+    #get the kinetic energies
+    kinetic_energies = ne_mc_move._kinetic_energy
+
     #if we're measuring shadow work, get that. Otherwise just fill in zeros:
     if measure_shadow_work:
         shadow_work = ne_mc_move._shadow_work
@@ -436,6 +443,7 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
                                       protocol_work = protocol_work,
                                       cumulative_work = cumulative_work,
                                       shadow_work = shadow_work,
+                                      kinetic_energies = kinetic_energies,
                                       timers = timers)
 
     return neq_result

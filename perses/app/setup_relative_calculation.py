@@ -196,7 +196,7 @@ def run_setup(setup_options):
 
     else:
         eq_splitting = "V R O R V"
-        neq_splitting = "V R O R V"
+        neq_splitting = "O { V R H R V } O"
         _logger.info(f"\tno splitting strings specified: defaulting to neq: {neq_splitting}, eq: {eq_splitting}.")
 
     if "measure_shadow_work" in setup_options:

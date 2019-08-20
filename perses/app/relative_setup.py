@@ -594,7 +594,7 @@ class NonequilibriumSwitchingFEP(object):
 
     def __init__(self, topology_proposal, geometry_engine, pos_old, new_positions, use_dispersion_correction=False,
                  ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
-                 atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
+                 atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "O { V R H R V } O", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
                  neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class.
@@ -632,7 +632,7 @@ class NonequilibriumSwitchingFEP(object):
             all water.
         eq_splitting_string : str, default 'V R O R V'
             The integrator splitting to use for equilibrium simulation
-        neq_splitting_string : str, default 'V R O R V'
+        neq_splitting_string : str, default 'O { V R H R V } O'
             The integrator splitting to use for nonequilibrium switching simulation
         neglected_new_angle_terms : list, default []
             list of indices from the HarmonicAngleForce of the new_system for which the geometry engine neglected.
@@ -739,6 +739,7 @@ class NonequilibriumSwitchingFEP(object):
         self._nonequilibrium_prot_work = {'forward': [], 'reverse': []}
         self._nonequilibrium_shadow_work = {'forward': [], 'reverse': []}
         self._nonequilibrium_timers = {'forward': [], 'reverse': []}
+        self._nonequilibrium_kinetic_energies = {'forward': [], 'reverse': []}
 
         # ensure their states are set appropriately
         self._hybrid_alchemical_states = {0: lambda_zero_alchemical_state, 1: lambda_one_alchemical_state}
@@ -998,6 +999,7 @@ class NonequilibriumSwitchingFEP(object):
                 self._nonequilibrium_prot_work[_direction].append(neq_fut.protocol_work)
                 self._nonequilibrium_shadow_work[_direction].append(neq_fut.shadow_work)
                 self._nonequilibrium_timers[_direction].append(neq_fut.timers)
+                self._nonequilibrium_kinetic_energies[_direction].append(neq_fut.kinetic_energies)
 
 
     def equilibrate(self, n_equilibration_iterations = 1, endstates = [0,1], max_size = 1024*1e3, decorrelate=False, timer = False, minimize = False):
@@ -1195,7 +1197,7 @@ class NonequilibriumSwitchingFEP(object):
                 raise Exception(f"direction of perturbation calculation was {_direction} but nonalchemical reduced potentials returned an empty list")
 
             alchemical_reduced_potential_differences = [i-j for i, j in zip(self._alchemical_reduced_potentials[f"to_{end_lambda}"], self._alchemical_reduced_potentials[f"from_{start_lambda}"])]
-            nonalchemical_reduced_potential_differences = [i-j for i, j in zip(self._nonalchemical_reduced_potentials[f"from_{start_lambda}"], self._alchemical_reduced_potentials[f"from_{start_lambda}"])]
+            nonalchemical_reduced_potential_differences = [(i + j) - k for i, j, k in zip(self._nonalchemical_reduced_potentials[f"from_{start_lambda}"], self._added_valence_reduced_potentials[f"from_{start_lambda}"], self._alchemical_reduced_potentials[f"from_{start_lambda}"])]
 
             #now to decorrelate the differences:
             [alch_t0, alch_g, alch_Neff_max, alch_A_t, alch_full_uncorrelated_indices] = feptasks.compute_timeseries(np.array(alchemical_reduced_potential_differences))
