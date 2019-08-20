@@ -35,11 +35,6 @@ def test_lambda_protocol_failure_ends():
     lp = LambdaProtocol(functions=bad_function)
 
 @raises(AssertionError)
-def test_lambda_protocol_monotonic():
-    bad_function = {'lambda_sterics_delete': lambda x : 0. if x == 0. else 1. if x == 1. else (1. - x)}
-    lp = LambdaProtocol(functions=bad_function)
-
-@raises(AssertionError)
 def test_lambda_protocol_naked_charges():
     naked_charge_functions = {'lambda_sterics_insert':
                   lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),

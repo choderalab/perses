@@ -150,7 +150,9 @@ class LambdaProtocol(object):
             global_lambda = np.linspace(0., 1., n)
             sub_lambda = [self.functions[function](l) for l in global_lambda]
             difference = np.diff(sub_lambda)
-            assert (all(i >= 0. for i in difference) == True), 'lambda_schdeule must be monotonically increasing'
+            if all(i >= 0. for i in difference) == False:
+                _logger.warning(f'The function {function} is not monotonic as typically expected.')
+                _logger.warning('Simulating with non-monotonic function anyway')
         return
 
     def _check_for_naked_charges(self,n=10):
@@ -176,6 +178,19 @@ class LambdaProtocol(object):
 
     def get_functions(self):
         return self.functions
+
+    def plot_fucntions(self,n=50):
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(10,5))
+
+        global_lambda = np.linspace(0.,1.,n)
+        for f in self.functions:
+            plt.plot(global_lambda, [self.functions[f](l) for l in global_lambda], alpha=0.5, label=f)
+
+        plt.xlabel('global lambda')
+        plt.ylabel('sub-lambda')
+        plt.legend()
+        plt.show()
 
 
 class RelativeAlchemicalState(AlchemicalState):
