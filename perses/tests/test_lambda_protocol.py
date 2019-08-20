@@ -9,7 +9,7 @@ import os
 istravis = os.environ.get('TRAVIS', None) == 'true'
 
 #############################################
-# TESTS 
+# TESTS
 #############################################
 
 def test_lambda_protocol():
@@ -22,7 +22,7 @@ def test_lambda_protocol():
     # check that it's possible to instantiate a LambdaProtocol for all the default types
     for protocol in ['default','namd','quarters']:
         lp = LambdaProtocol(type=protocol)
-        
+
     # check that if we give an incomplete set of parameters it will add in the missing terms
     missing_functions = {'lambda_sterics_delete': lambda x : x}
     lp = LambdaProtocol(functions=missing_functions)
@@ -38,3 +38,11 @@ def test_lambda_protocol_failure_ends():
 def test_lambda_protocol_monotonic():
     bad_function = {'lambda_sterics_delete': lambda x : 0. if x == 0. else 1. if x == 1. else (1. - x)}
     lp = LambdaProtocol(functions=bad_function)
+
+@raises(AssertionError)
+def test_lambda_protocol_naked_charges():
+    naked_charge_functions = {'lambda_sterics_insert':
+                  lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
+                  'lambda_electrostatics_insert':
+                  lambda x: 2.0 * x if x < 0.5 else 1.0}
+    lp = LambdaProtocol(functions=naked_charge_functions)

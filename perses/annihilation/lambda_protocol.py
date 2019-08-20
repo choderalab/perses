@@ -69,23 +69,23 @@ class LambdaProtocol(object):
                 self.functions = copy.deepcopy(LambdaProtocol.default_functions)
             elif self.type == 'namd':
                 self.functions = {'lambda_sterics_core':
-                                lambda x: x,
-                                'lambda_electrostatics_core':
-                                lambda x: x,
-                                'lambda_sterics_insert':
-                                lambda x: (3. / 2.) * x if x < (2. / 3.) else 1.0,
-                                'lambda_sterics_delete':
-                                lambda x: 0.0 if x < (1. / 3.) else (x - (1. / 3.)) * (3. / 2.),
-                                'lambda_electrostatics_insert':
-                                lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
-                                'lambda_electrostatics_delete':
-                                lambda x: 2.0 * x if x < 0.5 else 1.0,
-                                'lambda_bonds':
-                                lambda x: x,
-                                'lambda_angles':
-                                lambda x: x,
-                                'lambda_torsions':
-                                lambda x: x}
+                                  lambda x: x,
+                                  'lambda_electrostatics_core':
+                                  lambda x: x,
+                                  'lambda_sterics_insert':
+                                  lambda x: (3. / 2.) * x if x < (2. / 3.) else 1.0,
+                                  'lambda_sterics_delete':
+                                  lambda x: 0.0 if x < (1. / 3.) else (x - (1. / 3.)) * (3. / 2.),
+                                  'lambda_electrostatics_insert':
+                                  lambda x: 0.0 if x < 0.5 else 2.0 * (x - 0.5),
+                                  'lambda_electrostatics_delete':
+                                  lambda x: 2.0 * x if x < 0.5 else 1.0,
+                                  'lambda_bonds':
+                                  lambda x: x,
+                                  'lambda_angles':
+                                  lambda x: x,
+                                  'lambda_torsions':
+                                  lambda x: x}
             elif self.type == 'quarters':
                 # TODO put this in
                 self.functions = {'lambda_sterics_core':
@@ -115,6 +115,7 @@ class LambdaProtocol(object):
                 self.functions = LambdaProtocol.default_functions
 
         self._validate_functions()
+        self._check_for_naked_charges()
 
     def _validate_functions(self,n=10):
         """Ensures that all the lambda functions adhere to the rules:
@@ -151,6 +152,27 @@ class LambdaProtocol(object):
             difference = np.diff(sub_lambda)
             assert (all(i >= 0. for i in difference) == True), 'lambda_schdeule must be monotonically increasing'
         return
+
+    def _check_for_naked_charges(self,n=10):
+        global_lambda = np.linspace(0., 1., n)
+
+        # checking unique new terms first
+        ele = 'lambda_electrostatics_insert'
+        sterics = 'lambda_sterics_insert'
+        for l in global_lambda:
+            e_val = self.functions[ele](l)
+            s_val = self.functions[sterics](l)
+            if e_val != 0.:
+                assert (s_val != 0.)
+
+        # checking unique old terms now
+        ele = 'lambda_electrostatics_delete'
+        sterics = 'lambda_sterics_delete'
+        for l in global_lambda:
+            e_val = self.functions[ele](l)
+            s_val = self.functions[sterics](l)
+            if e_val != 1.:
+                assert (s_val != 1.)
 
     def get_functions(self):
         return self.functions
