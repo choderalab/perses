@@ -784,6 +784,9 @@ class NonequilibriumSwitchingFEP(object):
         else:
             self._atom_selection_indices = None
 
+        # set up a list of failures
+        self._failures = []
+
         _logger.info(f"constructed")
 
     def activate_client(self, LSF = True, gpus = 2, adapt = False):
@@ -886,6 +889,7 @@ class NonequilibriumSwitchingFEP(object):
             _logger.debug(f"\tnonalchemical_perturbation_args for lambda_start = {_lambda}, lambda_end = {_lambda_rev}: {nonalchemical_perturbation_args}")
             nonalchemical_perturbation_args_list[_lambda] = nonalchemical_perturbation_args
 
+        count_iterator = self._current_iteration
         for i in range(n_iterations): #iterate forward and/or backward n_iterations times
             _logger.debug(f"\tconducting iteration {self._current_iteration}")
 
@@ -978,8 +982,8 @@ class NonequilibriumSwitchingFEP(object):
             if full_protocol: # make the attribute sampler state of interest the last sampler state of the equilibrium run
                 self._sampler_states[start_lambda] = eq_results_collected[-1].sampler_state
 
+
             for eq_fut, neq_fut in zip(eq_results_collected, neq_results_collected):
-                # _logger.debug(f"eq_future: {eq_fut}; neq_future: {neq_fut}")
 
                 nonalchemical_perturbation_dict = eq_fut.nonalchemical_perturbations
 
@@ -995,11 +999,16 @@ class NonequilibriumSwitchingFEP(object):
                 self._alchemical_reduced_potentials[f"from_{start_lambda}"].append(hybrid_reduced_potentials[0])
                 self._alchemical_reduced_potentials[f"to_{end_lambda}"].append(hybrid_reduced_potentials[1])
 
-                self._nonequilibrium_cum_work[_direction].append(neq_fut.cumulative_work)
-                self._nonequilibrium_prot_work[_direction].append(neq_fut.protocol_work)
-                self._nonequilibrium_shadow_work[_direction].append(neq_fut.shadow_work)
-                self._nonequilibrium_timers[_direction].append(neq_fut.timers)
-                self._nonequilibrium_kinetic_energies[_direction].append(neq_fut.kinetic_energies)
+                if neq_fut.pass:
+                    self._nonequilibrium_cum_work[_direction].append(neq_fut.cumulative_work)
+                    self._nonequilibrium_prot_work[_direction].append(neq_fut.protocol_work)
+                    self._nonequilibrium_shadow_work[_direction].append(neq_fut.shadow_work)
+                    self._nonequilibrium_timers[_direction].append(neq_fut.timers)
+                    self._nonequilibrium_kinetic_energies[_direction].append(neq_fut.kinetic_energies)
+                else:
+                    self._failures.append((count_iterator, neq_fut))
+
+                count_iterator += 1
 
 
     def equilibrate(self, n_equilibration_iterations = 1, endstates = [0,1], max_size = 1024*1e3, decorrelate=False, timer = False, minimize = False):

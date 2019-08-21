@@ -30,7 +30,7 @@ _logger.setLevel(logging.DEBUG)
 
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
-NonequilibriumResult = namedtuple('NonequilibriumResult', ['sampler_state', 'protocol_work', 'cumulative_work', 'shadow_work', 'kinetic_energies','timers'])
+NonequilibriumResult = namedtuple('NonequilibriumResult', ['pass', 'sampler_state', 'protocol_work', 'cumulative_work', 'shadow_work', 'kinetic_energies','timers'])
 iter_tuple = namedtuple('iter_tuple', ['prep_time', 'step_time', 'save_config_time'])
 
 class NonequilibriumSwitchingMove():
@@ -168,6 +168,9 @@ class NonequilibriumSwitchingMove():
 
         self._timers['instantiate'] = time.time() - start
 
+        #set a bool variable for pass or failure
+        self.pass = True
+
     def apply(self, thermodynamic_state, sampler_state):
         """Propagate the state through the integrator.
         This updates the SamplerState after the integration. It will apply the full NCMC protocol.
@@ -301,11 +304,14 @@ class NonequilibriumSwitchingMove():
 
 
             except Exception as e:
-                _logger.debug(f"old_rp: {old_rp}, new_rp: {new_rp}")
-                _logger.debug(f"trajectory positions: {np.array(self._trajectory_positions)}")
-                _logger.debug(f"cumulative work: {self._cumulative_work}")
-                raise e
-                #self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
+                _logger.debug(f"the simulation failed")
+                if self._save_configuration:
+                    self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
+                self._timers['neq_switching'] = timer_list
+                self._shadow_work = 0.0
+                self.pass = False
+                return
+
 
 
         self._timers['neq_switching'] = timer_list
@@ -438,12 +444,22 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
     else:
         timers = ne_mc_move._timers
 
-    neq_result = NonequilibriumResult(sampler_state = sampler_state,
-                                      protocol_work = protocol_work,
-                                      cumulative_work = cumulative_work,
-                                      shadow_work = shadow_work,
-                                      kinetic_energies = kinetic_energies,
-                                      timers = timers)
+    if ne_mc_move.pass:
+        neq_result = NonequilibriumResult(pass = True,
+                                          sampler_state = sampler_state,
+                                          protocol_work = protocol_work,
+                                          cumulative_work = cumulative_work,
+                                          shadow_work = shadow_work,
+                                          kinetic_energies = kinetic_energies,
+                                          timers = timers)
+    else:
+        neq_result = NonequilibriumResult(pass = False,
+                                          sampler_state = sampler_state,
+                                          protocol_work = protocol_work,
+                                          cumulative_work = cumulative_work,
+                                          shadow_work = shadow_work,
+                                          kinetic_energies = kinetic_energies,
+                                          timers = timers)
 
     return neq_result
 
