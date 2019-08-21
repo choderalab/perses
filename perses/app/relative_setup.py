@@ -977,7 +977,7 @@ class NonequilibriumSwitchingFEP(object):
             end_lambda = 1 if start_lambda == 0 else 0
 
             eq_results_collected = eq_results_collector[start_lambda]
-            neq_results_collected = self.client.gather(neq_results_collector[_direction])
+            neq_results_collected = self.client.gather(neq_results_collector[_direction], direct=False, errors='skip')
 
             if full_protocol: # make the attribute sampler state of interest the last sampler state of the equilibrium run
                 self._sampler_states[start_lambda] = eq_results_collected[-1].sampler_state
