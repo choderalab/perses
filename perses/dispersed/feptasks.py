@@ -169,7 +169,7 @@ class NonequilibriumSwitchingMove():
         self._timers['instantiate'] = time.time() - start
 
         #set a bool variable for pass or failure
-        self.pass = True
+        self._pass = True
 
     def apply(self, thermodynamic_state, sampler_state):
         """Propagate the state through the integrator.
@@ -309,7 +309,7 @@ class NonequilibriumSwitchingMove():
                     self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
                 self._timers['neq_switching'] = timer_list
                 self._shadow_work = 0.0
-                self.pass = False
+                self._pass = False
                 return
 
 
@@ -444,7 +444,7 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
     else:
         timers = ne_mc_move._timers
 
-    if ne_mc_move.pass:
+    if ne_mc_move._pass:
         neq_result = NonequilibriumResult(pass = True,
                                           sampler_state = sampler_state,
                                           protocol_work = protocol_work,
