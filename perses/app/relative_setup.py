@@ -999,7 +999,7 @@ class NonequilibriumSwitchingFEP(object):
                 self._alchemical_reduced_potentials[f"from_{start_lambda}"].append(hybrid_reduced_potentials[0])
                 self._alchemical_reduced_potentials[f"to_{end_lambda}"].append(hybrid_reduced_potentials[1])
 
-                if neq_fut.pass:
+                if neq_fut.succeed:
                     self._nonequilibrium_cum_work[_direction].append(neq_fut.cumulative_work)
                     self._nonequilibrium_prot_work[_direction].append(neq_fut.protocol_work)
                     self._nonequilibrium_shadow_work[_direction].append(neq_fut.shadow_work)

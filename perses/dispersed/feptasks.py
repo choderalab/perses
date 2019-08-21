@@ -30,7 +30,7 @@ _logger.setLevel(logging.DEBUG)
 
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
-NonequilibriumResult = namedtuple('NonequilibriumResult', ['pass', 'sampler_state', 'protocol_work', 'cumulative_work', 'shadow_work', 'kinetic_energies','timers'])
+NonequilibriumResult = namedtuple('NonequilibriumResult', ['succeed', 'sampler_state', 'protocol_work', 'cumulative_work', 'shadow_work', 'kinetic_energies','timers'])
 iter_tuple = namedtuple('iter_tuple', ['prep_time', 'step_time', 'save_config_time'])
 
 class NonequilibriumSwitchingMove():
@@ -169,7 +169,7 @@ class NonequilibriumSwitchingMove():
         self._timers['instantiate'] = time.time() - start
 
         #set a bool variable for pass or failure
-        self._pass = True
+        self.succeed = True
 
     def apply(self, thermodynamic_state, sampler_state):
         """Propagate the state through the integrator.
@@ -309,7 +309,7 @@ class NonequilibriumSwitchingMove():
                     self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
                 self._timers['neq_switching'] = timer_list
                 self._shadow_work = 0.0
-                self._pass = False
+                self.succeed = False
                 return
 
 
@@ -444,8 +444,8 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
     else:
         timers = ne_mc_move._timers
 
-    if ne_mc_move._pass:
-        neq_result = NonequilibriumResult(pass = True,
+    if ne_mc_move.succeed:
+        neq_result = NonequilibriumResult(succeed = True,
                                           sampler_state = sampler_state,
                                           protocol_work = protocol_work,
                                           cumulative_work = cumulative_work,
@@ -453,7 +453,7 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
                                           kinetic_energies = kinetic_energies,
                                           timers = timers)
     else:
-        neq_result = NonequilibriumResult(pass = False,
+        neq_result = NonequilibriumResult(succeed = False,
                                           sampler_state = sampler_state,
                                           protocol_work = protocol_work,
                                           cumulative_work = cumulative_work,
