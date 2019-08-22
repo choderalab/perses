@@ -816,7 +816,7 @@ class NonequilibriumSwitchingFEP(object):
                 cluster.scale(self._gpus)
 
             _logger.debug(f"scheduling cluster with client")
-            self.client = distributed.Client(cluster, asynchronous=True)
+            self.client = distributed.Client(cluster, asynchronous=False)
         else:
             self.client = distributed.Client()
             self._adapt = False
