@@ -88,9 +88,9 @@ def getSetupOptions(filename):
         if 'write_ncmc_configuration' not in setup_options:
             _logger.info(f"\t\t\twrite_ncmc_configuration not specified: default to False")
             setup_options['write_ncmc_configuration'] = False
-        if 'gpus' not in setup_options:
-            _logger.info(f"\t\t\tgpus is not specified; default to 100")
-            setup_options['gpus'] = 100
+        if 'processes' not in setup_options:
+            _logger.info(f"\t\t\tprocesses is not specified; default to 100")
+            setup_options['processes'] = 100
         if 'adapt' not in setup_options:
             _logger.info(f"\t\t\tadapt is not specified; default to True")
             setup_options['adapt'] = True
@@ -463,10 +463,10 @@ if __name__ == "__main__":
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
             print("activating client...")
-            gpus = setup_options['gpus']
+            processes = setup_options['processes']
             adapt = setup_options['adapt']
             LSF = setup_options['LSF']
-            ne_fep_run.activate_client(LSF = LSF, gpus = gpus, adapt = adapt)
+            ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt)
 
             print("equilibrating...")
             ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
