@@ -789,7 +789,7 @@ class NonequilibriumSwitchingFEP(object):
 
         _logger.info(f"constructed")
 
-    def activate_client(self, LSF = True, gpus = 2, adapt = False):
+    def activate_client(self, LSF = True, processes = 2, adapt = False):
         """
         NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
 
@@ -797,30 +797,30 @@ class NonequilibriumSwitchingFEP(object):
         ----------
         LSF: bool, default True
             whether to use the LSFCuster
-        gpus: int, default 4 (number of GPUs in a lilac node)
-            number of GPUs to run in parallel
+        processes: int, default 4 (number of GPUs in a lilac node)
+            number of processes to run in parallel
         adapt: bool, default False
-            whether to adapt the cluster size dynamically; if True, default minimum is 2 and maximum is gpus
+            whether to adapt the cluster size dynamically; if True, default minimum is 2 and maximum is processes
         """
         if LSF:
             from dask_jobqueue import LSFCluster
             cluster = LSFCluster()
             self._adapt = adapt
-            self._gpus = gpus
+            self._processes = processes
 
             if self._adapt:
-                _logger.debug(f"adapting cluster from 1 to {self._gpus} gpus")
-                cluster.adapt(minimum = 2, maximum = self._gpus)
+                _logger.debug(f"adapting cluster from 1 to {self._processes} processes")
+                cluster.adapt(minimum = 2, maximum = self._processes, interval = "1s", target_duration = "60s")
             else:
-                _logger.debug(f"scaling cluster to {self._gpus} gpus")
-                cluster.scale(self._gpus)
+                _logger.debug(f"scaling cluster to {self._processes} processes")
+                cluster.scale(self._processes)
 
             _logger.debug(f"scheduling cluster with client")
             self.client = distributed.Client(cluster)
         else:
             self.client = distributed.Client()
             self._adapt = False
-            self._gpus = 0
+            self._processes = 0
 
 
     def deactivate_client(self):
