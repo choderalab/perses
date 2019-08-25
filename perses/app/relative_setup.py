@@ -952,12 +952,9 @@ class NonequilibriumSwitchingFEP(object):
             _logger.debug(f"\t\tinitial lambda of thermodynamic_states: {[self._hybrid_thermodynamic_states[_lambda].lambda_sterics_core for _lambda in start]}")
 
             for _lambda, _direction in zip(start, directions): #iterate once or twice
-                #first, we will scatter the eq_result since the sampler state can be large
-                _logger.debug(f"\t\tscattering eq_result: {eq_results[_lambda]}")
-                remote_eq_result = self.client.scatter(eq_results[_lambda])
                 neq_results_collector[_direction].append(self.client.submit(feptasks.run_protocol,
                                                                      thermodynamic_state = self._hybrid_thermodynamic_states[_lambda],
-                                                                     equilibrium_result = remote_eq_result,
+                                                                     equilibrium_result = eq_results[_lambda],
                                                                      direction = _direction,
                                                                      topology = self._factory._hybrid_topology,
                                                                      nsteps_neq = self._ncmc_nsteps,
