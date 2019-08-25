@@ -913,9 +913,10 @@ class NonequilibriumSwitchingFEP(object):
                 file_iterators = {_lambda: 0 if self._eq_dict[_lambda] == [] else 1 + int(self._eq_dict[_lambda][-1][0][-7:-3]) for _lambda in start}
 
                 for index, _lambda in enumerate(start):
+                    remote_eq_result_input = self.client.scatter(eq_results_input[_lambda])
                     eq_results_futures[_lambda] = self.client.submit(feptasks.run_equilibrium,
                                                                      thermodynamic_state = self._hybrid_thermodynamic_states[_lambda],
-                                                                     eq_result = eq_results_input[_lambda],
+                                                                     eq_result = remote_eq_result_input,
                                                                      nsteps_equil = self._n_equil_steps,
                                                                      topology = self._factory.hybrid_topology,
                                                                      n_iterations = 1,
@@ -951,9 +952,12 @@ class NonequilibriumSwitchingFEP(object):
             _logger.debug(f"\t\tinitial lambda of thermodynamic_states: {[self._hybrid_thermodynamic_states[_lambda].lambda_sterics_core for _lambda in start]}")
 
             for _lambda, _direction in zip(start, directions): #iterate once or twice
+                #first, we will scatter the eq_result since the sampler state can be large
+                _logger.debug(f"\t\tscattering eq_result")
+                remote_eq_result = self.client.scatter(eq_results[_lambda])
                 neq_results_collector[_direction].append(self.client.submit(feptasks.run_protocol,
                                                                      thermodynamic_state = self._hybrid_thermodynamic_states[_lambda],
-                                                                     equilibrium_result = eq_results[_lambda],
+                                                                     equilibrium_result = remote_eq_result,
                                                                      direction = _direction,
                                                                      topology = self._factory._hybrid_topology,
                                                                      nsteps_neq = self._ncmc_nsteps,
@@ -977,8 +981,8 @@ class NonequilibriumSwitchingFEP(object):
             end_lambda = 1 if start_lambda == 0 else 0
 
             eq_results_collected = eq_results_collector[start_lambda]
-            #neq_results_collected = self.client.gather(neq_results_collector[_direction])
-            neq_results_collected = [fut.result() for fut in neq_results_collector[_direction]]
+            neq_results_collected = self.client.gather(neq_results_collector[_direction], errors='skip')
+            #neq_results_collected = [fut.result() for fut in neq_results_collector[_direction]]
 
             if full_protocol: # make the attribute sampler state of interest the last sampler state of the equilibrium run
                 self._sampler_states[start_lambda] = eq_results_collected[-1].sampler_state
