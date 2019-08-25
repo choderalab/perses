@@ -810,7 +810,7 @@ class NonequilibriumSwitchingFEP(object):
 
             if self._adapt:
                 _logger.debug(f"adapting cluster from 1 to {self._processes} processes")
-                cluster.adapt(minimum = 2, maximum = self._processes, interval = "1s", target_duration = "60s")
+                cluster.adapt(minimum = 2, maximum = self._processes, interval = "1s")
             else:
                 _logger.debug(f"scaling cluster to {self._processes} processes")
                 cluster.scale(self._processes)
