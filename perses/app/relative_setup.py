@@ -1197,10 +1197,12 @@ class NonequilibriumSwitchingFEP(object):
             if direction != 'forward' and direction != 'reverse':
                 raise Exception(f"direction must be 'forward' or 'reverse'; direction argument was given as {direction}")
         for _direction in directions:
-            if direction == 'forward':
+            if _direction == 'forward':
                 start_lambda, end_lambda = 0, 1
-            else:
+            elif _direction == 'reverse':
                 start_lambda, end_lambda = 1, 0
+            else:
+                raise Exception(f"direction may only be 'forward' or 'reverse'; the indicated direction was {_direction}")
 
             if self._alchemical_reduced_potentials[f"from_{start_lambda}"] == [] or self._alchemical_reduced_potentials[f"to_{end_lambda}"] == []:
                 raise Exception(f"direction of perturbation calculation was {_direction} but alchemical reduced potentials returned an empty list")
