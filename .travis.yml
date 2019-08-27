@@ -15,6 +15,16 @@ branches:
   except:
     - /^(?i:notest)-.*$/
 
+matrix:
+  include:
+    - env: python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="latest"
+    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="latest"
+    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
+    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
+  allow_failures:
+    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
+    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
+
 install:
   #add random sleep from 1-10s to try to prevent overloading the anaconda servers
   - sleep $[ ( $RANDOM % 10 )  + 1 ]s
@@ -34,9 +44,6 @@ script:
   - source activate test
   # Add omnia
   - conda config --add channels omnia --add channels conda-forge
-  # Add omnia beta and dev channels
-  - conda config --add channels omnia/label/beta
-  - conda config --add channels omnia/label/dev
   # Add OpenEye channel
   - conda config --add channels openeye
   # Update conda
@@ -49,13 +56,14 @@ script:
   - conda install --yes --use-local ${PACKAGENAME}-dev
   # Install testing dependencies
   - conda install --yes --quiet nose nose-timer
+  # Install desired OpenMM version
+  - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia openmm; fi
+  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c omnia/label/beta openmm; fi
+  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c omnia-dev openmm; fi
   # Test the package
   - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
 
 env:
-  matrix:
-    - python=3.6 CONDA_PY=36 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem"
-
   global:
     - ORGNAME="omnia"
     - OE_LICENSE="$HOME/oe_license.txt"

@@ -283,22 +283,17 @@ class HybridTopologyFactory(object):
     def _get_core_atoms(self):
         """
         Determine which atoms in the old system are part of the "core" class.
-
         All necessary information is contained in the topology proposal passed to the constructor.
-
         Returns
         -------
         core_atoms : set of int
             The set of atoms (hybrid topology indexed) that are core atoms.
         environment_atoms : set of int
             The set of atoms (hybrid topology indexed) that are environment atoms.
-
         .. todo ::
-
            Overhaul this method and methods it calls by instead having this class accept
            an alchemical atom set that denotes atoms not in the environment. The core would
            then be very easy to figure out.
-
         """
 
         #In order to be either a core or environment atom, the atom must be mapped.
@@ -311,14 +306,16 @@ class HybridTopologyFactory(object):
         unique_new_set = set(self._topology_proposal.unique_new_atoms)
 
         #we derive core atoms from the old topology:
+        name_of_residue = self._topology_proposal.old_residue_name
         core_atoms_from_old = self._determine_core_atoms_in_topology(self._topology_proposal.old_topology,
                                                                      unique_old_set, mapped_old_atoms_set,
-                                                                     self._old_to_hybrid_map)
+                                                                     self._old_to_hybrid_map, name_of_residue)
 
         #we also derive core atoms from the new topology:
+        name_of_residue = self._topology_proposal.new_residue_name
         core_atoms_from_new = self._determine_core_atoms_in_topology(self._topology_proposal.new_topology,
                                                                      unique_new_set, mapped_new_atoms_set,
-                                                                     self._new_to_hybrid_map)
+                                                                     self._new_to_hybrid_map, name_of_residue)
 
         #The union of the two will give the core atoms that can result from either new or old topology
         # TODO: Shouldn't these sets be the same?
@@ -330,7 +327,7 @@ class HybridTopologyFactory(object):
 
         return total_core_atoms, environment_atoms
 
-    def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map):
+    def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map, residue_to_switch):
         """
         Given a topology and its corresponding unique and mapped atoms, return the set of atom indices in the
         hybrid system which would belong to the "core" atom class
@@ -343,6 +340,8 @@ class HybridTopologyFactory(object):
             A set of atoms that are unique to this topology
         mapped_atoms : set of int
             A set of atoms that are mapped to another topology
+        residue_to_switch : str
+            string name of a residue that is being mutated
 
         Returns
         -------
@@ -357,7 +356,8 @@ class HybridTopologyFactory(object):
 
             #if the residue contains an atom index that is unique, then the residue is changing.
             #We determine this by checking if the atom indices of the residue have any intersection with the unique atoms
-            if len(atom_indices_old_system.intersection(unique_atoms)) > 0:
+            #likewise, if the name of the residue matches the residue_to_match, then we look for mapped atoms
+            if len(atom_indices_old_system.intersection(unique_atoms)) > 0 or residue_to_switch == residue.name:
                 #we can add the atoms in this residue which are mapped to the core_atoms set:
                 for atom_index in atom_indices_old_system:
                     if atom_index in mapped_atoms:
@@ -1264,7 +1264,7 @@ class HybridTopologyFactory(object):
                 old_index_list = [self._hybrid_to_old_map[hybr_idx] for hybr_idx in hybrid_index_list]
                 old_index_list_reversed = [i for i in reversed(old_index_list)]
 
-                 #if we've already added these indices (they may appear >once for high periodicities)
+                  #if we've already added these indices (they may appear >once for high periodicities)
                 #then just continue to the next torsion.
                 if (old_index_list in added_torsions) or (old_index_list_reversed in added_torsions):
                     continue
@@ -1276,7 +1276,6 @@ class HybridTopologyFactory(object):
                     self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
                 added_torsions.append(old_index_list)
                 added_torsions.append(old_index_list_reversed)
-
 
     def handle_nonbonded(self):
         """

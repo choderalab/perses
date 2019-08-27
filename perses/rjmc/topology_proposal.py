@@ -751,6 +751,10 @@ class TopologyProposal(object):
         The previous chemical state key
     new_chemical_state_key : str
         The proposed chemical state key
+    old_residue_name : str
+        Name of the old residue
+    new_residue_name : str
+        Name of the new residue
     metadata : dict
         additional information of interest about the state
     """
@@ -761,6 +765,7 @@ class TopologyProposal(object):
                  logp_proposal=None,
                  new_to_old_atom_map=None, old_alchemical_atoms=None,
                  old_chemical_state_key=None, new_chemical_state_key=None,
+                 old_residue_name=None, new_residue_name=None,
                  metadata=None):
 
         if new_chemical_state_key is None or old_chemical_state_key is None:
@@ -772,6 +777,8 @@ class TopologyProposal(object):
         self._logp_proposal = logp_proposal
         self._new_chemical_state_key = new_chemical_state_key
         self._old_chemical_state_key = old_chemical_state_key
+        self._old_residue_name = old_residue_name
+        self._new_residue_name = new_residue_name
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = list(set(range(self._new_topology.getNumAtoms()))-set(self._new_to_old_atom_map.keys()))
@@ -833,6 +840,12 @@ class TopologyProposal(object):
     @property
     def old_chemical_state_key(self):
         return self._old_chemical_state_key
+    @property
+    def old_residue_name(self):
+        return self._old_residue_name
+    @property
+    def new_residue_name(self):
+        return self._new_residue_name
     @property
     def metadata(self):
         return self._metadata
@@ -2403,7 +2416,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_topology=current_topology, new_topology=new_topology,
             old_system=current_system, new_system=new_system,
             old_alchemical_atoms=old_alchemical_atoms,
-            old_chemical_state_key=self._residue_name, new_chemical_state_key=self._residue_name)
+            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles,
+            old_residue_name=self._residue_name, new_residue_name=self._residue_name)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
         ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
@@ -2709,46 +2723,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
                 continue
 
-            # # If the above is not true, then they are either both hydrogens or both not hydrogens
-            # elif old_atom.GetAtomicNum() == 1:
-            #     assert len(list(old_atom.GetBonds())) == 1, f"This atom has more than one bond"
-            #     bond = list(old_atom.GetBonds())[0] # There is only one for hydrogen
-            #     bgn = bond.GetBgn()
-            #     end = bond.GetEnd()
-            #
-            #     # Is this atom the beginning of the bond?
-            #     if bgn.GetIdx() == old_index:
-            #         other_atom = end
-            #     else:
-            #         other_atom = bgn
-            #
-            #     assert len(list(new_atom.GetBonds())) == 1, f"This atom has more than one bond"
-            #     new_bond = list(new_atom.GetBonds())[0]
-            #     new_bgn = new_bond.GetBgn()
-            #     new_end = new_bond.GetEnd()
-            #
-            #     if new_bgn.GetIdx() == new_index:
-            #         new_other_atom = new_end
-            #     else:
-            #         new_other_atom = new_bgn
-
-                # old_pair, new_pair = set([bgn.GetIdx(), end.GetIdx()]), set([new_bgn.GetIdx(), new_end.GetIdx()])
-                # assert old_pair in old_constraints.keys(), f"old hydrogen bond ({bgn.GetAtomicNum()} to {end.GetAtomicNum()}) doesn't have a constraint"
-                # assert new_pair in new_constraints.keys(), f"new hydrogen bond ({new_bgn.GetAtomicNum()} to {new_end.GetAtomicNum()}) doesn't have a constraint"
-
-                # if old_constraints[old_pair] != new_constraints[new_pair]: #if the old constraint doesn't equal the new constraint, then continue
-                #     continue
-
-                #now to loop through the indices of the constraints and see if they are conserved; if not, we have to
-                # if (new_other_atom.GetAtomicNum() != other_atom.GetAtomicNum()):
-                #     # if X-H maps to Y-H where X, Y are the same element but with different aromaticity booleans, then the Hbond constraint difference
-                #     # will throw an error in the HybridTopologyFactory class.  map these hydrogens as unique new/old
-                #     continue
-
-
             new_to_old_atom_map[new_index] = old_index
-
         return new_to_old_atom_map
+
 
     @staticmethod
     def _constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology):
@@ -2774,7 +2751,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             elif atom2 in new_hydrogens:
                 new_constraints[atom2] = length
 
-        #iterate through the atom indices in the new_to_old map, check bonds for pairs, and remove appropriate matches
+         #iterate through the atom indices in the new_to_old map, check bonds for pairs, and remove appropriate matches
         to_delete = []
         for new_index, old_index in atom_map.items():
             if new_index in new_constraints.keys() and old_index in old_constraints.keys(): # both atom indices are hydrogens
@@ -2786,9 +2763,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             del atom_map[idx]
 
         return atom_map
-
-
-
 
     @staticmethod
     def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=True):
@@ -2844,7 +2818,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             hit_number = 0
             for key, value in map.items():
                 if key == value:
-                    hit_number+=1
+                    hit_number += 1
+
             index_overlap_numbers.append(hit_number)
 
         max_index_overlap_number = max(index_overlap_numbers)
