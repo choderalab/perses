@@ -27,7 +27,7 @@ from openmmtools.multistate import sams, replicaexchange
 from openmmtools import cache
 
 from perses.annihilation.ncmc_switching import NCMCEngine
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 from perses.dispersed import feptasks
 from perses.storage import NetCDFStorageView
 from perses.utils.openeye import smiles_to_oemol
@@ -1119,10 +1119,12 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
     """
     SAMSSampler that supports unsampled end states with a different number of positions
     """
+    # TODO this needs to be updated to be consistent with
 
-    def __init__(self, *args, hybrid_factory=None, **kwargs):
+    def __init__(self, *args, lambda_protocol=LambdaProtocol(), hybrid_factory=None, **kwargs):
         super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
         self._factory = hybrid_factory
+        self.lambda_protocol = lambda_protocol
 
     def setup(self, n_states, temperature, storage_file):
         hybrid_system = self._factory.hybrid_system
@@ -1140,7 +1142,7 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
         lambda_values = np.linspace(0.,1.,n_states)
         for lambda_val in lambda_values:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
-            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
+            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol = self.lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
         nonalchemical_thermodynamic_states = [
@@ -1160,9 +1162,10 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
     ReplicaExchangeSampler that supports unsampled end states with a different number of positions
     """
 
-    def __init__(self, *args, hybrid_factory=None, **kwargs):
+    def __init__(self, *args, lambda_protocol=LambdaProtocol(), hybrid_factory=None, **kwargs):
         super(HybridRepexSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
         self._factory = hybrid_factory
+        self.lambda_protocol = lambda_protocol
 
     def setup(self, n_states, temperature, storage_file):
         hybrid_system = self._factory.hybrid_system
@@ -1179,7 +1182,7 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
         lambda_values = np.linspace(0.,1.,n_states)
         for lambda_val in lambda_values:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
-            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
+            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol=self.lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
         #nonalchemical_thermodynamic_states = [
