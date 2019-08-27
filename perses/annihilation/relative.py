@@ -283,22 +283,17 @@ class HybridTopologyFactory(object):
     def _get_core_atoms(self):
         """
         Determine which atoms in the old system are part of the "core" class.
-
         All necessary information is contained in the topology proposal passed to the constructor.
-
         Returns
         -------
         core_atoms : set of int
             The set of atoms (hybrid topology indexed) that are core atoms.
         environment_atoms : set of int
             The set of atoms (hybrid topology indexed) that are environment atoms.
-
         .. todo ::
-
            Overhaul this method and methods it calls by instead having this class accept
            an alchemical atom set that denotes atoms not in the environment. The core would
            then be very easy to figure out.
-
         """
 
         #In order to be either a core or environment atom, the atom must be mapped.
@@ -311,14 +306,16 @@ class HybridTopologyFactory(object):
         unique_new_set = set(self._topology_proposal.unique_new_atoms)
 
         #we derive core atoms from the old topology:
+        name_of_residue = self._topology_proposal.old_residue_name
         core_atoms_from_old = self._determine_core_atoms_in_topology(self._topology_proposal.old_topology,
                                                                      unique_old_set, mapped_old_atoms_set,
-                                                                     self._old_to_hybrid_map)
+                                                                     self._old_to_hybrid_map, name_of_residue)
 
         #we also derive core atoms from the new topology:
+        name_of_residue = self._topology_proposal.new_residue_name
         core_atoms_from_new = self._determine_core_atoms_in_topology(self._topology_proposal.new_topology,
                                                                      unique_new_set, mapped_new_atoms_set,
-                                                                     self._new_to_hybrid_map)
+                                                                     self._new_to_hybrid_map, name_of_residue)
 
         #The union of the two will give the core atoms that can result from either new or old topology
         # TODO: Shouldn't these sets be the same?

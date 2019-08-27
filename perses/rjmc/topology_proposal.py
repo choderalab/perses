@@ -747,6 +747,10 @@ class TopologyProposal(object):
         The previous chemical state key
     new_chemical_state_key : str
         The proposed chemical state key
+    old_residue_name : str
+        Name of the old residue
+    new_residue_name : str
+        Name of the new residue
     metadata : dict
         additional information of interest about the state
     """
@@ -757,6 +761,7 @@ class TopologyProposal(object):
                  logp_proposal=None,
                  new_to_old_atom_map=None, old_alchemical_atoms=None,
                  old_chemical_state_key=None, new_chemical_state_key=None,
+                 old_residue_name=None, new_residue_name=None,
                  metadata=None):
 
         if new_chemical_state_key is None or old_chemical_state_key is None:
@@ -768,6 +773,8 @@ class TopologyProposal(object):
         self._logp_proposal = logp_proposal
         self._new_chemical_state_key = new_chemical_state_key
         self._old_chemical_state_key = old_chemical_state_key
+        self._old_residue_name = old_residue_name
+        self._new_residue_name = new_residue_name
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = list(set(range(self._new_topology.getNumAtoms()))-set(self._new_to_old_atom_map.keys()))
@@ -829,6 +836,12 @@ class TopologyProposal(object):
     @property
     def old_chemical_state_key(self):
         return self._old_chemical_state_key
+    @property
+    def old_residue_name(self):
+        return self._old_residue_name
+    @property
+    def new_residue_name(self):
+        return self._new_residue_name
     @property
     def metadata(self):
         return self._metadata
@@ -2399,7 +2412,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_topology=current_topology, new_topology=new_topology,
             old_system=current_system, new_system=new_system,
             old_alchemical_atoms=old_alchemical_atoms,
-            old_chemical_state_key=self._residue_name, new_chemical_state_key=self._residue_name)
+            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles,
+            old_residue_name=self._residue_name, new_residue_name=self._residue_name)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
         ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
