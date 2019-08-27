@@ -2346,7 +2346,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             _logger.info(f"logp proposal: {logp_proposal}")
         else:
             # TODO: Make sure we're using canonical mol to smiles conversion
-            proposed_mol_smiles = oechem.OEMolToSmiles(current_mol)
+            proposed_mol_smiles = oechem.OEMolToSmiles(proposed_mol)
             proposed_mol_smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(proposed_mol_smiles)
             _logger.info(f"proposed mol detected with smiles {proposed_mol_smiles} and logp_proposal of 0.0")
             logp_proposal = 0.0
