@@ -46,7 +46,6 @@ OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | 
 # DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
-WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 ################################################################################
 # LOGGER
@@ -122,7 +121,7 @@ class SmallMoleculeAtomMapper(object):
     proposals is not disconnected.
     """
 
-    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, weak_atom_mapping: bool=False, prohibit_hydrogen_mapping: bool=True):
+    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
 
         self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
         self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
@@ -133,10 +132,7 @@ class SmallMoleculeAtomMapper(object):
         self._prohibit_hydrogen_mapping = prohibit_hydrogen_mapping
 
         if atom_match_expression is None:
-            if weak_atom_mapping:
-                self._atom_expr = WEAK_ATOM_EXPRESSION
-            else:
-                self._atom_expr = DEFAULT_ATOM_EXPRESSION
+            self._atom_expr = DEFAULT_ATOM_EXPRESSION
         else:
             self._atom_expr = atom_match_expression
 
@@ -2700,20 +2696,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     def hydrogen_mapping_exceptions(old_mol, new_mol, match):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
+        or aromatic(X) != aromatic(Y)
         """
-        # from perses.utils.openeye import OEMol_to_omm_ff
         new_to_old_atom_map = {}
-
-        # #wrapping constraints
-        # old_sys, old_pos, old_top = OEMol_to_omm_ff(old_mol, data_filename='data/gaff.xml')
-        # new_sys, new_pos, new_top = OEMol_to_omm_ff(new_mol, data_filename='data/gaff.xml')
-        # old_constraints, new_constraints = {}, {}
-        # for idx in range(old_sys.getNumConstraints()):
-        #     atom1, atom2, length = old_sys.getConstraintParameters(idx)
-        #     old_constraints[set([atom1, atom2])] = length
-        # for idx in range(new_sys.getNumConstraints()):
-        #     atom1, atom2, length = new_sys.getConstraintParameters(idx)
-        #     new_constraints[set([atom1, atom2])] = length
 
         for matchpair in match.GetAtoms():
             old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
@@ -2819,7 +2804,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             for key, value in map.items():
                 if key == value:
                     hit_number += 1
-
             index_overlap_numbers.append(hit_number)
 
         max_index_overlap_number = max(index_overlap_numbers)
