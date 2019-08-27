@@ -2698,9 +2698,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return new_to_old_atom_map
 
 
-   @staticmethod
+    @staticmethod
     def _constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology):
-       """
+        """
         Given an adjusted atom map (corresponding to the true indices of the new: old atoms in their respective systems), iterate through all of the
         atoms in the map that are hydrogen and check if the constraint length changes; if so, we do not map.
         """
@@ -2715,7 +2715,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             elif atom2 in old_hydrogens:
                 old_constraints[atom2] = length
 
-         for idx in range(new_system.getNumConstraints()):
+        for idx in range(new_system.getNumConstraints()):
             atom1, atom2, length = new_system.getConstraintParameters(idx)
             if atom1 in new_hydrogens:
                 new_constraints[atom1] = length
@@ -2730,10 +2730,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 if not old_length == new_length: #then we have to remove it from
                     to_delete.append(new_index)
 
-         for idx in to_delete:
+        for idx in to_delete:
             del atom_map[idx]
 
-         return atom_map
+        return atom_map
 
     @staticmethod
     def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=True):
@@ -2776,25 +2776,25 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             return {}
 
         top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches) #remove the matches with the lower rank score (filter out bad degeneracies)
-       _logger.debug(f"\tthere are {len(top_matches)} top matches")
+        _logger.debug(f"\tthere are {len(top_matches)} top matches")
         max_num_atoms = max([match.NumAtoms() for match in top_matches])
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
         _logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
 
-         #now all else is equal; we will choose the map with the highest overlap of atom indices
+        #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
         for map in new_to_old_atom_maps:
             hit_number = 0
             for key, value in map.items():
                 if key == value:
-                    hit_number+=1
+                    hit_number += 1
             index_overlap_numbers.append(hit_number)
 
-         max_index_overlap_number = max(index_overlap_numbers)
+        max_index_overlap_number = max(index_overlap_numbers)
         max_index = index_overlap_numbers.index(max_index_overlap_number)
         _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]}")
 
-         return new_to_old_atom_maps[max_index]
+        return new_to_old_atom_maps[max_index]
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         """
