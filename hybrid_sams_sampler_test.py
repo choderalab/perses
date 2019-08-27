@@ -1,7 +1,7 @@
 import numpy as np
 from simtk import unit
 from openmmtools import mcmc
-from perses.samplers.samplers import HybridSAMSSampler
+from perses.samplers.multistate import HybridSAMSSampler
 from perses.dispersed.relative_setup import HybridTopologyFactory
 import logging
 logging.basicConfig(level=logging.DEBUG)
