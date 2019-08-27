@@ -1373,6 +1373,7 @@ class HybridTopologyFactory(object):
         for old in unique_old_atoms:
             for new in unique_new_atoms:
                 self._hybrid_system_forces['standard_nonbonded_force'].addException(old, new, 0.0*unit.elementary_charge**2, 1.0*unit.nanometers, 0.0*unit.kilojoules_per_mole)
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(old, new) #this is only necessary to avoid the 'All forces must have identical exclusions' rule
 
         _logger.info("\thandle_nonbonded: Handling Interaction Groups...")
         self._handle_interaction_groups()
