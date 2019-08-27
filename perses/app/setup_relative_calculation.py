@@ -6,7 +6,7 @@ import sys
 import simtk.unit as unit
 import logging
 
-from perses.samplers.samplers import HybridSAMSSampler, HybridRepexSampler
+from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
