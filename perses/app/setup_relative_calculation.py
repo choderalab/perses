@@ -6,7 +6,7 @@ import sys
 import simtk.unit as unit
 import logging
 
-from perses.samplers.samplers import HybridSAMSSampler, HybridRepexSampler
+from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
@@ -112,10 +112,6 @@ def run_setup(setup_options):
     """
     from perses.tests.utils import validate_endstate_energies
     phases = setup_options['phases']
-
-    if len(phases) != 2:
-        _logger.info(f"\tnumber of phases is NOT 2...complex and solvent will be provided...")
-        phases = ['complex', 'solvent']
 
     known_phases = ['complex','solvent','vacuum']
     for phase in phases:
