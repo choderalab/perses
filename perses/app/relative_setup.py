@@ -27,7 +27,7 @@ import parmed as pm
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.WARNING)
 
 
 

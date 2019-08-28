@@ -16,7 +16,7 @@ InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'c
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.WARNING)
 ###########################################
 
 class HybridTopologyFactory(object):
