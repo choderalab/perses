@@ -135,7 +135,7 @@ class SmallMoleculeAtomMapper(object):
     proposals is not disconnected.
     """
 
-    def __init__(self, list_of_smiles: List[str], map_strength: str='default'; atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
+    def __init__(self, list_of_smiles: List[str], map_strength: str='default', atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
 
         self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
         self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
@@ -146,16 +146,16 @@ class SmallMoleculeAtomMapper(object):
         self._prohibit_hydrogen_mapping = prohibit_hydrogen_mapping
 
         if atom_match_expression is None:
-            assert (map_strength is in ['default','strong','weak']), "atom_map_type must match one of the allowed types: 'default','strong' or 'weak'. To use a different mapping scheme, please use the atom_match_expression flag."
+            assert (map_strength in ['default','strong','weak'])#, "atom_map_type must match one of the allowed types: 'default','strong' or 'weak'. To use a different mapping scheme, please use the atom_match_expression flag."
             self._atom_expr = vars()[map_strength.upper()+'_ATOM_EXPRESSION'] 
-            _logger.info(f'Setting atom_match_expression to {vars()[map_strength.upper()+'_ATOM_EXPRESSION']}')
+            _logger.info(f"Setting atom_match_expression to {vars()[map_strength.upper()+'_ATOM_EXPRESSION']}")
         else:
             self._atom_expr = atom_match_expression
 
         if bond_match_expression is None:
             self._bond_expr = DEFAULT_BOND_EXPRESSION
             self._bond_expr = vars()[map_strength.upper()+'_BOND_EXPRESSION'] 
-            _logger.info(f'Setting bond_match_expression to {vars()[map_strength.upper()+'_BOND_EXPRESSION']}')
+            _logger.info(f"Setting bond_match_expression to {vars()[map_strength.upper()+'_BOND_EXPRESSION']}")
         else:
             self._bond_expr = bond_match_expression
 

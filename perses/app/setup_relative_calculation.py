@@ -87,6 +87,8 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
 
+    if 'mapping_strength' not in setup_options:
+        setup_options['mapping_strength'] = 'default'
 
     _logger.info(f"\ttrajectory_directory detected: {trajectory_directory}.  making dir...")
     assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
