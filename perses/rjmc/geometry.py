@@ -17,7 +17,7 @@ from perses.storage import NetCDFStorage, NetCDFStorageView
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("geometry")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.WARNING)
 
 
 
@@ -585,8 +585,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"final reduced energy {final_context_reduced_potential}")
 
-        _logger.debug(f"reduced potential components added:")
-        added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
+        _logger.debug(f"potential components added:")
+        added_energy_components = [(force, energy) for force, energy in compute_potential_components(context)]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"total reduced energy added from growth system: {reduced_potential_energy}")

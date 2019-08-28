@@ -1001,16 +1001,17 @@ class HybridTopologyFactory(object):
         angle_parameters : list
             list of angle parameters
         """
-        index_set = set(indices)
+        #index_set = set(indices)
+        indices_reversed = indices[::-1]
 
         #now loop through and try to find the angle:
         for angle_index in range(angle_force.getNumAngles()):
             angle_parameters = angle_force.getAngleParameters(angle_index)
 
             #get a set representing the angle indices
-            angle_parameter_indices = set(angle_parameters[:3])
+            angle_parameter_indices = angle_parameters[:3]
 
-            if index_set==angle_parameter_indices:
+            if indices == angle_parameter_indices or indices_reversed == angle_parameter_indices:
                 return angle_parameters
         return []  # return empty if no matching angle found
 
@@ -1023,14 +1024,15 @@ class HybridTopologyFactory(object):
         torsion_force : openmm.PeriodicTorsionForce
             torsion force where the torsion of interest may be found
         indices : list of int
-            The indices (any order) of the atoms of the torsion
+            The indices of the atoms of the torsion
 
         Returns
         -------
         torsion_parameters : list
             torsion parameters
         """
-        index_set = set(indices)
+        #index_set = set(indices)
+        indices_reversed = indices[::-1]
 
         torsion_parameters_list = list()
 
@@ -1039,9 +1041,9 @@ class HybridTopologyFactory(object):
             torsion_parameters = torsion_force.getTorsionParameters(torsion_index)
 
             #get a set representing the torsion indices:
-            torsion_parameter_indices = set(torsion_parameters[:4])
+            torsion_parameter_indices = torsion_parameters[:4]
 
-            if index_set==torsion_parameter_indices:
+            if indices == torsion_parameter_indices or indices_reversed == torsion_parameter_indices:
                 torsion_parameters_list.append(torsion_parameters)
 
         return torsion_parameters_list
@@ -1194,12 +1196,14 @@ class HybridTopologyFactory(object):
         added_torsions = []
         _logger.info("\thandle_periodic_torsion_forces: looping through old_system to add relevant terms...")
         for torsion_index in range(old_system_torsion_force.getNumTorsions()):
-            _logger.debug(f"\t\thandle_harmonic_angles: old torsion_index: {torsion_index}")
+            _logger.debug(f"\t\thandle_harmonic_torsion_forces: old torsion_index: {torsion_index}")
             torsion_parameters = old_system_torsion_force.getTorsionParameters(torsion_index)
+            _logger.debug(f"\t\thandle_harmonic_torsion_forces: old_torsion parameters: {torsion_parameters}")
 
 
             #get the indices in the hybrid system
             hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in torsion_parameters[:4]]
+            _logger.debug(f"\t\thandle_harmonic_torsion_forces: hybrid torsion index: {hybrid_index_list}")
             hybrid_index_set = set(hybrid_index_list)
 
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
@@ -1215,8 +1219,11 @@ class HybridTopologyFactory(object):
                 #get the new indices so we can get the new angle parameters, as well as all old parameters of the old torsion
                 #The reason we do it like this is to take care of varying periodicity between new and old system.
                 torsion_parameters_list = self._find_torsion_parameters(old_system_torsion_force, torsion_indices)
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: old torsion parameters: {torsion_parameters_list}")
                 new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in torsion_indices]
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: new indices: {new_indices}")
                 new_torsion_parameters_list = self._find_torsion_parameters(new_system_torsion_force, new_indices)
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: new torsion parameters: {new_torsion_parameters_list}")
 
                 #for old torsions, have the energy scale from full at lambda=0 to off at lambda=1
                 for torsion_parameters in torsion_parameters_list:
