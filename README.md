@@ -30,5 +30,5 @@ have concluded.
 * Patrick B. Grinaway
 * Julie M. Behr
 * Hannah E. Bruce Macdonald
-* Dominic A. Rufa
+* dominic a. rufa
 * John D. Chodera
