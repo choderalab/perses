@@ -312,7 +312,7 @@ class HybridTopologyFactory(object):
                                                                      self._old_to_hybrid_map, name_of_residue)
 
         #we also derive core atoms from the new topology:
-        name_of_residue = self._topology_proposal.new_residue_name
+        name_of_residue = self._topology_proposal.new_chemical_state_key
         core_atoms_from_new = self._determine_core_atoms_in_topology(self._topology_proposal.new_topology,
                                                                      unique_new_set, mapped_new_atoms_set,
                                                                      self._new_to_hybrid_map, name_of_residue)
@@ -731,8 +731,10 @@ class HybridTopologyFactory(object):
         #these will be ignored from the _logger for the time being
         if self._old_system_forces['NonbondedForce'].getUseDispersionCorrection():
             self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(True)
-            if self._use_dispersion_correction:
+            if self._use_dispersion_correction: #this will be expensive for ncmc
                 sterics_custom_nonbonded_force.setUseLongRangeCorrection(True)
+            else:
+                sterics_custom_nonbonded_force.setUseLongRangeCorrection(False)
         else:
             self._hybrid_system_forces['standard_nonbonded_force'].setUseDispersionCorrection(False)
 
@@ -1175,7 +1177,7 @@ class HybridTopologyFactory(object):
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
                 _logger.debug(f"\t\thandle_harmonic_angles: angle_index {angle_index} is a core (to custom angle force).")
                 if not self._find_angle_parameters(self._hybrid_system_forces['core_angle_force'], hybrid_index_list):
-                    _logger.debug(f"\t\t\thandle_harmonic_angles: angle_index {angle_index} NOT previously added...adding now...THERE IS A CONSIDERATION NOT BEING MADE!")
+                    _logger.debug(f"\t\t\thandle_harmonic_angles: angle_index {angle_index} NOT previously added...adding now...This is a core angle force present in new system but not in old system!")
                     hybrid_force_parameters = [new_angle_parameters[3], 0.0*unit.kilojoule_per_mole/unit.radian**2, new_angle_parameters[3], new_angle_parameters[4]]
                     self._hybrid_system_forces['core_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2],
@@ -1271,7 +1273,8 @@ class HybridTopologyFactory(object):
                 old_index_list = [self._hybrid_to_old_map[hybr_idx] for hybr_idx in hybrid_index_list]
                 old_index_list_reversed = [i for i in reversed(old_index_list)]
 
-                  #if we've already added these indices (they may appear >once for high periodicities)
+
+                 #if we've already added these indices (they may appear >once for high periodicities)
                 #then just continue to the next torsion.
                 if (old_index_list in added_torsions) or (old_index_list_reversed in added_torsions):
                     continue

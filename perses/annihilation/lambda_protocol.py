@@ -216,6 +216,19 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_electrostatics_delete
     """
 
+    # lambda components for each component, all run from 0 -> 1 following master lambda
+    lambda_functions = {
+        'lambda_sterics_core': lambda x: x,
+        'lambda_electrostatics_core': lambda x: x,
+        'lambda_sterics_insert': lambda x: 2.0*x if x< 0.5 else 1.0,
+        'lambda_sterics_delete': lambda x: 0.0 if x < 0.5 else 2.0*(x-0.5),
+        'lambda_electrostatics_insert': lambda x:0.0 if x < 0.5 else 2.0*(x-0.5),
+        'lambda_electrostatics_delete': lambda x: 2.0*x if x< 0.5 else 1.0,
+        'lambda_bonds': lambda x: x,
+        'lambda_angles': lambda x: x,
+        'lambda_torsions': lambda x: x
+    }
+
     class _LambdaParameter(AlchemicalState._LambdaParameter):
         pass
 
@@ -225,6 +238,9 @@ class RelativeAlchemicalState(AlchemicalState):
     lambda_sterics_delete = _LambdaParameter('lambda_sterics_delete')
     lambda_electrostatics_insert = _LambdaParameter('lambda_electrostatics_insert')
     lambda_electrostatics_delete = _LambdaParameter('lambda_electrostatics_delete')
+    # lambda_bonds = _LambdaParameter('lambda_bonds')
+    # lambda_angles = _LambdaParameter('lambda_angles')
+    # lambda_torsions = _LambdaParameter('lambda_torsions')
 
     def set_alchemical_parameters(self, global_lambda,
                                   lambda_protocol=LambdaProtocol()):

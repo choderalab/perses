@@ -14,6 +14,7 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 from perses.utils.smallmolecules import render_atom_mapping
+from perses.tests.utils import validate_endstate_energies
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("setup_relative_calculation")
@@ -76,6 +77,39 @@ def getSetupOptions(filename):
         if 'offline-freq' not in setup_options:
             setup_options['offline-freq'] = 10
             _logger.info(f"\t\t\toffline-freq not specified: default to 10.")
+    elif setup_options['fe_type'] == 'neq': #there are some neq attributes that are not used with the equilibrium samplers...
+        _logger.info(f"\t\tfe_type: neq")
+        if 'n_equilibrium_steps_per_iteration' not in setup_options:
+            _logger.info(f"\t\t\tn_equilibrium_steps_per_iteration not specified: default to 1000.")
+            setup_options['n_equilibrium_steps_per_iteration'] = 1000
+        if 'n_steps_ncmc_protocol' not in setup_options:
+            _logger.info(f"\t\t\tn_steps_ncmc_protocol not specified: default to 25000.")
+            setup_options['n_steps_ncmc_protocol'] = 25000
+        if 'ncmc_save_interval' not in setup_options:
+            _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
+            setup_options['ncmc_save_interval'] = None
+        if 'measure_shadow_work' not in setup_options:
+            _logger.info(f"\t\t\tmeasure_shadow_work not specified: default to False")
+            setup_options['measure_shadow_work'] = False
+        if 'write_ncmc_configuration' not in setup_options:
+            _logger.info(f"\t\t\twrite_ncmc_configuration not specified: default to False")
+            setup_options['write_ncmc_configuration'] = False
+        if 'processes' not in setup_options:
+            _logger.info(f"\t\t\tprocesses is not specified; default to 100")
+            setup_options['processes'] = 100
+        if 'adapt' not in setup_options:
+            _logger.info(f"\t\t\tadapt is not specified; default to True")
+            setup_options['adapt'] = True
+        if 'max_file_size' not in setup_options:
+            _logger.info(f"\t\t\tmax_file_size is not specified; default to 10MB")
+            setup_options['max_file_size'] = 10*1024e3
+        if 'n_cycles' not in setup_options:
+            _logger.info(f"\t\t\tn_cycles is not specified; default to 100")
+            setup_options['n_cycles'] = 100
+        if 'LSF' not in setup_options:
+            _logger.info(f"\t\t\tLSF is not specified; default to True")
+            setup_options['LSF'] = True
+        setup_options['n_steps_per_move_application'] = 1 #setting the writeout to 1 for now
 
     trajectory_directory = setup_options['trajectory_directory']
 
@@ -105,13 +139,14 @@ def run_setup(setup_options):
 
     Returns
     -------
-    fe_setup : NonequilibriumFEPSetup
-        The setup class for this calculation
-    ne_fep : NonequilibriumSwitchingFEP
-        The nonequilibrium driver class
+    setup_dict: dict
+        {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
+        - 'topology_proposals':
     """
-    from perses.tests.utils import validate_endstate_energies
     phases = setup_options['phases']
+    if len(phases) > 2:
+        _logger.info(f"\tnumber of phases is greater than 2...complex and solvent will be provided...")
+        phases = ['complex', 'solvent']
 
     known_phases = ['complex','solvent','vacuum']
     for phase in phases:
@@ -166,7 +201,7 @@ def run_setup(setup_options):
 
     else:
         eq_splitting = "V R O R V"
-        neq_splitting = "V R O H R V"
+        neq_splitting = "V R O R V"
         _logger.info(f"\tno splitting strings specified: defaulting to neq: {neq_splitting}, eq: {eq_splitting}.")
 
     if "measure_shadow_work" in setup_options:
@@ -206,22 +241,20 @@ def run_setup(setup_options):
         _logger.info(f"\n\n\n")
 
         _logger.info(f"\twriting pickle output...")
-        pickle_outfile = open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb')
-
-        try:
-            pickle.dump(fe_setup, pickle_outfile)
-            _logger.info(f"\tsuccessfully dumped pickle.")
-        except Exception as e:
-            print(e)
-            print("\tUnable to save setup object as a pickle")
-        finally:
-            pickle_outfile.close()
+        with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
+            try:
+                pickle.dump(fe_setup, f)
+                _logger.info(f"\tsuccessfully dumped pickle.")
+            except Exception as e:
+                print(e)
+                print("\tUnable to save setup object as a pickle")
 
         _logger.info(f"\tsetup is complete.  Writing proposals and positions for each phase to top_prop dict...")
 
         top_prop = dict()
         if 'complex' in phases:
             top_prop['complex_topology_proposal'] = fe_setup.complex_topology_proposal
+            top_prop['complex_geometry_engine'] = fe_setup._complex_geometry_engine
             top_prop['complex_old_positions'] = fe_setup.complex_old_positions
             top_prop['complex_new_positions'] = fe_setup.complex_new_positions
             top_prop['complex_added_valence_energy'] = fe_setup._complex_added_valence_energy
@@ -237,6 +270,7 @@ def run_setup(setup_options):
 
         if 'solvent' in phases:
             top_prop['solvent_topology_proposal'] = fe_setup.solvent_topology_proposal
+            top_prop['solvent_geometry_engine'] = fe_setup._solvent_geometry_engine
             top_prop['solvent_old_positions'] = fe_setup.solvent_old_positions
             top_prop['solvent_new_positions'] = fe_setup.solvent_new_positions
             top_prop['solvent_added_valence_energy'] = fe_setup._solvated_added_valence_energy
@@ -252,6 +286,7 @@ def run_setup(setup_options):
 
         if 'vacuum' in phases:
             top_prop['vacuum_topology_proposal'] = fe_setup.vacuum_topology_proposal
+            top_prop['vacuum_geometry_engine'] = fe_setup._vacuum_geometry_engine
             top_prop['vacuum_old_positions'] = fe_setup.vacuum_old_positions
             top_prop['vacuum_new_positions'] = fe_setup.vacuum_new_positions
             top_prop['vacuum_added_valence_energy'] = fe_setup._vacuum_added_valence_energy
@@ -283,28 +318,36 @@ def run_setup(setup_options):
         _logger.info(f"\tno atom selection detected: default to None.")
         atom_selection = None
 
-    if setup_options['fe_type'] == 'nonequilibrium':
+    if setup_options['fe_type'] == 'neq':
+        _logger.info(f"\tInstantiating nonequilibrium switching FEP")
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
+        ncmc_save_interval = setup_options['ncmc_save_interval']
+        write_ncmc_configuration = setup_options['write_ncmc_configuration']
+
 
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
-        scheduler_address = setup_options['scheduler_address']
 
         ne_fep = dict()
         for phase in phases:
-            ne_fep[phase] = NonequilibriumSwitchingFEP(top_prop['%s_topology_proposal' % phase],
-                                                       top_prop['%s_old_positions' % phase],
-                                                       top_prop['%s_new_positions' % phase],
-                                                       n_equil_steps=n_equilibrium_steps_per_iteration,
+            _logger.info(f"\t\tphase: {phase}")
+            ne_fep[phase] = NonequilibriumSwitchingFEP(topology_proposal = top_prop['%s_topology_proposal' % phase],
+                                                       geometry_engine = top_prop['%s_geometry_engine' % phase],
+                                                       pos_old = top_prop['%s_old_positions' % phase],
+                                                       new_positions = top_prop['%s_new_positions' % phase],
                                                        ncmc_nsteps=n_steps_ncmc_protocol,
-                                                       nsteps_per_iteration=n_steps_per_move_application,
-                                                       temperature=temperature,
+                                                       n_equilibrium_steps_per_iteration = n_equilibrium_steps_per_iteration,
+                                                       temperature = temperature,
                                                        trajectory_directory=trajectory_directory,
-                                                       trajectory_prefix='-'.join([trajectory_prefix, '%s' % phase]),
+                                                       trajectory_prefix=f"{trajectory_prefix}_{phase}",
                                                        atom_selection=atom_selection,
-                                                       scheduler_address=scheduler_address, eq_splitting_string=eq_splitting,
-                                                       neq_splitting_string=neq_splitting,
+                                                       eq_splitting_string = eq_splitting,
+                                                       neq_splitting_string = neq_splitting,
+                                                       measure_shadow_work=measure_shadow_work,
                                                        timestep=timestep,
-                                                       measure_shadow_work=measure_shadow_work)
+                                                       neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
+                                                       neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
+                                                       ncmc_save_interval = ncmc_save_interval,
+                                                       write_ncmc_configuration = write_ncmc_configuration)
 
         print("Nonequilibrium switching driver class constructed")
 
@@ -395,63 +438,62 @@ if __name__ == "__main__":
 
     trajectory_prefix = setup_options['trajectory_prefix']
     trajectory_directory = setup_options['trajectory_directory']
+
     #write out topology proposals
-    _logger.info(f"Writing topology proposal {trajectory_prefix}topology_proposals.npy to {trajectory_directory}...")
-    np.save(os.path.join(setup_options['trajectory_directory'], trajectory_prefix+"topology_proposals.npy"),
-            setup_dict['topology_proposals'])
+    try:
+        _logger.info(f"Writing topology proposal {trajectory_prefix}_topology_proposals.pkl to {trajectory_directory}...")
+        with open(os.path.join(trajectory_directory, "%s_topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
+            pickle.dump(setup_dict['topology_proposals'], f)
+    except Exception as e:
+        print(e)
+        _logger.info("Unable to save run object as a pickle; saving as npy")
+        np.save(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
 
-
-    n_equilibration_iterations = setup_options['n_equilibration_iterations']
+    n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
     _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
-    if setup_options['fe_type'] == 'nonequilibrium':
-        _logger.info(f"Detecting nonequilibrium as fe_type...(this is neither logged nor debugged properly).")
+
+    if setup_options['fe_type'] == 'neq':
+        temperature = setup_options['temperature'] * unit.kelvin
+        max_file_size = setup_options['max_file_size']
         n_cycles = setup_options['n_cycles']
-        n_iterations_per_cycle = setup_options['n_iterations_per_cycle']
-        total_iterations = n_cycles*n_iterations_per_cycle
 
         ne_fep = setup_dict['ne_fep']
         for phase in setup_options['phases']:
             ne_fep_run = ne_fep[phase]
             hybrid_factory = ne_fep_run._factory
-            np.save(os.path.join(trajectory_directory, "%s_%s_hybrid_factory.npy" % (trajectory_prefix, phase)),
-                    hybrid_factory)
 
-            print("equilibrating")
-            ne_fep_run.equilibrate(n_iterations=n_equilibration_iterations)
+            top_proposal = setup_dict['topology_proposals'][f"{phase}_topology_proposal"]
+            _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
+            _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
 
-            print("equilibration complete")
-            for i in range(n_cycles):
-                ne_fep_run.run(n_iterations=n_iterations_per_cycle)
-                print(i)
+            zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature))
+            _logger.info(f"\t\terror in zero state: {zero_state_error}")
+            _logger.info(f"\t\terror in one state: {one_state_error}")
 
-            print("calculation complete")
-            df, ddf = ne_fep_run.current_free_energy_estimate
+            print("activating client...")
+            processes = setup_options['processes']
+            adapt = setup_options['adapt']
+            LSF = setup_options['LSF']
+            ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt)
 
-            print("The free energy estimate is %f +/- %f" % (df, ddf))
+            print("equilibrating...")
+            ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
 
-            endpoint_file_prefix = os.path.join(trajectory_directory, "%s_%s_endpoint{endpoint_idx}.npy" %
-                                                (trajectory_prefix, phase))
-
-            endpoint_work_paths = [endpoint_file_prefix.format(endpoint_idx=lambda_state) for lambda_state in [0, 1]]
+            print("annealing...")
+            ne_fep_run.run(n_iterations = n_cycles, full_protocol = False, timer = True)
+            print("calculation complete; deactivating client")
+            ne_fep_run.deactivate_client()
 
             # try to write out the ne_fep object as a pickle
             try:
-                pickle_outfile = open(os.path.join(trajectory_directory, "%s_%s_ne_fep.pkl" %
-                                                   (trajectory_prefix, phase)), 'wb')
-            except Exception as e:
-                pass
+                with open(os.path.join(trajectory_directory, "%s_%s_ne_fep.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+                    pickle.dump(ne_fep_run, f)
+                    print("pickle save successful; terminating.")
 
-            try:
-                pickle.dump(ne_fep, pickle_outfile)
             except Exception as e:
                 print(e)
-                print("Unable to save run object as a pickle")
-            finally:
-                pickle_outfile.close()
-
-            # save the endpoint perturbations
-            for lambda_state, reduced_potential_difference in ne_fep._reduced_potential_differences.items():
-                np.save(endpoint_work_paths[lambda_state], np.array(reduced_potential_difference))
+                print("Unable to save run object as a pickle; saving as npy")
+                np.save(os.path.join(trajectory_directory, "%s_%s_ne_fep.npy" % (trajectory_prefix, phase)), ne_fep_run)
 
     elif setup_options['fe_type'] == 'sams':
         _logger.info(f"Detecting sams as fe_type...")

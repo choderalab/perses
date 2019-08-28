@@ -2696,9 +2696,20 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     def hydrogen_mapping_exceptions(old_mol, new_mol, match):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
-        or aromatic(X) != aromatic(Y)
         """
+        # from perses.utils.openeye import OEMol_to_omm_ff
         new_to_old_atom_map = {}
+
+        # #wrapping constraints
+        # old_sys, old_pos, old_top = OEMol_to_omm_ff(old_mol, data_filename='data/gaff.xml')
+        # new_sys, new_pos, new_top = OEMol_to_omm_ff(new_mol, data_filename='data/gaff.xml')
+        # old_constraints, new_constraints = {}, {}
+        # for idx in range(old_sys.getNumConstraints()):
+        #     atom1, atom2, length = old_sys.getConstraintParameters(idx)
+        #     old_constraints[set([atom1, atom2])] = length
+        # for idx in range(new_sys.getNumConstraints()):
+        #     atom1, atom2, length = new_sys.getConstraintParameters(idx)
+        #     new_constraints[set([atom1, atom2])] = length
 
         for matchpair in match.GetAtoms():
             old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
