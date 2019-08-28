@@ -39,14 +39,28 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
-#DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
-#DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
-# DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms
-# DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
+# TODO write a mapping-protocol class to handle these options
+
+# weak requirements for mapping atoms == more atoms mapped, more in core
+# atoms need to match in aromaticity. Same with bonds.
+# maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
+WEAK_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity 
+
+# default atom expression, requires same aromaticitiy and hybridization
+# bonds need to match in bond order
+# ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic | oechem.OEExprOpts_Hybridization
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+# strong requires same hybridization AND the same atom type
+# bonds are same as default, require them to match in bond order
+# ethane to ethene wouldn't map, CH3 to NH2 wouldn't map, nor would CH3 to HC=O
+STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic | oechem.OEExprOpts_Hybridization
+STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
 ################################################################################
 # LOGGER
 ################################################################################
@@ -121,7 +135,7 @@ class SmallMoleculeAtomMapper(object):
     proposals is not disconnected.
     """
 
-    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
+    def __init__(self, list_of_smiles: List[str], map_strength: str='default'; atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
 
         self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
         self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
@@ -132,12 +146,16 @@ class SmallMoleculeAtomMapper(object):
         self._prohibit_hydrogen_mapping = prohibit_hydrogen_mapping
 
         if atom_match_expression is None:
-            self._atom_expr = DEFAULT_ATOM_EXPRESSION
+            assert (map_strength is in ['default','strong','weak']), "atom_map_type must match one of the allowed types: 'default','strong' or 'weak'. To use a different mapping scheme, please use the atom_match_expression flag."
+            self._atom_expr = vars()[map_strength.upper()+'_ATOM_EXPRESSION'] 
+            _logger.info(f'Setting atom_match_expression to {vars()[map_strength.upper()+'_ATOM_EXPRESSION']}')
         else:
             self._atom_expr = atom_match_expression
 
         if bond_match_expression is None:
             self._bond_expr = DEFAULT_BOND_EXPRESSION
+            self._bond_expr = vars()[map_strength.upper()+'_BOND_EXPRESSION'] 
+            _logger.info(f'Setting bond_match_expression to {vars()[map_strength.upper()+'_BOND_EXPRESSION']}')
         else:
             self._bond_expr = bond_match_expression
 
@@ -2273,12 +2291,24 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
-                 atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
-                 always_change=True, atom_map=None):
+                 atom_expr=None, bond_expr=None, map_strength='default', proposal_metadata=None, 
+                 storage=None, always_change=True, atom_map=None):
 
         # Default atom and bond expressions for MCSS
-        self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
-        self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+        if atom_expr is None:
+            _logger.info(f'Setting the atom expression to {map_strength.upper()}')
+            self.atom_expr = vars()[map_strength.upper()+'_ATOM_EXPRESSION'] 
+        else:
+            self.atom_expr = atom_expr
+            _logger.info(f'Setting the atom expression to user defined: {atom_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
+        if bond_expr is None:
+            _logger.info(f'Setting the bond expression to {map_strength.upper()}')
+            self.bond_expr = vars()[map_strength.upper()+'_BOND_EXPRESSION'] 
+        else:
+            self.bond_expr = bond_expr
+            _logger.info(f'Setting the bond expression to user defined: {bond_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
         self._allow_ring_breaking = True # allow ring breaking
 
         # Canonicalize all SMILES strings
@@ -2768,6 +2798,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         matches : list of match
             list of the matches between the molecules
         """
+        if atom_expr is None:
+            _logger.warning('atom_expr not set. using DEFAULT')
+        if bond_expr is None:
+            _logger.warning('atom_expr not set. using DEFAULT')
         atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
         bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
 

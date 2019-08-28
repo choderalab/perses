@@ -87,7 +87,6 @@ class LambdaProtocol(object):
                                   'lambda_torsions':
                                   lambda x: x}
             elif self.type == 'quarters':
-                # TODO put this in
                 self.functions = {'lambda_sterics_core':
                                   lambda x: x,
                                   'lambda_electrostatics_core':
@@ -106,7 +105,6 @@ class LambdaProtocol(object):
                                   lambda x: x,
                                   'lambda_torsions':
                                   lambda x: x}
-
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
                                   recognised. Allowed values are 'default',
