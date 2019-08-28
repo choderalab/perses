@@ -261,9 +261,6 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
                         # finding alchemical global parameters
                         if force.getGlobalParameterName(parameter_index)[0:7] == 'lambda_':
                             force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
-                            print(f'{force}')
-                            print(f'{force.getGlobalParameterName(parameter_index)}')
-                            print(f'{master_lambda}')
             unsampled_dispersion_endstates.append(ThermodynamicState(dispersion_system, temperature=temperature))
 
         reporter = storage_file
