@@ -16,7 +16,7 @@ InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'c
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative")
-_logger.setLevel(logging.WARNING)
+_logger.setLevel(logging.INFO)
 ###########################################
 
 class HybridTopologyFactory(object):
@@ -1835,6 +1835,7 @@ class HybridTopologyFactory(object):
 
         #now, add each unique new atom to the topology (this is the same order as the system)
         for particle_idx in self._topology_proposal.unique_new_atoms:
+            new_particle_hybrid_idx = self._new_to_hybrid_map[particle_idx]
             new_system_atom = new_topology.atom(particle_idx)
 
             #first, we get the residue in the new system associated with this atom
@@ -1861,7 +1862,7 @@ class HybridTopologyFactory(object):
             mapped_residue = mapped_hybrid_system_atom.residue
 
             #add the atom using the mapped residue
-            added_atoms[particle_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
+            added_atoms[new_particle_hybrid_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
 
         #now loop through the bonds in the new system, and if the bond contains a unique new atom, then add it to the hybrid topology
         for (atom1, atom2) in new_topology.bonds:
