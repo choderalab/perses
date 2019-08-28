@@ -147,15 +147,15 @@ class SmallMoleculeAtomMapper(object):
 
         if atom_match_expression is None:
             assert (map_strength in ['default','strong','weak'])#, "atom_map_type must match one of the allowed types: 'default','strong' or 'weak'. To use a different mapping scheme, please use the atom_match_expression flag."
-            self._atom_expr = vars()[map_strength.upper()+'_ATOM_EXPRESSION'] 
-            _logger.info(f"Setting atom_match_expression to {vars()[map_strength.upper()+'_ATOM_EXPRESSION']}")
+            self._atom_expr = globals()[map_strength.upper()+'_ATOM_EXPRESSION'] 
+            _logger.info(f"Setting atom_match_expression to {globals()[map_strength.upper()+'_ATOM_EXPRESSION']}")
         else:
             self._atom_expr = atom_match_expression
 
         if bond_match_expression is None:
             self._bond_expr = DEFAULT_BOND_EXPRESSION
-            self._bond_expr = vars()[map_strength.upper()+'_BOND_EXPRESSION'] 
-            _logger.info(f"Setting bond_match_expression to {vars()[map_strength.upper()+'_BOND_EXPRESSION']}")
+            self._bond_expr = globals()[map_strength.upper()+'_BOND_EXPRESSION'] 
+            _logger.info(f"Setting bond_match_expression to {globals()[map_strength.upper()+'_BOND_EXPRESSION']}")
         else:
             self._bond_expr = bond_match_expression
 
@@ -2297,14 +2297,14 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Default atom and bond expressions for MCSS
         if atom_expr is None:
             _logger.info(f'Setting the atom expression to {map_strength.upper()}')
-            self.atom_expr = vars()[map_strength.upper()+'_ATOM_EXPRESSION'] 
+            self.atom_expr = globals()[map_strength.upper()+'_ATOM_EXPRESSION'] 
         else:
             self.atom_expr = atom_expr
             _logger.info(f'Setting the atom expression to user defined: {atom_expr}')
             _logger.info('If map_strength has been set, it will be ignored')
         if bond_expr is None:
             _logger.info(f'Setting the bond expression to {map_strength.upper()}')
-            self.bond_expr = vars()[map_strength.upper()+'_BOND_EXPRESSION'] 
+            self.bond_expr = globals()[map_strength.upper()+'_BOND_EXPRESSION'] 
         else:
             self.bond_expr = bond_expr
             _logger.info(f'Setting the bond expression to user defined: {bond_expr}')
