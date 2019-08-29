@@ -34,7 +34,10 @@ def generate_initial_molecule(mol_smiles):
     mol = oechem.OEMol()
     oechem.OESmilesToMol(mol, mol_smiles)
     mol.SetTitle("MOL")
+    # Assign aromaticity and hydrogens and hybridization.
     oechem.OEAddExplicitHydrogens(mol)
+    oechem.OEAssignAromaticFlags(mol, oechem.OEAroModelOpenEye)
+    oechem.OEAssignHybridization(mol)
     oechem.OETriposAtomNames(mol)
     oechem.OETriposBondTypeNames(mol)
     omega = oeomega.OEOmega()
@@ -72,6 +75,33 @@ def test_small_molecule_proposals():
         smiles = SmallMoleculeSetProposalEngine.canonicalize_smiles(oechem.OEMolToSmiles(oemol))
         assert smiles == proposal.new_chemical_state_key
         proposal = new_proposal
+
+def test_mapping_strength_levels():
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    from perses.rjmc import topology_proposal
+    pairs_of_smiles = [('Cc1ccccc1','c1ccc(cc1)N'),
+                       ('CC(c1ccccc1)','O=C(c1ccccc1)'),
+                       ('Oc1ccccc1','Sc1ccccc1')]
+    gaff_xml_filename = get_data_filename('data/gaff.xml')
+   
+    correct_results = {0:{'default': (1,0), 'weak':(1,0), 'strong':(4,3)},
+                       1:{'default': (7,3), 'weak':(5,1), 'strong':(7,3)},
+                       2:{'default': (0,0), 'weak':(0,0), 'strong':(2,2)}}
+     
+    mapping = ['weak','default','strong']
+
+    for example in mapping:
+        for index, (lig_a, lig_b) in enumerate(pairs_of_smiles):
+            initial_molecule = generate_initial_molecule(lig_a) 
+            proposed_molecule = generate_initial_molecule(lig_b)
+            system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
+            proposal_engine = topology_proposal.SmallMoleculeSetProposalEngine([lig_a, lig_b], system_generator,map_strength=example)
+            initial_system, initial_positions, initial_topology = OEMol_to_omm_ff(initial_molecule)
+            proposal = proposal_engine.propose(initial_system, initial_topology)
+            print(lig_a, lig_b,'length OLD and NEW atoms',len(proposal.unique_old_atoms), len(proposal.unique_new_atoms))
+            assert ( (len(proposal.unique_old_atoms), len(proposal.unique_new_atoms)) == correct_results[index][example])
+            render_atom_mapping(f'{index}-{example}.png', initial_molecule, proposed_molecule, proposal._new_to_old_atom_map) 
+
 
 @skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip full test on TRAVIS.")
 def test_no_h_map():
