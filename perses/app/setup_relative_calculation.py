@@ -50,8 +50,6 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t\tphases detected: {setup_options['phases']}")
 
-    if 'lambda-protocol' not in setup_options:
-        setup_options['lambda-protocol'] = None
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
@@ -340,8 +338,7 @@ def run_setup(setup_options):
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
             # generating lambda protocol
-            lambda_protocol = LambdaProtocol(type=setup_options['protocol-type'],
-                                             functions=setup_options['lambda_protocol'])
+            lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
 
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
