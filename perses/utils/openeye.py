@@ -39,6 +39,7 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
 
     # Assign aromaticity and hydrogens.
     oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+    oechem.OEAssignHybridization(molecule)
     oechem.OEAddExplicitHydrogens(molecule)
 
     # Create atom names.
@@ -150,6 +151,7 @@ def createSystemFromIUPAC(iupac_name):
     """
 
     # Create OEMol
+    # TODO write our own of this function so we can be sure of the oe flags that are being used
     molecule = iupac_to_oemol(iupac_name)
 
     molecule = generate_conformers(molecule, max_confs=1)
@@ -238,6 +240,13 @@ def createOEMolFromSDF(sdf_filename, index=0):
     # get the list of molecules
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
     # we'll always take the first for now
+
+    # Assign aromaticity and hydrogens.
+    for molecule in mol_list:
+        oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+        oechem.OEAssignHybridization(molecule)
+        oechem.OEAddExplicitHydrogens(molecule)
+
     mol_to_return = mol_list[index]
     return mol_to_return
 

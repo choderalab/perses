@@ -39,14 +39,26 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
-#DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
-#DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
-# DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms
-# DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+# TODO write a mapping-protocol class to handle these options
 
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
+# weak requirements for mapping atoms == more atoms mapped, more in core
+# atoms need to match in aromaticity. Same with bonds.
+# maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
+WEAK_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
+
+# default atom expression, requires same aromaticitiy and hybridization
+# bonds need to match in bond order
+# ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+# strong requires same hybridization AND the same atom type
+# bonds are same as default, require them to match in bond order
+STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_DefaultAtoms
+STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
 ################################################################################
 # LOGGER
 ################################################################################
@@ -121,7 +133,7 @@ class SmallMoleculeAtomMapper(object):
     proposals is not disconnected.
     """
 
-    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
+    def __init__(self, list_of_smiles: List[str], map_strength: str='default', atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
 
         self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
         self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
@@ -132,14 +144,35 @@ class SmallMoleculeAtomMapper(object):
         self._prohibit_hydrogen_mapping = prohibit_hydrogen_mapping
 
         if atom_match_expression is None:
-            self._atom_expr = DEFAULT_ATOM_EXPRESSION
+            _logger.debug(f'map_strength = {map_strength}')
+            if map_strength == 'default':
+                self._atom_expr = DEFAULT_ATOM_EXPRESSION
+            elif map_strength == 'weak':
+                self._atom_expr = WEAK_ATOM_EXPRESSION
+            elif map_strength == 'strong':
+                self._atom_expr = STRONG_ATOM_EXPRESSION
+            else:
+                _logger.warning(f"atom_match_expression not recognised, setting to default")
+                self._atom_expr = DEFAULT_ATOM_EXPRESSION
         else:
-            self._atom_expr = atom_match_expression
+            self._atom_expr = atom_expr
+            _logger.info(f'Setting the atom expression to user defined: {atom_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
 
         if bond_match_expression is None:
-            self._bond_expr = DEFAULT_BOND_EXPRESSION
+            if map_strength == 'default':
+                self._bond_expr = DEFAULT_BOND_EXPRESSION
+            elif map_strength == 'weak':
+                self._bond_expr = WEAK_BOND_EXPRESSION
+            elif map_strength == 'strong':
+                self._bond_expr = STRONG_BOND_EXPRESSION
+            else:
+                _logger.warning(f"bond_match_expression not recognised, setting to default")
+                self._bond_expr = DEFAULT_BOND_EXPRESSION
         else:
-            self._bond_expr = bond_match_expression
+            self.bond_expr = bond_expr
+            _logger.info(f'Setting the bond expression to user defined: {bond_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
 
         self._molecules_mapped = False
         self._molecule_maps = {}
@@ -491,6 +524,9 @@ class SmallMoleculeAtomMapper(object):
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smiles)
             oechem.OEAddExplicitHydrogens(mol)
+            oechem.OEAssignHybridization(molecule)
+            oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+
             list_of_mols.append(mol)
 
         #now write out all molecules and read them back in:
@@ -2273,12 +2309,41 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
-                 atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
-                 always_change=True, atom_map=None):
+                 atom_expr=None, bond_expr=None, map_strength='default', proposal_metadata=None,
+                 storage=None, always_change=True, atom_map=None):
 
         # Default atom and bond expressions for MCSS
-        self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
-        self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+        if atom_expr is None:
+            _logger.info(f'Setting the atom expression to {map_strength}')
+            _logger.info(type(map_strength))
+            if map_strength == 'default':
+                self.atom_expr = DEFAULT_ATOM_EXPRESSION
+            elif map_strength == 'weak':
+                self.atom_expr = WEAK_ATOM_EXPRESSION
+            elif map_strength == 'strong':
+                self.atom_expr = STRONG_ATOM_EXPRESSION
+            else:
+                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
+                self.atom_expr = DEFAULT_ATOM_EXPRESSION
+        else:
+            self.atom_expr = atom_expr
+            _logger.info(f'Setting the atom expression to user defined: {atom_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
+        if bond_expr is None:
+            _logger.info(f'Setting the bond expression to {map_strength}')
+            if map_strength == 'default':
+                self.bond_expr = DEFAULT_BOND_EXPRESSION
+            elif map_strength == 'weak':
+                self.bond_expr = WEAK_BOND_EXPRESSION
+            elif map_strength == 'strong':
+                self.bond_expr = STRONG_BOND_EXPRESSION
+            else:
+                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
+                self.bond_expr = DEFAULT_BOND_EXPRESSION
+        else:
+            self.bond_expr = bond_expr
+            _logger.info(f'Setting the bond expression to user defined: {bond_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
         self._allow_ring_breaking = True # allow ring breaking
 
         # Canonicalize all SMILES strings
@@ -2768,9 +2833,16 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         matches : list of match
             list of the matches between the molecules
         """
-        atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
-        bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+        if atom_expr is None:
+            _logger.warning('atom_expr not set. using DEFAULT')
+            atom_expr = DEFAULT_ATOM_EXPRESSION
+        if bond_expr is None:
+            _logger.warning('atom_expr not set. using DEFAULT')
+            bond_expr = DEFAULT_BOND_EXPRESSION
 
+        # this ensures that the hybridization of the oemols is done for correct atom mapping
+        oechem.OEAssignHybridization(current_molecule)
+        oechem.OEAssignHybridization(proposed_molecule)
         oegraphmol_current = oechem.OEGraphMol(current_molecule) # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule) # target molecule
         #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)

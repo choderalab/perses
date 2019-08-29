@@ -102,7 +102,6 @@ class LambdaProtocol(object):
                                   lambda x: x,
                                   'lambda_torsions':
                                   lambda x: x}
-
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
                                   recognised. Allowed values are 'default',
