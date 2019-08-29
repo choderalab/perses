@@ -252,6 +252,7 @@ class RelativeFEPSetup(object):
 
             self._complex_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
             self._complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
+            self._complex_geometry_engine = copy.deepcopy(self._geometry_engine)
 
 
         if 'solvent' in phases:
@@ -294,6 +295,7 @@ class RelativeFEPSetup(object):
 
             self._solvated_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
             self._solvated_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
+            self._solvent_geometry_engine = copy.deepcopy(self._geometry_engine)
 
         if 'vacuum' in phases:
             _logger.info(f"Detected solvent...")
@@ -342,6 +344,7 @@ class RelativeFEPSetup(object):
 
             self._vacuum_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
             self._vacuum_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
+            self._vacuum_geometry_engine = copy.deepcopy(self._geometry_engine)
 
     def _setup_complex_phase(self,protein_pdb_filename,receptor_mol2_filename,mol_list):
         """
