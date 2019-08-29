@@ -37,32 +37,26 @@ class LambdaProtocol(object):
 
     # lambda components for each component,
     # all run from 0 -> 1 following master lambda
-    def __init__(self, type='default', functions=None):
+    def __init__(self, functions='default'):
         """Instantiates lambda protocol to be used in a free energy calculation.
-        Can either be user defined, using protocol, or using one of the preset
-        options : default, namd or quarters.
-        If both `functions` and `type` are set, then `type` is ignored
-        If `type` is not recognised, then it is set to default
-
-        All protocols must be monotonic, from 0 to 1. Any energy term not defined
-        in `functions` will be set to the function in `default_functions`
-
+        Can either be user defined, by passing in a dict, or using one
+        of the pregenerated sets by passing in a string 'default', 'namd' or 'quarters'
+        All protocols must begin and end at 0 and 1 respectively. Any energy term not defined
+        in `functions` dict will be set to the function in `default_functions`
         Parameters
         ----------
-        type : str, default='default'
+        type : str or dict, default='default'
             one of the predefined lambda protocols ['default','namd','quarters']
-        protocol : dict
-            dictionary of lambda functions for each of the energy components,
-            for both inserted and deleted and core atom types.
-
+            or a dictionary
         Returns
         -------
         """
-        self.type = type
         self.functions = copy.deepcopy(functions)
-        if self.functions is not None:
+        if type(self.functions) == dict:
             self.type = 'user-defined'
-
+        elif type(self.functions) == str:
+            self.functions = None # will be set later
+            self.type = functions
 
         if self.functions is None:
             if self.type == 'default':
@@ -87,7 +81,6 @@ class LambdaProtocol(object):
                                   'lambda_torsions':
                                   lambda x: x}
             elif self.type == 'quarters':
-                # TODO put this in
                 self.functions = {'lambda_sterics_core':
                                   lambda x: x,
                                   'lambda_electrostatics_core':
@@ -130,7 +123,6 @@ class LambdaProtocol(object):
 
         Returns
         -------
-
         """
         # the individual lambda functions that must be defined for
         required_functions = list(LambdaProtocol.default_functions.keys())
@@ -196,16 +188,12 @@ class LambdaProtocol(object):
 class RelativeAlchemicalState(AlchemicalState):
     """
     Relative AlchemicalState to handle all lambda parameters required for relative perturbations
-
     lambda = 1 refers to ON, i.e. fully interacting while
     lambda = 0 refers to OFF, i.e. non-interacting with the system
-
     all lambda functions will follow from 0 -> 1 following the master lambda
-
     lambda*core parameters perturb linearly
     lambda_sterics_insert and lambda_electrostatics_delete perturb in the first half of the protocol 0 -> 0.5
     lambda_sterics_delete and lambda_electrostatics_insert perturb in the second half of the protocol 0.5 -> 1
-
     Attributes
     ----------
     lambda_sterics_core

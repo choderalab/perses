@@ -22,6 +22,7 @@ import tqdm
 from sys import getsizeof
 import time
 from collections import namedtuple
+from perses.annihilation.lambda_protocol import LambdaProtocol
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
@@ -168,7 +169,7 @@ class NonequilibriumSwitchingMove():
         #set a bool variable for pass or failure
         self.succeed = True
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, lambda_protocol = 'default'):
         """Propagate the state through the integrator.
         This updates the SamplerState after the integration. It will apply the full NCMC protocol.
         Parameters
@@ -177,6 +178,8 @@ class NonequilibriumSwitchingMove():
            The compound thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
+        lambda_protocol : str (or dict), default 'default'
+           Which protocol to use for the lambda update
         """
         """Propagate the state through the integrator.
         This updates the SamplerState after the integration. It also logs
@@ -242,13 +245,15 @@ class NonequilibriumSwitchingMove():
         self._timers['prepare_neq_switching'] = time.time() - start
 
         timer_list = []
+        lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
+
         #loop through the number of times we have to apply in order to collect the requested work and trajectory statistics.
         for iteration, master_lambda in zip(range(self._nsteps), lambda_schedule):
             _logger.debug(f"\tconducting iteration {iteration} at master lambda {master_lambda}")
             try:
                 prep_start = time.time()
                 old_rp = self._beta * context.getState(getEnergy=True).getPotentialEnergy()
-                thermodynamic_state.set_alchemical_parameters(master_lambda)
+                thermodynamic_state.set_alchemical_parameters(master_lambda, lambda_protocol = lambda_protocol_class)
                 thermodynamic_state.apply_to_context(context)
                 #context.setVelocitiesToTemperature(thermodynamic_state.temperature) #resample velocities
                 new_rp = self._beta * context.getState(getEnergy=True).getPotentialEnergy()
@@ -334,7 +339,7 @@ class NonequilibriumSwitchingMove():
 
 
 def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilibrium_result: EquilibriumResult,
-                 direction: str, topology: md.Topology, nsteps_neq: int = 1000, work_save_interval: int = 1, splitting: str='V R O R V',
+                 direction: str, topology: md.Topology, nsteps_neq: int = 1000, forward_functions: str = None, work_save_interval: int = 1, splitting: str='V R O R V',
                  atom_indices_to_save: List[int] = None, trajectory_filename: str = None, write_configuration: bool = False, timestep: unit.Quantity=1.0*unit.femtoseconds, measure_shadow_work: bool=False, timer: bool=True) -> dict:
     """
     Perform a nonequilibrium switching protocol and return the nonequilibrium protocol work. Note that it is expected
@@ -352,6 +357,8 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
         An MDtraj topology for the system to generate trajectories
     nsteps_neq : int
         The number of nonequilibrium steps in the protocol
+    forward_functions : str, default None
+        which option to call as the forward function for the lambda protocol
     work_save_interval : int
         How often to write the work and, if requested, configurations
     splitting : str, default 'V R O R V'
@@ -381,6 +388,10 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
     thermodynamic_state = copy.deepcopy(thermodynamic_state)
     sampler_state = copy.deepcopy(equilibrium_result.sampler_state)
 
+    #forward Functions
+    if not forward_functions:
+        forward_functions = 'default'
+
 
     #get the temperature needed for the simulation
     temperature = thermodynamic_state.temperature
@@ -407,7 +418,7 @@ def run_protocol(thermodynamic_state: states.CompoundThermodynamicState, equilib
 
     #apply the nonequilibrium move; sampler state gets updated
     _logger.debug(f"applying thermodynamic state and sampler state to the ne_mc_move")
-    ne_mc_move.apply(thermodynamic_state, sampler_state)
+    ne_mc_move.apply(thermodynamic_state, sampler_state, lambda_protocol = forward_functions)
 
     #get the cumulative work
     cumulative_work = ne_mc_move._cumulative_work

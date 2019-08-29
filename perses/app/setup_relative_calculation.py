@@ -103,6 +103,9 @@ def getSetupOptions(filename):
         if 'n_cycles' not in setup_options:
             _logger.info(f"\t\t\tn_cycles is not specified; default to 100")
             setup_options['n_cycles'] = 100
+        if 'lambda_protocol' not in setup_options:
+            _logger.info(f"\t\t\tlambda_protocol is not specified; default to None")
+            setup_options['lambda_protocol'] = None
         if 'LSF' not in setup_options:
             _logger.info(f"\t\t\tLSF is not specified; default to True")
             setup_options['LSF'] = True
@@ -318,8 +321,6 @@ def run_setup(setup_options):
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
         ncmc_save_interval = setup_options['ncmc_save_interval']
         write_ncmc_configuration = setup_options['write_ncmc_configuration']
-
-
         n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
 
         ne_fep = dict()
@@ -329,6 +330,8 @@ def run_setup(setup_options):
                                                        geometry_engine = top_prop['%s_geometry_engine' % phase],
                                                        pos_old = top_prop['%s_old_positions' % phase],
                                                        new_positions = top_prop['%s_new_positions' % phase],
+                                                       use_dispersion_correction = False,
+                                                       forward_functions = setup_options['lambda_protocol'],
                                                        ncmc_nsteps=n_steps_ncmc_protocol,
                                                        n_equilibrium_steps_per_iteration = n_equilibrium_steps_per_iteration,
                                                        temperature = temperature,
