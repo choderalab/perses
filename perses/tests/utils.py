@@ -757,3 +757,129 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
 
 
     return abs(nonalch_zero_rp - alch_zero_rp + added_energy), abs(nonalch_one_rp - alch_one_rp + subtracted_energy)
+
+
+def track_torsions(hybrid_factory):
+    """
+    This is a useful function for finding bugs in the `relative.py` self.handle_periodic_torsion_force() function, which creates hybrid torsion forces for the hybrid system.
+    It is observed that accounting for all of the annealing and unique old/new torsion terms is cumbersome and often fails, resulting in validate_endstate_energies throwing an ENERGY_THRESHOLD error of >1e-6.
+    Often, the mismatch in energies is in a valence term (specifically a torsion).  This function will throw an assert error if there is a unique old/new torsion that is not in the hybrid_system's PeriodicTorsionForce object
+    or if there is a core torsion force that is not being annealed properly.  Since the energy mismatch is valence in nature, the validate_endstate_energies assert error should be reproducible in the vacuum phase.  Hence, it is advisable
+    to use the vacuum hybrid factory as the argument to this function.  The first successful implementation of this code was in the MCL1 ligands 0 and 22.
+        1. for all mapped atoms, pulls the torsions of the old and new systems and asserts that there are two interpolating
+           terms from one to the other
+        2. for all unique old/new atoms, asserts that the corresponding terms match
+    """
+    old_system, new_system = hybrid_factory._old_system, hybrid_factory._new_system
+    hybrid_system = hybrid_factory._hybrid_system
+    hybrid_to_old, hybrid_to_new = hybrid_factory._hybrid_to_old_map, hybrid_factory._hybrid_to_new_map
+    print(f"hybrid_to_old: {hybrid_to_old}")
+    print(f"hybrid_to_new: {hybrid_to_new}")
+    old_to_hybrid, new_to_hybrid = hybrid_factory._old_to_hybrid_map, hybrid_factory._new_to_hybrid_map
+    unique_old_atoms = hybrid_factory._atom_classes['unique_old_atoms']
+    unique_new_atoms = hybrid_factory._atom_classes['unique_new_atoms']
+    core_atoms = hybrid_factory._atom_classes['core_atoms']
+
+    #first, grab all of the old/new torsions
+    num_old_torsions, num_new_torsions = old_system.getForce(2).getNumTorsions(), new_system.getForce(2).getNumTorsions()
+    print(f"num old torsions, new torsions: {num_old_torsions}, {num_new_torsions}")
+
+    old_torsions = [old_system.getForce(2).getTorsionParameters(i) for i in range(num_old_torsions)]
+    new_torsions = [new_system.getForce(2).getTorsionParameters(i) for i in range(num_new_torsions)]
+
+    #reformat the last two entries
+    old_torsions = [[old_to_hybrid[q] for q in i[:4]] + [float(i[4])] + [i[5]/unit.radian] + [i[6]/(unit.kilojoule/unit.mole)] for i in old_torsions]
+    new_torsions = [[new_to_hybrid[q] for q in i[:4]] + [float(i[4])] + [i[5]/unit.radian] + [i[6]/(unit.kilojoule/unit.mole)] for i in new_torsions]
+
+    print(f"old torsions:")
+    for i in old_torsions:
+        print(i)
+
+    print(f"new torsions:")
+    for i in new_torsions:
+        print(i)
+
+    #now grab the annealing hybrid torsions
+    num_annealed_torsions = hybrid_system.getForce(4).getNumTorsions()
+    annealed_torsions = [hybrid_system.getForce(4).getTorsionParameters(i) for i in range(num_annealed_torsions)]
+    print(f"annealed torsions:")
+    for i in annealed_torsions:
+        print(i)
+
+    #now grab the old/new hybrid torsions
+    num_old_new_atom_torsions = hybrid_system.getForce(5).getNumTorsions()
+    hybrid_old_new_torsions = [hybrid_system.getForce(5).getTorsionParameters(i) for i in range(num_old_new_atom_torsions)]
+    hybrid_old_new_torsions = [i[:5] + [i[5]/unit.radian] + [i[6]/(unit.kilojoule/unit.mole)] for i in hybrid_old_new_torsions] #reformatted
+
+    hybrid_old_torsions = [i for i in hybrid_old_new_torsions if set(unique_old_atoms).intersection(set(i[:4])) != set()]
+    print(f"hybrid old torsions:")
+    for i in hybrid_old_torsions:
+        print(i)
+    hybrid_new_torsions = [i for i in hybrid_old_new_torsions if set(unique_new_atoms).intersection(set(i[:4])) != set()]
+    print(f"hybrid_new_torsions:")
+    for i in hybrid_new_torsions:
+        print(i)
+
+
+    #assert len(hybrid_old_torsions) + len(hybrid_new_torsions) == len(hybrid_old_new_torsions), f"there are some hybrid_old_new torsions missing: "
+    for i in hybrid_old_new_torsions:
+        assert (i in hybrid_old_torsions) or (i in hybrid_new_torsions), f"hybrid old/new torsion {i} is in neither hybrid_old/hybrid_new torsion list"
+        if i in hybrid_old_torsions:
+            assert i not in hybrid_new_torsions, f"{i} in both old ({unique_old_atoms}) and new ({unique_new_atoms}) hybrid torsion lists"
+        elif i in hybrid_new_torsions:
+            assert i not in hybrid_old_torsions, f"{i} in both old ({unique_old_atoms}) and new ({unique_new_atoms}) hybrid torsion lists"
+
+    #now we can check the hybrid old and new torsions
+    old_counter, new_counter = 0, 0
+    for hybrid_torsion in hybrid_old_torsions:
+        if hybrid_torsion in old_torsions:
+            old_counter += 1
+        elif hybrid_torsion[:4][::-1] + hybrid_torsion[4:] in old_torsions:
+            old_counter +=1
+        else:
+            print(f"found a hybrid old torsion not in old_torsions: {hybrid_torsion}")
+
+    unique_old_torsions = len([i for i in hybrid_old_new_torsions if set(i[:4]).intersection(unique_old_atoms) != set()])
+    unique_annealing_old_torsions = len([i for i in annealed_torsions if set(i[:4]).intersection(unique_old_atoms) != set()])
+    assert unique_annealing_old_torsions == 0, f"there are unique old atoms in the annealing torsions: {unique_annealing_old_torsions}"
+    assert old_counter == unique_old_torsions, f"the old counter ({old_counter}) != unique old torsions ({unique_old_torsions})"
+
+
+
+    for hybrid_torsion in hybrid_new_torsions:
+        if hybrid_torsion in new_torsions:
+            new_counter += 1
+        elif hybrid_torsion[:4][::-1] + hybrid_torsion[4:] in new_torsions:
+            new_counter += 1
+        else:
+            print(f"found a hybrid new torsion not in new_torsions: {hybrid_torsion}")
+
+    unique_new_torsions = len([i for i in hybrid_old_new_torsions if set(i[:4]).intersection(unique_new_atoms) != set()])
+    unique_annealing_new_torsions = len([i for i in annealed_torsions if set(i[:4]).intersection(unique_new_atoms) != set()])
+    assert unique_annealing_new_torsions == 0, f"there are unique new atoms in the annealing torsions: {unique_annealing_new_torsions}"
+    assert new_counter == unique_new_torsions, f"the new counter ({new_counter}) != unique new torsions ({unique_new_torsions})"
+
+
+
+    #now we can test the annealed torsions to determine whether all of the core torsions forces are properly annealed
+
+    #first to assert that the set of all annealed torsion atoms is a subset of all core atoms
+    all_annealed_torsion_atoms = []
+    for torsion_set in [i[:4] for i in annealed_torsions]:
+        for torsion_index in torsion_set:
+            all_annealed_torsion_atoms.append(torsion_index)
+
+    assert set(all_annealed_torsion_atoms).issubset(core_atoms), f"the set of all annealed atom indices is not a subset of core atoms"
+
+    #now to take all of the annealed torsions and assert
+    print(f"checking annealed torsions...")
+    for annealed_torsion in annealed_torsions:
+        print(f"checking annealed torsion: {annealed_torsion}")
+        if annealed_torsion[4][2] == 0.0 and annealed_torsion[4][5] != 0.0: #turning on torsion should be unique new
+            assert (annealed_torsion[:4] + list(annealed_torsion[-1][3:]) in new_torsions) or (annealed_torsion[:4][::-1] + list(annealed_torsion[-1][3:]) in new_torsions), f"{annealed_torsion}"
+
+        elif annealed_torsion[4][2] != 0.0 and annealed_torsion[4][5] == 0.0: #turning off torsion should be unique old
+            assert (annealed_torsion[:4] + list(annealed_torsion[-1][:3]) in old_torsions) or (annealed_torsion[:4][::-1] + list(annealed_torsion[-1][:3]) in old_torsions), f"{annealed_torsion}"
+
+        else:
+            print(f"this is a strange annealed torsion: {annealed_torsion}")
