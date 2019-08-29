@@ -4,7 +4,7 @@ import copy
 import logging
 import traceback
 from simtk import openmm, unit
-from perses.dispersed.feptasks import NonequilibriumSwitchingMove, compute_reduced_potential, ExternalNonequilibriumSwitchingMove
+from perses.dispersed.feptasks import NonequilibriumSwitchingMove, compute_reduced_potential
 from perses.storage import NetCDFStorageView
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.tests.utils import quantity_is_finite
@@ -86,7 +86,7 @@ class NCMCEngine(object):
         """
         # Handle some defaults.
         if functions == None:
-            functions = LambdaProtocol.default_functions 
+            functions = LambdaProtocol.default_functions
         if nsteps == None:
             nsteps = default_nsteps
         if timestep == None:
