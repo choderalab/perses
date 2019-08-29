@@ -193,7 +193,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             structure = parmed.openmm.load_topology(top_proposal.old_topology, top_proposal._old_system)
             atoms_with_positions = [ structure.atoms[atom_idx] for atom_idx in top_proposal.new_to_old_atom_map.keys() ]
             new_positions = self._copy_positions(atoms_with_positions, top_proposal, current_positions)
-            logp_proposal, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms = 0.0, None, 0.0, 0.0, []
+            logp_proposal, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms = 0.0, None, None, None, None
             self.forward_final_growth_system = None
         else:
             _logger.info("propose: unique new atoms detected; proceeding to _logp_propose...")
