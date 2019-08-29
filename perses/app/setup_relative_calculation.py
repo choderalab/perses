@@ -6,10 +6,9 @@ import sys
 import simtk.unit as unit
 import logging
 
-from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
+from perses.samplers.samplers import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
-from perses.annihilation.lambda_protocol import LambdaProtocol
 
 from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
@@ -50,11 +49,6 @@ def getSetupOptions(filename):
         _logger.warning('\t\tNo phases provided - running complex and solvent as default.')
     else:
         _logger.info(f"\t\tphases detected: {setup_options['phases']}")
-
-    if 'lambda-protocol' not in setup_options:
-        setup_options['lambda-protocol'] = None
-    if 'protocol-type' not in setup_options:
-        setup_options['protocol-type'] = 'default'
 
     _logger.info(f"\tDetecting fe_type...")
     if setup_options['fe_type'] == 'sams':
@@ -144,6 +138,7 @@ def run_setup(setup_options):
         - 'topology_proposals':
     """
     phases = setup_options['phases']
+
     if len(phases) > 2:
         _logger.info(f"\tnumber of phases is greater than 2...complex and solvent will be provided...")
         phases = ['complex', 'solvent']
@@ -382,9 +377,6 @@ def run_setup(setup_options):
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
-            # generating lambda protocol
-            lambda_protocol = LambdaProtocol(type=setup_options['protocol-type'],
-                                             functions=setup_options['lambda_protocol'])
 
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
@@ -408,7 +400,7 @@ def run_setup(setup_options):
                                                                                              splitting="V R R R O R R R V"),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                               gamma0=setup_options['gamma0'],lambda_protocol=lambda_protocol)
+                                               gamma0=setup_options['gamma0'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
@@ -417,7 +409,7 @@ def run_setup(setup_options):
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
                                                                                              splitting="V R R R O R R R V"),
-                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'],lambda_protocol=lambda_protocol)
+                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}

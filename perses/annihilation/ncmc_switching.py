@@ -11,7 +11,7 @@ from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
 from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState
 
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
@@ -86,7 +86,7 @@ class NCMCEngine(object):
         """
         # Handle some defaults.
         if functions == None:
-            functions = LambdaProtocol.default_functions 
+            functions = RelativeAlchemicalState.lambda_functions
         if nsteps == None:
             nsteps = default_nsteps
         if timestep == None:
