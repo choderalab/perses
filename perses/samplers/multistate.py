@@ -2,7 +2,7 @@
 # HYBRID SYSTEM SAMPLERS
 #############################################################################
 
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 
 from openmmtools.multistate import sams, replicaexchange
 from openmmtools import cache
@@ -106,7 +106,8 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
         super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
         self._factory = hybrid_factory
 
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schdeule=None):
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
+              lambda_schedule=None,lambda_protocol=LambdaProtocol()):
 
         from openmmtools.integrators import FIREMinimizationIntegrator
 
@@ -125,20 +126,20 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
         integrator = FIREMinimizationIntegrator()
         context_cache = cache.ContextCache()
 
-        if lambda_schdeule is None:
-            lambda_schdeule = np.linspace(0.,1.,n_states)
+        if lambda_schedule is None:
+            lambda_schedule = np.linspace(0.,1.,n_states)
         else:
-            assert (len(lambda_schdeule) == n_states) , 'length of lambda_schdeule must match the number of states, n_states'
-            assert (lambda_schdeule[0] == 0.), 'lambda_schdeule must start at 0.'
-            assert (lambda_schdeule[-1] == 1.), 'lambda_schdeule must end at 1.'
-            difference = np.diff(lambda_schdeule)
-            assert ( all(i >= 0. for i in difference ) ), 'lambda_schdeule must be monotonicly increasing'
+            assert (len(lambda_schedule) == n_states) , 'length of lambda_schedule must match the number of states, n_states'
+            assert (lambda_schedule[0] == 0.), 'lambda_schedule must start at 0.'
+            assert (lambda_schedule[-1] == 1.), 'lambda_schedule must end at 1.'
+            difference = np.diff(lambda_schedule)
+            assert ( all(i >= 0. for i in difference ) ), 'lambda_schedule must be monotonicly increasing'
 
         #starting with the initial positions generated py geometry.py
         positions = initial_hybrid_positions
-        for lambda_val in lambda_schdeule:
+        for lambda_val in lambda_schedule:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
-            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
+            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
             # now generating a sampler_state for each thermodyanmic state, with relaxed positions
@@ -179,7 +180,7 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
         self._factory = hybrid_factory
         self._real_endstates = real_endstates
 
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schdeule=None,real_endstates=False):
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schedule=None,real_endstates=False,lambda_protocol=LambdaProtocol()):
 
         from openmmtools.integrators import FIREMinimizationIntegrator
 
@@ -198,20 +199,20 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
         integrator = FIREMinimizationIntegrator()
         context_cache = cache.ContextCache()
 
-        if lambda_schdeule is None:
-            lambda_schdeule = np.linspace(0.,1.,n_states)
+        if lambda_schedule is None:
+            lambda_schedule = np.linspace(0.,1.,n_states)
         else:
-            assert (len(lambda_schdeule) == n_states) , 'length of lambda_schdeule must match the number of states, n_states'
-            assert (lambda_schdeule[0] == 0.), 'lambda_schdeule must start at 0.'
-            assert (lambda_schdeule[-1] == 1.), 'lambda_schdeule must end at 1.'
-            difference = np.diff(lambda_schdeule)
-            assert ( all(i >= 0. for i in difference ) ), 'lambda_schdeule must be monotonicly increasing'
+            assert (len(lambda_schedule) == n_states) , 'length of lambda_schedule must match the number of states, n_states'
+            assert (lambda_schedule[0] == 0.), 'lambda_schedule must start at 0.'
+            assert (lambda_schedule[-1] == 1.), 'lambda_schedule must end at 1.'
+            difference = np.diff(lambda_schedule)
+            assert ( all(i >= 0. for i in difference ) ), 'lambda_schedule must be monotonicly increasing'
 
         #starting with the initial positions generated py geometry.py
         positions = initial_hybrid_positions
-        for lambda_val in lambda_schdeule:
+        for lambda_val in lambda_schedule:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
-            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val)
+            compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
              # now generating a sampler_state for each thermodyanmic state, with relaxed positions

@@ -364,8 +364,8 @@ def run_setup(setup_options):
                                                                                              splitting="V R R R O R R R V"),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                               gamma0=setup_options['gamma0'],lambda_protocol=lambda_protocol)
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+                                               gamma0=setup_options['gamma0'])
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
@@ -373,8 +373,8 @@ def run_setup(setup_options):
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
                                                                                              splitting="V R R R O R R R V"),
-                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'],lambda_protocol=lambda_protocol)
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
