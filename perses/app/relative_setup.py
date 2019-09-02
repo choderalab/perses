@@ -47,7 +47,7 @@ class RelativeFEPSetup(object):
     def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
                  protein_pdb_filename=None,receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
-                 hmass=4*unit.amus, neglect_angles = False):
+                 hmass=4*unit.amus, neglect_angles=False,map_strength='default'):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -80,6 +80,7 @@ class RelativeFEPSetup(object):
         self._hmass = hmass
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
         self._proposal_phase = None
+        self._map_strength = map_strength
 
         beta = 1.0 / (kB * temperature)
 
@@ -205,7 +206,7 @@ class RelativeFEPSetup(object):
         self._system_generator._forcefield.loadFile(StringIO(ffxml))
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
-        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_smiles_old, self._ligand_smiles_new], self._system_generator, residue_name='MOL')
+        self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_smiles_old, self._ligand_smiles_new], self._system_generator,map_strength=self._map_strength, residue_name='MOL')
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         # NOTE: we are conducting the geometry proposal without any neglected angles
