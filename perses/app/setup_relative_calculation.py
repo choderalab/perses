@@ -20,7 +20,7 @@ logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("setup_relative_calculation")
 _logger.setLevel(logging.INFO)
 
-ENERGY_THRESHOLD = 1e-1
+ENERGY_THRESHOLD = 1e-4
 from openmmtools.constants import kB
 
 def getSetupOptions(filename):
@@ -376,7 +376,7 @@ def run_setup(setup_options):
             _forward_added_valence_energy = top_prop['%s_added_valence_energy' % phase]
             _reverse_subtracted_valence_energy = top_prop['%s_subtracted_valence_energy' % phase]
 
-            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature))
+            zero_state_error, one_state_error = validate_endstate_energies(_top_prop, _htf, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
@@ -463,7 +463,7 @@ if __name__ == "__main__":
             _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
             _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
 
-            zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature))
+            zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
@@ -471,12 +471,18 @@ if __name__ == "__main__":
             processes = setup_options['processes']
             adapt = setup_options['adapt']
             LSF = setup_options['LSF']
-            ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt)
+            ne_fep_run.activate_client(LSF = LSF, processes = 2, adapt = adapt) #we only need 2 processes for equilibration
 
             print("equilibrating...")
             ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
+            ne_fep_run.deactivate_client()
+            with open(os.path.join(trajectory_directory, "%s_%s_eq_ne_fep.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+                pickle.dump(ne_fep_run, f)
+
 
             print("annealing...")
+            ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_eq_ne_fep.pkl" % (trajectory_prefix, phase)), 'rb'))
+            ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt) #now call n processes
             ne_fep_run.run(n_iterations = n_cycles, full_protocol = False, timer = True)
             print("calculation complete; deactivating client")
             ne_fep_run.deactivate_client()
