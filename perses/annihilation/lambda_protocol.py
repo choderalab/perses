@@ -41,13 +41,16 @@ class LambdaProtocol(object):
         """Instantiates lambda protocol to be used in a free energy calculation.
         Can either be user defined, by passing in a dict, or using one
         of the pregenerated sets by passing in a string 'default', 'namd' or 'quarters'
+
         All protocols must begin and end at 0 and 1 respectively. Any energy term not defined
         in `functions` dict will be set to the function in `default_functions`
+
         Parameters
         ----------
         type : str or dict, default='default'
             one of the predefined lambda protocols ['default','namd','quarters']
             or a dictionary
+
         Returns
         -------
         """
@@ -99,7 +102,6 @@ class LambdaProtocol(object):
                                   lambda x: x,
                                   'lambda_torsions':
                                   lambda x: x}
-
             else:
                 _logger.warning(f"""LambdaProtocol type : {self.type} not
                                   recognised. Allowed values are 'default',
