@@ -46,13 +46,8 @@ class RelativeFEPSetup(object):
     """
     def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
                  protein_pdb_filename=None,receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
-<<<<<<< HEAD
-                 temperature=300.0 * unit.kelvin, solvent_padding=15.0 * unit.angstroms, atom_map=None,
-                 hmass=4*unit.amus, neglect_angles = False):
-=======
                  temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
                  hmass=4*unit.amus, neglect_angles=False,map_strength='default'):
->>>>>>> c10f2c2be467efd7187ce00caefc59dd0959fda6
         """
         Initialize a NonequilibriumFEPSetup object
 
