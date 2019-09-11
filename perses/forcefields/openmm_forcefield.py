@@ -85,6 +85,13 @@ def generateResidueTemplate(molecule, residue_atoms=None, normalize=True, gaff_v
 
     This requires the OpenEye toolkit.
 
+    .. todo ::
+
+       Update `gaff_version` argument to accept numerical GAFF versions
+       '1.8', '2.0', '2.1'
+
+
+
     Parameters
     ----------
     molecule : openeye.oechem.OEMol
