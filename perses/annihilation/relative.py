@@ -1716,7 +1716,7 @@ class HybridTopologyFactory(object):
         if self._softcore_LJ_v2:
             nonbonded_exceptions_force.addGlobalParameter("softcore_alpha", self._softcore_LJ_v2_alpha)
         else:
-            nonbonded_exceptions_force.addGlobalParameter("softcore_alpha", self._softcore_alpha)
+            nonbonded_exceptions_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
         nonbonded_exceptions_force.addGlobalParameter("lambda_electrostatics_insert", 0.0) # electrostatics
         nonbonded_exceptions_force.addGlobalParameter("lambda_electrostatics_delete", 0.0) # electrostatics
         nonbonded_exceptions_force.addGlobalParameter("lambda_sterics_insert", 0.0) # sterics insert
