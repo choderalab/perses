@@ -54,7 +54,23 @@ class HybridTopologyFactory(object):
 
     _known_forces = {'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'NonbondedForce', 'MonteCarloBarostat'}
 
-    def __init__(self, topology_proposal, current_positions, new_positions, use_dispersion_correction=False, functions=None, softcore_alpha=None, bond_softening_constant=1.0, angle_softening_constant=1.0, soften_only_new=False, neglected_new_angle_terms = [], neglected_old_angle_terms = []):
+    def __init__(self,
+                 topology_proposal,
+                 current_positions,
+                 new_positions,
+                 use_dispersion_correction=False,
+                 functions=None,
+                 softcore_alpha=None,
+                 bond_softening_constant=1.0,
+                 angle_softening_constant=1.0,
+                 soften_only_new=False,
+                 neglected_new_angle_terms = [],
+                 neglected_old_angle_terms = [],
+                 softcore_LJ_v2 = True,
+                 softcore_electrostatics = True,
+                 softcore_LJ_v2_alpha = 0.85,
+                 softcore_electrostatics_alpha = 0.3,
+                 softcore_sigma_Q = 1.0):
         """
         Initialize the Hybrid topology factory.
 
@@ -87,6 +103,18 @@ class HybridTopologyFactory(object):
         neglected_old_angle_terms : list
             list of indices from the HarmonicAngleForce of the old_system for which the geometry engine neglected.
             Hence, these angles must be alchemically deleted for the unique old atoms (reverse lambda protocol)
+        softcore_LJ_v2 : bool, default True
+            implement a new softcore LJ: citation below.
+            Gapsys, Vytautas, Daniel Seeliger, and Bert L. de Groot. "New soft-core potential function for molecular dynamics based alchemical free energy calculations." Journal of chemical theory and computation 8.7 (2012): 2373-2382.
+        softcore_electrostatics : bool, default True
+            softcore electrostatics: citation below.
+            Gapsys, Vytautas, Daniel Seeliger, and Bert L. de Groot. "New soft-core potential function for molecular dynamics based alchemical free energy calculations." Journal of chemical theory and computation 8.7 (2012): 2373-2382.
+        softcore_LJ_v2_alpha : float, default 0.85
+            softcore alpha parameter for LJ v2
+        softcore_electrostatics_alpha : float, default 0.3
+            softcore alpha parameter for softcore electrostatics.
+        softcore_sigma_Q : float, default 1.0
+            softcore sigma parameter for softcore electrostatics.
 
         .. todo :: Document how positions for hybrid system are constructed
 
@@ -119,6 +147,19 @@ class HybridTopologyFactory(object):
             self._soften_angles = False
 
         self._use_dispersion_correction = use_dispersion_correction
+
+        self._softcore_LJ_v2 = softcore_LJ_v2
+        if self._softcore_LJ_v2:
+            self._softcore_LJ_v2_alpha = softcore_LJ_v2_alpha
+            assert self._softcore_LJ_v2_alpha >= 0.0 and self._softcore_LJ_v2_alpha <= 1.0, f"softcore_LJ_v2_alpha: ({self._softcore_LJ_v2_alpha}) is not in [0,1]"
+
+        self._softcore_electrostatics = softcore_electrostatics
+        if self._softcore_electrostatics:
+            self._softcore_electrostatics_alpha = softcore_electrostatics_alpha
+            self._softcore_sigma_Q = softcore_sigma_Q
+            assert self._softcore_electrostatics_alpha >= 0.0 and self._softcore_electrostatics_alpha <= 1.0, f"softcore_electrostatics_alpha: ({self._softcore_electrostatics_alpha}) is not in [0,1]"
+            assert self._softcore_sigma_Q >= 0.0 and self._softcore_sigma_Q <= 1.0, f"softcore_sigma_Q : {self._softcore_sigma_Q} is not in [0, 1]"
+
 
         if softcore_alpha is None:
             self.softcore_alpha = 0.5
@@ -662,12 +703,12 @@ class HybridTopologyFactory(object):
         # TODO: check _nonbonded_custom_ewald and _nonbonded_custom_cutoff since they take arguments that are never used...
         if self._nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
             _logger.info("\t_add_nonbonded_force_terms: nonbonded_method is NoCutoff")
-            sterics_energy_expression = self._nonbonded_custom_nocutoff()
+            sterics_energy_expression = self._nonbonded_custom(self._softcore_LJ_v2)
         elif self._nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
             _logger.info("\t_add_nonbonded_force_terms: nonbonded_method is Cutoff(Periodic or NonPeriodic)")
             epsilon_solvent = self._old_system_forces['NonbondedForce'].getReactionFieldDielectric()
             r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-            sterics_energy_expression = self._nonbonded_custom_cutoff(epsilon_solvent, r_cutoff)
+            sterics_energy_expression = self._nonbonded_custom(self._softcore_LJ_v2)
             standard_nonbonded_force.setReactionFieldDielectric(epsilon_solvent)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
         elif self._nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
@@ -675,7 +716,7 @@ class HybridTopologyFactory(object):
             [alpha_ewald, nx, ny, nz] = self._old_system_forces['NonbondedForce'].getPMEParameters()
             delta = self._old_system_forces['NonbondedForce'].getEwaldErrorTolerance()
             r_cutoff = self._old_system_forces['NonbondedForce'].getCutoffDistance()
-            sterics_energy_expression = self._nonbonded_custom_ewald(alpha_ewald, delta, r_cutoff)
+            sterics_energy_expression = self._nonbonded_custom(self._softcore_LJ_v2)
             standard_nonbonded_force.setPMEParameters(alpha_ewald, nx, ny, nz)
             standard_nonbonded_force.setEwaldErrorTolerance(delta)
             standard_nonbonded_force.setCutoffDistance(r_cutoff)
@@ -700,7 +741,11 @@ class HybridTopologyFactory(object):
                 raise e
 
         sterics_custom_nonbonded_force = openmm.CustomNonbondedForce(total_sterics_energy)
-        sterics_custom_nonbonded_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
+        if self._softcore_LJ_v2:
+            sterics_custom_nonbonded_force.addGlobalParameter("softcore_alpha", self._softcore_LJ_v2_alpha)
+        else:
+            sterics_custom_nonbonded_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
+
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaA") # Lennard-Jones sigma initial
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilonA") # Lennard-Jones epsilon initial
         sterics_custom_nonbonded_force.addPerParticleParameter("sigmaB") # Lennard-Jones sigma final
@@ -766,7 +811,7 @@ class HybridTopologyFactory(object):
 
         return sterics_addition
 
-    def _nonbonded_custom_nocutoff(self):
+    def _nonbonded_custom(self, v2):
         """
         Get a part of the nonbonded energy expression when there is no cutoff.
 
@@ -778,60 +823,16 @@ class HybridTopologyFactory(object):
             The energy expression for electrostatics
         """
         # soft-core Lennard-Jones
-        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
-        return sterics_energy_expression
+        if v2:
+            sterics_energy_expression = "U_sterics = select(step(r - r_LJ), 4*epsilon*x*(x-1.0), U_sterics_quad);"
+            sterics_energy_expression += f"U_sterics_quad = Force * ((r - r_LJ)**2/2 - (r - r_LJ)) + U_sterics_cut;"
+            sterics_energy_expression += f"U_sterics_cut = 4*epsilon * (sigma/r_LJ)**6 * ((sigma/r_LJ)**6 - 1.0);"
+            sterics_energy_expression += f"Force = -4 * epsilon * ((-12*sigma**12)/(r_LJ**13) + (6*sigma**6)/(r_LJ**7));"
+            sterics_energy_expression += f"x = (sigma/r)**6;"
+            sterics_energy_expression += f"r_LJ = softcore_alpha * ((26/7) * sigma**6 * lambda_sterics)**(1/6);"
+        else:
+            sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
 
-    def _nonbonded_custom_cutoff(self, epsilon_solvent, r_cutoff):
-        """
-        Get the energy expressions for sterics and electrostatics under a reaction field assumption.
-
-        Parameters
-        ----------
-        epsilon_solvent : float
-            The reaction field dielectric
-        r_cutoff : float
-            The cutoff distance
-
-        Returns
-        -------
-        sterics_energy_expression : str
-            The energy expression for U_sterics
-        electrostatics_energy_expression : str
-            The energy expression for electrostatics
-        """
-        # soft-core Lennard-Jones
-        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
-
-        return sterics_energy_expression
-
-    def _nonbonded_custom_ewald(self, alpha_ewald, delta, r_cutoff):
-        """
-        Get the energy expression for Ewald treatment.
-
-        Parameters
-        ----------
-        alpha_ewald : float
-            The Ewald alpha parameter
-        delta : float
-            The PME error tolerance
-        r_cutoff : float
-            The cutoff distance
-
-        Returns
-        -------
-        sterics_energy_expression : str
-            The energy expression for U_sterics
-        electrostatics_energy_expression : str
-            The energy expression for electrostatics
-        """
-        # soft-core Lennard-Jones
-        sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
-        if unit.is_quantity(alpha_ewald):
-            alpha_ewald = alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit
-        if alpha_ewald == 0.0:
-            # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
-            alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
-            alpha_ewald = alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit
         return sterics_energy_expression
 
     def _nonbonded_custom_mixing_rules(self):
@@ -1681,15 +1682,26 @@ class HybridTopologyFactory(object):
         from openmmtools.constants import ONE_4PI_EPS0 # OpenMM constant for Coulomb interactions (implicitly in md_unit_system units)
 
         old_new_nonbonded_exceptions = "U_electrostatics + U_sterics;"
+
+        if self._softcore_LJ_v2:
+            sterics_energy_expression = "U_sterics = select(step(r - r_LJ), 4*epsilon*x*(x-1.0), U_sterics_quad);"
+            sterics_energy_expression += f"U_sterics_quad = Force * ((r - r_LJ)**2/2 - (r - r_LJ)) + U_sterics_cut;"
+            sterics_energy_expression += f"U_sterics_cut = 4*epsilon * (sigma/r_LJ)**6 * ((sigma/r_LJ)**6 - 1.0);"
+            sterics_energy_expression += f"Force = -4 * epsilon * ((-12*sigma**12)/(r_LJ**13) + (6*sigma**6)/(r_LJ**7));"
+            sterics_energy_expression += f"x = (sigma/r)**6;"
+            sterics_energy_expression += f"r_LJ = softcore_alpha * ((26/7) * sigma**6 * lambda_sterics)**(1/6);"
+        else:
+            sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
+            old_new_nonbonded_exceptions += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);"
+            old_new_nonbonded_exceptions += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
+            old_new_nonbonded_exceptions += "lambda_alpha = new_interaction*(1-lambda_sterics_insert) + old_interaction*lambda_sterics_delete;"
+
         old_new_nonbonded_exceptions += "U_electrostatics = (lambda_electrostatics_insert * unique_new + unique_old * (1 - lambda_electrostatics_delete)) * ONE_4PI_EPS0*chargeProd/r;"
         old_new_nonbonded_exceptions += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0
 
-        old_new_nonbonded_exceptions += "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
         old_new_nonbonded_exceptions += "epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;" #interpolation
-        old_new_nonbonded_exceptions += "reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
         old_new_nonbonded_exceptions += "sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;"
 
-        old_new_nonbonded_exceptions+= "lambda_alpha = new_interaction*(1-lambda_sterics_insert) + old_interaction*lambda_sterics_delete;"
         old_new_nonbonded_exceptions += "lambda_sterics = new_interaction*lambda_sterics_insert + old_interaction*lambda_sterics_delete;"
         old_new_nonbonded_exceptions += "new_interaction = delta(1-unique_new); old_interaction = delta(1-unique_old);"
 
@@ -1701,7 +1713,10 @@ class HybridTopologyFactory(object):
         #for reference, set name in force dict
         self._hybrid_system_forces['old_new_exceptions_force'] = nonbonded_exceptions_force
 
-        nonbonded_exceptions_force.addGlobalParameter("softcore_alpha", self.softcore_alpha)
+        if self._softcore_LJ_v2:
+            nonbonded_exceptions_force.addGlobalParameter("softcore_alpha", self._softcore_LJ_v2_alpha)
+        else:
+            nonbonded_exceptions_force.addGlobalParameter("softcore_alpha", self._softcore_alpha)
         nonbonded_exceptions_force.addGlobalParameter("lambda_electrostatics_insert", 0.0) # electrostatics
         nonbonded_exceptions_force.addGlobalParameter("lambda_electrostatics_delete", 0.0) # electrostatics
         nonbonded_exceptions_force.addGlobalParameter("lambda_sterics_insert", 0.0) # sterics insert
