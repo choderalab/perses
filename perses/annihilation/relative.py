@@ -829,7 +829,7 @@ class HybridTopologyFactory(object):
             sterics_energy_expression += f"U_sterics_cut = 4*epsilon*((sigma/r_LJ)^6)*(((sigma/r_LJ)^6) - 1.0);"
             sterics_energy_expression += f"Force = -4*epsilon*((-12*sigma^12)/(r_LJ^13) + (6*sigma^6)/(r_LJ^7));"
             sterics_energy_expression += f"x = (sigma/r)^6;"
-            sterics_energy_expression += f"r_LJ = softcore_alpha*((26/7)*(sigma^6)*(1.0 - lambda_sterics))^(1/6);"
+            sterics_energy_expression += f"r_LJ = softcore_alpha*((26/7)*(sigma^6)*select(new_interaction, 1.0 - lambda_sterics, lambda_sterics))^(1/6);"
         else:
             sterics_energy_expression = "U_sterics = 4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
 
