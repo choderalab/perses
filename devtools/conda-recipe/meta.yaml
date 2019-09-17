@@ -23,7 +23,7 @@ requirements:
     - pymbar
     - openmm
     - parmed
-    - openmoltools
+    - openmoltools >=0.8.4
     - openmmtools
     - numba
     - netcdf4

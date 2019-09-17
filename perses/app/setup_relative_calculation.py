@@ -50,8 +50,6 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t\tphases detected: {setup_options['phases']}")
 
-    if 'lambda-protocol' not in setup_options:
-        setup_options['lambda-protocol'] = None
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
@@ -87,6 +85,8 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
 
+    if 'mapping_strength' not in setup_options:
+        setup_options['mapping_strength'] = 'default'
 
     _logger.info(f"\ttrajectory_directory detected: {trajectory_directory}.  making dir...")
     assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
@@ -340,8 +340,7 @@ def run_setup(setup_options):
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
             # generating lambda protocol
-            lambda_protocol = LambdaProtocol(type=setup_options['protocol-type'],
-                                             functions=setup_options['lambda_protocol'])
+            lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
 
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
@@ -365,8 +364,8 @@ def run_setup(setup_options):
                                                                                              splitting="V R R R O R R R V"),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
-                                               gamma0=setup_options['gamma0'],lambda_protocol=lambda_protocol)
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+                                               gamma0=setup_options['gamma0'])
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
@@ -374,8 +373,8 @@ def run_setup(setup_options):
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
                                                                                              splitting="V R R R O R R R V"),
-                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'],lambda_protocol=lambda_protocol)
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+                                                                                             hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 

@@ -21,7 +21,7 @@ def test_lambda_protocol():
 
     # check that it's possible to instantiate a LambdaProtocol for all the default types
     for protocol in ['default','namd','quarters']:
-        lp = LambdaProtocol(type=protocol)
+        lp = LambdaProtocol(functions=protocol)
 
     # check that if we give an incomplete set of parameters it will add in the missing terms
     missing_functions = {'lambda_sterics_delete': lambda x : x}
