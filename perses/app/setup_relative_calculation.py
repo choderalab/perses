@@ -107,6 +107,12 @@ def getSetupOptions(filename):
         if 'LSF' not in setup_options:
             _logger.info(f"\t\t\tLSF is not specified; default to True")
             setup_options['LSF'] = True
+        if 'run_type' not in setup_options:
+            _logger.info(f"\t\t\trun_type is not specified; default to None")
+            setup_options['run_type'] = None
+        if setup_options['run_type'] not in [None, 'anneal', 'equilibrate']:
+            raise Exception(f"'run_type' must be None, 'anneal', or 'equilibrate'; input was specified as {setup_options['run_type']}")
+
         setup_options['n_steps_per_move_application'] = 1 #setting the writeout to 1 for now
 
     trajectory_directory = setup_options['trajectory_directory']
@@ -488,32 +494,34 @@ if __name__ == "__main__":
             processes = setup_options['processes']
             adapt = setup_options['adapt']
             LSF = setup_options['LSF']
-            ne_fep_run.activate_client(LSF = LSF, processes = 2, adapt = adapt) #we only need 2 processes for equilibration
 
-            print("equilibrating...")
-            ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
-            ne_fep_run.deactivate_client()
-            with open(os.path.join(trajectory_directory, "%s_%s_eq_ne_fep.pkl" % (trajectory_prefix, phase)), 'wb') as f:
-                pickle.dump(ne_fep_run, f)
-
-
-            print("annealing...")
-            ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_eq_ne_fep.pkl" % (trajectory_prefix, phase)), 'rb'))
-            ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt) #now call n processes
-            ne_fep_run.run(n_iterations = n_cycles, full_protocol = False, timer = True)
-            print("calculation complete; deactivating client")
-            ne_fep_run.deactivate_client()
-
-            # try to write out the ne_fep object as a pickle
-            try:
-                with open(os.path.join(trajectory_directory, "%s_%s_ne_fep.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+            if setup_options['run_type'] == None or setup_options['run_type'] == 'equilibrate':
+                print("equilibrating...")
+                ne_fep_run.activate_client(LSF = LSF, processes = 2, adapt = adapt) #we only need 2 processes for equilibration
+                ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
+                ne_fep_run.deactivate_client()
+                with open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
                     pickle.dump(ne_fep_run, f)
-                    print("pickle save successful; terminating.")
 
-            except Exception as e:
-                print(e)
-                print("Unable to save run object as a pickle; saving as npy")
-                np.save(os.path.join(trajectory_directory, "%s_%s_ne_fep.npy" % (trajectory_prefix, phase)), ne_fep_run)
+
+            if setup_options['run_type'] == None or setup_options['run_type'] == 'anneal':
+                print("annealing...")
+                ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
+                ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt) #now call n processes
+                ne_fep_run.run(n_iterations = n_cycles, full_protocol = False, timer = True)
+                print("calculation complete; deactivating client")
+                ne_fep_run.deactivate_client()
+
+                # try to write out the ne_fep object as a pickle
+                try:
+                    with open(os.path.join(trajectory_directory, "%s_%s_fep.neq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+                        pickle.dump(ne_fep_run, f)
+                        print("pickle save successful; terminating.")
+
+                except Exception as e:
+                    print(e)
+                    print("Unable to save run object as a pickle; saving as npy")
+                    np.save(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase)), ne_fep_run)
 
     elif setup_options['fe_type'] == 'sams':
         _logger.info(f"Detecting sams as fe_type...")
