@@ -47,7 +47,7 @@ class RelativeFEPSetup(object):
     def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
                  protein_pdb_filename=None,receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
-                 hmass=4*unit.amus, neglect_angles=False,map_strength='default'):
+                 hmass=4*unit.amus, neglect_angles=False, map_strength='default', anneal_14s = False):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -72,6 +72,10 @@ class RelativeFEPSetup(object):
             The amount of padding to use when adding solvent
         neglect_angles : bool
             Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
+        anneal_14s : bool, default False
+            Whether to anneal 1,4 interactions over the protocol;
+                if True, then geometry_engine takes the argument use_14_nonbondeds = False;
+                if False, then geometry_engine takes the argument use_14_nonbondeds = True;
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -81,6 +85,7 @@ class RelativeFEPSetup(object):
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
         self._proposal_phase = None
         self._map_strength = map_strength
+        self._anneal_14s = anneal_14s
 
         beta = 1.0 / (kB * temperature)
 
@@ -210,7 +215,7 @@ class RelativeFEPSetup(object):
 
         _logger.info(f"instantiating FFAllAngleGeometryEngine...")
         # NOTE: we are conducting the geometry proposal without any neglected angles
-        self._geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = neglect_angles)
+        self._geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = neglect_angles, use_14_nonbondeds = (not self._anneal_14s))
 
         # if we are running multiple phases, we only want to generate one topology proposal, and use the same one for the other legs
         # this is tracked using _proposal_phase
@@ -600,24 +605,20 @@ class NonequilibriumSwitchingFEP(object):
     This class manages Nonequilibrium switching based relative free energy calculations, carried out on a distributed computing framework.
     """
 
-    def __init__(self, topology_proposal, geometry_engine, pos_old, new_positions, use_dispersion_correction=False, forward_functions=None,
+    def __init__(self, geometry_engine, use_dispersion_correction=False, forward_functions=None,
                  ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
                  atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
-                 neglected_new_angle_terms = [], neglected_old_angle_terms = [], ncmc_save_interval = None, write_ncmc_configuration = False):
+                 ncmc_save_interval = None, write_ncmc_configuration = False):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class.
         NOTE : defining self.client and self.cluster renders this class non-pickleable; call self.deactivate_client() to close the cluster/client
                objects to render this pickleable.
         Parameters
         ----------
-        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
-            TopologyProposal object containing transformation of interest
+        hybrid_factory : perses.annihilation.relative.HybridTopologyFactory
+            hybrid topology factory
         geometry_engine : perses.rjmc.geometry.FFAllAngleGeometryEngine
             geometry engine used to create and compute the RJMCMC; we use this to compute the importance weight from the old/new system to the hybrid system (neglecting added valence terms)
-        pos_old : [n, 3] ndarray unit.Quantity
-            Positions of the old system.
-        new_positions : [m, 3] ndarray unit.Quantity
-            Positions of the new system
         use_dispersion_correction : bool, default False
             Whether to use the (expensive) dispersion correction
         forward_functions : dict of str: str, default forward_functions as defined by top of file
@@ -657,7 +658,8 @@ class NonequilibriumSwitchingFEP(object):
 
         # construct the hybrid topology factory object
         _logger.info(f"writing HybridTopologyFactory")
-        self._factory = HybridTopologyFactory(topology_proposal, pos_old, new_positions, neglected_new_angle_terms, neglected_old_angle_terms)
+        self._factory = hybrid_factory
+        topology_proposal = self._factory._topology_proposal
         self.geometry_engine = geometry_engine
         self._ncmc_save_interval = ncmc_nsteps if not ncmc_save_interval else ncmc_save_interval
         _logger.debug(f"ncmc save interval set as {self._ncmc_save_interval}")

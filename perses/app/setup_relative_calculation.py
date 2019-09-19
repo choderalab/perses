@@ -122,6 +122,14 @@ def getSetupOptions(filename):
     if 'mapping_strength' not in setup_options:
         setup_options['mapping_strength'] = 'default'
 
+    if 'anneal_1,4s' not in setup_options:
+        setup_options['anneal_1,4s'] = False
+        _logger.info(f"\t'anneal_1,4s' not specified: default to 'False' (i.e. since 1,4 interactions are not being annealed, they are being used to make new/old atom proposals in the geometry engine.)")
+
+    if 'softcore_v2' not in setup_options:
+        setup_options['softcore_v2'] = False
+        _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
+
     _logger.info(f"\ttrajectory_directory detected: {trajectory_directory}.  making dir...")
     assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
     os.makedirs(trajectory_directory)
@@ -235,7 +243,7 @@ def run_setup(setup_options):
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms,
-                                          atom_map=atom_map, neglect_angles = setup_options['neglect_angles'])
+                                          atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'])
         _logger.info(f"\n\n\n")
 
         _logger.info(f"\twriting pickle output...")
@@ -326,10 +334,16 @@ def run_setup(setup_options):
         ne_fep = dict()
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}")
-            ne_fep[phase] = NonequilibriumSwitchingFEP(topology_proposal = top_prop['%s_topology_proposal' % phase],
+            hybrid_factory = HybridTopologyFactory(top_prop['%s_topology_proposal' % phase],
+                                               top_prop['%s_old_positions' % phase],
+                                               top_prop['%s_new_positions' % phase],
+                                               neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
+                                               neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
+                                               softcore_LJ_v2 = setup_options['softcore_v2'],
+                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
+
+            ne_fep[phase] = NonequilibriumSwitchingFEP(hybrid_factory = hybrid_factory,
                                                        geometry_engine = top_prop['%s_geometry_engine' % phase],
-                                                       pos_old = top_prop['%s_old_positions' % phase],
-                                                       new_positions = top_prop['%s_new_positions' % phase],
                                                        use_dispersion_correction = False,
                                                        forward_functions = setup_options['lambda_protocol'],
                                                        ncmc_nsteps=n_steps_ncmc_protocol,
@@ -368,7 +382,9 @@ def run_setup(setup_options):
                                                top_prop['%s_old_positions' % phase],
                                                top_prop['%s_new_positions' % phase],
                                                neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
-                                               neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"])
+                                               neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
+                                               softcore_LJ_v2 = setup_options['softcore_v2'],
+                                               interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
 
            # Define necessary vars to check energy bookkeeping
             _top_prop = top_prop['%s_topology_proposal' % phase]

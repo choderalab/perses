@@ -70,7 +70,8 @@ class HybridTopologyFactory(object):
                  softcore_electrostatics = True,
                  softcore_LJ_v2_alpha = 0.85,
                  softcore_electrostatics_alpha = 0.3,
-                 softcore_sigma_Q = 1.0):
+                 softcore_sigma_Q = 1.0,
+                 interpolate_old_and_new_14s = False):
         """
         Initialize the Hybrid topology factory.
 
@@ -115,6 +116,8 @@ class HybridTopologyFactory(object):
             softcore alpha parameter for softcore electrostatics.
         softcore_sigma_Q : float, default 1.0
             softcore sigma parameter for softcore electrostatics.
+        interpolate_old_and_new_14s : bool, default False
+            whether to turn on new 1,4 interactions and turn off old 1,4 interactions; if False, they are present in the nonbonded force
 
         .. todo :: Document how positions for hybrid system are constructed
 
@@ -129,6 +132,7 @@ class HybridTopologyFactory(object):
         self._old_positions = current_positions
         self._new_positions = new_positions
         self._soften_only_new = soften_only_new
+        self._interpolate_14s = interpolate_old_and_new_14s
 
         #new attributes from the modified geometry engine
         self.neglected_new_angle_terms = neglected_new_angle_terms
@@ -1490,14 +1494,23 @@ class HybridTopologyFactory(object):
             if old_index_atom_pair in self._old_system_exceptions:
                 _logger.debug(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {old_index_atom_pair} is an old system exception")
                 [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair]
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0) # TODO: check if we should leave modified sigma, epsilon should be zeroed explicitly
+                if self._interpolate_14s: #if we are interpolating 1,4 exceptions then we have to
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
+                else:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+
 
             #check if the pair is in the reverse order and use that if so
             elif old_index_atom_pair[::-1] in self._old_system_exceptions:
                 _logger.debug(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {old_index_atom_pair[::-1]} is an old system exception")
                 [chargeProd, sigma, epsilon] = self._old_system_exceptions[old_index_atom_pair[::-1]]
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0) # TODO: same for this
+                if self._interpolate_14s: #if we are interpolating 1,4 exceptions then we have to
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
+                else:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
             #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
@@ -1521,15 +1534,26 @@ class HybridTopologyFactory(object):
             if new_index_atom_pair in self._new_system_exceptions:
                 _logger.debug(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {new_index_atom_pair} is a new system exception")
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair]
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
-                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+                if self._interpolate_14s:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
+                else:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1])
+
+
 
             #check if the pair is present in the reverse order and use that if so
             elif new_index_atom_pair[::-1] in self._new_system_exceptions:
                 _logger.debug(f"\t\thandle_nonbonded: _handle_hybrid_exceptions: {new_index_atom_pair[::-1]} is a new system exception")
                 [chargeProd, sigma, epsilon] = self._new_system_exceptions[new_index_atom_pair[::-1]]
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
-                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
+                if self._interpolate_14s:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
+                else:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+
+                self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1])
+
 
             #If it's not handled by an exception in the original system, we just add the regular parameters as an exception
             # else:
@@ -1580,7 +1604,11 @@ class HybridTopologyFactory(object):
             #otherwise, check if one of the atoms in the set is in the unique_old_group and the other is not:
             elif len(index_set.intersection(self._atom_classes['unique_old_atoms'])) == 1:
                 _logger.debug(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_old-core or unique_old-environment exception pair.")
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old*0.0, sigma_old, epsilon_old*0.0)
+                if self._interpolate_14s:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old*0.0, sigma_old, epsilon_old*0.0)
+                else:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #If the exception particles are neither solely old unique, solely environment, nor contain any unique old atoms, they are either core/environment or core/core
@@ -1634,7 +1662,11 @@ class HybridTopologyFactory(object):
             #similarly: they are simply on and constant the entire time (as a valence term)
             elif len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
                 _logger.debug(f"\t\thandle_nonbonded: _handle_original_exceptions: {exception_pair} is a unique_new-core or unique_new-environment exception pair.")
-                self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new*0.0, sigma_new, epsilon_new*0.0)
+                if self._interpolate_14s:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new*0.0, sigma_new, epsilon_new*0.0)
+                else:
+                    self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
+
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
             #however, there may be a core exception that exists in one system but not the other (ring closure)
@@ -1747,7 +1779,11 @@ class HybridTopologyFactory(object):
             #otherwise, check if one of the atoms in the set is in the unique_old_group and the other is not:
             if len(index_set.intersection(self._atom_classes['unique_old_atoms'])) > 0 and (chargeProd_old.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_old.value_in_unit_system(unit.md_unit_system) != 0.0):
                 _logger.debug(f"\t\thandle_old_new_exceptions: {exception_pair} is a unique_old exception pair.")
-                nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, sigma_old, epsilon_old*0.0, 1, 0])
+                if self._interpolate_14s:
+                    # if we are interpolating 1,4s, then we anneal this term off; otherwise, the exception force is constant and already handled in the standard nonbonded force
+                    nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, sigma_old, epsilon_old*0.0, 1, 0])
+
+
 
         #next, loop through the new system's exceptions and add them to the hybrid appropriately
         for exception_pair, exception_parameters in self._new_system_exceptions.items():
@@ -1762,9 +1798,11 @@ class HybridTopologyFactory(object):
 
             #look for the final class- interactions between uniquenew-core and uniquenew-environment. They are treated
             #similarly: they are simply on and constant the entire time (as a valence term)
-            if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
+            if len(index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0 and (chargeProd_new.value_in_unit_system(unit.md_unit_system) != 0.0 or epsilon_new.value_in_unit_system(unit.md_unit_system) != 0.0):
                 _logger.debug(f"\t\thandle_old_new_exceptions: {exception_pair} is a unique_new exception pair.")
-                nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_new, sigma_new, epsilon_new*0.0, sigma_new, epsilon_new, 0, 1])
+                if self._interpolate_14s:
+                    # if we are interpolating 1,4s, then we anneal this term on; otherwise, the exception force is constant and already handled in the standard nonbonded force
+                    nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_new, sigma_new, epsilon_new*0.0, sigma_new, epsilon_new, 0, 1])
 
 
     def _find_exception(self, force, index1, index2):
