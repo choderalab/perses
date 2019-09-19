@@ -362,8 +362,6 @@ def run_setup(setup_options):
                                                        neq_splitting_string = neq_splitting,
                                                        measure_shadow_work=measure_shadow_work,
                                                        timestep=timestep,
-                                                       neglected_new_angle_terms = top_prop[f"{phase}_forward_neglected_angles"],
-                                                       neglected_old_angle_terms = top_prop[f"{phase}_reverse_neglected_angles"],
                                                        ncmc_save_interval = ncmc_save_interval,
                                                        write_ncmc_configuration = write_ncmc_configuration)
 

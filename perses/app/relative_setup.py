@@ -640,12 +640,6 @@ class NonequilibriumSwitchingFEP(object):
             The integrator splitting to use for equilibrium simulation
         neq_splitting_string : str, default 'V R O R V'
             The integrator splitting to use for nonequilibrium switching simulation
-        neglected_new_angle_terms : list, default []
-            list of indices from the HarmonicAngleForce of the new_system for which the geometry engine neglected.
-            Hence, these angles must be alchemically grown in for the unique new atoms (forward lambda protocol)
-        neglected_old_angle_terms : list, default []
-            list of indices from the HarmonicAngleForce of the old_system for which the geometry engine neglected.
-            Hence, these angles must be alchemically deleted for the unique old atoms (reverse lambda protocol)
         ncmc_save_interval : int, default None
             interval with which to write ncmc trajectory.  If None, trajectory will not be saved.
             We will assert that the ncmc_nsteps % ncmc_save_interval = 0; otherwise, the protocol will not be complete
