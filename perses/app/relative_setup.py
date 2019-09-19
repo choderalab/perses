@@ -605,7 +605,7 @@ class NonequilibriumSwitchingFEP(object):
     This class manages Nonequilibrium switching based relative free energy calculations, carried out on a distributed computing framework.
     """
 
-    def __init__(self, geometry_engine, use_dispersion_correction=False, forward_functions=None,
+    def __init__(self, hybrid_factory, geometry_engine, use_dispersion_correction=False, forward_functions=None,
                  ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
                  atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
                  ncmc_save_interval = None, write_ncmc_configuration = False):
