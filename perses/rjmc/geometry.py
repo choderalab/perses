@@ -741,7 +741,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         for index in reversed(range(num_forces)):
             force = no_nb_system.getForce(index)
             if force.__class__.__name__ == 'NonbondedForce' or force.__class__.__name__ == 'MonteCarloBarostat':
-                if self._use_14_nonbondeds:
+                if self._use_14_nonbondeds and force.__class__.__name__ == 'NonbondedForce':
                     for particle_index in range(force.getNumParticles()):
                         [charge, sigma, epsilon] = force.getParticleParameters(particle_index)
                         force.setParticleParameters(particle_index, charge*0.0, sigma, epsilon*0.0)
