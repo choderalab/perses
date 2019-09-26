@@ -21,9 +21,9 @@ requirements:
     - numpy >=1.14
     - scipy
     - pymbar
-    - openmm ==7.3.1
+    - openmm
     - parmed
-    - openmoltools
+    - openmoltools >=0.8.4
     - openmmtools
     - numba
     - netcdf4

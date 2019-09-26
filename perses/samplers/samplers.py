@@ -1038,3 +1038,4 @@ class ProtonationStateSampler(object):
         # Update all samplers.
         for iteration in range(niterations):
             self.update()
+

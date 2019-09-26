@@ -39,15 +39,26 @@ except ImportError:
 
 OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | oechem.OESMILESFlag_Hydrogens
 
-#DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_Hybridization #| oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqHalogen | oechem.OEExprOpts_RingMember | oechem.OEExprOpts_EqCAliphaticONS
-#DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity | oechem.OEExprOpts_RingMember
 
-# DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms
-# DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+# TODO write a mapping-protocol class to handle these options
 
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
-WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_DefaultAtoms | oechem.OEExprOpts_EqAromatic
+# weak requirements for mapping atoms == more atoms mapped, more in core
+# atoms need to match in aromaticity. Same with bonds.
+# maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
+WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
+WEAK_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
+
+# default atom expression, requires same aromaticitiy and hybridization
+# bonds need to match in bond order
+# ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+# strong requires same hybridization AND the same atom type
+# bonds are same as default, require them to match in bond order
+STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_DefaultAtoms
+STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
 ################################################################################
 # LOGGER
 ################################################################################
@@ -55,7 +66,7 @@ DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("proposal_generator")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
 ################################################################################
 # UTILITIES
@@ -122,7 +133,7 @@ class SmallMoleculeAtomMapper(object):
     proposals is not disconnected.
     """
 
-    def __init__(self, list_of_smiles: List[str], atom_match_expression: int=None, bond_match_expression: int=None, weak_atom_mapping: bool=False, prohibit_hydrogen_mapping: bool=True):
+    def __init__(self, list_of_smiles: List[str], map_strength: str='default', atom_match_expression: int=None, bond_match_expression: int=None, prohibit_hydrogen_mapping: bool=True):
 
         self._unique_noncanonical_smiles_list = list(set(list_of_smiles))
         self._oemol_dictionary = self._initialize_oemols(self._unique_noncanonical_smiles_list)
@@ -133,17 +144,35 @@ class SmallMoleculeAtomMapper(object):
         self._prohibit_hydrogen_mapping = prohibit_hydrogen_mapping
 
         if atom_match_expression is None:
-            if weak_atom_mapping:
+            _logger.debug(f'map_strength = {map_strength}')
+            if map_strength == 'default':
+                self._atom_expr = DEFAULT_ATOM_EXPRESSION
+            elif map_strength == 'weak':
                 self._atom_expr = WEAK_ATOM_EXPRESSION
+            elif map_strength == 'strong':
+                self._atom_expr = STRONG_ATOM_EXPRESSION
             else:
+                _logger.warning(f"atom_match_expression not recognised, setting to default")
                 self._atom_expr = DEFAULT_ATOM_EXPRESSION
         else:
-            self._atom_expr = atom_match_expression
+            self._atom_expr = atom_expr
+            _logger.info(f'Setting the atom expression to user defined: {atom_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
 
         if bond_match_expression is None:
-            self._bond_expr = DEFAULT_BOND_EXPRESSION
+            if map_strength == 'default':
+                self._bond_expr = DEFAULT_BOND_EXPRESSION
+            elif map_strength == 'weak':
+                self._bond_expr = WEAK_BOND_EXPRESSION
+            elif map_strength == 'strong':
+                self._bond_expr = STRONG_BOND_EXPRESSION
+            else:
+                _logger.warning(f"bond_match_expression not recognised, setting to default")
+                self._bond_expr = DEFAULT_BOND_EXPRESSION
         else:
-            self._bond_expr = bond_match_expression
+            self.bond_expr = bond_expr
+            _logger.info(f'Setting the bond expression to user defined: {bond_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
 
         self._molecules_mapped = False
         self._molecule_maps = {}
@@ -495,6 +524,9 @@ class SmallMoleculeAtomMapper(object):
             mol = oechem.OEMol()
             oechem.OESmilesToMol(mol, smiles)
             oechem.OEAddExplicitHydrogens(mol)
+            oechem.OEAssignHybridization(molecule)
+            oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
+
             list_of_mols.append(mol)
 
         #now write out all molecules and read them back in:
@@ -751,6 +783,10 @@ class TopologyProposal(object):
         The previous chemical state key
     new_chemical_state_key : str
         The proposed chemical state key
+    old_residue_name : str
+        Name of the old residue
+    new_residue_name : str
+        Name of the new residue
     metadata : dict
         additional information of interest about the state
     """
@@ -761,6 +797,7 @@ class TopologyProposal(object):
                  logp_proposal=None,
                  new_to_old_atom_map=None, old_alchemical_atoms=None,
                  old_chemical_state_key=None, new_chemical_state_key=None,
+                 old_residue_name=None, new_residue_name=None,
                  metadata=None):
 
         if new_chemical_state_key is None or old_chemical_state_key is None:
@@ -772,6 +809,8 @@ class TopologyProposal(object):
         self._logp_proposal = logp_proposal
         self._new_chemical_state_key = new_chemical_state_key
         self._old_chemical_state_key = old_chemical_state_key
+        self._old_residue_name = old_residue_name
+        self._new_residue_name = new_residue_name
         self._new_to_old_atom_map = new_to_old_atom_map
         self._old_to_new_atom_map = {old_atom : new_atom for new_atom, old_atom in new_to_old_atom_map.items()}
         self._unique_new_atoms = list(set(range(self._new_topology.getNumAtoms()))-set(self._new_to_old_atom_map.keys()))
@@ -833,6 +872,12 @@ class TopologyProposal(object):
     @property
     def old_chemical_state_key(self):
         return self._old_chemical_state_key
+    @property
+    def old_residue_name(self):
+        return self._old_residue_name
+    @property
+    def new_residue_name(self):
+        return self._new_residue_name
     @property
     def metadata(self):
         return self._metadata
@@ -2264,12 +2309,41 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     """
 
     def __init__(self, list_of_smiles, system_generator, residue_name='MOL',
-                 atom_expr=None, bond_expr=None, proposal_metadata=None, storage=None,
-                 always_change=True, atom_map=None):
+                 atom_expr=None, bond_expr=None, map_strength='default', proposal_metadata=None,
+                 storage=None, always_change=True, atom_map=None):
 
         # Default atom and bond expressions for MCSS
-        self.atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
-        self.bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+        if atom_expr is None:
+            _logger.info(f'Setting the atom expression to {map_strength}')
+            _logger.info(type(map_strength))
+            if map_strength == 'default':
+                self.atom_expr = DEFAULT_ATOM_EXPRESSION
+            elif map_strength == 'weak':
+                self.atom_expr = WEAK_ATOM_EXPRESSION
+            elif map_strength == 'strong':
+                self.atom_expr = STRONG_ATOM_EXPRESSION
+            else:
+                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
+                self.atom_expr = DEFAULT_ATOM_EXPRESSION
+        else:
+            self.atom_expr = atom_expr
+            _logger.info(f'Setting the atom expression to user defined: {atom_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
+        if bond_expr is None:
+            _logger.info(f'Setting the bond expression to {map_strength}')
+            if map_strength == 'default':
+                self.bond_expr = DEFAULT_BOND_EXPRESSION
+            elif map_strength == 'weak':
+                self.bond_expr = WEAK_BOND_EXPRESSION
+            elif map_strength == 'strong':
+                self.bond_expr = STRONG_BOND_EXPRESSION
+            else:
+                _logger.warning(f"User defined map_strength: {map_strength} not recognised, setting to default")
+                self.bond_expr = DEFAULT_BOND_EXPRESSION
+        else:
+            self.bond_expr = bond_expr
+            _logger.info(f'Setting the bond expression to user defined: {bond_expr}')
+            _logger.info('If map_strength has been set, it will be ignored')
         self._allow_ring_breaking = True # allow ring breaking
 
         # Canonicalize all SMILES strings
@@ -2403,7 +2477,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             old_topology=current_topology, new_topology=new_topology,
             old_system=current_system, new_system=new_system,
             old_alchemical_atoms=old_alchemical_atoms,
-            old_chemical_state_key=self._residue_name, new_chemical_state_key=self._residue_name)
+            old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles,
+            old_residue_name=self._residue_name, new_residue_name=self._residue_name)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
         ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
@@ -2686,20 +2761,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
     def hydrogen_mapping_exceptions(old_mol, new_mol, match):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
+        or aromatic(X) != aromatic(Y)
         """
-        # from perses.utils.openeye import OEMol_to_omm_ff
         new_to_old_atom_map = {}
-
-        # #wrapping constraints
-        # old_sys, old_pos, old_top = OEMol_to_omm_ff(old_mol, data_filename='data/gaff.xml')
-        # new_sys, new_pos, new_top = OEMol_to_omm_ff(new_mol, data_filename='data/gaff.xml')
-        # old_constraints, new_constraints = {}, {}
-        # for idx in range(old_sys.getNumConstraints()):
-        #     atom1, atom2, length = old_sys.getConstraintParameters(idx)
-        #     old_constraints[set([atom1, atom2])] = length
-        # for idx in range(new_sys.getNumConstraints()):
-        #     atom1, atom2, length = new_sys.getConstraintParameters(idx)
-        #     new_constraints[set([atom1, atom2])] = length
 
         for matchpair in match.GetAtoms():
             old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
@@ -2709,46 +2773,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
                 continue
 
-            # # If the above is not true, then they are either both hydrogens or both not hydrogens
-            # elif old_atom.GetAtomicNum() == 1:
-            #     assert len(list(old_atom.GetBonds())) == 1, f"This atom has more than one bond"
-            #     bond = list(old_atom.GetBonds())[0] # There is only one for hydrogen
-            #     bgn = bond.GetBgn()
-            #     end = bond.GetEnd()
-            #
-            #     # Is this atom the beginning of the bond?
-            #     if bgn.GetIdx() == old_index:
-            #         other_atom = end
-            #     else:
-            #         other_atom = bgn
-            #
-            #     assert len(list(new_atom.GetBonds())) == 1, f"This atom has more than one bond"
-            #     new_bond = list(new_atom.GetBonds())[0]
-            #     new_bgn = new_bond.GetBgn()
-            #     new_end = new_bond.GetEnd()
-            #
-            #     if new_bgn.GetIdx() == new_index:
-            #         new_other_atom = new_end
-            #     else:
-            #         new_other_atom = new_bgn
-
-                # old_pair, new_pair = set([bgn.GetIdx(), end.GetIdx()]), set([new_bgn.GetIdx(), new_end.GetIdx()])
-                # assert old_pair in old_constraints.keys(), f"old hydrogen bond ({bgn.GetAtomicNum()} to {end.GetAtomicNum()}) doesn't have a constraint"
-                # assert new_pair in new_constraints.keys(), f"new hydrogen bond ({new_bgn.GetAtomicNum()} to {new_end.GetAtomicNum()}) doesn't have a constraint"
-
-                # if old_constraints[old_pair] != new_constraints[new_pair]: #if the old constraint doesn't equal the new constraint, then continue
-                #     continue
-
-                #now to loop through the indices of the constraints and see if they are conserved; if not, we have to
-                # if (new_other_atom.GetAtomicNum() != other_atom.GetAtomicNum()):
-                #     # if X-H maps to Y-H where X, Y are the same element but with different aromaticity booleans, then the Hbond constraint difference
-                #     # will throw an error in the HybridTopologyFactory class.  map these hydrogens as unique new/old
-                #     continue
-
-
             new_to_old_atom_map[new_index] = old_index
-
         return new_to_old_atom_map
+
 
     @staticmethod
     def _constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology):
@@ -2774,7 +2801,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             elif atom2 in new_hydrogens:
                 new_constraints[atom2] = length
 
-        #iterate through the atom indices in the new_to_old map, check bonds for pairs, and remove appropriate matches
+         #iterate through the atom indices in the new_to_old map, check bonds for pairs, and remove appropriate matches
         to_delete = []
         for new_index, old_index in atom_map.items():
             if new_index in new_constraints.keys() and old_index in old_constraints.keys(): # both atom indices are hydrogens
@@ -2786,9 +2813,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             del atom_map[idx]
 
         return atom_map
-
-
-
 
     @staticmethod
     def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=True):
@@ -2809,9 +2833,16 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         matches : list of match
             list of the matches between the molecules
         """
-        atom_expr = atom_expr or DEFAULT_ATOM_EXPRESSION
-        bond_expr = bond_expr or DEFAULT_BOND_EXPRESSION
+        if atom_expr is None:
+            _logger.warning('atom_expr not set. using DEFAULT')
+            atom_expr = DEFAULT_ATOM_EXPRESSION
+        if bond_expr is None:
+            _logger.warning('atom_expr not set. using DEFAULT')
+            bond_expr = DEFAULT_BOND_EXPRESSION
 
+        # this ensures that the hybridization of the oemols is done for correct atom mapping
+        oechem.OEAssignHybridization(current_molecule)
+        oechem.OEAssignHybridization(proposed_molecule)
         oegraphmol_current = oechem.OEGraphMol(current_molecule) # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule) # target molecule
         #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
@@ -2844,7 +2875,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             hit_number = 0
             for key, value in map.items():
                 if key == value:
-                    hit_number+=1
+                    hit_number += 1
             index_overlap_numbers.append(hit_number)
 
         max_index_overlap_number = max(index_overlap_numbers)

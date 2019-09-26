@@ -16,7 +16,7 @@ InteractionGroup = enum.Enum("InteractionGroup", ['unique_old', 'unique_new', 'c
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative")
-_logger.setLevel(logging.WARNING)
+_logger.setLevel(logging.INFO)
 ###########################################
 
 class HybridTopologyFactory(object):
@@ -283,22 +283,17 @@ class HybridTopologyFactory(object):
     def _get_core_atoms(self):
         """
         Determine which atoms in the old system are part of the "core" class.
-
         All necessary information is contained in the topology proposal passed to the constructor.
-
         Returns
         -------
         core_atoms : set of int
             The set of atoms (hybrid topology indexed) that are core atoms.
         environment_atoms : set of int
             The set of atoms (hybrid topology indexed) that are environment atoms.
-
         .. todo ::
-
            Overhaul this method and methods it calls by instead having this class accept
            an alchemical atom set that denotes atoms not in the environment. The core would
            then be very easy to figure out.
-
         """
 
         #In order to be either a core or environment atom, the atom must be mapped.
@@ -311,14 +306,16 @@ class HybridTopologyFactory(object):
         unique_new_set = set(self._topology_proposal.unique_new_atoms)
 
         #we derive core atoms from the old topology:
+        name_of_residue = self._topology_proposal.old_residue_name
         core_atoms_from_old = self._determine_core_atoms_in_topology(self._topology_proposal.old_topology,
                                                                      unique_old_set, mapped_old_atoms_set,
-                                                                     self._old_to_hybrid_map)
+                                                                     self._old_to_hybrid_map, name_of_residue)
 
         #we also derive core atoms from the new topology:
+        name_of_residue = self._topology_proposal.new_residue_name
         core_atoms_from_new = self._determine_core_atoms_in_topology(self._topology_proposal.new_topology,
                                                                      unique_new_set, mapped_new_atoms_set,
-                                                                     self._new_to_hybrid_map)
+                                                                     self._new_to_hybrid_map, name_of_residue)
 
         #The union of the two will give the core atoms that can result from either new or old topology
         # TODO: Shouldn't these sets be the same?
@@ -330,7 +327,7 @@ class HybridTopologyFactory(object):
 
         return total_core_atoms, environment_atoms
 
-    def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map):
+    def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map, residue_to_switch):
         """
         Given a topology and its corresponding unique and mapped atoms, return the set of atom indices in the
         hybrid system which would belong to the "core" atom class
@@ -343,6 +340,8 @@ class HybridTopologyFactory(object):
             A set of atoms that are unique to this topology
         mapped_atoms : set of int
             A set of atoms that are mapped to another topology
+        residue_to_switch : str
+            string name of a residue that is being mutated
 
         Returns
         -------
@@ -357,7 +356,8 @@ class HybridTopologyFactory(object):
 
             #if the residue contains an atom index that is unique, then the residue is changing.
             #We determine this by checking if the atom indices of the residue have any intersection with the unique atoms
-            if len(atom_indices_old_system.intersection(unique_atoms)) > 0:
+            #likewise, if the name of the residue matches the residue_to_match, then we look for mapped atoms
+            if len(atom_indices_old_system.intersection(unique_atoms)) > 0 or residue_to_switch == residue.name:
                 #we can add the atoms in this residue which are mapped to the core_atoms set:
                 for atom_index in atom_indices_old_system:
                     if atom_index in mapped_atoms:
@@ -1001,16 +1001,17 @@ class HybridTopologyFactory(object):
         angle_parameters : list
             list of angle parameters
         """
-        index_set = set(indices)
+        #index_set = set(indices)
+        indices_reversed = indices[::-1]
 
         #now loop through and try to find the angle:
         for angle_index in range(angle_force.getNumAngles()):
             angle_parameters = angle_force.getAngleParameters(angle_index)
 
             #get a set representing the angle indices
-            angle_parameter_indices = set(angle_parameters[:3])
+            angle_parameter_indices = angle_parameters[:3]
 
-            if index_set==angle_parameter_indices:
+            if indices == angle_parameter_indices or indices_reversed == angle_parameter_indices:
                 return angle_parameters
         return []  # return empty if no matching angle found
 
@@ -1023,14 +1024,15 @@ class HybridTopologyFactory(object):
         torsion_force : openmm.PeriodicTorsionForce
             torsion force where the torsion of interest may be found
         indices : list of int
-            The indices (any order) of the atoms of the torsion
+            The indices of the atoms of the torsion
 
         Returns
         -------
         torsion_parameters : list
             torsion parameters
         """
-        index_set = set(indices)
+        #index_set = set(indices)
+        indices_reversed = indices[::-1]
 
         torsion_parameters_list = list()
 
@@ -1039,9 +1041,9 @@ class HybridTopologyFactory(object):
             torsion_parameters = torsion_force.getTorsionParameters(torsion_index)
 
             #get a set representing the torsion indices:
-            torsion_parameter_indices = set(torsion_parameters[:4])
+            torsion_parameter_indices = torsion_parameters[:4]
 
-            if index_set==torsion_parameter_indices:
+            if indices == torsion_parameter_indices or indices_reversed == torsion_parameter_indices:
                 torsion_parameters_list.append(torsion_parameters)
 
         return torsion_parameters_list
@@ -1194,12 +1196,14 @@ class HybridTopologyFactory(object):
         added_torsions = []
         _logger.info("\thandle_periodic_torsion_forces: looping through old_system to add relevant terms...")
         for torsion_index in range(old_system_torsion_force.getNumTorsions()):
-            _logger.debug(f"\t\thandle_harmonic_angles: old torsion_index: {torsion_index}")
+            _logger.debug(f"\t\thandle_harmonic_torsion_forces: old torsion_index: {torsion_index}")
             torsion_parameters = old_system_torsion_force.getTorsionParameters(torsion_index)
+            _logger.debug(f"\t\thandle_harmonic_torsion_forces: old_torsion parameters: {torsion_parameters}")
 
 
             #get the indices in the hybrid system
             hybrid_index_list = [self._old_to_hybrid_map[old_index] for old_index in torsion_parameters[:4]]
+            _logger.debug(f"\t\thandle_harmonic_torsion_forces: hybrid torsion index: {hybrid_index_list}")
             hybrid_index_set = set(hybrid_index_list)
 
             #if all atoms are in the core, we'll need to find the corresponding parameters in the old system and
@@ -1215,8 +1219,11 @@ class HybridTopologyFactory(object):
                 #get the new indices so we can get the new angle parameters, as well as all old parameters of the old torsion
                 #The reason we do it like this is to take care of varying periodicity between new and old system.
                 torsion_parameters_list = self._find_torsion_parameters(old_system_torsion_force, torsion_indices)
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: old torsion parameters: {torsion_parameters_list}")
                 new_indices = [self._topology_proposal.old_to_new_atom_map[old_index] for old_index in torsion_indices]
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: new indices: {new_indices}")
                 new_torsion_parameters_list = self._find_torsion_parameters(new_system_torsion_force, new_indices)
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: new torsion parameters: {new_torsion_parameters_list}")
 
                 #for old torsions, have the energy scale from full at lambda=0 to off at lambda=1
                 for torsion_parameters in torsion_parameters_list:
@@ -1264,7 +1271,7 @@ class HybridTopologyFactory(object):
                 old_index_list = [self._hybrid_to_old_map[hybr_idx] for hybr_idx in hybrid_index_list]
                 old_index_list_reversed = [i for i in reversed(old_index_list)]
 
-                 #if we've already added these indices (they may appear >once for high periodicities)
+                  #if we've already added these indices (they may appear >once for high periodicities)
                 #then just continue to the next torsion.
                 if (old_index_list in added_torsions) or (old_index_list_reversed in added_torsions):
                     continue
@@ -1276,7 +1283,6 @@ class HybridTopologyFactory(object):
                     self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
                 added_torsions.append(old_index_list)
                 added_torsions.append(old_index_list_reversed)
-
 
     def handle_nonbonded(self):
         """
@@ -1829,6 +1835,7 @@ class HybridTopologyFactory(object):
 
         #now, add each unique new atom to the topology (this is the same order as the system)
         for particle_idx in self._topology_proposal.unique_new_atoms:
+            new_particle_hybrid_idx = self._new_to_hybrid_map[particle_idx]
             new_system_atom = new_topology.atom(particle_idx)
 
             #first, we get the residue in the new system associated with this atom
@@ -1855,7 +1862,7 @@ class HybridTopologyFactory(object):
             mapped_residue = mapped_hybrid_system_atom.residue
 
             #add the atom using the mapped residue
-            added_atoms[particle_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
+            added_atoms[new_particle_hybrid_idx] = hybrid_topology.add_atom(new_system_atom.name, new_system_atom.element, mapped_residue)
 
         #now loop through the bonds in the new system, and if the bond contains a unique new atom, then add it to the hybrid topology
         for (atom1, atom2) in new_topology.bonds:

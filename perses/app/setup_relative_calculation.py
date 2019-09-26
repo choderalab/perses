@@ -9,6 +9,7 @@ import logging
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
+from perses.annihilation.lambda_protocol import LambdaProtocol
 
 from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
@@ -49,6 +50,9 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t\tphases detected: {setup_options['phases']}")
 
+    if 'protocol-type' not in setup_options:
+        setup_options['protocol-type'] = 'default'
+
     _logger.info(f"\tDetecting fe_type...")
     if setup_options['fe_type'] == 'sams':
         _logger.info(f"\t\tfe_type: sams")
@@ -81,6 +85,8 @@ def getSetupOptions(filename):
     else:
         _logger.info(f"\t'neglect_angles' detected: {setup_options['neglect_angles']}.")
 
+    if 'mapping_strength' not in setup_options:
+        setup_options['mapping_strength'] = 'default'
 
     _logger.info(f"\ttrajectory_directory detected: {trajectory_directory}.  making dir...")
     assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
@@ -333,6 +339,8 @@ def run_setup(setup_options):
             _logger.info(f"\t\terror in zero state: {zero_state_error}")
             _logger.info(f"\t\terror in one state: {one_state_error}")
 
+            # generating lambda protocol
+            lambda_protocol = LambdaProtocol(functions=setup_options['protocol-type'])
 
             if atom_selection:
                 selection_indices = htf[phase].hybrid_topology.select(atom_selection)
@@ -357,7 +365,7 @@ def run_setup(setup_options):
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
@@ -366,7 +374,7 @@ def run_setup(setup_options):
                                                                                              n_restart_attempts=20,
                                                                                              splitting="V R R R O R R R V"),
                                                                                              hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 

@@ -143,5 +143,8 @@ def test_try_random_itoc():
         r, theta, phi = _get_internal_from_omm(atom_position, bond_position, angle_position, torsion_position)
         recomputed_xyz, _ = geometry_engine._internal_to_cartesian(bond_position, angle_position, torsion_position, r, theta, phi)
         new_r, new_theta, new_phi = _get_internal_from_omm(recomputed_xyz,bond_position, angle_position, torsion_position)
-        assert np.linalg.norm(np.array(atom_position/unit.nanometers) - np.array(recomputed_xyz/unit.nanometers)) < 1e-12, "the difference in recomputed with original cartesians is greater than 1e-12"
-        assert np.linalg.norm(np.array([r, theta, phi]) - np.array([new_r, new_theta, new_phi])) < 1e-12, "the difference in recomputed with original sphericals is greater than 1e-12"
+        TOLERANCE = 1e-10
+        difference = np.linalg.norm(np.array(atom_position/unit.nanometers) - np.array(recomputed_xyz/unit.nanometers))
+        assert difference < TOLERANCE, f"the norm of the difference in positions recomputed with original cartesians ({difference}) is greater than tolerance of {TOLERANCE}"
+        difference = np.linalg.norm(np.array([r, theta, phi]) - np.array([new_r, new_theta, new_phi]))
+        assert difference < TOLERANCE, f"the norm of the difference in internals recomputed with original sphericals ({difference}) is greater than tolerance of {TOLERANCE}"

@@ -17,7 +17,7 @@ from perses.storage import NetCDFStorage, NetCDFStorageView
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("geometry")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
 
 
@@ -239,7 +239,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         if not top_proposal.unique_old_atoms:
             _logger.info("logp_reverse: there are no unique old atoms; logp_proposal = 0.0.")
             #define reverse attributes
-            self.reverse_new_positions, self.reverse_rjmc_info, self.reverse_atoms_with_positions_reduced_potential, self.reverse_final_context_reduced_potential, self.reverse_neglected_angle_terrm = None, None, None, None, None
+            self.reverse_new_positions, self.reverse_rjmc_info, self.reverse_atoms_with_positions_reduced_potential, self.reverse_final_context_reduced_potential, self.reverse_neglected_angle_terms = None, None, None, None, None
             return 0.0
 
         # Compute log proposal probability for reverse direction
@@ -585,8 +585,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"final reduced energy {final_context_reduced_potential}")
 
-        _logger.debug(f"reduced potential components added:")
-        added_energy_components = [(force, energy*beta) for force, energy in compute_potential_components(context)]
+        _logger.debug(f"potential components added:")
+        added_energy_components = [(force, energy) for force, energy in compute_potential_components(context)]
         for item in added_energy_components:
             _logger.debug(f"\t\t{item[0]}: {item[1]}")
         _logger.info(f"total reduced energy added from growth system: {reduced_potential_energy}")

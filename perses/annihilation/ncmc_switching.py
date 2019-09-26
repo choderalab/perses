@@ -11,7 +11,7 @@ from perses.tests.utils import quantity_is_finite
 from openmmtools.constants import kB
 from openmmtools.cache import LRUCache, global_context_cache
 from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
-from perses.annihilation.lambda_protocol import RelativeAlchemicalState
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 
 default_temperature = 300.0*unit.kelvin
 default_nsteps = 1
@@ -86,7 +86,7 @@ class NCMCEngine(object):
         """
         # Handle some defaults.
         if functions == None:
-            functions = RelativeAlchemicalState.lambda_functions 
+            functions = LambdaProtocol.default_functions 
         if nsteps == None:
             nsteps = default_nsteps
         if timestep == None:
@@ -168,7 +168,7 @@ class NCMCEngine(object):
         ---------
         topology_proposal : perses.rjmc.TopologyProposal
             topology proposal for whose endpoint systems we want ThermodynamicStates
-        
+
         Returns
         -------
         old_thermodynamic_state : openmmtools.states.ThermodynamicState
@@ -181,13 +181,13 @@ class NCMCEngine(object):
         for system in systems:
             thermodynamic_state = ThermodynamicState(system, temperature=self._temperature, pressure=self._pressure)
             thermostates.append(thermodynamic_state)
-        
+
         return thermostates[0], thermostates[1]
 
     def make_alchemical_system(self, topology_proposal, current_positions, new_positions):
         """
         Generate an alchemically-modified system at the correct atoms
-        based on the topology proposal. This method generates a hybrid system using the new 
+        based on the topology proposal. This method generates a hybrid system using the new
         HybridTopologyFactory. It memoizes so that calling multiple times (within a recent time period)
         will immediately return a cached object.
 
@@ -267,7 +267,7 @@ class NCMCEngine(object):
         topology = hybrid_factory.hybrid_topology
 
         #generate the corresponding thermodynamic and sampler states so that we can use the NonequilibriumSwitchingMove:
-        
+
         #First generate the thermodynamic state:
         hybrid_system = hybrid_factory.hybrid_system
         hybrid_thermodynamic_state = ThermodynamicState(hybrid_system, temperature=self._temperature, pressure=self._pressure)
