@@ -199,6 +199,13 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
         integrator = FIREMinimizationIntegrator()
         context_cache = cache.ContextCache()
 
+        context, _ = context_cache.get_context(compound_thermodynamic_state,
+                                                    integrator)
+        platform = context.getPlatform()
+        _logger.info('Setting the platform precision to mixed')
+        platform.setPropertyDefaultValue('Precision','mixed')
+
+
         if lambda_schedule is None:
             lambda_schedule = np.linspace(0.,1.,n_states)
         else:
