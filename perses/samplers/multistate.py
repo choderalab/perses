@@ -202,7 +202,7 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
         context, _ = context_cache.get_context(compound_thermodynamic_state,
                                                     integrator)
         platform = context.getPlatform()
-        _logger.info('Setting the platform precision to mixed')
+        logger.info('Setting the platform precision to mixed')
         platform.setPropertyDefaultValue('Precision','mixed')
 
 
