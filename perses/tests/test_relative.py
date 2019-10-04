@@ -517,12 +517,18 @@ def HybridTopologyFactory_energies(current_mol = 'toluene', proposed_mol = '1,2-
 
 
     # run geometry engine to generate old and new positions
-    _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False)
+    _geometry_engine = FFAllAngleGeometryEngine(metadata=None, use_sterics=False, n_bond_divisions=100, n_angle_divisions=180, n_torsion_divisions=360, verbose=True, storage=None, bond_softening_constant=1.0, angle_softening_constant=1.0, neglect_angles = False, use_14_nonbondeds = True)
     _new_positions, _lp = _geometry_engine.propose(top_proposal, old_positions, beta)
     _lp_rev = _geometry_engine.logp_reverse(top_proposal, _new_positions, old_positions, beta)
 
     # make the hybrid system, reset the CustomNonbondedForce cutoff
-    HTF = HybridTopologyFactory(top_proposal, old_positions, _new_positions)
+    HTF = HybridTopologyFactory(top_proposal, 
+                                old_positions,
+                                _new_positions,
+                                special_new_terms = _geometry_engine.forward_special_terms,
+                                special_old_terms = _geometry_engine.reverse_special_terms,
+                                softcore_LJ_v2 = False,
+                                interpolate_old_and_new_14s = False)
     hybrid_system = HTF.hybrid_system
     nonalch_zero, nonalch_one, alch_zero, alch_one = generate_endpoint_thermodynamic_states(hybrid_system, top_proposal)
 
