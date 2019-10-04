@@ -107,9 +107,18 @@ class HybridTopologyFactory(object):
             list of indices from the HarmonicAngleForce of the old_system for which the geometry engine neglected.
             Hence, these angles must be alchemically deleted for the unique old atoms (reverse lambda protocol)
         special_new_terms : dict, default None
-            dict of new valence/1,4 terms used for stereochemical/ring strucure stability
+            dict of new valence/1,4 terms used for stereochemical/ring structure stability.  these are specified by the FFAllAngleGeometryEngine.forward_special_terms
+            dict takes the following form:
+                {'omitted_bonds': [], 'omitted_angles': [], 'omitted_torsions': [], 'omitted_1,4s': [], 'extra_torsions': [], 'extra_angles': []}
+                'omitted_<>' take lists of new_topology particle indices comprising a bond, angle, torison, or 1,4 interaction.
+                'extra_torsions' takes a list of lists of the form:
+                    [p1, p2, p3, p4, [periodicity, phase, k, growth_idx]]
+                'extra_angles' are not yet implemented (but necessary for stereochemistry)
+            omitted new terms are annealed in over lambda protocol
         special_old_terms : dict, default None
-            dict of new valence/1,4 terms used for stereochemical/ring strucure stability
+            dict of old valence/1,4 terms used for stereochemical/ring strucure stability.  these are specified by the FFAllAngleGeometryEngine.reverse_special_terms
+            The form is the same as `special_new_terms`
+            omitted old terms are annealed off over the lambda protocol
         softcore_LJ_v2 : bool, default True
             implement a new softcore LJ: citation below.
             Gapsys, Vytautas, Daniel Seeliger, and Bert L. de Groot. "New soft-core potential function for molecular dynamics based alchemical free energy calculations." Journal of chemical theory and computation 8.7 (2012): 2373-2382.
