@@ -418,12 +418,14 @@ def run_setup(setup_options):
 
             #TODO expose more of these options in input
             if setup_options['fe_type'] == 'sams':
+                _logger.warning(f'Relative free energies do not currently work with unsampled endstates')
                 hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
                                                                                              n_steps=n_steps_per_move_application,
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
-                                                                                             splitting="V R R R O R R R V"),
+                                                                                             splitting="V R R R O R R R V",
+                                                                                             constraint_tolerance=1e-06),
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
@@ -434,7 +436,8 @@ def run_setup(setup_options):
                                                                                              n_steps=n_steps_per_move_application,
                                                                                              reassign_velocities=False,
                                                                                              n_restart_attempts=20,
-                                                                                             splitting="V R R R O R R R V"),
+                                                                                             splitting="V R R R O R R R V",
+                                                                                             constraint_tolerance=1e-06),
                                                                                              hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
                 hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
 
@@ -562,8 +565,6 @@ if __name__ == "__main__":
                 setup_dict['hybrid_topology_factories'])
 
         hss = setup_dict['hybrid_samplers']
-        logZ = dict()
-        free_energies = dict()
         _logger.info(f"Iterating through phases for repex...")
         for phase in setup_options['phases']:
             print(f'Running {phase} phase')

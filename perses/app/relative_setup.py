@@ -80,6 +80,7 @@ class RelativeFEPSetup(object):
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
+        self._pme_tol = 1e-04
         self._padding = solvent_padding
         self._hmass = hmass
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
@@ -310,7 +311,8 @@ class RelativeFEPSetup(object):
             self._nonbonded_method = app.NoCutoff
             _logger.info(f"calling TopologyProposal.SystemGenerator to create ligand systems.")
             self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,
-                                                    'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
+                                                    'nonbondedMethod': self._nonbonded_method, 'ewaldErrorTolerance': self._pme_tol,
+                                                    'constraints' : app.HBonds})
             self._system_generator._forcefield.loadFile(StringIO(ffxml))
             if self._proposal_phase is None:
                 _logger.info('No complex or solvent leg, so performing topology proposal for vacuum leg')
@@ -599,6 +601,7 @@ class RelativeFEPSetup(object):
     @property
     def vacuum_new_positions(self):
         return self._vacuum_positions_new
+
 
 class NonequilibriumSwitchingFEP(object):
     """
