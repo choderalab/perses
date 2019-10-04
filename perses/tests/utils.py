@@ -707,6 +707,8 @@ def validate_endstate_energies(topology_proposal, htf, added_energy, subtracted_
         reduced potential difference of the nonalchemical and alchemical lambda = 1 state (corrected for valence energy).
     """
     import copy
+    #import openmmtools.cache as cache
+    #context_cache = cache.global_context_cache
 
     #create copies of old/new systems and set the dispersion correction
     top_proposal = copy.deepcopy(topology_proposal)
