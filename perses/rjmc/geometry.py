@@ -2314,6 +2314,7 @@ class NetworkXProposalOrder(object):
             if not set(self._new_atoms).intersection(set(_edge)):
                 self._connectivity_graph.add_edge(*_edge)
         _logger.debug(f"\tconnectivity graph: {self._connectivity_graph}")
+        self._residue_atoms_with_positions_set = set(atom for atom in self._atoms_with_positions if atom in self._index_to_node.keys())
 
     def determine_proposal_order(self):
         """
@@ -2381,6 +2382,7 @@ class NetworkXProposalOrder(object):
         _logger.debug(f"\t\tatom group: {atom_group}")
         #_logger.debug(f"\t\tatom_list: {atom_list}")
         _logger.debug(f"\t\tatoms with positions: {self._atoms_with_positions_set}")
+        _logger.debug(f"\t\tresidue atoms with positions: {self._residue_atoms_with_positions_set}")
 
         #we will check for cycle closures: if this is the case, the proposal criteria are biased
         #current proposal:
@@ -2398,7 +2400,8 @@ class NetworkXProposalOrder(object):
             atom_torsions.append(random_torsion)
             atom_group.remove(chosen_atom_index)
             self._atoms_with_positions_set.add(chosen_atom_index)
-            _logger.debug(f"\t\t\tatoms with positions: {self._atoms_with_positions_set}")
+            self._residue_atoms_with_positions_set.add(chosen_atom_index)
+            _logger.debug(f"\t\t\tresidue atoms with positions: {self._residue_atoms_with_positions_set}")
             logp.append(np.log(1./ntorsions))
 
             #add the atom and bond connectivty to the connectivity graph
@@ -2417,7 +2420,7 @@ class NetworkXProposalOrder(object):
                     _logger.debug(f"\t\t\t\t cycle of interest: {cycle}")
                     cycle_atom_group = unplaced_atoms[cycle]
                     _logger.debug(f"\t\t\t\tunplaced atoms in cycle {cycle}: {cycle_atom_group}")
-                    placed_atoms_in_cycle = [atom_idx for atom_idx in self._atoms_with_positions_set if cycle in self._residue_graph.nodes[self._index_to_node[atom_idx]]['cycle_membership']]
+                    placed_atoms_in_cycle = [atom_idx for atom_idx in self._residue_atoms_with_positions_set if cycle in self._residue_graph.nodes[self._index_to_node[atom_idx]]['cycle_membership']]
                     _logger.debug(f"\t\t\t\tplaced atoms in cycle {cycle}: {placed_atoms_in_cycle}")
                     if len(cycle_atom_group) > 0 and len(placed_atoms_in_cycle) > 2:
                         _logger.debug(f"\t\t\t\tthere is at least one unplaced atoms in the cycle and at least 3 placed atoms in the cycle...")
@@ -2441,6 +2444,7 @@ class NetworkXProposalOrder(object):
                             cycle_atom_group.remove(chosen_atom_index)
                             placed_atoms_in_cycle.append(chosen_atom_index)
                             self._atoms_with_positions_set.add(chosen_atom_index)
+                            self._residue_atoms_with_positions_set.add(chosen_atom_index)
                             logp.append(np.log(1./ntorsions))
                             #add the atom and bond connectivty to the connectivity graph
                             self.add_torsion_connectivity(random_torsion)
