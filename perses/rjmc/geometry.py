@@ -231,6 +231,7 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             _logger.info("propose: unique new atoms detected; proceeding to _logp_propose...")
             logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, special_terms = self._logp_propose(top_proposal, current_positions, beta, direction='forward')
             self.nproposed += 1
+            self.forward_special_terms = special_terms
 
         check_dimensionality(new_positions, unit.nanometers)
         check_dimensionality(logp_proposal, float)
@@ -239,7 +240,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         self.forward_rjmc_info = rjmc_info
         self.forward_atoms_with_positions_reduced_potential, self.forward_final_context_reduced_potential = atoms_with_positions_reduced_potential, final_context_reduced_potential
         self.forward_neglected_angle_terms = neglected_angle_terms
-        self.forward_special_terms = special_terms
 
         return new_positions, logp_proposal
 
