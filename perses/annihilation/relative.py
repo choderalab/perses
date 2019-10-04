@@ -66,6 +66,8 @@ class HybridTopologyFactory(object):
                  soften_only_new=False,
                  neglected_new_angle_terms = [],
                  neglected_old_angle_terms = [],
+                 special_new_terms = None,
+                 special_old_terms = None,
                  softcore_LJ_v2 = True,
                  softcore_electrostatics = True,
                  softcore_LJ_v2_alpha = 0.85,
@@ -104,6 +106,10 @@ class HybridTopologyFactory(object):
         neglected_old_angle_terms : list
             list of indices from the HarmonicAngleForce of the old_system for which the geometry engine neglected.
             Hence, these angles must be alchemically deleted for the unique old atoms (reverse lambda protocol)
+        special_new_terms : dict, default None
+            dict of new valence/1,4 terms used for stereochemical/ring strucure stability
+        special_old_terms : dict, default None
+            dict of new valence/1,4 terms used for stereochemical/ring strucure stability
         softcore_LJ_v2 : bool, default True
             implement a new softcore LJ: citation below.
             Gapsys, Vytautas, Daniel Seeliger, and Bert L. de Groot. "New soft-core potential function for molecular dynamics based alchemical free energy calculations." Journal of chemical theory and computation 8.7 (2012): 2373-2382.
@@ -137,6 +143,24 @@ class HybridTopologyFactory(object):
         #new attributes from the modified geometry engine
         self.neglected_new_angle_terms = neglected_new_angle_terms
         self.neglected_old_angle_terms = neglected_old_angle_terms
+
+        special_keys = ['omitted_bonds', 'omitted_angles', 'omitted_torsions', 'omitted_1,4s', 'extra_torsions', 'extra_angles']
+        if special_new_terms:
+            if set(special_new_terms.keys()).union(set(special_keys)) != set(special_keys):
+                raise Exception(f"special terms only permit the following keys: {special_keys}")
+            self.special_new_terms = special_new_terms
+        else:
+            self.special_new_terms = {'omitted_bonds': [], 'omitted_angles': [], 'omitted_torsions': [], 'omitted_1,4s': [], 'extra_torsions': [], 'extra_angles': []}
+
+        if special_old_terms:
+            if set(special_old_terms.keys()).union(set(special_keys)) != set(special_keys):
+                raise Exception(f"special terms only permit the following keys: {special_keys}")
+            self.special_old_terms = special_old_terms
+        else:
+            self.special_old_terms = {'omitted_bonds': [], 'omitted_angles': [], 'omitted_torsions': [], 'omitted_1,4s': [], 'extra_torsions': [], 'extra_angles': []}
+
+
+        #   special new/old terms allow for the following
 
         if bond_softening_constant != 1.0:
             self._bond_softening_constant = bond_softening_constant
@@ -929,17 +953,25 @@ class HybridTopologyFactory(object):
 
                 # If we're not softening bonds, we can just add it to the regular bond force. Likewise if we are only softening new bonds
                 if not self._soften_bonds or self._soften_only_new:
-                    _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening (to standard bond force)")
-                    self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old,
+                    _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening; checking special bond terms...")
+                    if ((index1_old, index2_old) in self.special_old_terms['omitted_bonds']) or ((index2_old, index1_old) in self.special_old_terms['omitted_bonds']):
+                        _logger.debug(f"\t\t\thandle_harmonic_bonds: found omitted old bond between {index1_old} and {index2_old}; adding to anneal off...")
+                        self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid, [r0_old, k_old, r0_old, k_old * 0.0]) #it is annealed off
+                    else:
+                        _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening; adding to standard bond force")
+                        self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_old,
                                                                               k_old)
                 # Otherwise, we will need to soften one of the endpoints. For unique old atoms, the softening endpoint is at lambda =1
                 else:
-
+                    raise Exception(f"bond softening is not currently implemented.")
                     r0_new = r0_old # The bond length won't change
                     k_new = self._bond_softening_constant * k_old # We multiply the endpoint by the bond softening constant
-
-                    # Now we add to the core bond force, since that is an alchemically-modified force.
-                    self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
+                    if ((index1_old, index2_old) in self.special_old_terms['omitted_bonds']) or ((index2_old, index1_old) in self.special_old_terms['omitted_bonds']):
+                        _logger.debug(f"\t\t\thandle_harmonic_bonds: found omitted old bond between {index1_old} and {index2_old}; adding to anneal off...")
+                        self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid, [r0_old, k_old, r0_old, k_old * 0.0]) #it is annealed off
+                    else:
+                        # Now we add to the core bond force, since that is an alchemically-modified force.
+                        self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid,
                                                                           [r0_old, k_old, r0_new, k_new])
 
             #otherwise, we just add the same parameters as those in the old system (these are environment atoms, and the parameters are the same)
@@ -967,6 +999,7 @@ class HybridTopologyFactory(object):
 
                 # If we are softening bonds, we have to use the core bond force, and scale the force constant at lambda = 0:
                 if self._soften_bonds:
+                    raise Exception(f"bond softening is not currently implemented.")
                     _logger.debug(f"\t\t\thandle_harmonic_bonds: softening (to custom bond force)")
                     r0_old = r0_new # Do not change the length
                     k_old = k_new * self._bond_softening_constant # Scale the force constant by the requested parameter
@@ -977,8 +1010,13 @@ class HybridTopologyFactory(object):
 
                 # If we aren't softening bonds, then just add it to the standard bond force
                 else:
-                    _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening (to standard bond force)")
-                    self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_new, k_new)
+                    _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening; checking special bond terms...")
+                    if ((index1_new, index2_new) in self.special_new_terms['omitted_bonds']) or ((index2_new, index1_new) in self.special_new_terms['omitted_bonds']):
+                        _logger.debug(f"\t\t\thandle_harmonic_bonds: found omitted new bond between {index1_new} and {index2_new}; adding to anneal on...")
+                        self._hybrid_system_forces['core_bond_force'].addBond(index1_hybrid, index2_hybrid, [r0_new, k_new*0.0, r0_new, k_new]) #it is annealed on
+                    else:
+                        _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening; adding to standard bond force")
+                        self._hybrid_system_forces['standard_bond_force'].addBond(index1_hybrid, index2_hybrid, r0_new, k_new)
 
             #if the bond is in the core, it has probably already been added in the above loop. However, there are some circumstances
             #where it was not (closing a ring). In that case, the bond has not been added and should be added here.
@@ -1100,8 +1138,7 @@ class HybridTopologyFactory(object):
 
                 # Check if we are softening angles, and not softening only new angles:
                 if self._soften_angles and not self._soften_only_new:
-                    _logger.debug(f"\t\t\thandle_harmonic_angles: softening (to custom angle force)")
-
+                    raise Exception(f"angle softening is not currently implemented.")
 
                     # If we are, then we need to generate the softened parameters (at lambda=1 for old atoms)
                     # We do this by using the same equilibrium angle, and scaling the force constant at the non-interacting
@@ -1124,12 +1161,17 @@ class HybridTopologyFactory(object):
                         self._hybrid_system_forces['custom_neglected_old_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
 
                     else:
-                        _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening (to standard angle force)")
-                        self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0],
-                                                                                    hybrid_index_list[1],
-                                                                                    hybrid_index_list[2],
-                                                                                    old_angle_parameters[3],
-                                                                                    old_angle_parameters[4])
+                        _logger.debug(f"\t\t\thandle_harmonic_angles: no softening; checking special angle terms...")
+                        if (tuple(old_angle_parameters[:3]) in self.special_old_terms['omitted_angles']) or (tuple(old_angle_parameters[:3])[::-1] in self.special_old_terms['omitted_angles']):
+                            _logger.debug(f"\t\t\thandle_harmonic_angles: found omitted old angle between {old_angle_parameters[:3]}; adding to anneal off...")
+                            self._hybrid_system_forces['core_angle_force'].addAngle(*hybrid_index_list, [old_angle_parameters[3], old_angle_parameters[4], old_angle_parameters[3], old_angle_parameters[4] * 0.0]) #it is annealed off
+                        else:
+                            _logger.debug(f"\t\t\thandle_harmonic_angles: no softening; adding to standard angle force")
+                            self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0],
+                                                                                        hybrid_index_list[1],
+                                                                                        hybrid_index_list[2],
+                                                                                        old_angle_parameters[3],
+                                                                                        old_angle_parameters[4])
 
             #otherwise, only environment atoms are in this interaction, so add it to the standard angle force
             else:
@@ -1154,6 +1196,7 @@ class HybridTopologyFactory(object):
 
                 # Check to see if we are softening angles:
                 if self._soften_angles:
+                    raise Exception(f"angle softening is not currently implemented.")
                     _logger.info(f"\t\t\thandle_harmonic_bonds: softening (to custom angle force)")
 
                     if angle_index in self.neglected_new_angle_terms:
@@ -1173,12 +1216,18 @@ class HybridTopologyFactory(object):
                         hybrid_force_parameters = [new_angle_parameters[3], 0.0 * new_angle_parameters[4], new_angle_parameters[3], new_angle_parameters[4]]
                         self._hybrid_system_forces['custom_neglected_new_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_force_parameters)
                     else:
-                        _logger.debug(f"\t\t\thandle_harmonic_bonds: no softening (to standard angle force)")
-                        self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
-                                                                                hybrid_index_list[2], new_angle_parameters[3],
-                                                                                new_angle_parameters[4])
+                        _logger.debug(f"\t\t\thandle_harmonic_angles: no softening; checking special angle terms...")
+                        if (tuple(new_angle_parameters[:3]) in self.special_new_terms['omitted_angles']) or (tuple(new_angle_parameters[:3])[::-1] in self.special_new_terms['omitted_angles']):
+                            _logger.debug(f"\t\t\thandle_harmonic_angles: found omitted new angle between {new_angle_parameters[:3]}; adding to anneal on...")
+                            self._hybrid_system_forces['core_angle_force'].addAngle(*hybrid_index_list, [new_angle_parameters[3], new_angle_parameters[4] * 0.0, new_angle_parameters[3], new_angle_parameters[4]]) #it is annealed on
+                        else:
+                            _logger.debug(f"\t\t\thandle_harmonic_angles: no softening; adding to standard angle force")
+                            self._hybrid_system_forces['standard_angle_force'].addAngle(hybrid_index_list[0], hybrid_index_list[1],
+                                                                                    hybrid_index_list[2], new_angle_parameters[3],
+                                                                                    new_angle_parameters[4])
 
             if hybrid_index_set.issubset(self._atom_classes['core_atoms']):
+                # raise Exception(f"core atoms should have been handled in the previous 'old_system' loop; check terms for debugging.")
                 _logger.debug(f"\t\thandle_harmonic_angles: angle_index {angle_index} is a core (to custom angle force).")
                 if not self._find_angle_parameters(self._hybrid_system_forces['core_angle_force'], hybrid_index_list):
                     _logger.debug(f"\t\t\thandle_harmonic_angles: angle_index {angle_index} NOT previously added...adding now...THERE IS A CONSIDERATION NOT BEING MADE!")
@@ -1190,6 +1239,8 @@ class HybridTopologyFactory(object):
     def handle_periodic_torsion_force(self):
         """
         Handle the torsions in the hybrid system in the same way as the angles and bonds.
+        The only exception is that (with perhaps the exception of angles) we have to correct for the addition of extra
+        torsions used in the geometry engine
         """
         old_system_torsion_force = self._old_system_forces['PeriodicTorsionForce']
         new_system_torsion_force = self._new_system_forces['PeriodicTorsionForce']
@@ -1247,11 +1298,16 @@ class HybridTopologyFactory(object):
 
             #otherwise, just add the parameters to the regular force:
             else:
-                #TODO: make considerations for environment-core valence interactions.  THESE will be important in protein mutation studies...
-                _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core-unique_old or unique_old-unique_old  (to standard torsion force).")
-                self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
-                                                                            hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
-                                                                            torsion_parameters[5], torsion_parameters[6])
+                _logger.debug(f"\t\t\thandle_harmonic_torsion_forces: checking special torsion terms...")
+                if (tuple(torsion_parameters[:4]) in self.special_old_terms['omitted_torsions']) or (tuple(torsion_parameters[:4])[::-1] in self.special_old_terms['omitted_torsions']):
+                    _logger.debug(f"\t\t\thandle_harmonic_torsion_forces: found omitted old torsion between {torsion_parameters[:4]}; adding to anneal off...")
+                    self._hybrid_system_forces['core_torsion_force'].addTorsion(*hybrid_index_list, [torsion_parameters[4], torsion_parameters[5], torsion_parameters[6], 0, 0, 0]) #it is annealed off
+                else:
+                    #TODO: make considerations for environment-core valence interactions.  THESE will be important in protein mutation studies...
+                    _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core-unique_old or unique_old-unique_old; .")
+                    self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
+                                                                                hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
+                                                                                torsion_parameters[5], torsion_parameters[6])
 
         _logger.info("\thandle_periodic_torsion_forces: looping through new_system to add relevant terms...")
         for torsion_index in range(new_system_torsion_force.getNumTorsions()):
@@ -1264,8 +1320,13 @@ class HybridTopologyFactory(object):
 
             #if any are part of the unique new atoms, we will add them to the standard torsion force:
             if len(hybrid_index_set.intersection(self._atom_classes['unique_new_atoms'])) > 0:
-                _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is core-unique_new or unique_new-unique_new (to standard torsion force).")
-                self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
+                _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is core-unique_new or unique_new-unique_new; checking for special torsion terms...")
+                if (tuple(torsion_parameters[:4]) in self.special_new_terms['omitted_torsions']) or (tuple(torsion_parameters[:4])[::-1] in self.special_new_terms['omitted_torsions']):
+                    _logger.debug(f"\t\t\thandle_harmonic_torsion_forces: found omitted new torsion between {torsion_parameters[:4]}; adding to anneal on...")
+                    self._hybrid_system_forces['core_torsion_force'].addTorsion(*hybrid_index_list, [0, 0, 0, torsion_parameters[4], torsion_parameters[5], torsion_parameters[6]]) #it is annealed on
+                else:
+                    _logger.debug(f"\t\thandle_periodic_torsion_forces: torsion_index {torsion_index} is a core-unique_new or unique_new-unique_new; .")
+                    self._hybrid_system_forces['standard_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1],
                                                                             hybrid_index_list[2], hybrid_index_list[3], torsion_parameters[4],
                                                                             torsion_parameters[5], torsion_parameters[6])
 
@@ -1289,6 +1350,25 @@ class HybridTopologyFactory(object):
                     self._hybrid_system_forces['core_torsion_force'].addTorsion(hybrid_index_list[0], hybrid_index_list[1], hybrid_index_list[2], hybrid_index_list[3], hybrid_force_parameters)
                 added_torsions.append(old_index_list)
                 added_torsions.append(old_index_list_reversed)
+
+        #the last thing to do is to loop through extra torsions in the new/old special terms and anneal
+        #them off/on, respectively
+        if self.special_new_terms:
+            _logger.info(f"\thandle_periodic_torsion_forces: looping through special new terms to handle extra torsions")
+            for torsion in self.special_new_terms['extra_torsions']:
+                _logger.info(f"\t\ttorsion: {torsion}")
+                hybrid_torsion_indices = [self._new_to_hybrid_map[i] for i in torsion[:4]]
+                periodicity, phase, k, _ = torsion[4]
+                self._hybrid_system_forces['core_torsion_force'].addTorsion(*hybrid_torsion_indices, [periodicity, phase, k, 0, 0, 0]) #it is annealed off
+
+        if self.special_old_terms:
+            _logger.info(f"\thandle_periodic_torsion_forces: looping through special old terms to handle extra torsions")
+            for torsion in self.special_old_terms['extra_torsions']:
+                _logger.info(f"\t\ttorsion: {torsion}")
+                hybrid_torsion_indices = [self._old_to_hybrid_map[i] for i in torsion[:4]]
+                periodicity, phase, k, _ = torsion[4]
+                self._hybrid_system_forces['core_torsion_force'].addTorsion(*hybrid_torsion_indices, [0, 0, 0, periodicity, phase, k]) #it is annealed on
+
 
     def handle_nonbonded(self):
         """
@@ -1497,7 +1577,10 @@ class HybridTopologyFactory(object):
                 if self._interpolate_14s: #if we are interpolating 1,4 exceptions then we have to
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                 else:
-                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                    if (old_index_atom_pair not in self.special_old_terms['omitted_1,4s']) and (old_index_atom_pair[::-1] not in self.special_old_terms['omitted_1,4s']):
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                    else:
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
@@ -1509,7 +1592,10 @@ class HybridTopologyFactory(object):
                 if self._interpolate_14s: #if we are interpolating 1,4 exceptions then we have to
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                 else:
-                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                    if (old_index_atom_pair not in self.special_old_terms['omitted_1,4s']) and (old_index_atom_pair[::-1] not in self.special_old_terms['omitted_1,4s']):
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                    else:
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1]) # add exclusion to ensure exceptions are consistent
 
@@ -1537,7 +1623,10 @@ class HybridTopologyFactory(object):
                 if self._interpolate_14s:
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                 else:
-                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                    if (new_index_atom_pair not in self.special_new_terms['omitted_1,4s']) and (new_index_atom_pair[::-1] not in self.special_new_terms['omitted_1,4s']):
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                    else:
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1])
 
@@ -1550,7 +1639,10 @@ class HybridTopologyFactory(object):
                 if self._interpolate_14s:
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
                 else:
-                    self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                    if (new_index_atom_pair not in self.special_new_terms['omitted_1,4s']) and (new_index_atom_pair[::-1] not in self.special_new_terms['omitted_1,4s']):
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd, sigma, epsilon)
+                    else:
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(atom_pair[0], atom_pair[1], chargeProd*0.0, sigma, epsilon*0.0)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(atom_pair[0], atom_pair[1])
 
@@ -1580,6 +1672,7 @@ class HybridTopologyFactory(object):
         for exception_pair, exception_parameters in self._old_system_exceptions.items():
 
             [index1_old, index2_old] = exception_pair
+            old_index_atom_pair = (index1_old, index2_old)
 
             [chargeProd_old, sigma_old, epsilon_old] = exception_parameters
 
@@ -1607,7 +1700,10 @@ class HybridTopologyFactory(object):
                 if self._interpolate_14s:
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old*0.0, sigma_old, epsilon_old*0.0)
                 else:
-                    self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+                    if (old_index_atom_pair not in self.special_old_terms['omitted_1,4s']) and (old_index_atom_pair[::-1] not in self.special_old_terms['omitted_1,4s']):
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old, sigma_old, epsilon_old)
+                    else:
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_old*0.0, sigma_old, epsilon_old*0.0)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
@@ -1645,6 +1741,7 @@ class HybridTopologyFactory(object):
         for exception_pair, exception_parameters in self._new_system_exceptions.items():
             [index1_new, index2_new] = exception_pair
             [chargeProd_new, sigma_new, epsilon_new] = exception_parameters
+            new_index_atom_pair = (index1_new, index2_new)
 
             #get hybrid indices:
             index1_hybrid = self._new_to_hybrid_map[index1_new]
@@ -1665,7 +1762,10 @@ class HybridTopologyFactory(object):
                 if self._interpolate_14s:
                     self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new*0.0, sigma_new, epsilon_new*0.0)
                 else:
-                    self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
+                    if (new_index_atom_pair not in self.special_new_terms['omitted_1,4s']) and (new_index_atom_pair[::-1] not in self.special_new_terms['omitted_1,4s']):
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new, sigma_new, epsilon_new)
+                    else:
+                        self._hybrid_system_forces['standard_nonbonded_force'].addException(index1_hybrid, index2_hybrid, chargeProd_new*0.0, sigma_new, epsilon_new*0.0)
 
                 self._hybrid_system_forces['core_sterics_force'].addExclusion(index1_hybrid, index2_hybrid)
 
@@ -1770,6 +1870,7 @@ class HybridTopologyFactory(object):
 
             [index1_old, index2_old] = exception_pair
             [chargeProd_old, sigma_old, epsilon_old] = exception_parameters
+            old_index_atom_pair = (index1_old, index2_old)
 
             #get hybrid indices:
             index1_hybrid = self._old_to_hybrid_map[index1_old]
@@ -1782,6 +1883,9 @@ class HybridTopologyFactory(object):
                 if self._interpolate_14s:
                     # if we are interpolating 1,4s, then we anneal this term off; otherwise, the exception force is constant and already handled in the standard nonbonded force
                     nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, sigma_old, epsilon_old*0.0, 1, 0])
+                elif (old_index_atom_pair in self.special_old_terms['omitted_1,4s']) or (old_index_atom_pair[::-1] in self.special_old_terms['omitted_1,4s']):
+                    #then we thrn the interaction off
+                    nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_old, sigma_old, epsilon_old, sigma_old, epsilon_old*0.0, 1, 0])
 
 
 
@@ -1789,6 +1893,7 @@ class HybridTopologyFactory(object):
         for exception_pair, exception_parameters in self._new_system_exceptions.items():
             [index1_new, index2_new] = exception_pair
             [chargeProd_new, sigma_new, epsilon_new] = exception_parameters
+            new_index_atom_pair = (index1_new, index2_new)
 
             #get hybrid indices:
             index1_hybrid = self._new_to_hybrid_map[index1_new]
@@ -1802,6 +1907,9 @@ class HybridTopologyFactory(object):
                 _logger.debug(f"\t\thandle_old_new_exceptions: {exception_pair} is a unique_new exception pair.")
                 if self._interpolate_14s:
                     # if we are interpolating 1,4s, then we anneal this term on; otherwise, the exception force is constant and already handled in the standard nonbonded force
+                    nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_new, sigma_new, epsilon_new*0.0, sigma_new, epsilon_new, 0, 1])
+                elif (new_index_atom_pair in self.special_new_terms['omitted_1,4s']) or (new_index_atom_pair[::-1] in self.special_new_terms['omitted_1,4s']):
+                    #then we turn the interaction on
                     nonbonded_exceptions_force.addBond(index1_hybrid, index2_hybrid, [chargeProd_new, sigma_new, epsilon_new*0.0, sigma_new, epsilon_new, 0, 1])
 
 

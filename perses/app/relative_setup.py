@@ -80,7 +80,6 @@ class RelativeFEPSetup(object):
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
-        self._pme_tol = 1e-04
         self._padding = solvent_padding
         self._hmass = hmass
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
@@ -105,10 +104,10 @@ class RelativeFEPSetup(object):
                 _logger.info(f"\told smiles: {self._ligand_smiles_old}")
                 _logger.info(f"\tnew smiles: {self._ligand_smiles_new}")
 
-                all_old_mol = createSystemFromSMILES(self._ligand_smiles_old,title='MOL')
+                all_old_mol = createSystemFromSMILES(self._ligand_smiles_old, title='MOL') # should be stereospecific
                 self._ligand_oemol_old, self._ligand_system_old, self._ligand_positions_old, self._ligand_topology_old = all_old_mol
 
-                all_new_mol = createSystemFromSMILES(self._ligand_smiles_new,title='NEW')
+                all_new_mol = createSystemFromSMILES(self._ligand_smiles_new, title='NEW')
                 self._ligand_oemol_new, self._ligand_system_new, self._ligand_positions_new, self._ligand_topology_new = all_new_mol
                 _logger.info(f"\tsuccessfully created old and new systems from smiles")
 
@@ -311,8 +310,7 @@ class RelativeFEPSetup(object):
             self._nonbonded_method = app.NoCutoff
             _logger.info(f"calling TopologyProposal.SystemGenerator to create ligand systems.")
             self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,
-                                                    'nonbondedMethod': self._nonbonded_method, 'ewaldErrorTolerance': self._pme_tol,
-                                                    'constraints' : app.HBonds})
+                                                    'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
             self._system_generator._forcefield.loadFile(StringIO(ffxml))
             if self._proposal_phase is None:
                 _logger.info('No complex or solvent leg, so performing topology proposal for vacuum leg')
@@ -601,7 +599,6 @@ class RelativeFEPSetup(object):
     @property
     def vacuum_new_positions(self):
         return self._vacuum_positions_new
-
 
 class NonequilibriumSwitchingFEP(object):
     """
