@@ -224,7 +224,7 @@ class Particle():
         self.failures = []
         self.incremental_work = None
 
-    def anneal(self, num_steps = self._nsteps - 1):
+    def anneal(self, num_steps = None):
         """Propagate the state through the integrator.
         This updates the SamplerState after the integration. It will an mcmc protocol specified by the number of steps
 
@@ -233,6 +233,8 @@ class Particle():
         num_steps: int, default is
             number of steps to propagate the particle
         """
+        if not num_steps:
+            num_steps = self._nsteps - 1
         #check that the num_steps doesn't overshoot end lambda
         if self.current_index == len(self.lambdas) - 1:
             raise Exception(f"the lambda protocol is already complete")
