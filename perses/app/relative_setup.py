@@ -31,7 +31,7 @@ import random
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.DEBUG)
 
  # define NamedTuples from feptasks
 # EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
@@ -1053,9 +1053,6 @@ class NonequilibriumSwitchingFEP(object):
         """
 
         _logger.debug(f"conducting equilibration")
-        eq_result_collector = {key: [] for key in endstates} #initialize canonical eq_result keys
-
-        #init_eq_results = {_lambda: EquilibriumResult(sampler_state = self._sampler_states[_lambda], reduced_potentials = [], files = [], timers = {}, nonalchemical_perturbations = {}) for _lambda in endstates}
 
         # run a round of equilibrium
         _logger.debug(f"iterating through endstates to submit equilibrium jobs")
@@ -1094,24 +1091,11 @@ class NonequilibriumSwitchingFEP(object):
 
         _logger.debug(f"scattering and mapping run_equilibrium task")
         remote_EquilibriumFEPTask_list = self.client.scatter(EquilibriumFEPTask_list)
+        distributed.progress(remote_EquilibriumFEPTask_list)
+
         futures_EquilibriumFEPTask_list = self.client.map(feptasks.run_equilibrium, remote_EquilibriumFEPTask_list)
-        # eq_result = self.client.submit(feptasks.run_equilibrium, thermodynamic_state = self._hybrid_thermodynamic_states[state],
-        #                                    eq_result = init_eq_results[state],
-        #                                    nsteps_equil = self._n_equil_steps,
-        #                                    topology = self._factory.hybrid_topology,
-        #                                    n_iterations = n_equilibration_iterations,
-        #                                    trajectory_filename = equilibrium_trajectory_filename,
-        #                                    splitting = self._eq_splitting_string,
-        #                                    timestep = self._timestep,
-        #                                    max_size = max_size,
-        #                                    timer = timer,
-        #                                    _minimize = minimize,
-        #                                    file_iterator = file_iterator)
-        # _logger.debug(f"\t collecting task future into eq_result_collector[{state}]")
-        # eq_result_collector[state] = eq_result
-            # self._eq_dict[state].extend(eq_result.files)
-            # self._eq_dict[f"{state}_reduced_potentials"].extend(eq_result.reduced_potentials)
-            # sampler_states.append(eq_result.sampler_state)
+        distributed.progress(futures_EquilibriumFEPTask_list)
+
 
         _logger.debug(f"finished submitting tasks; gathering...")
         eq_results = self.client.gather(futures_EquilibriumFEPTask_list)
@@ -1147,9 +1131,6 @@ class NonequilibriumSwitchingFEP(object):
                         corrected_dict[tupl[0]] = decorrelated_list
                     self._eq_files_dict[state] = corrected_dict
                     _logger.debug(f"\t corrected_dict for state {state}: {corrected_dict}")
-
-        #lastly, name the EquilibriumFEPTask an attribute
-        self._equilibrium_results = {}
 
 
     def pull_trajectory_snapshot(self, endstate):
