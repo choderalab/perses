@@ -961,11 +961,11 @@ class NonequilibriumSwitchingFEP(object):
                 self.start_sampler_states[_direction].append(sampler_state)
                 # self.compute_nonalchemical_perturbations(start_lambda, end_lambda, sampler_state)
 
-                 if self._write_traj: #check if we should make 'trajectory_filename' not None
-                     _logger.debug(f"\twriting eq traj: {self._trajectory_filename.values()}")
-                     _logger.debug(f"\twriting neq traj: {self._neq_traj_filename.values()}")
-                     noneq_trajectory_filename = self._neq_traj_filename[_direction] + f".iteration_{self._current_iteration:04}.h5"
-                     inputs_dict['trajectory_filename'] = noneq_trajectory_filename
+                if self._write_traj: #check if we should make 'trajectory_filename' not None
+                    _logger.debug(f"\twriting eq traj: {self._trajectory_filename.values()}")
+                    _logger.debug(f"\twriting neq traj: {self._neq_traj_filename.values()}")
+                    noneq_trajectory_filename = self._neq_traj_filename[_direction] + f".iteration_{self._current_iteration:04}.h5"
+                    inputs_dict['trajectory_filename'] = noneq_trajectory_filename
 
                 task = NonequilibriumFEPTask(particle = None, inputs = inputs_dict)
                 NonequilibriumFEPSetup_dict[_direction].append(task)
