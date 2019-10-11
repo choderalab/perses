@@ -792,8 +792,8 @@ class NonequilibriumSwitchingFEP(object):
         self._failures = []
 
         # create an empty dict of starting and ending sampler_states
-        self.start_sampler_states = [_direction: [] for _direction in ['forward', 'reverse']]
-        self.end_sampler_states = [_direction: [] for _direction in ['forward', 'reverse']]
+        self.start_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
+        self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
 
         _logger.info(f"constructed")
 
@@ -1017,13 +1017,13 @@ class NonequilibriumSwitchingFEP(object):
                 else:
                     self._failures.append(future.result()) #pull the entire particle class
 
-    @staticmethod
-    def compute_weights
-
-    @staticmethod
-    def compute_CESS()
-
-    def sMC_
+    # @staticmethod
+    # def compute_weights
+    #
+    # @staticmethod
+    # def compute_CESS()
+    #
+    # def sMC_
 
 
 
