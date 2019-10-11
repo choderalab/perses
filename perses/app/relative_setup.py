@@ -1086,7 +1086,7 @@ class NonequilibriumSwitchingFEP(object):
                 _logger.debug(f"\tlast file number: {last_file_num}; initiating file iterator as {last_file_num + 1}")
                 file_iterator = last_file_num + 1
                 input_dict['file_iterator'] = file_iterator
-            task = FEPTask(sampler_state = self._sampler_states[_state], inputs = input_dict, outputs = None)
+            task = EquilibriumFEPTask(sampler_state = self._sampler_states[_state], inputs = input_dict, outputs = None)
             EquilibriumFEPTask_list.append(task)
 
         _logger.debug(f"scattering and mapping run_equilibrium task")
