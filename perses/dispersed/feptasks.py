@@ -122,7 +122,7 @@ class Particle():
                  direction,
                  splitting = 'V R O R V',
                  temperature = 300*unit.kelvin,
-                 timestep = unit.Quantity=1.0*unit.femtosecond,
+                 timestep = 1.0*unit.femtosecond,
                  work_save_interval = None,
                  top = None,
                  subset_atoms = None,
