@@ -323,7 +323,7 @@ def run_setup(setup_options):
         atom_selection = setup_options['atom_selection']
         _logger.info(f"\tatom selection detected: {atom_selection}")
     else:
-        _logger.info(f"\tno atom selection detected: default to None.")
+        _logger.info(f"\tno atom selection detected: default to all.")
         atom_selection = 'all' 
 
     if setup_options['fe_type'] == 'neq':
