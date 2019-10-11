@@ -135,8 +135,15 @@ class HybridTopologyFactory(object):
         self._interpolate_14s = interpolate_old_and_new_14s
 
         #new attributes from the modified geometry engine
-        self.neglected_new_angle_terms = neglected_new_angle_terms
-        self.neglected_old_angle_terms = neglected_old_angle_terms
+        if neglected_old_angle_terms:
+            self.neglected_old_angle_terms = neglected_old_angle_terms
+        else:
+            self.neglected_old_angle_terms = []
+
+        if neglected_new_angle_terms:
+            self.neglected_new_angle_terms = neglected_new_angle_terms
+        else:
+            self.neglected_new_angle_terms = []
 
         if bond_softening_constant != 1.0:
             self._bond_softening_constant = bond_softening_constant
