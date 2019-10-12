@@ -978,7 +978,9 @@ class NonequilibriumSwitchingFEP(object):
         for _direction in directions:
             _logger.debug(f"scattering and mapping NonequilibriumFEPSetup_list for {_direction} direction")
             remote_NonquilibriumFEPTask_list = self.client.scatter(NonequilibriumFEPSetup_dict[_direction])
-            futures = self.client.map(feptasks.launch_particle, remote_NonquilibriumFEPTask_list)
+            distributed.progress(remote_NonquilibriumFEPTask_list, notebook = False)
+            futures = self.client.map(feptasks.Particle.launch_particle, remote_NonquilibriumFEPTask_list)
+            distributed.progress(futures, notebook = False)
             self.particle_futures[_direction] = futures
 
     def AIS(self):
