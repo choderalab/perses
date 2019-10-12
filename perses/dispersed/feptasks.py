@@ -728,6 +728,7 @@ def run_equilibrium(task):
     timer = inputs['timer'] #bool
     timers = {}
     file_numsnapshots = []
+    file_iterator = inputs['file_iterator']
     _logger.debug(f"running equilibrium")
 
     # creating copies in case computation is parallelized
