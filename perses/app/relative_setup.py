@@ -926,13 +926,6 @@ class NonequilibriumSwitchingFEP(object):
             start = [0] if direction == 'forward' else [1]
             end = [1] if direction == 'forward' else [0]
 
-        # define collection lists for eq and noneq results
-        eq_results_collector, neq_results_collector = {l: [] for l in start}, {_direction: [] for _direction in directions} #canonical dict keys for two types of collector objects
-        eq_results_futures = dict()
-        init_eq_results = {_lambda: EquilibriumResult(sampler_state = self._sampler_states[_lambda], reduced_potentials = [], files = [], timers = {}, nonalchemical_perturbations = {}) for _lambda in start}
-
-        equilibrium_trajectory_filenames = self._trajectory_filename
-
         NonequilibriumFEPSetup_dict = {_direction: [] for _direction in directions}
         for i in range(n_iterations): # prepare NonequilibriumFEPSetup_list to iterate forward and/or backward n_iterations times
             for start_lambda, end_lambda, _direction in zip(start, end, directions):
