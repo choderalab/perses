@@ -1092,10 +1092,10 @@ class NonequilibriumSwitchingFEP(object):
 
         _logger.debug(f"scattering and mapping run_equilibrium task")
         remote_EquilibriumFEPTask_list = self.client.scatter(EquilibriumFEPTask_list)
-        distributed.progress(remote_EquilibriumFEPTask_list)
+        distributed.progress(remote_EquilibriumFEPTask_list, notebook = False)
 
         futures_EquilibriumFEPTask_list = self.client.map(feptasks.run_equilibrium, remote_EquilibriumFEPTask_list)
-        distributed.progress(futures_EquilibriumFEPTask_list)
+        distributed.progress(futures_EquilibriumFEPTask_list, notebook = False)
 
 
         _logger.debug(f"finished submitting tasks; gathering...")
