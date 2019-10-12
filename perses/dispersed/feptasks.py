@@ -822,6 +822,4 @@ def run_equilibrium(task):
     if not timer:
         timers = {}
 
-    task.outputs = {'reduced_potentials': reduced_potentials, 'files': file_numsnapshots, 'timers': timers}
-    task.sampler_state = sampler_state
-    return EquilibriumFEPTask
+    return EquilibriumFEPTask(sampler_state = sampler_state, inputs = task.inputs, outputs = {'reduced_potentials': reduced_potentials, 'files': file_numsnapshots, 'timers': timers})
