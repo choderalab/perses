@@ -736,8 +736,8 @@ def run_equilibrium(task):
     sampler_state = task.sampler_state
     if timer: timers['copy_state'] = time.time() - start
 
-    if _minimize:
-        _logger.debug(f"conducting minimization; (minimize = {_minimize})")
+    if inputs['_minimize']:
+        _logger.debug(f"conducting minimization")
         if timer: start = time.time()
         minimize(thermodynamic_state, sampler_state)
         if timer: timers['minimize'] = time.time() - start
@@ -745,11 +745,11 @@ def run_equilibrium(task):
     #get the atom indices we need to subset the topology and positions
     if timer: start = time.time()
     if not inputs['atom_indices_to_save']:
-        atom_indices = list(range(topology.n_atoms))
+        atom_indices = list(range(inputs['topology'].n_atoms))
         subset_topology = inputs['topology']
     else:
-        subset_topology = inputs['topology'].subset(atom_indices_to_save)
         atom_indices = inputs['atom_indices_to_save']
+        subset_topology = inputs['topology'].subset(atom_indices)
     if timer: timers['define_topology'] = time.time() - start
 
     n_atoms = subset_topology.n_atoms
@@ -763,7 +763,7 @@ def run_equilibrium(task):
     reduced_potentials = list()
 
     #loop through iterations and apply MCMove, then collect positions into numpy array
-    _logger.debug(f"conducting {n_iterations} of production")
+    _logger.debug(f"conducting {inputs['n_iterations']} of production")
     if timer: eq_times = []
 
     init_file_iterator = inputs['file_iterator']

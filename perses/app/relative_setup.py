@@ -794,6 +794,7 @@ class NonequilibriumSwitchingFEP(object):
         # create an empty dict of starting and ending sampler_states
         self.start_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
         self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
+        self._equilibrium_results = {0:[], 1:[]}
 
         _logger.info(f"constructed")
 
@@ -1099,15 +1100,13 @@ class NonequilibriumSwitchingFEP(object):
 
         _logger.debug(f"finished submitting tasks; gathering...")
         eq_results = self.client.gather(futures_EquilibriumFEPTask_list)
-        self._equilibrium_results = {}
         for state, eq_result in zip(endstates, eq_results):
             _logger.debug(f"\tcomputing equilibrium task future for state = {state}")
             self._eq_dict[state].extend(eq_result.outputs['files'])
             self._eq_dict[f"{state}_reduced_potentials"].extend(eq_result.outputs['reduced_potentials'])
             self._sampler_states[state] = eq_result.sampler_state
             self._eq_timers[state].append(eq_result.outputs['timers'])
-            self._equilibrium_results[state] = eq_result
-            self._equilibrium_results.outputs = None #since this is redundant and expensive
+            self._equilibrium_results[state].append(eq_result)
 
         _logger.debug(f"collections complete.")
         if decorrelate: # if we want to decorrelate all sample
