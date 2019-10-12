@@ -912,7 +912,7 @@ class NonequilibriumSwitchingFEP(object):
         protocol : str, default 'default'
             which lambda protocol to anneal particles with
         """
-        _logger.debug(f"conducting nonequilibrium_switching with {n_iterations} iterations")
+        _logger.debug(f"conducting nonequilibrium_switching with {n_particles} iterations")
 
         # Now we have to pull the files
         if direction == None:
