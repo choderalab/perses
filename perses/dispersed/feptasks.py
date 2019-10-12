@@ -810,10 +810,10 @@ def run_equilibrium(task):
             #in this case, we can just skip this
             trajectory = md.Trajectory(np.array(trajectory_positions), subset_topology, unitcell_lengths=np.array(trajectory_box_lengths), unitcell_angles=np.array(trajectory_box_angles))
             if file_iterator == init_file_iterator: #this means that no files have been written yet
-                new_filename = trajectory_filename[:-2] + f'{file_iterator:04}' + '.h5'
+                new_filename = inputs['trajectory_filename'][:-2] + f'{file_iterator:04}' + '.h5'
                 file_numsnapshots.append((new_filename, len(trajectory_positions)))
             else:
-                new_filename = trajectory_filename[:-2] + f'{file_iterator+1:04}' + '.h5'
+                new_filename = inputs['trajectory_filename'][:-2] + f'{file_iterator+1:04}' + '.h5'
                 file_numsnapshots.append((new_filename, len(trajectory_positions)))
             write_equilibrium_trajectory(trajectory, new_filename)
 
