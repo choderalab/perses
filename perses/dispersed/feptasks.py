@@ -176,14 +176,12 @@ class Particle():
         self.sampler_state.apply_to_context(self.context, ignore_velocities=True)
         self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #randomize velocities @ temp
 
-
-
-        init_state = self.context.getState(getEnergy=True)
-        self.initial_energy = self._beta * (init_state.getPotentialEnergy() + init_state.getKineticEnergy())
-
         #create temperatures
         self._beta = 1.0 / (kB*temperature)
         self._temperature = temperature
+
+        init_state = self.context.getState(getEnergy=True)
+        self.initial_energy = self._beta * (init_state.getPotentialEnergy() + init_state.getKineticEnergy())
 
         if work_save_interval is None:
             self._work_save_interval = self._nsteps
