@@ -68,6 +68,8 @@ class Particle():
         whether to measure the shadow work from the integrator
     label : int, default None
         particle label
+    trajectory_filename : str
+        name of the trajectory filename prefix to which we write
 
     Attributes
     ----------
@@ -189,6 +191,7 @@ class Particle():
 
         self._save_configuration = save_configuration
         self._measure_shadow_work = measure_shadow_work
+        self._trajectory_filename = trajectory_filename
 
         #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
         #work before the end of the protocol as the end
@@ -283,6 +286,7 @@ class Particle():
         if self.current_index == len(self.lambdas) - 1:
             if self._save_configuration:
                 self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
+                Particle.write_nonequilibrium_trajectory(self._trajectory, self._trajectory_filename)
 
             if self._measure_shadow_work:
                 total_heat = self.integrator.get_heat(dimensionless=True)
@@ -403,7 +407,8 @@ class Particle():
                             save_configuration = input_dict['write_configuration'],
                             lambda_protocol = inputs_dict['lambda_protocol'],
                             measure_shadow_work=inputs_dict['measure_shadow_work'],
-                            label = inputs_dict['label'])
+                            label = inputs_dict['label'],
+                            trajectory_filename = inputs_dict['trajectory_filename'])
 
         return NonequilibriumFEPTask(particle = particle, inputs = inputs_dict)
 
@@ -511,12 +516,35 @@ class Particle():
                       'write_configuration',
                       'lambda_protocol',
                       'measure_shadow_work',
-                      'label']
+                      'label',
+                      'trajectory_filename']
 
         #assert all valid keys are in the inputs keys
         for _key in input_dict.keys():
             if _key not in valid_keys:
                 raise Exception(f"{_key} is not in NonequilibriumFEPTask.inputs")
+
+    @staticmethod
+    def write_nonequilibrium_trajectory(nonequilibrium_trajectory, trajectory_filename):
+        """
+        Write the results of a nonequilibrium switching trajectory to a file. The trajectory is written to an
+        mdtraj hdf5 file.
+
+        Parameters
+        ----------
+        nonequilibrium_trajectory : md.Trajectory
+            The trajectory resulting from a nonequilibrium simulation
+        trajectory_filename : str
+            The full filepath for where to store the trajectory
+
+        Returns
+        -------
+        True : bool
+        """
+        if nonequilibrium_trajectory is not None:
+            nonequilibrium_trajectory.save_hdf5(trajectory_filename)
+
+        return True
 
 
 
@@ -602,16 +630,18 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 
-def write_nonequilibrium_trajectory(nonequilibrium_trajectory: md.Trajectory, trajectory_filename: str) -> float:
+def write_nonequilibrium_trajectory(nonequilibrium_trajectory, trajectory_filename) -> float:
     """
     Write the results of a nonequilibrium switching trajectory to a file. The trajectory is written to an
-    mdtraj hdf5 file, whereas the cumulative work is written to a numpy file.
+    mdtraj hdf5 file.
+
     Parameters
     ----------
     nonequilibrium_trajectory : md.Trajectory
         The trajectory resulting from a nonequilibrium simulation
     trajectory_filename : str
         The full filepath for where to store the trajectory
+
     Returns
     -------
     True : bool
