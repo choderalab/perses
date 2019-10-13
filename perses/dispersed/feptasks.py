@@ -378,10 +378,8 @@ class Particle():
         sampler_state = task.sampler_state
 
         #forward Functions
-        if not inputs_dict['forward_functions']:
-            forward_functions = 'default'
-        else:
-            forward_functions = inputs_dict['forward_functions']
+        if not inputs_dict['lambda_protocol']:
+            inputs_dict['lambda_protocol'] = 'default'
 
 
         #get the atom indices we need to subset the topology and positions

@@ -606,7 +606,7 @@ class NonequilibriumSwitchingFEP(object):
     This class manages Nonequilibrium switching based relative free energy calculations, carried out on a distributed computing framework.
     """
 
-    def __init__(self, hybrid_factory, geometry_engine, use_dispersion_correction=False, forward_functions=None,
+    def __init__(self, hybrid_factory, geometry_engine, use_dispersion_correction=False, protocol = 'default',
                  ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
                  atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
                  ncmc_save_interval = None, write_ncmc_configuration = False):
@@ -622,7 +622,7 @@ class NonequilibriumSwitchingFEP(object):
             geometry engine used to create and compute the RJMCMC; we use this to compute the importance weight from the old/new system to the hybrid system (neglecting added valence terms)
         use_dispersion_correction : bool, default False
             Whether to use the (expensive) dispersion correction
-        forward_functions : dict of str: str, default forward_functions as defined by top of file
+        protocol : dict of str: str, default protocol as defined by top of file
             How each force's scaling parameter relates to the main lambda that is switched by the integrator from 0 to 1
         ncmc_nsteps : int, default 100
             Number of steps per NCMC trajectory
@@ -666,7 +666,7 @@ class NonequilibriumSwitchingFEP(object):
             print(f"The work writing interval must be a factor of the total number of ncmc steps; otherwise, the ncmc protocol is incomplete!")
 
         # use default functions if none specified
-        self._forward_functions = forward_functions
+        self._protocol = protocol
 
         self._write_ncmc_configuration = write_ncmc_configuration
 
@@ -896,7 +896,7 @@ class NonequilibriumSwitchingFEP(object):
 
 
 
-    def instantiate_particles(self, n_particles = 5, direction = None, timer = False, protocol = 'default'):
+    def instantiate_particles(self, n_particles = 5, direction = None, timer = False):
         """
         Instantiate sMC particles. This entails loading n_iterations snapshots from disk (from each endstate of specified)
         and distributing Particle classes.
@@ -909,8 +909,6 @@ class NonequilibriumSwitchingFEP(object):
             which direction to conduct the simulation, 'forward', 'reverse', or None; None will run both
         timer : bool, default False
             whether to time the annealing protocol and all sub-protocols
-        protocol : str, default 'default'
-            which lambda protocol to anneal particles with
         """
         _logger.debug(f"conducting nonequilibrium_switching with {n_particles} iterations")
 
@@ -934,7 +932,6 @@ class NonequilibriumSwitchingFEP(object):
                                'direction': _direction,
                                'topology': self._factory._hybrid_topology,
                                'nsteps_neq': self._ncmc_nsteps,
-                               'forward_functions': self._forward_functions,
                                'work_save_interval': self._ncmc_save_interval,
                                'splitting': self._neq_splitting_string,
                                'atom_indices_to_save': self._atom_selection_indices,
@@ -944,7 +941,7 @@ class NonequilibriumSwitchingFEP(object):
                                'measure_shadow_work': self._measure_shadow_work,
                                'timer': timer,
                                'label': self._current_iteration,
-                               'lambda_protocol': protocol
+                               'lambda_protocol': self._protocol
                                }
 
                 #pull the sampler_state
