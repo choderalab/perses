@@ -1006,7 +1006,8 @@ class NonequilibriumSwitchingFEP(object):
                     self._nonequilibrium_timers[_direction].append(timer)
                     self.end_sampler_states[_direction].append(sampler_state)
                 else:
-                    self._failures.append(future.result()) #pull the entire particle class
+                    result = future.result()
+                    self._failures.append((result.sampler_state, result.outputs)) #pull the entire particle class
 
     # @staticmethod
     # def compute_weights
