@@ -389,7 +389,7 @@ class Particle():
             atom_indices = list(range(inputs_dict['topology'].n_atoms))
             subset_topology = inputs_dict['topology']
         else:
-            subset_topology = inputs_dict['topology'].subset(atom_indices_to_save)
+            subset_topology = inputs_dict['topology'].subset(inputs_dict['atom_indices_to_save'])
             atom_indices = inputs_dict['atom_indices_to_save']
 
         _logger.debug(f"Instantiating NonequilibriumSwitchingMove class")
