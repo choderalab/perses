@@ -184,7 +184,7 @@ class Particle():
         self._beta = 1.0 / (kB*temperature)
         self._temperature = temperature
 
-        if not work_save_interval:
+        if work_save_interval == None:
             self._work_save_interval = self._nsteps
         else:
             self._work_save_interval = work_save_interval
@@ -385,7 +385,7 @@ class Particle():
 
 
         #get the atom indices we need to subset the topology and positions
-        if not inputs_dict['atom_indices_to_save']:
+        if inputs_dict['atom_indices_to_save'] == None:
             atom_indices = list(range(inputs_dict['topology'].n_atoms))
             subset_topology = inputs_dict['topology']
         else:
