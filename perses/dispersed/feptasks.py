@@ -130,7 +130,7 @@ class Particle():
                  top = None,
                  subset_atoms = None,
                  save_configuration = False,
-                 lambda_protocol = 'default'
+                 lambda_protocol = 'default',
                  measure_shadow_work = False,
                  label = None,
                  trajectory_filename  = None):
