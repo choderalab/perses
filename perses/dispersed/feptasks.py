@@ -377,7 +377,7 @@ class Particle():
         Particle.check_NonequilibriumFEPTask(task)
 
         thermodynamic_state = inputs_dict['thermodynamic_state']
-        sampler_state = task.sampler_state
+        sampler_state = inputs_dict['sampler_state']
 
         #forward Functions
         if not inputs_dict['lambda_protocol']:
