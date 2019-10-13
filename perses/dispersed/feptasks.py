@@ -120,6 +120,7 @@ class Particle():
 
     def __init__(self,
                  thermodynamic_state,
+                 sampler_state,
                  nsteps,
                  direction,
                  splitting = 'V R O R V',
@@ -131,7 +132,7 @@ class Particle():
                  save_configuration = False,
                  measure_shadow_work = False,
                  label = None,
-                 **kwargs):
+                 trajectory_filename  = None):
 
 
         start = time.time()
@@ -190,7 +191,11 @@ class Particle():
 
         self._save_configuration = save_configuration
         self._measure_shadow_work = measure_shadow_work
-        self._trajectory_filename = trajectory_filename
+        if self._save_configuration:
+            if trajectory_filename is None:
+                raise Exception(f"cannot save configuration when trajectory_filename is None")
+            else:
+                self._trajectory_filename = trajectory_filename
 
         #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
         #work before the end of the protocol as the end
