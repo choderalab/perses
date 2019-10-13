@@ -165,7 +165,7 @@ class Particle():
         self.current_index = 0
 
         integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = np.inf/unit.picosecond)
-        self.context, self.integrator = context_cache.get_context(self.thermodynamic_state, integrator)
+        self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, integrator)
 
         #create integrator and context
         self.sampler_state = sampler_state
