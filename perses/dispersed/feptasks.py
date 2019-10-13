@@ -358,7 +358,6 @@ class Particle():
              direction: (<str>; 'forward' or 'reverse')
              topology: (<mdtraj.Topology>; an MDTraj topology object used to construct the trajectory),
              nsteps_neq: (<int, default None; number of nonequilibrium steps in the protocol>),
-             forward_functions: (<str, default None>; which option to call as the forward function for the lambda protocol),
              work_save_interval: (<int>; how often to write the work and, if requested, configurations),
              splitting: (<str>; The splitting string for the dynamics),
              atom_indices_to_save: (<list of int, default None>; list of indices to save when excluding waters, for instance. If None, all indices are saved.),
