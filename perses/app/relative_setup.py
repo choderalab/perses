@@ -794,7 +794,6 @@ class NonequilibriumSwitchingFEP(object):
         # create an empty dict of starting and ending sampler_states
         self.start_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
         self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
-        self._equilibrium_results = {0:[], 1:[]}
 
         _logger.info(f"constructed")
 
@@ -962,7 +961,7 @@ class NonequilibriumSwitchingFEP(object):
 
         #now to scatter the jobs and map
         self.particle_futures = {_direction: None for _direction in directions}
-        for _direction in directions: #for the moment, we don't need dask
+        for _direction in directions: #for the moment, we don
             # _logger.debug(f"scattering and mapping NonequilibriumFEPSetup_list for {_direction} direction")
             # remote_NonquilibriumFEPTask_list = self.client.scatter(NonequilibriumFEPSetup_dict[_direction])
             # distributed.progress(remote_NonquilibriumFEPTask_list, notebook = False)
@@ -1006,8 +1005,7 @@ class NonequilibriumSwitchingFEP(object):
                     self._nonequilibrium_timers[_direction].append(timer)
                     self.end_sampler_states[_direction].append(sampler_state)
                 else:
-                    result = future.result()
-                    self._failures.append((result.sampler_state, result.outputs)) #pull the entire particle class
+                    self._failures.append(future.result()) #pull the entire particle class
 
     # @staticmethod
     # def compute_weights
@@ -1097,7 +1095,6 @@ class NonequilibriumSwitchingFEP(object):
             self._eq_dict[f"{state}_reduced_potentials"].extend(eq_result.outputs['reduced_potentials'])
             self._sampler_states[state] = eq_result.sampler_state
             self._eq_timers[state].append(eq_result.outputs['timers'])
-            self._equilibrium_results[state].append(eq_result)
 
         _logger.debug(f"collections complete.")
         if decorrelate: # if we want to decorrelate all sample
