@@ -178,7 +178,7 @@ class Particle():
 
 
 
-        init_state = context.getState(getEnergy=True)
+        init_state = self.context.getState(getEnergy=True)
         self.initial_energy = self._beta * (init_state.getPotentialEnergy() + init_state.getKineticEnergy())
 
         #create temperatures
