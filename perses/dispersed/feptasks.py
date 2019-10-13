@@ -372,7 +372,7 @@ class Particle():
         """
 
         inputs_dict = task.inputs
-        check_NonequilibriumFEPTask(task)
+        Particle.check_NonequilibriumFEPTask(task)
 
         thermodynamic_state = inputs_dict['thermodynamic_state']
         sampler_state = task.sampler_state
