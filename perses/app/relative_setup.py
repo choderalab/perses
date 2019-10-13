@@ -896,7 +896,7 @@ class NonequilibriumSwitchingFEP(object):
 
 
 
-    def instantiate_particles(self, n_particles = 5, direction = None, timer = False):
+    def instantiate_particles(self, n_particles = 5, direction = None):
         """
         Instantiate sMC particles. This entails loading n_iterations snapshots from disk (from each endstate of specified)
         and distributing Particle classes.
@@ -907,8 +907,6 @@ class NonequilibriumSwitchingFEP(object):
             The number of times to run the entire sequence described above (concurrency)
         direction : str
             which direction to conduct the simulation, 'forward', 'reverse', or None; None will run both
-        timer : bool, default False
-            whether to time the annealing protocol and all sub-protocols
         """
         _logger.debug(f"conducting nonequilibrium_switching with {n_particles} iterations")
 
@@ -939,7 +937,6 @@ class NonequilibriumSwitchingFEP(object):
                                'write_configuration': self._write_ncmc_configuration,
                                'timestep': self._timestep,
                                'measure_shadow_work': self._measure_shadow_work,
-                               'timer': timer,
                                'label': self._current_iteration,
                                'lambda_protocol': self._protocol
                                }

@@ -369,7 +369,6 @@ class Particle():
              write_configuration: (<boolean, default False>; Whether to also write configurations of the trajectory at the requested interval.),
              timestep: (<unit.Quantity=float*unit.femtoseconds>; dynamical timestep),
              measure_shadow_work: (<bool, default False>; Whether to compute the shadow work; there is additional overhead in the integrator cost),
-             timer: (<bool, default False>; whether to report the timer dictionary in the outputs)
              lambda_protocol: (<str, default 'default'; lambda protocol with which to conduct annealing >)
             }
         """
