@@ -164,12 +164,11 @@ class Particle():
         self.lambdas = np.linspace(self.start_lambda, self.end_lambda, self._nsteps)
         self.current_index = 0
 
-        integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = np.inf/unit.picosecond)
-        self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, integrator)
-
-        #create integrator and context
+        #create sampling objects
         self.sampler_state = sampler_state
         self.thermodynamic_state = thermodynamic_state
+        integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = np.inf/unit.picosecond)
+        self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, integrator)
         self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
         self.thermodynamic_state.set_alchemical_parameters(self.start_lambda, lambda_protocol = self.lambda_protocol_class)
         self.sampler_state.apply_to_context(self.context, ignore_velocities=True)
