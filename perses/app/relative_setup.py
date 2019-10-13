@@ -927,7 +927,7 @@ class NonequilibriumSwitchingFEP(object):
             end = [1] if direction == 'forward' else [0]
 
         NonequilibriumFEPSetup_dict = {_direction: [] for _direction in directions}
-        for i in range(n_iterations): # prepare NonequilibriumFEPSetup_list to iterate forward and/or backward n_iterations times
+        for i in range(n_particles):
             for start_lambda, end_lambda, _direction in zip(start, end, directions):
                 inputs_dict = {'thermodynamic_state': self._hybrid_thermodynamic_states[start_lambda],
                                'sampler_state': None,
