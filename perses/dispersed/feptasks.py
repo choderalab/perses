@@ -490,6 +490,45 @@ class Particle():
         task.particle._protocol_work[-1] = work
         return task
 
+    @staticmethod
+    def check_NonequilibriumFEPTask(task):
+        """
+        checks the NonequilibriumFEPTask for proper parameters as specified by Particle class
+
+        Parameters
+        ----------
+        task : NonequilibriumFEPTask
+        """
+        input_dict = task.inputs
+        assert type(input_dict) == dict, f"the NonquilibriumFEPTask.input entry is not a dictionary; type = {type(input_dict)}"
+
+        valid_keys = ['thermodynamic_state',
+                      'sampler_state',
+                      'nsteps_neq',
+                      'direction',
+                      'splitting',
+                      'timestep',
+                      'work_save_interval',
+                      'topology',
+                      'atom_indices_to_save',
+                      'write_configuration',
+                      'lambda_protocol',
+                      'measure_shadow_work',
+                      'label']
+
+        #assert all valid keys are in the inputs keys
+        for _key in input_dict.keys():
+            if _key not in valid_keys:
+                raise Exception(f"{_key} is not in NonequilibriumFEPTask.inputs")
+
+
+
+
+
+
+
+
+
 
 
 
@@ -500,24 +539,6 @@ def check_EquilibriumFEPTask(task):
     Parameters
     ----------
     task : EquilibriumFEPTask
-
-    Returns
-    -------
-    _tupl: {
-             thermodynamic_state: (<openmmtools.states.CompoundThermodynamicState>; compound thermodynamic state comprising state at lambda = 0 (1)),
-             sampler_state: (<openmmtools.states.SamplerState>; sampler state of the current molecular microstate.  velocities need not be specified),
-             nsteps_equil: (<int>; The number of equilibrium steps that a move should make when apply is called),
-             topology: (<mdtraj.Topology>; an MDTraj topology object used to construct the trajectory),
-             n_iterations: (<int>; The number of times to apply the move. Note that this is not the number of steps of dynamics),
-             splitting: (<str>; The splitting string for the dynamics),
-             atom_indices_to_save: (<list of int, default None>; list of indices to save when excluding waters, for instance. If None, all indices are saved.),
-             trajectory_filename: (<str, optional, default None>; Full filepath of trajectory files. If none, trajectory files are not written.),
-             max_size: (<float>; maximum size of the trajectory numpy array allowable until it is written to disk),
-             timer: (<bool, default False>; whether to time all parts of the equilibrium run),
-             _minimize: (<bool, default False>; whether to minimize the sampler_state before conducting equilibration),
-             file_iterator: (<int, default 0>; which index to begin writing files)
-             timestep: (<unit.Quantity=float*unit.femtoseconds>; dynamical timestep)
-             }
     """
     input_dict = task.inputs
     #assert input_dict is a dict
