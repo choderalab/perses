@@ -962,12 +962,13 @@ class NonequilibriumSwitchingFEP(object):
 
         #now to scatter the jobs and map
         self.particle_futures = {_direction: None for _direction in directions}
-        for _direction in directions:
-            _logger.debug(f"scattering and mapping NonequilibriumFEPSetup_list for {_direction} direction")
-            remote_NonquilibriumFEPTask_list = self.client.scatter(NonequilibriumFEPSetup_dict[_direction])
-            distributed.progress(remote_NonquilibriumFEPTask_list, notebook = False)
-            futures = self.client.map(feptasks.Particle.launch_particle, remote_NonquilibriumFEPTask_list)
-            distributed.progress(futures, notebook = False)
+        for _direction in directions: #for the moment, we don't need dask
+            # _logger.debug(f"scattering and mapping NonequilibriumFEPSetup_list for {_direction} direction")
+            # remote_NonquilibriumFEPTask_list = self.client.scatter(NonequilibriumFEPSetup_dict[_direction])
+            # distributed.progress(remote_NonquilibriumFEPTask_list, notebook = False)
+            # futures = self.client.map(feptasks.Particle.launch_particle, remote_NonquilibriumFEPTask_list)
+            # distributed.progress(futures, notebook = False)
+            futures = [feptasks.Particle.launch_particle(i) for i in NonequilibriumFEPSetup_dict[_direction]]
             self.particle_futures[_direction] = futures
 
     def AIS(self):
