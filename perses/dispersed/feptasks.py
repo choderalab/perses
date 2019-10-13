@@ -403,7 +403,7 @@ class Particle():
                             work_save_interval = inputs_dict['work_save_interval'],
                             top = subset_topology,
                             subset_atoms = atom_indices,
-                            save_configuration = input_dict['write_configuration'],
+                            save_configuration = inputs_dict['write_configuration'],
                             lambda_protocol = inputs_dict['lambda_protocol'],
                             measure_shadow_work=inputs_dict['measure_shadow_work'],
                             label = inputs_dict['label'],
