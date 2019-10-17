@@ -27,7 +27,7 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("feptasks")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.WARNING)
 
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
@@ -135,10 +135,10 @@ class Particle():
                  label = None,
                  trajectory_filename  = None):
 
-
+        _logger.debug(f"Initializing Particle...")
         start = time.time()
         self._timers = {} #instantiate timer
-        self.label = label
+        self.label = [label]
 
         self.context_cache = cache.global_context_cache
 
@@ -164,15 +164,20 @@ class Particle():
         #create lambda protocol
         self._nsteps = nsteps
         self.lambdas = np.linspace(self.start_lambda, self.end_lambda, self._nsteps)
-        self.current_index = 0
+        self.current_index = int(0)
 
         #create sampling objects
         self.sampler_state = sampler_state
         self.thermodynamic_state = thermodynamic_state
-        integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = np.inf/unit.picosecond)
-        self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, integrator)
+        _logger.debug(f"thermodynamic state: {self.thermodynamic_state}")
+        self.integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = np.inf/unit.picosecond)
+        #platform = openmm.Platform.getPlatformByName(platform_name)
+        self.context = openmm.Context(self.thermodynamic_state.system, self.integrator)
+        #self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, integrator)
+        _logger.debug(f"context: {self.context}")
         self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
         self.thermodynamic_state.set_alchemical_parameters(self.start_lambda, lambda_protocol = self.lambda_protocol_class)
+        self.thermodynamic_state.apply_to_context(self.context)
         self.sampler_state.apply_to_context(self.context, ignore_velocities=True)
         self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #randomize velocities @ temp
 
@@ -202,7 +207,7 @@ class Particle():
             raise ValueError("The work writing interval must be a factor of the total number of steps")
 
         #use the number of step moves plus one, since the first is always zero
-        self._cumulative_work = []
+        self._cumulative_work = 0.0
         self._shadow_work = 0.0
         self._protocol_work = []
         self._heat = 0.0
@@ -228,7 +233,8 @@ class Particle():
         #set a bool variable for pass or failure
         self.succeed = True
         self.failures = []
-        self.incremental_work = None
+        self.incremental_work = []
+        _logger.debug(f"Initialization complete!")
 
     def anneal(self, num_steps = None):
         """Propagate the state through the integrator.
@@ -239,8 +245,10 @@ class Particle():
         num_steps: int, default is
             number of steps to propagate the particle
         """
+        _logger.info(f"Annealing {num_steps} steps...")
         if not num_steps:
             num_steps = self._nsteps - 1
+
         #check that the num_steps doesn't overshoot end lambda
         if self.current_index == len(self.lambdas) - 1:
             raise Exception(f"the lambda protocol is already complete")
@@ -255,43 +263,66 @@ class Particle():
         else:
             context_cache = self.context_cache
 
+        _logger.debug(f"conducting iteration loop")
         for _ in range(num_steps): #anneal for step steps
             try:
                 prep_start = time.time()
 
                 #if t = 0, then we compute the weight wrt the next state
                 current_lambda = self.lambdas[self.current_index]
+                _logger.info(f"\tcurrent index: {self.current_index} / {len(self.lambdas) - 1}")
+                _logger.info(f"\tcurrent lambda: {self.thermodynamic_state.global_lambda}")
 
                 if self.current_index == 0: #then this is the first iteration, so we have to compute the incremental weight
-                    self.compute_incremental_work()
+
+                    _logger.debug(f"\tfirst iteration: computing incremental work")
+                    self.compute_incremental_work(self.current_index + 1)
+                    _logger.info(f"\tincremental work: {self.incremental_work}")
+                    _logger.debug(f"\tsampler state positions: {self.sampler_state.positions}")
+
                 else:
+                    _logger.debug(f"\tintegrating one step")
+                    _logger.debug(f"\tsampler state positions: {self.sampler_state.positions}")
                     self.integrator.step(1)
-                    self.compute_incremental_work()
+                    _logger.debug(f"\tcomputing incremental work")
+                    self.compute_incremental_work(self.current_index + 1)
+                    _logger.info(f"\tincremental work: {self.incremental_work}")
                     #we can resample outside of this if necessary
 
                 #save protocol time
                 self._timers['protocol'].append(time.time() - prep_start)
-
-                #save configuration
-                self.save_configuration()
+                _logger.debug(f"\tlocal timer: {self._timers['protocol'][-1]}")
 
                 #now to increment the current_index
+                _logger.debug(f"\tincrementing current index")
                 self.current_index += 1
+                _logger.info(f"final lambda: {self.current_index} / {len(self.lambdas) - 1}")
+                _logger.info(f"\tcurrent lambda: {self.thermodynamic_state.global_lambda}")
+
+                #save configuration
+                _logger.debug(f"\tsaving configuration")
+                self.save_configuration()
 
             except Exception as e:
+                _logger.info(f"\tdetected failure: {e}")
                 self.succeed = False
                 self.failures.append(e)
-
+            _logger.info(f"###########################")
         #now just update the sampler state
-        self.sampler_state.update_from_context(context)
+        _logger.debug(f"updating sampler state from context")
+        self.sampler_state.update_from_context(self.context)
 
         #if the protocol is done, then finish
         if self.current_index == len(self.lambdas) - 1:
+            _logger.info(f"detected final lambda (i.e. {self.current_index} / {len(self.lambdas) - 1})...")
             if self._save_configuration:
+                _logger.debug(f"saving configuration")
+
                 self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
                 Particle.write_nonequilibrium_trajectory(self._trajectory, self._trajectory_filename)
 
             if self._measure_shadow_work:
+                _logger.debug(f"measuring shadow work")
                 total_heat = self.integrator.get_heat(dimensionless=True)
                 final_state = self.context.getState(getEnergy=True)
                 self.final_energy = self._beta * (final_state.getPotentialEnergy() + final_state.getKineticEnergy())
@@ -301,22 +332,31 @@ class Particle():
                 self._shadow_work = 0.0
 
 
-    def compute_incremental_work(self):
+    def compute_incremental_work(self, index):
         """
         compute the incremental work of a lambda update
         """
         old_rp = self._beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+        _logger.debug(f"\t\told rp: {old_rp}")
 
-        #update thermodynamic state
-        new_lambda = self.lambdas[self.current_index + 1]
+        #update thermodynamic state and context
+        _logger.debug(f"\t\tincrementing lambda...")
+        new_lambda = self.lambdas[index]
+        _logger.debug(f"\t\tnew lambda: {new_lambda}")
+        _logger.debug(f"\t\tupdating thermodynamic state to new lambda")
         self.thermodynamic_state.set_alchemical_parameters(new_lambda, lambda_protocol = self.lambda_protocol_class)
+        self.thermodynamic_state.apply_to_context(self.context)
 
         #compute new rp
         new_rp = self._beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+        _logger.debug(f"\t\tnew_rp: {new_rp}")
 
         #incremental work
-        self.incremental_work = new_rp - old_rp
-        self._cumulative_work += self.incremental_work
+        _logger.debug(f"\t\tupdating incremental and cumulative works")
+        self.incremental_work.append(new_rp - old_rp)
+        self._cumulative_work += self.incremental_work[-1]
+        _logger.debug(f"\t\tincremental_work: {self.incremental_work[-1]}")
+        _logger.debug(f"\t\tcumulative_work: {self._cumulative_work}")
 
 
 
@@ -325,7 +365,8 @@ class Particle():
         pass a conditional save function
         """
         #now to save the protocol work if necessary
-        if (self.current_index + 1) % self._work_save_interval == 0: #we save the protocol work if the remainder is zero
+        if (self.current_index) % self._work_save_interval == 0: #we save the protocol work if the remainder is zero
+            _logger.debug(f"\t\tsaving protocol")
             save_start = time.time()
             self._protocol_work.append(self._cumulative_work)
             #self._kinetic_energy.append(self._beta * context.getState(getEnergy=True).getKineticEnergy()) #maybe if we want kinetic energy in the future
@@ -333,6 +374,7 @@ class Particle():
 
             #if we have a trajectory, we'll also write to it
             if self._save_configuration:
+                _logger.debug(f"\t\tsaving configuration")
 
                 #record positions for writing to trajectory
                 #we need to check whether the user has requested to subset atoms (excluding water, for instance)
@@ -346,7 +388,7 @@ class Particle():
                 a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self.sampler_state.box_vectors)
                 self._trajectory_box_lengths.append([a, b, c])
                 self._trajectory_box_angles.append([alpha, beta, gamma])
-            self.timers['save'].append(time.time() - save_start)
+            self._timers['save'].append(time.time() - save_start)
 
 
     @staticmethod
@@ -436,6 +478,18 @@ class Particle():
         return task
 
     @staticmethod
+    def update_incremental_work(task, index):
+        """
+        client-callable function to compute importance weight given a new index
+        (w.r.t. current index), and set the new self.current_index
+        """
+        task.particle.compute_incremental_work(index)
+        task.particle._cumulative_work -= task.particle.incremental_work[-1]
+        task.current_index = index
+        return task
+
+
+    @staticmethod
     def pull_sampler_state(task):
         """
         client-callable function to pull the sampler state from the task.particle class
@@ -448,6 +502,30 @@ class Particle():
         client-callable function to pull the cumulative_work from the task.particle class
         """
         return task.particle._cumulative_work
+
+    @staticmethod
+    def pull_incremental_work(task):
+        """
+        client-callable function to pull the last incremental work from the task.particle class
+        """
+        return task.particle.incremental_work[-1]
+
+    def pull_cumulative_and_incremental_work(task):
+        """
+        client-callable function to pull the cumulative_work and incremental_work from the task.particle class
+
+        Returns
+        -------
+        cumulative_work: float
+            the cumulative work of the protocol; this is the work_(t-1) + incremental_work
+        incremental_work: float
+            the incremental work of the protocol
+
+
+        """
+        cumulative_work = Particle.pull_cumulative_work(task)
+        incremental_work = Particle.pull_incremental_work(task)
+        return cumulative_work, incremental_work
 
     @staticmethod
     def pull_protocol_work(task):
@@ -476,13 +554,15 @@ class Particle():
         return task.particle.succeed
 
     @staticmethod
-    def push_sampler_state(task, sampler_state):
+    def push_resamples(task, sampler_state, label, work):
         """
-        client-callable function to push a local sampler state to the task.particle class.
-        It simply overwrites the particle.sampler_state and
+        client-callable function to push a local sampler state, label, and cumulative_work to the task.particle class.
+        It simply overwrites the particle.sampler_state, appends to self.label and corrects the work
         """
         task.particle.sampler_state = sampler_state
-        task.particle.sampler_state.update_from_context(self.context)
+        task.particle.sampler_state.update_from_context(task.particle.context)
+        task.particle.label.append(label)
+        task.particle._cumulative_work = work
         return task
 
     @staticmethod
