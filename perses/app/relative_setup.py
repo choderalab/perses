@@ -796,6 +796,9 @@ class NonequilibriumSwitchingFEP(object):
         self.start_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
         self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
 
+        #create observable list
+        self.observable = []
+
         _logger.info(f"constructed")
 
     def activate_client(self, LSF = True, processes = 2, adapt = False):
@@ -1090,6 +1093,7 @@ class NonequilibriumSwitchingFEP(object):
                 _logger.debug(f"\tincremental works: {works_incremental}")
                 if observable == 'ESS':
                     normalized_observable_value = NonequilibriumSwitchingFEP.ESS(works_prev, works_incremental) / len(works_incremental)
+                    self.observable.append(normalized_observable_value)
                 _logger.debug(f"\tnormalized observable value: {normalized_observable_value}")
                 if normalized_observable_value <= resample_observable_threshold: #then we resample
                     _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling...")
