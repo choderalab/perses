@@ -24,6 +24,7 @@ matrix:
   allow_failures:
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
+    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="conda-forge"
 
 install:
   #add random sleep from 1-10s to try to prevent overloading the anaconda servers
@@ -60,6 +61,7 @@ script:
   - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia openmm; fi
   - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c omnia/label/beta openmm; fi
   - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c omnia-dev openmm; fi
+  - if [ "$OPENMM" == "conda-forge" ]; then echo "Using OpenMM conda-forge testing build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c conda-forge/label/testing openmm; fi
   # Test the package
   - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
 
