@@ -207,9 +207,8 @@ class Particle():
             raise ValueError("The work writing interval must be a factor of the total number of steps")
 
         #use the number of step moves plus one, since the first is always zero
-        self._cumulative_work = 0.0
+        self._cumulative_work = [0.0]
         self._shadow_work = 0.0
-        self._protocol_work = []
         self._heat = 0.0
         self._kinetic_energy = []
 
@@ -246,6 +245,7 @@ class Particle():
             number of steps to propagate the particle
         """
         _logger.info(f"Annealing {num_steps} steps...")
+        _logger.debug(f"\tcurrent labels: {self.label}")
         if not num_steps:
             num_steps = self._nsteps - 1
 
@@ -354,7 +354,7 @@ class Particle():
         #incremental work
         _logger.debug(f"\t\tupdating incremental and cumulative works")
         self.incremental_work.append(new_rp - old_rp)
-        self._cumulative_work += self.incremental_work[-1]
+        self._cumulative_work.append(self.incremental_work[-1])
         _logger.debug(f"\t\tincremental_work: {self.incremental_work[-1]}")
         _logger.debug(f"\t\tcumulative_work: {self._cumulative_work}")
 
@@ -368,7 +368,6 @@ class Particle():
         if (self.current_index) % self._work_save_interval == 0: #we save the protocol work if the remainder is zero
             _logger.debug(f"\t\tsaving protocol")
             save_start = time.time()
-            self._protocol_work.append(self._cumulative_work)
             #self._kinetic_energy.append(self._beta * context.getState(getEnergy=True).getKineticEnergy()) #maybe if we want kinetic energy in the future
             self.sampler_state.update_from_context(self.context, ignore_velocities=True) #save bandwidth by not updating the velocities
 
@@ -501,7 +500,7 @@ class Particle():
         """
         client-callable function to pull the cumulative_work from the task.particle class
         """
-        return task.particle._cumulative_work
+        return task.particle._cumulative_work[-1]
 
     @staticmethod
     def pull_incremental_work(task):
@@ -510,6 +509,7 @@ class Particle():
         """
         return task.particle.incremental_work[-1]
 
+    @staticmethod
     def pull_cumulative_and_incremental_work(task):
         """
         client-callable function to pull the cumulative_work and incremental_work from the task.particle class
@@ -520,12 +520,41 @@ class Particle():
             the cumulative work of the protocol; this is the work_(t-1) + incremental_work
         incremental_work: float
             the incremental work of the protocol
-
-
         """
         cumulative_work = Particle.pull_cumulative_work(task)
         incremental_work = Particle.pull_incremental_work(task)
         return cumulative_work, incremental_work
+
+    @staticmethod
+    def pull_full_cumulative_and_incremental_works(task):
+        """
+        client-callable function to pull the cumulative_work and incremental_work from the task.particle class
+
+        Returns
+        -------
+        cumulative_work: float
+            the cumulative work of the protocol; this is the work_(t-1) + incremental_work
+        incremental_work: float
+            the incremental work of the protocol
+        """
+        cumulative_work = task.particle._cumulative_work
+        incremental_work = task.particle.incremental_work
+        return cumulative_work, incremental_work
+
+
+
+
+    @staticmethod
+    def pull_current_index(task):
+        """
+        client-callable function to pull the current index from the task.particle class
+
+        Returns
+        -------
+        current_index: int
+            the index of the particle iterator
+        """
+        return task.particle.current_index
 
     @staticmethod
     def pull_protocol_work(task):
@@ -560,9 +589,9 @@ class Particle():
         It simply overwrites the particle.sampler_state, appends to self.label and corrects the work
         """
         task.particle.sampler_state = sampler_state
-        task.particle.sampler_state.update_from_context(task.particle.context)
+        task.particle.sampler_state.apply_to_context(task.particle.context)
         task.particle.label.append(label)
-        task.particle._cumulative_work = work
+        task.particle._cumulative_work[-1] = work
         return task
 
     @staticmethod
@@ -570,8 +599,7 @@ class Particle():
         """
         client-callable function to push a local float (cumulative work) to the task.particle class.
         """
-        task.particle._cumulative_work = work
-        task.particle._protocol_work[-1] = work
+        task.particle._cumulative_work[-1] = work
         return task
 
     @staticmethod

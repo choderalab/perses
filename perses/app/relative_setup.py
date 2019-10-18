@@ -32,7 +32,7 @@ from scipy.special import logsumexp
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
  # define NamedTuples from feptasks
 # EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
@@ -741,10 +741,9 @@ class NonequilibriumSwitchingFEP(object):
 
         #instantiate nonequilibrium work dicts: the keys indicate from which equilibrium thermodynamic state the neq_switching is conducted FROM (as opposed to TO)
         self._nonequilibrium_cum_work = {'forward': [], 'reverse': []}
-        self._nonequilibrium_prot_work = {'forward': [], 'reverse': []}
+        self._nonequilibrium_incremental_work = {'forward': [], 'reverse': []}
         self._nonequilibrium_shadow_work = {'forward': [], 'reverse': []}
         self._nonequilibrium_timers = {'forward': [], 'reverse': []}
-        self._nonequilibrium_kinetic_energies = {'forward': [], 'reverse': []}
 
         # ensure their states are set appropriately
         self._hybrid_alchemical_states = {0: lambda_zero_alchemical_state, 1: lambda_one_alchemical_state}
@@ -1003,16 +1002,17 @@ class NonequilibriumSwitchingFEP(object):
             # sampler_states = self.client.gather(self.client.map(feptasks.Particle.pull_sampler_state))
 
             successes = [feptasks.Particle.pull_success(future) for future in futures]
-            cumulative_works = [feptasks.Particle.pull_cumulative_work(future) for future in futures]
-            protocol_works = [feptasks.Particle.pull_protocol_work(future) for future in futures]
+            works = [feptasks.Particle.pull_cumulative_and_incremental_work(future) for future in futures]
+            cumulative_works = [i for i,j in works]
+            incremental_works = [j for i,j in works]
             shadow_works = [feptasks.Particle.pull_shadow_work(future) for future in futures]
             timers = [feptasks.Particle.pull_timers(future) for future in futures]
             sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
 
-            for future, success, cum_work, prot_work, shadow_work, timer, sampler_state in zip(futures, successes, cumulative_works, protocol_works, shadow_works, timers, sampler_states):
+            for future, success, cum_work, incremental_work, shadow_work, timer, sampler_state in zip(futures, successes, cumulative_works, incremental_works, shadow_works, timers, sampler_states):
                 if success:
                     self._nonequilibrium_cum_work[_direction].append(cum_work)
-                    self._nonequilibrium_prot_work[_direction].append(prot_work)
+                    self._nonequilibrium_incremental_work[_direction].append(incremental_work)
                     self._nonequilibrium_shadow_work[_direction].append(shadow_work)
                     self._nonequilibrium_timers[_direction].append(timer)
                     self.end_sampler_states[_direction].append(sampler_state)
@@ -1065,7 +1065,7 @@ class NonequilibriumSwitchingFEP(object):
         step_counter = 0
         _logger.info(f"All setups are complete; proceeding with annealing and resampling until the final lambda is weighed.")
         while step_counter < self._ncmc_nsteps - 1:
-            _logger.debug(f"\tsteps_counter: {step_counter} / {self._ncmc_nsteps - 1}")
+            _logger.info(f"\tsteps_counter: {step_counter} / {self._ncmc_nsteps - 1}")
             _logger.debug(f"\tdistributing annealing for {check_interval} steps...")
             for _direction, futures in self.particle_futures.items():
                 _logger.debug(f"\t\tdirection: {_direction}")
@@ -1076,11 +1076,6 @@ class NonequilibriumSwitchingFEP(object):
 
             step_counter += check_interval
             _logger.debug(f"\tnew step_counter: {step_counter} / {self._ncmc_nsteps - 1}")
-
-            if step_counter == self._ncmc_nsteps - 1:
-                _logger.debug(f"\tfinal step count is achieved; leaving while loop")
-                #we have reached the max number of steps and should not resample
-                break
 
             #pull cumulative works
             _logger.debug(f"\tattempting to resample...")
@@ -1093,10 +1088,10 @@ class NonequilibriumSwitchingFEP(object):
                 _logger.debug(f"\tincremental works: {works_incremental}")
                 if observable == 'ESS':
                     normalized_observable_value = NonequilibriumSwitchingFEP.ESS(works_prev, works_incremental) / len(works_incremental)
-                    self.observable.append(normalized_observable_value)
                 _logger.debug(f"\tnormalized observable value: {normalized_observable_value}")
                 if normalized_observable_value <= resample_observable_threshold: #then we resample
-                    _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling...")
+                    self.observable.append(1.0)
+                    _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling")
 
                     #pull the sampler states
                     sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
@@ -1109,12 +1104,27 @@ class NonequilibriumSwitchingFEP(object):
                     resample_futures = [feptasks.Particle.push_resamples(future, sampler_state, label, work) for future, sampler_state, label, work in zip(futures, resampled_sampler_states, resampled_labels, resampled_works)]
                     self.particle_futures.update({_direction: resample_futures})
                 else:
+                    self.observable.append(normalized_observable_value)
                     _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
 
                 _logger.debug(f"################################")
-            _logger.debug(f"################################")
-            _logger.debug(f"################################")
+            _logger.debug(f"################################################################")
 
+        #check to ensure that all of the remote timers are equal to the online timer
+        if step_counter == self._ncmc_nsteps - 1:
+            _logger.debug(f"\tfinal step count is achieved; left while loop")
+            for _direction, futures in self.particle_futures.items():
+                #we have reached the max number of steps; check this
+                indices = [feptasks.Particle.pull_current_index(future) for future in futures]
+                if all(index == self._ncmc_nsteps - 1 for index in indices):
+                    pass
+                else:
+                    raise Exception(f"the indices are {indices} but they are not equal to {self._ncmc_nsteps - 1}.  the direction is {_direction}")
+
+
+        #now we can parse the outputs
+        self.gather_results()
+        _logger.info(f"Complete")
 
 
     def adaptive_sMC(self, observable = 'CESS', trailblaze_observable_threshold = None, resample_observable_threshold = 0.9, check_interval = 1, resampling_method = 'multinomial'):
@@ -1291,12 +1301,105 @@ class NonequilibriumSwitchingFEP(object):
                 break
 
 
+    def gather_results(self):
+        """
+        Compact function for gathering results from the Scheduler
+        """
+        _logger.debug(f"Gathering results...")
+
+        #now gather
+        for _direction, futures in self.particle_futures.items():
+            _logger.debug(f"parsing {_direction} direction...")
+            #task_list = self.client.gather(futures, errors = 'skip')
+            # successes = self.client.gather(self.client.map(feptasks.Particle.pull_success, futures))
+            # cumulative_works = self.client.gather(self.client.map(feptasks.Particle.pull_cumulative_work, futures))
+            # protocol_works = self.client.gather(self.client.map(feptasks.Particle.pull_protocol_work, futures))
+            # shadow_works = self.client.gather(self.client.map(feptasks.Particle.pull_shadow_work, futures))
+            # timers = self.client.gather(self.client.map(feptasks.Particle.pull_timers, futures))
+            # sampler_states = self.client.gather(self.client.map(feptasks.Particle.pull_sampler_state))
+
+            successes = [feptasks.Particle.pull_success(future) for future in futures]
+            works = [feptasks.Particle.pull_full_cumulative_and_incremental_works(future) for future in futures]
+            cumulative_works = [i for i,j in works]
+            incremental_works = [j for i,j in works]
+            shadow_works = [feptasks.Particle.pull_shadow_work(future) for future in futures]
+            timers = [feptasks.Particle.pull_timers(future) for future in futures]
+            sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
+
+            for future, success, cum_work, incremental_work, shadow_work, timer, sampler_state in zip(futures, successes, cumulative_works, incremental_works, shadow_works, timers, sampler_states):
+                if success:
+                    self._nonequilibrium_cum_work[_direction].append(cum_work)
+                    self._nonequilibrium_incremental_work[_direction].append(incremental_work)
+                    self._nonequilibrium_shadow_work[_direction].append(shadow_work)
+                    self._nonequilibrium_timers[_direction].append(timer)
+                    self.end_sampler_states[_direction].append(sampler_state)
+                else:
+                    self._failures.append(future.result()) #pull the entire particle class
 
 
+    def compute_sMC_free_energy(self):
+        """
+        Given self._nonequilibrium_cum_work and self._nonequilibrium_incremental_work, compute the free energy profile
+        """
+        from scipy.misc import logsumexp
+        _logger.debug(f"Computing sMC free energy...")
+        #from scipy.misc import logsumexp
+        self.cumulative_weights = {_direction: None for _direction in self._nonequilibrium_cum_work.keys()}
+        self.incremental_weights = {_direction: None for _direction in self._nonequilibrium_incremental_work.keys()}
+        self.dg_profile = {_direction: None for _direction in self._nonequilibrium_incremental_work.keys()}
+        self.cumulative_dg = {_direction: [0.0] for _direction in self._nonequilibrium_incremental_work.keys()}
+        self.dg = {_direction: None for _direction in self._nonequilibrium_incremental_work.keys()}
 
+        for _direction, value in self._nonequilibrium_cum_work.items():
+            _logger.debug(f"Computing cumulative weights {_direction} direction...")
+            #first we have to normalize the cumulative works
+            cum_log_weights = -np.array(self._nonequilibrium_cum_work[_direction])
+            _logger.debug(f"\tcumulative log weights: {cum_log_weights}")
+            if cum_log_weights.size == 0:
+                continue
+            shape = cum_log_weights.shape
+            _logger.debug(f"\tshape of cumulative weights: {shape}")
+            for i in range(shape[1]):
+                normalization_constant = np.exp(logsumexp(cum_log_weights[:,i]))
+                cum_log_weights[:,i] = np.exp(cum_log_weights[:,i]) / normalization_constant
 
+            self.cumulative_weights[_direction] = cum_log_weights
+            _logger.debug(f"\tnormalized cumulative weights: {self.cumulative_weights[_direction]}")
 
+            #then put the incremental weights into a numpy array
+            self.incremental_weights[_direction] = np.exp(-np.array(self._nonequilibrium_incremental_work[_direction]))
+            _logger.debug(f"\tincremental weights: {self.incremental_weights[_direction]}")
 
+        #now we can compute the incremental log coefficients
+        for _direction, value in self.cumulative_weights.items():
+            _logger.debug(f"Computing incremental log coefficients: {_direction} direction.")
+            if value is None:
+                continue
+            cum_weights = np.array([arr[:-1] for arr in value])
+            shape = cum_weights.T.shape
+            mean = []
+            std = []
+            for i in range(shape[0]):
+                mean.append(np.dot(cum_weights.T[i, :], -np.log(self.incremental_weights[_direction][:,i])))
+                _logger.debug(f"\tmean of time {i}: {mean[-1]}")
+                std.append(np.sqrt(np.dot(cum_weights.T[i, :], -np.log(self.incremental_weights[_direction][:,i])**2) - mean[-1]**2))
+                _logger.debug
+            # self.ratio_profile[_direction] = -np.log(np.array(mat))
+            self.dg_profile[_direction] = (mean, std)
+            for i in mean:
+                incremental = self.cumulative_dg[_direction][-1] + i
+                self.cumulative_dg[_direction].append(incremental)
+                
+            _logger.debug(f"\tfree energy profile: {self.dg_profile[_direction]}")
+            self.dg[_direction] = np.sum(self.dg_profile[_direction])
+
+    def compute_AIS_free_energy(self):
+        """
+        Compute the BAR estimate
+        """
+        forward_cum_works = np.array(self._nonequilibrium_cum_work['forward'])[:,-1]
+        reverse_cum_works = np.array(self._nonequilibrium_cum_work['reverse'])[:,-1]
+        self.dg = pymbar.BAR(forward_cum_works, reverse_cum_works, compute_uncertainty=True)
 
 
 
