@@ -354,7 +354,7 @@ class Particle():
         #incremental work
         _logger.debug(f"\t\tupdating incremental and cumulative works")
         self.incremental_work.append(new_rp - old_rp)
-        self._cumulative_work.append(self.incremental_work[-1])
+        self._cumulative_work.append(self._cumulative_work[-1] + self.incremental_work[-1])
         _logger.debug(f"\t\tincremental_work: {self.incremental_work[-1]}")
         _logger.debug(f"\t\tcumulative_work: {self._cumulative_work}")
 
