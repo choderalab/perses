@@ -797,6 +797,7 @@ class NonequilibriumSwitchingFEP(object):
 
         #create observable list
         self.observable = []
+        self.resamples = []
 
         _logger.info(f"constructed")
 
@@ -1092,6 +1093,7 @@ class NonequilibriumSwitchingFEP(object):
                 if normalized_observable_value <= resample_observable_threshold: #then we resample
                     self.observable.append(1.0)
                     _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling")
+                    self.resamples.append(step_counter)
 
                     #pull the sampler states
                     sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
@@ -1389,7 +1391,7 @@ class NonequilibriumSwitchingFEP(object):
             for i in mean:
                 incremental = self.cumulative_dg[_direction][-1] + i
                 self.cumulative_dg[_direction].append(incremental)
-                
+
             _logger.debug(f"\tfree energy profile: {self.dg_profile[_direction]}")
             self.dg[_direction] = np.sum(self.dg_profile[_direction])
 
