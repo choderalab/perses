@@ -1066,7 +1066,7 @@ class NonequilibriumSwitchingFEP(object):
         step_counter = 0
         _logger.info(f"All setups are complete; proceeding with annealing and resampling until the final lambda is weighed.")
         while step_counter < self._ncmc_nsteps - 1:
-            _logger.info(f"\tsteps_counter: {step_counter} / {self._ncmc_nsteps - 1}")
+            _logger.info(f"\tsteps_counter: {step_counter} / {self._ncmc_nsteps - 1}",)
             _logger.debug(f"\tdistributing annealing for {check_interval} steps...")
             for _direction, futures in self.particle_futures.items():
                 _logger.debug(f"\t\tdirection: {_direction}")
