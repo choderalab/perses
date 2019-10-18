@@ -796,7 +796,7 @@ class NonequilibriumSwitchingFEP(object):
         self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
 
         #create observable list
-        self.observable = []
+        self.observable = [1.0]
         self.resamples = []
 
         _logger.info(f"constructed")
