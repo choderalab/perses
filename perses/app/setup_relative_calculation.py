@@ -156,10 +156,6 @@ def run_setup(setup_options):
         - 'topology_proposals':
     """
     phases = setup_options['phases']
-    if len(phases) > 2:
-        _logger.info(f"\tnumber of phases is greater than 2...complex and solvent will be provided...")
-        phases = ['complex', 'solvent']
-
     known_phases = ['complex','solvent','vacuum']
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
@@ -327,8 +323,8 @@ def run_setup(setup_options):
         atom_selection = setup_options['atom_selection']
         _logger.info(f"\tatom selection detected: {atom_selection}")
     else:
-        _logger.info(f"\tno atom selection detected: default to None.")
-        atom_selection = None
+        _logger.info(f"\tno atom selection detected: default to all.")
+        atom_selection = 'all' 
 
     if setup_options['fe_type'] == 'neq':
         _logger.info(f"\tInstantiating nonequilibrium switching FEP")
@@ -538,10 +534,6 @@ if __name__ == "__main__":
             _logger.info(f'\tRunning {phase} phase...')
             hss_run = hss[phase]
 
-            _logger.info(f"\t\tminimizing...\n\n")
-            hss_run.minimize()
-            _logger.info(f"\n\n")
-
             _logger.info(f"\t\tequilibrating...\n\n")
             hss_run.equilibrate(n_equilibration_iterations)
             _logger.info(f"\n\n")
@@ -569,10 +561,6 @@ if __name__ == "__main__":
         for phase in setup_options['phases']:
             print(f'Running {phase} phase')
             hss_run = hss[phase]
-
-            _logger.info(f"\t\tminimizing...\n\n")
-            hss_run.minimize()
-            _logger.info(f"\n\n")
 
             _logger.info(f"\t\tequilibrating...\n\n")
             hss_run.equilibrate(n_equilibration_iterations)

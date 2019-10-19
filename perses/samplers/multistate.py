@@ -109,13 +109,12 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
     def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
               lambda_schedule=None,lambda_protocol=LambdaProtocol()):
 
-        from openmmtools.integrators import FIREMinimizationIntegrator
+        from perses.dispersed import feptasks
 
         hybrid_system = self._factory.hybrid_system
 
-        initial_hybrid_positions = self._factory.hybrid_positions
+        positions = self._factory.hybrid_positions
         lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
-
 
         thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
         compound_thermodynamic_state = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
@@ -123,7 +122,6 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
         thermodynamic_state_list = []
         sampler_state_list = []
 
-        integrator = FIREMinimizationIntegrator()
         context_cache = cache.ContextCache()
 
         if lambda_schedule is None:
@@ -135,28 +133,17 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
             difference = np.diff(lambda_schedule)
             assert ( all(i >= 0. for i in difference ) ), 'lambda_schedule must be monotonicly increasing'
 
-        #starting with the initial positions generated py geometry.py
-        positions = initial_hybrid_positions
+        sampler_state =  SamplerState(positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
+        sampler_state_list = []
         for lambda_val in lambda_schedule:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
-            # now generating a sampler_state for each thermodyanmic state, with relaxed positions
-            context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy,
-                                                        integrator)
-            # set the positions to the end-point of the previous lambda window
-            context.setPositions(positions)
-
-            context_integrator.step(minimisation_steps)
-
-            state = context.getState(getPositions=True)
-            minimized_hybrid_positions = copy.deepcopy(state.getPositions())
-
-            sampler_state = SamplerState(minimized_hybrid_positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
-            sampler_state_list.append(sampler_state)
-            # save the positions for the next iteration
-            positions = minimized_hybrid_positions
+             # now generating a sampler_state for each thermodyanmic state, with relaxed positions
+            context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy)
+            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state) 
+            sampler_state_list.append(copy.deepcopy(sampler_state))
 
          #nonalchemical_thermodynamic_states = [
         #    ThermodynamicState(self._factory._old_system, temperature=temperature),
@@ -182,13 +169,12 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
 
     def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schedule=None,real_endstates=False,lambda_protocol=LambdaProtocol()):
 
-        from openmmtools.integrators import FIREMinimizationIntegrator
+        from perses.dispersed import feptasks
 
         hybrid_system = self._factory.hybrid_system
 
-        initial_hybrid_positions = self._factory.hybrid_positions
+        positions = self._factory.hybrid_positions
         lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(hybrid_system)
-
 
         thermostate = ThermodynamicState(hybrid_system, temperature=temperature)
         compound_thermodynamic_state = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
@@ -196,11 +182,9 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
         thermodynamic_state_list = []
         sampler_state_list = []
 
-        integrator = FIREMinimizationIntegrator()
         context_cache = cache.ContextCache()
 
-        context, _ = context_cache.get_context(compound_thermodynamic_state,
-                                                    integrator)
+        context, _ = context_cache.get_context(compound_thermodynamic_state)
         platform = context.getPlatform()
         logger.info('Setting the platform precision to mixed')
         platform.setPropertyDefaultValue('Precision','mixed')
@@ -216,28 +200,16 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
             assert ( all(i >= 0. for i in difference ) ), 'lambda_schedule must be monotonicly increasing'
 
         #starting with the initial positions generated py geometry.py
-        positions = initial_hybrid_positions
+        sampler_state =  SamplerState(positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
         for lambda_val in lambda_schedule:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
             thermodynamic_state_list.append(compound_thermodynamic_state_copy)
 
              # now generating a sampler_state for each thermodyanmic state, with relaxed positions
-            context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy,
-                                                        integrator)
-            # set the positions to the end-point of the previous lambda window
-            context.setPositions(positions)
-
-            context_integrator.step(minimisation_steps)
-
-            state = context.getState(getPositions=True)
-            minimized_hybrid_positions = copy.deepcopy(state.getPositions())
-
-            sampler_state = SamplerState(minimized_hybrid_positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
-            sampler_state_list.append(sampler_state)
-            # save the positions for the next iteration
-            positions = minimized_hybrid_positions
-
+            context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy)
+            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state) 
+            sampler_state_list.append(copy.deepcopy(sampler_state))
 
          # adding unsampled endstates, wether these are real systems, with a different number of atoms to the hybrid, or hybrid systems with larger cutoffs
         if self._real_endstates == True:
@@ -251,7 +223,7 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
          # changing the non-bonded method for the unsampled endstates
         unsampled_dispersion_endstates = []
         for master_lambda,endstate in zip([0.,1.],unsampled_endstates):
-            context, context_integrator = context_cache.get_context(endstate,integrator)
+            context, context_integrator = context_cache.get_context(endstate)
             dispersion_system = context.getSystem()
             box_vectors = hybrid_system.getDefaultPeriodicBoxVectors()
             dimensions = [x[i] for i,x in enumerate(box_vectors)]
