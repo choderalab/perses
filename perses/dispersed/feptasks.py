@@ -180,6 +180,9 @@ class Particle():
         self.thermodynamic_state.apply_to_context(self.context)
         self.sampler_state.apply_to_context(self.context, ignore_velocities=True)
         self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #randomize velocities @ temp
+        self.integrator.step(1)
+        self.sampler_state.update_from_context(self.context)
+
 
         #create temperatures
         self._beta = 1.0 / (kB*temperature)
@@ -210,7 +213,6 @@ class Particle():
         self._cumulative_work = [0.0]
         self._shadow_work = 0.0
         self._heat = 0.0
-        self._kinetic_energy = []
 
         self._topology = top
         self._subset_atoms = subset_atoms
@@ -232,17 +234,18 @@ class Particle():
         #set a bool variable for pass or failure
         self.succeed = True
         self.failures = []
-        self.incremental_work = []
         _logger.debug(f"Initialization complete!")
 
-    def anneal(self, num_steps = None):
+    def anneal(self, num_steps = None, increment = 1):
         """Propagate the state through the integrator.
         This updates the SamplerState after the integration. It will an mcmc protocol specified by the number of steps
 
         Parameters
         ----------
-        num_steps: int, default is
+        num_steps: int, default None
             number of steps to propagate the particle
+        increment: int, default 1
+            the lambda index to increment for each step
         """
         _logger.info(f"Annealing {num_steps} steps...")
         _logger.debug(f"\tcurrent labels: {self.label}")
@@ -253,61 +256,45 @@ class Particle():
         if self.current_index == len(self.lambdas) - 1:
             raise Exception(f"the lambda protocol is already complete")
 
-        if self.current_index + num_steps >= len(self.lambdas):
-            raise Exception(f"you specified {num_steps} steps, but there are only {len(self.lambdas)} lambda values, or {len(self.lambdas) - 1} steps to be conducted...aborting!")
-
-
-        # Check if we have to use the global cache.
-        if self.context_cache is None:
-            context_cache = cache.global_context_cache
-        else:
-            context_cache = self.context_cache
+        if self.current_index + num_steps * increment >= len(self.lambdas):
+            raise Exception(f"you specified {num_steps * increment} steps, but there are only {len(self.lambdas)} lambda values, or {len(self.lambdas) - 1} steps to be conducted...aborting!")
 
         _logger.debug(f"conducting iteration loop")
         for _ in range(num_steps): #anneal for step steps
             try:
+                #print current state
                 prep_start = time.time()
-
-                #if t = 0, then we compute the weight wrt the next state
                 current_lambda = self.lambdas[self.current_index]
                 _logger.info(f"\tcurrent index: {self.current_index} / {len(self.lambdas) - 1}")
                 _logger.info(f"\tcurrent lambda: {self.thermodynamic_state.global_lambda}")
 
-                if self.current_index == 0: #then this is the first iteration, so we have to compute the incremental weight
+                #compute the importance weights and increment lambda
+                self.compute_incremental_work(self.current_index + increment)
+                _logger.debug(f"\tincrementing current index by {increment}")
+                self.current_index += increment
+                _logger.info(f"final lambda: {self.current_index} / {len(self.lambdas) - 1}")
+                _logger.info(f"\tcurrent lambda: {self.thermodynamic_state.global_lambda}")
 
-                    _logger.debug(f"\tfirst iteration: computing incremental work")
-                    self.compute_incremental_work(self.current_index + 1)
-                    _logger.info(f"\tincremental work: {self.incremental_work}")
-                    _logger.debug(f"\tsampler state positions: {self.sampler_state.positions}")
-
-                else:
-                    _logger.debug(f"\tintegrating one step")
-                    _logger.debug(f"\tsampler state positions: {self.sampler_state.positions}")
-                    self.integrator.step(1)
-                    _logger.debug(f"\tcomputing incremental work")
-                    self.compute_incremental_work(self.current_index + 1)
-                    _logger.info(f"\tincremental work: {self.incremental_work}")
-                    #we can resample outside of this if necessary
+                #sample next state
+                _logger.debug(f"\tintegrating one step")
+                self.integrator.step(1)
 
                 #save protocol time
                 self._timers['protocol'].append(time.time() - prep_start)
                 _logger.debug(f"\tlocal timer: {self._timers['protocol'][-1]}")
 
-                #now to increment the current_index
-                _logger.debug(f"\tincrementing current index")
-                self.current_index += 1
-                _logger.info(f"final lambda: {self.current_index} / {len(self.lambdas) - 1}")
-                _logger.info(f"\tcurrent lambda: {self.thermodynamic_state.global_lambda}")
-
                 #save configuration
                 _logger.debug(f"\tsaving configuration")
                 self.save_configuration()
+
+                #we can resample outside of this if necessary
 
             except Exception as e:
                 _logger.info(f"\tdetected failure: {e}")
                 self.succeed = False
                 self.failures.append(e)
             _logger.info(f"###########################")
+
         #now just update the sampler state
         _logger.debug(f"updating sampler state from context")
         self.sampler_state.update_from_context(self.context)
@@ -353,11 +340,8 @@ class Particle():
 
         #incremental work
         _logger.debug(f"\t\tupdating incremental and cumulative works")
-        self.incremental_work.append(new_rp - old_rp)
-        self._cumulative_work.append(self._cumulative_work[-1] + self.incremental_work[-1])
-        _logger.debug(f"\t\tincremental_work: {self.incremental_work[-1]}")
+        self._cumulative_work.append(self._cumulative_work[-1] + (new_rp - old_rp))
         _logger.debug(f"\t\tcumulative_work: {self._cumulative_work}")
-
 
 
     def save_configuration(self):
@@ -405,7 +389,7 @@ class Particle():
              sampler_state: (<openmmtools.states.SamplerState>; sampler state from which to anneal)
              direction: (<str>; 'forward' or 'reverse')
              topology: (<mdtraj.Topology>; an MDTraj topology object used to construct the trajectory),
-             nsteps_neq: (<int, default None; number of nonequilibrium steps in the protocol>),
+             n_lambdas: (<int, default None; number of nonequilibrium steps in the protocol>),
              work_save_interval: (<int>; how often to write the work and, if requested, configurations),
              splitting: (<str>; The splitting string for the dynamics),
              atom_indices_to_save: (<list of int, default None>; list of indices to save when excluding waters, for instance. If None, all indices are saved.),
@@ -439,7 +423,7 @@ class Particle():
         _logger.debug(f"Instantiating NonequilibriumSwitchingMove class")
         particle = Particle(thermodynamic_state = thermodynamic_state,
                             sampler_state = sampler_state,
-                            nsteps = inputs_dict['nsteps_neq'],
+                            nsteps = inputs_dict['n_lambdas'],
                             direction = inputs_dict['direction'],
                             splitting = inputs_dict['splitting'],
                             temperature = thermodynamic_state.temperature,
@@ -456,7 +440,7 @@ class Particle():
         return NonequilibriumFEPTask(particle = particle, inputs = inputs_dict)
 
     @staticmethod
-    def distribute_anneal(task, num_steps):
+    def distribute_anneal(task, num_steps, increment = 1):
         """
         client-callable function to call Particle.anneal method
 
@@ -466,6 +450,8 @@ class Particle():
             the particle-containing task on which to call Particle.anneal()
         num_steps: int
             number of steps to take
+        increment: int
+            the number of lambda increments per step
 
         Returns
         -------
@@ -473,7 +459,7 @@ class Particle():
             the particle-containing task on which anneal was called
 
         """
-        task.particle.anneal(num_steps)
+        task.particle.anneal(num_steps, increment)
         return task
 
     @staticmethod
@@ -503,46 +489,25 @@ class Particle():
         return task.particle._cumulative_work[-1]
 
     @staticmethod
-    def pull_incremental_work(task):
+    def pull_cumulative_work_profile(task):
         """
-        client-callable function to pull the last incremental work from the task.particle class
+        client-callable function to pull the cumulative_work profile from the task.particle class
         """
-        return task.particle.incremental_work[-1]
+        return task.particle._cumulative_work
+
 
     @staticmethod
-    def pull_cumulative_and_incremental_work(task):
+    def pull_work_increments(task):
         """
-        client-callable function to pull the cumulative_work and incremental_work from the task.particle class
+        client-callable function to pull the last two cumulative works from the task.particle class
 
         Returns
         -------
-        cumulative_work: float
-            the cumulative work of the protocol; this is the work_(t-1) + incremental_work
-        incremental_work: float
-            the incremental work of the protocol
+        work_increments: tuple(float, float)
+            last two accumulated work values of the Particle._cumulative_work list
         """
-        cumulative_work = Particle.pull_cumulative_work(task)
-        incremental_work = Particle.pull_incremental_work(task)
-        return cumulative_work, incremental_work
 
-    @staticmethod
-    def pull_full_cumulative_and_incremental_works(task):
-        """
-        client-callable function to pull the cumulative_work and incremental_work from the task.particle class
-
-        Returns
-        -------
-        cumulative_work: float
-            the cumulative work of the protocol; this is the work_(t-1) + incremental_work
-        incremental_work: float
-            the incremental work of the protocol
-        """
-        cumulative_work = task.particle._cumulative_work
-        incremental_work = task.particle.incremental_work
-        return cumulative_work, incremental_work
-
-
-
+        return task.particle._cumulative_work[-2:]
 
     @staticmethod
     def pull_current_index(task):
@@ -557,30 +522,33 @@ class Particle():
         return task.particle.current_index
 
     @staticmethod
-    def pull_protocol_work(task):
-        """
-        client-callable function to pull the protocol work from the task.particle class
-        """
-        return task.particle._protocol_work
-
-    @staticmethod
     def pull_shadow_work(task):
         """
         client-callable function to pull the shadow_work from the task.particle class
         """
         return task.particle._shadow_work
 
+    @staticmethod
     def pull_timers(task):
         """
         client-callable function to pull the _timers dict from the task.particle class
         """
         return task.particle._timers
 
+    @staticmethod
     def pull_success(task):
         """
         client-callable function to pull the success bool from the task.particle_class
         """
         return task.particle.succeed
+
+    @staticmethod
+    def pull_labels(task):
+        """
+        client-callable function to pull the label from the task.particle_class
+        """
+        return task.particle.label
+
 
     @staticmethod
     def push_resamples(task, sampler_state, label, work):
@@ -616,7 +584,7 @@ class Particle():
 
         valid_keys = ['thermodynamic_state',
                       'sampler_state',
-                      'nsteps_neq',
+                      'n_lambdas',
                       'direction',
                       'splitting',
                       'timestep',

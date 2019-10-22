@@ -32,7 +32,7 @@ from scipy.special import logsumexp
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.DEBUG)
 
  # define NamedTuples from feptasks
 # EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
@@ -608,7 +608,7 @@ class NonequilibriumSwitchingFEP(object):
     """
 
     def __init__(self, hybrid_factory, geometry_engine, use_dispersion_correction=False, protocol = 'default',
-                 ncmc_nsteps = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
+                 n_lambdas = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
                  atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
                  ncmc_save_interval = None, write_ncmc_configuration = False):
         """
@@ -625,7 +625,7 @@ class NonequilibriumSwitchingFEP(object):
             Whether to use the (expensive) dispersion correction
         protocol : dict of str: str, default protocol as defined by top of file
             How each force's scaling parameter relates to the main lambda that is switched by the integrator from 0 to 1
-        ncmc_nsteps : int, default 100
+        n_lambdas : int, default 100
             Number of steps per NCMC trajectory
         n_equilibrium_steps_per_iteration : int, default 100
             Number of steps to run in an iteration of equilibration to generate an iid sample
@@ -644,7 +644,7 @@ class NonequilibriumSwitchingFEP(object):
             The integrator splitting to use for nonequilibrium switching simulation
         ncmc_save_interval : int, default None
             interval with which to write ncmc trajectory.  If None, trajectory will not be saved.
-            We will assert that the ncmc_nsteps % ncmc_save_interval = 0; otherwise, the protocol will not be complete
+            We will assert that the n_lambdas % ncmc_save_interval = 0; otherwise, the protocol will not be complete
         write_ncmc_configuration : bool, default False
             whether to write ncmc annealing perturbations; if True, will write every ncmc_save_interval iterations
         """
@@ -657,12 +657,12 @@ class NonequilibriumSwitchingFEP(object):
         self._factory = hybrid_factory
         topology_proposal = self._factory._topology_proposal
         self.geometry_engine = geometry_engine
-        self._ncmc_save_interval = ncmc_nsteps if not ncmc_save_interval else ncmc_save_interval
+        self._ncmc_save_interval = n_lambdas if not ncmc_save_interval else ncmc_save_interval
         _logger.debug(f"ncmc save interval set as {self._ncmc_save_interval}")
 
-        #we have to make sure that there is no remainder from ncmc_nsteps % ncmc_save_interval
+        #we have to make sure that there is no remainder from n_lambdas % ncmc_save_interval
         try:
-            assert ncmc_nsteps % self._ncmc_save_interval == 0
+            assert n_lambdas % self._ncmc_save_interval == 0
         except ValueError:
             print(f"The work writing interval must be a factor of the total number of ncmc steps; otherwise, the ncmc protocol is incomplete!")
 
@@ -679,7 +679,7 @@ class NonequilibriumSwitchingFEP(object):
         # set up some class attributes
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
-        self._ncmc_nsteps = ncmc_nsteps
+        self._n_lambdas = n_lambdas
         self._n_equil_steps = n_equilibrium_steps_per_iteration
         self._trajectory_prefix = trajectory_prefix
         self._trajectory_directory = trajectory_directory
@@ -740,10 +740,14 @@ class NonequilibriumSwitchingFEP(object):
 
 
         #instantiate nonequilibrium work dicts: the keys indicate from which equilibrium thermodynamic state the neq_switching is conducted FROM (as opposed to TO)
-        self._nonequilibrium_cum_work = {'forward': [], 'reverse': []}
-        self._nonequilibrium_incremental_work = {'forward': [], 'reverse': []}
-        self._nonequilibrium_shadow_work = {'forward': [], 'reverse': []}
-        self._nonequilibrium_timers = {'forward': [], 'reverse': []}
+        self._nonequilibrium_cumulative_work = {'forward': None, 'reverse': None}
+        self._nonequilibrium_shadow_work = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self._nonequilibrium_timers = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self._failures = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self.path_degeneracy = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self.dg_profile = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self.dg = None
+
 
         # ensure their states are set appropriately
         self._hybrid_alchemical_states = {0: lambda_zero_alchemical_state, 1: lambda_one_alchemical_state}
@@ -764,7 +768,6 @@ class NonequilibriumSwitchingFEP(object):
                                                                            composable_states=[
                                                                                self._hybrid_alchemical_states[1]])}
 
-        self._ncmc_nsteps = ncmc_nsteps
         self._temperature = temperature
 
         # set the SamplerState for the lambda 0 and 1 equilibrium simulations
@@ -788,17 +791,15 @@ class NonequilibriumSwitchingFEP(object):
         else:
             self._atom_selection_indices = None
 
-        # set up a list of failures
-        self._failures = []
 
         # create an empty dict of starting and ending sampler_states
         self.start_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
         self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
 
         #create observable list
-        self.observable = [1.0]
-        self.resamples = []
-
+        self.observable = {_direction: [(0, 1.0)] for _direction in ['forward', 'reverse']}
+        self.allowable_resampling_methods = ['multinomial']
+        self.allowable_observables = ['ESS', 'CESS']
         _logger.info(f"constructed")
 
     def activate_client(self, LSF = True, processes = 2, adapt = False):
@@ -927,12 +928,11 @@ class NonequilibriumSwitchingFEP(object):
             for start_lambda, end_lambda, _direction in zip(start, end, directions):
                 #create a unique thermodynamic state
                 thermodynamic_state = copy.deepcopy(self._hybrid_thermodynamic_states[start_lambda])
-                thermodynamic_state.set_alchemical_parameters(np.random.uniform(), lambda_protocol=LambdaProtocol(functions = self._protocol))
                 inputs_dict = {'thermodynamic_state': thermodynamic_state,
                                'sampler_state': None,
                                'direction': _direction,
                                'topology': self._factory._hybrid_topology,
-                               'nsteps_neq': self._ncmc_nsteps,
+                               'n_lambdas': self._n_lambdas,
                                'work_save_interval': self._ncmc_save_interval,
                                'splitting': self._neq_splitting_string,
                                'atom_indices_to_save': self._atom_selection_indices,
@@ -974,52 +974,6 @@ class NonequilibriumSwitchingFEP(object):
             futures = [feptasks.Particle.launch_particle(i) for i in NonequilibriumFEPSetup_dict[_direction]]
             self.particle_futures[_direction] = futures
 
-    def AIS(self):
-        """
-        Annealed Importance Sampling: call the feptasks.Particle.anneal function on each particle in self.particle_futures
-        """
-        #map the distributed annealing jobs
-        for _direction, futures in self.particle_futures.items():
-            steps = [self._ncmc_nsteps - 1] * len(futures)
-            #AIS_futures = self.client.map(feptasks.distribute_anneal, futures, steps)
-            AIS_futures = [feptasks.Particle.distribute_anneal(future, step) for future, step in zip(futures, steps)]
-            self.particle_futures.update({_direction: AIS_futures})
-
-        #check progress
-        combined_futures = []
-        for value in self.particle_futures.values():
-            combined_futures += value
-        # distributed.progress(combined_futures)
-        # distributed.wait(combined_futures)
-
-        #now gather
-        for _direction, futures in self.particle_futures.items():
-            #task_list = self.client.gather(futures, errors = 'skip')
-            # successes = self.client.gather(self.client.map(feptasks.Particle.pull_success, futures))
-            # cumulative_works = self.client.gather(self.client.map(feptasks.Particle.pull_cumulative_work, futures))
-            # protocol_works = self.client.gather(self.client.map(feptasks.Particle.pull_protocol_work, futures))
-            # shadow_works = self.client.gather(self.client.map(feptasks.Particle.pull_shadow_work, futures))
-            # timers = self.client.gather(self.client.map(feptasks.Particle.pull_timers, futures))
-            # sampler_states = self.client.gather(self.client.map(feptasks.Particle.pull_sampler_state))
-
-            successes = [feptasks.Particle.pull_success(future) for future in futures]
-            works = [feptasks.Particle.pull_cumulative_and_incremental_work(future) for future in futures]
-            cumulative_works = [i for i,j in works]
-            incremental_works = [j for i,j in works]
-            shadow_works = [feptasks.Particle.pull_shadow_work(future) for future in futures]
-            timers = [feptasks.Particle.pull_timers(future) for future in futures]
-            sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
-
-            for future, success, cum_work, incremental_work, shadow_work, timer, sampler_state in zip(futures, successes, cumulative_works, incremental_works, shadow_works, timers, sampler_states):
-                if success:
-                    self._nonequilibrium_cum_work[_direction].append(cum_work)
-                    self._nonequilibrium_incremental_work[_direction].append(incremental_work)
-                    self._nonequilibrium_shadow_work[_direction].append(shadow_work)
-                    self._nonequilibrium_timers[_direction].append(timer)
-                    self.end_sampler_states[_direction].append(sampler_state)
-                else:
-                    self._failures.append(future.result()) #pull the entire particle class
-
     def resampling_adaptive_sMC(self, observable = 'ESS', resample_observable_threshold = 0.9, check_interval = 1, resampling_method = 'multinomial'):
         """
         Conduct annealed importance sampling with adaptive resampling.
@@ -1042,31 +996,25 @@ class NonequilibriumSwitchingFEP(object):
         _logger.info(f"Conducting resampling adaptive sMC...")
 
         #check resampler
-        if resampling_method != 'multinomial':
+        if resampling_method not in self.allowable_resampling_methods:
             raise Exception(f"{resampling_method} is not a currently supported resampling method.")
 
         #check observable
-        if observable != 'ESS':
+        if observable not in self.allowable_observables:
             raise Exception(f"{observable} is not a currently supported observable")
 
-        if check_interval >= self._ncmc_nsteps - 1:
-            raise Exception(f"the check interval was specified as {check_interval}, but only {self._ncmc_nsteps - 1} annealing steps can be called.  Aborting!")
-        elif (self._ncmc_nsteps - 1) % check_interval != 0:
-            raise Exception(f"the check interval ({check_interval}) does not evenly divide into the number of annealing steps ({self._ncmc_nsteps}) to be had.  Aborting!")
+        #ensure that the check interval is a factor of the number of _n_lambdas
+        if check_interval >= self._n_lambdas - 1:
+            raise Exception(f"the check interval was specified as {check_interval}, but only {self._n_lambdas - 1} annealing steps can be called.  Aborting!")
+        elif (self._n_lambdas - 1) % check_interval != 0:
+            raise Exception(f"the check interval ({check_interval}) does not evenly divide into the number of annealing steps ({self._n_lambdas}) to be had.  Aborting!")
         else:
-            max_number_of_resamples = (self._ncmc_nsteps - 1) // check_interval
-
-        online_protocols = {}
-        for _direction in self.particle_futures.keys(): #instantiate the online protocol timers
-            if _direction == 'forward':
-                online_protocols[_direction] = np.linspace(0, 1, self._ncmc_nsteps)
-            elif _direction == 'reverse':
-                online_protocols[_direction] = np.linspace(1, 0, self._ncmc_nsteps)
+            max_number_of_resamples = (self._n_lambdas - 1) // check_interval
 
         step_counter = 0
         _logger.info(f"All setups are complete; proceeding with annealing and resampling until the final lambda is weighed.")
-        while step_counter < self._ncmc_nsteps - 1:
-            _logger.info(f"\tsteps_counter: {step_counter} / {self._ncmc_nsteps - 1}",)
+        while step_counter < self._n_lambdas - 1:
+            _logger.info(f"\tsteps_counter: {step_counter} / {self._n_lambdas - 1}")
             _logger.debug(f"\tdistributing annealing for {check_interval} steps...")
             for _direction, futures in self.particle_futures.items():
                 _logger.debug(f"\t\tdirection: {_direction}")
@@ -1076,231 +1024,105 @@ class NonequilibriumSwitchingFEP(object):
                 self.particle_futures.update({_direction: AIS_futures})
 
             step_counter += check_interval
-            _logger.debug(f"\tnew step_counter: {step_counter} / {self._ncmc_nsteps - 1}")
+            _logger.debug(f"\tnew step_counter: {step_counter} / {self._n_lambdas - 1}")
 
-            #pull cumulative works
-            _logger.debug(f"\tattempting to resample...")
-            for _direction, futures in self.particle_futures.items():
-                _logger.debug(f"\t\tdirection: {_direction}")
-                work_tuples = [feptasks.Particle.pull_cumulative_and_incremental_work(future) for future in futures]
-                cumulative_works = np.array([tup[0] for tup in work_tuples])
-                works_prev = np.array([tup[0] - tup[1] for tup in work_tuples])
-                works_incremental = np.array([tup[1] for tup in work_tuples])
-                _logger.debug(f"\tincremental works: {works_incremental}")
-                if observable == 'ESS':
-                    normalized_observable_value = NonequilibriumSwitchingFEP.ESS(works_prev, works_incremental) / len(works_incremental)
-                _logger.debug(f"\tnormalized observable value: {normalized_observable_value}")
-                if normalized_observable_value <= resample_observable_threshold: #then we resample
-                    self.observable.append(1.0)
-                    _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling")
-                    self.resamples.append(step_counter)
-
-                    #pull the sampler states
-                    sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
-
-                    #resample
-                    resampled_works, resampled_sampler_states, resampled_labels = NonequilibriumSwitchingFEP.multinomial_resample(cumulative_works, sampler_states, num_resamples = len(sampler_states))
-                    _logger.debug(f"\tresampled labels: {resampled_labels}")
-
-                    #push resamples
-                    resample_futures = [feptasks.Particle.push_resamples(future, sampler_state, label, work) for future, sampler_state, label, work in zip(futures, resampled_sampler_states, resampled_labels, resampled_works)]
-                    self.particle_futures.update({_direction: resample_futures})
-                else:
-                    self.observable.append(normalized_observable_value)
-                    _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
-
-                _logger.debug(f"################################")
+            #attempt to resample all directions
+            normalized_observable_values = self.attempt_resample(observable = observable, resampling_method = resampling_method, resample_observable_threshold = resample_observable_threshold)
+            [self.observable[_direction].append((step_counter, i)) for _direction, i in normalized_observable_values.items()]
             _logger.debug(f"################################################################")
 
         #check to ensure that all of the remote timers are equal to the online timer
-        if step_counter == self._ncmc_nsteps - 1:
+        if step_counter == self._n_lambdas - 1:
             _logger.debug(f"\tfinal step count is achieved; left while loop")
             for _direction, futures in self.particle_futures.items():
                 #we have reached the max number of steps; check this
                 indices = [feptasks.Particle.pull_current_index(future) for future in futures]
-                if all(index == self._ncmc_nsteps - 1 for index in indices):
+                if all(index == self._n_lambdas - 1 for index in indices):
                     pass
                 else:
-                    raise Exception(f"the indices are {indices} but they are not equal to {self._ncmc_nsteps - 1}.  the direction is {_direction}")
+                    raise Exception(f"the indices are {indices} but they are not equal to {self._n_lambdas - 1}.  the direction is {_direction}")
 
 
         #now we can parse the outputs
         self.gather_results()
+
+        #and then we can compute the free energy
+        self.compute_sMC_free_energy()
         _logger.info(f"Complete")
 
-
-    def adaptive_sMC(self, observable = 'CESS', trailblaze_observable_threshold = None, resample_observable_threshold = 0.9, check_interval = 1, resampling_method = 'multinomial'):
+    def algorithm_4(self, observable = 'ESS', trailblaze_observable_threshold = None, resample_observable_threshold = 0.9, check_interval = 1, resampling_method = 'multinomial'):
         """
-        Conduct annealed importance sampling with adaptive resampling and automatic proposal update (trailblaze on lambda parameter).
-        The algorithm proceeds as follows:
-            1. given a current lambda, if trailblaze_observable_threshold is not None (it must be between 0 and 1):
-                use binary search to find the next lambda that does not exceed the threshold
-            2. update the online and Particle lambdas to the corresponding index
-            3. if the resample_observable_threshold is exceeded, resample
-            4. repeat 1-3 until lambda = 1
-
-        Parameters
-        ----------
-        observable : str, default 'CESS'
-            the observable used to check trailblaze_observable_threshold and resample_observable_threshold
-        trailblaze_observable_threshold : float, default None
-            float between 0 and 1. if None, trailblaze is disabled
-        resample_observable_threshold : float
-            float between 0 and 1. if observable is below this, resampling is conducted
-        check_interval : int, default 1
-            the interval with which to conduct annealing (i.e. n steps of annealing will be conducted)
-        check_interval : int, default 1
-            the interval with which to conduct resampling if the CESS_threshold is surpassed.
-            Default is to check after every step of annealing
-        resampling method : str, default 'multinomial'
-            the method used to resample. The default is multinomial.
-            Multinomial is the only accepted resampling scheme at the moment.
+        conduct algorithm 4 according to https://arxiv.org/abs/1303.3123
+        It consists of the following procedure:
+        1.  trailblaze the next incremental lambda value with a dense, linear spacing of lambdas
+        2.
         """
-        online_protocols = {}
-        if check_interval >= self._ncmc_nsteps - 1:
-            raise Exception(f"the check interval was specified as {check_interval}, but only {self._ncmc_nsteps - 1} annealing steps can be called.  Aborting!")
-        elif (self._ncmc_nsteps - 1) % check_interval != 0:
-            raise Exception(f"the check interval ({check_interval}) does not evenly divide into the number of annealing steps ({self._ncmc_nsteps}) to be had.  Aborting!")
-        else:
-            max_number_of_resamples = (self._ncmc_nsteps - 1) // check_interval
+        _logger.info(f"Conducting resampling adaptive sMC with trailblaze...")
 
         #check resampler
-        if resampling_method != 'multinomial':
+        if resampling_method not in self.allowable_resampling_methods:
             raise Exception(f"{resampling_method} is not a currently supported resampling method.")
 
         #check observable
-        if observable != 'CESS':
+        if observable not in self.allowable_observables:
             raise Exception(f"{observable} is not a currently supported observable")
-
-        #define some online protocols for reference
-        online_protocols = {'forward': np.linspace(0, 1, self._ncmc_nsteps), 'reverse': np.linspace(1, 0, self._ncmc_nsteps)}
-        online_protocol_counters = {_direction: 0 for _direction in self.particle_futures.keys()}
-        online_cumulative_works = {_direction: np.array([0.0]*len(self.particle_futures[_direction])) for _direction in self.particle_futures.keys()}
-        online_completion_counter = {_direction: False for _direction in self.particle_futures.keys()}
 
         #check trailblaze
         if trailblaze_observable_threshold is None:
             trailblaze = False
         else:
-            if trailblaze_observable_threshold > 1.0 or trailblaze_observable_threshold < 0.0:
-                raise Exception(f"the trailblaze observable threshold was set to {trailblaze_observable_threshold}, but it must be between 0 and 1")
             trailblaze = True
 
-        #check resample_observable_threshold
-        if resample_observable_threshold > 1.0 or resample_observable_threshold < 0.0:
-            raise Exception(f"the resample observable threshold was set to {resample_observable_threshold}, but it must be between 0 and 1")
+        #ensure that the check interval is a factor of the number of _n_lambdas
+        if check_interval >= self._n_lambdas - 1:
+            raise Exception(f"the check interval was specified as {check_interval}, but only {self._n_lambdas - 1} annealing steps can be called.  Aborting!")
+        elif (self._n_lambdas - 1) % check_interval != 0:
+            raise Exception(f"the check interval ({check_interval}) does not evenly divide into the number of annealing steps ({self._n_lambdas}) to be had.  Aborting!")
+        else:
+            max_number_of_resamples = (self._n_lambdas - 1) // check_interval
 
-        #now run the while loop until completion of both directions (if specified)
+        self.step_counters = {_direction: 0 for _direction in self.particle_futures.keys()}
+        online_protocols = {'forward': np.linspace(0, 1, self._n_lambdas), 'reverse': np.linspace(1, 0, self._n_lambdas)}
 
-        while True: #be vewy vewy caweful
-            for _direction, futures in self.particle_futures.items():
-                if online_completion_counter[_direction]:
-                    continue
-                if trailblaze:
-                    cumulative_works = np.array([feptasks.Particle.pull_cumulative_work(future) for future in futures])
-                    sampler_states = np.array([feptasks.Particle.pull_sampler_state(future) for future in futures])
-                    index = self.binary_search(lambdas = online_protocols[_direction],
-                                                   current_index = online_protocol_counters[_direction],
-                                                   cumulative_works = cumulative_works,
-                                                   sampler_states = sampler_states,
-                                                   thermodynamic_state = copy.deepcopy(sef._hybrid_alchemical_states[0]),
-                                                   observable_measure = observable,
-                                                   observable_threshold = trailblaze_observable_threshold)
-                    online_protocol_counters.update({_direction: index})
+        _logger.info(f"All setups are complete; proceeding with annealing and resampling until the final lambda is weighed.")
+        while any(val < self._n_lambdas - 1 for val in self.step_counters.values()):
+            _logger.info(f"\tstep_counters: {[(_direction + ': ' + str(val) + '/' + str(self._n_lambdas - 1)) for _direction, val in self.step_counters.items()]}")
 
-                    #now we have to update the particles in place
-                    [feptasks.Particle.update_incremental_work(future, index) for future in futures]
-
-                    #attempt to resample
-                    incremental_works = np.array([feptasks.Particle.pull_incremental_work(future) for future in futures])
-                    if observable == 'CESS':
-                        observable_measure = NonequilibriumSwitchingFEP.CESS(cumulative_works, incremental_works)
-
-                    if observable_measure / len(incremental_works) <= resample_observable_threshold: #then we resample
-                        if resampling_method == 'multinomial':
-                            resampled_works, resampled_sampler_states, resampled_labels = NonequilibriumSwitchingFEP.multinomial_resample(cumulative_works, sampler_states, num_resamples = len(sampler_states))
-
-                        #push resamples
-                        [feptasks.Particle.push_resamples(future, sampler_state, label, work) for future, sampler_state, label, work in zip(futures, resampled_sampler_states, resampled_labels, resampled_works)]
-
-                #Now, check if we have reached the last index
-                if online_protocol_counters[_direction] == self._ncmc_nsteps - 1:
-                    online_completion_counter.update({_direction : True})
-
-                #attempt to propagate
+            #we attempt to trailblaze
+            if trailblaze:
+                _logger.debug(f"\ttrailblaze is True; trailblazing...")
+                self.trailblaze(thermodynamic_state = copy.deepcopy(self._hybrid_thermodynamic_states[0]),
+                                observable = observable,
+                                observable_threshold = trailblaze_observable_threshold)
+            else: #we increment by 1
                 for _direction, futures in self.particle_futures.items():
-                    if online_completion_counter[_direction]:
-                        continue
-
-                    #decide whether we can propagate by check_interval
-                    if online_protocol_counters[_direction] + check_interval >= self._ncmc_nsteps - 1:
-                        #incrementing by check_interval will overshoot the target lambda
-                        increment = self._ncmc_nsteps - 1 - online_protocol_counters[_direction]
-                    else:
-                        increment = check_interval
-
-                    #increment
-                    AIS_futures = [feptasks.Particle.distribute_anneal(future, increment) for future in futures]
+                    if self.step_counters[_direction] == self._n_lambdas - 1:
+                        continue #if the step counter is at the last lambda index, we continue
+                    AIS_futures = [feptasks.Particle.distribute_anneal(future, check_interval) for future in futures]
                     self.particle_futures.update({_direction: AIS_futures})
 
-                    #update online protocol counters
-                    online_protocol_counters.update({_direction: increment})
+                    self.step_counters[_direction] += check_interval
+                    _logger.debug(f"\tnew step_counter: {self.step_counters[_direction]} / {self._n_lambdas - 1}")
 
-                    #update online completion counter
-                    if online_protocol_counters[_direction] == self._ncmc_nsteps - 1: #set the completion boolean
-                        online_completion_counter.update({_direction: True})
+            #attempt to resample all directions
+            normalized_observable_values = self.attempt_resample(observable = observable, resampling_method = resampling_method, resample_observable_threshold = resample_observable_threshold)
+            [self.observable[_direction].append((self.step_counters[_direction], i)) for _direction, i in normalized_observable_values.items()]
 
-                #attempt to resample
-                for _direction, futures in self.particle_futures.items():
-                    if online_completion_counter[_direction]:
-                        continue
+        #check to ensure that all of the remote timers are equal to the online timer
+        for _direction, futures in self.particle_futures.items():
+            #we have reached the max number of steps; check this
+            indices = [feptasks.Particle.pull_current_index(future) for future in futures]
+            if all(index == self._n_lambdas - 1 for index in indices):
+                pass
+            else:
+                raise Exception(f"the indices are {indices} but they are not equal to {self._n_lambdas - 1}.  the direction is {_direction}")
 
-                    work_tuples = [feptasks.Particle.pull_cumulative_and_incremental_work(future) for future in futures]
-                    cumulative_works = np.array([tup[0] for tup in work_tuples])
-                    works_prev = np.array([tup[0] - tup[1] for tup in work_tuples])
-                    incremental_works = np.array([tup[1] for tup in work_tuples])
+        #now we can parse the outputs
+        self.gather_results()
 
-                    if observable == 'CESS':
-                        observable_measure = NonequilibriumSwitchingFEP.CESS(works_prev, incremental_works)
-
-                    if observable_measure / len(incremental_works) <= resample_observable_threshold: #then we resample
-                        #pull the sampler states
-                        sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
-
-                        if resampling_method == 'multinomial': #resample
-                            resampled_works, resampled_sampler_states, resampled_labels = NonequilibriumSwitchingFEP.multinomial_resample(cumulative_works, sampler_states, num_resamples = len(sampler_states))
-
-                        #push resamples
-                        resample_futures = [feptasks.Particle.push_resamples(future, sampler_state, label, work) for future, sampler_state, label, work in zip(futures, resampled_sampler_states, resampled_labels, resampled_works)]
-                        self.particle_futures.update({_direction: resample_futures})
-
-                #check if we can terminate the loop
-                if all(val == True for val in online_completion_counter.values()):
-                    break
-
-
-
-
-
-
-
-
-
-                #now check if we can increment the
-
-
-
-
-
-
-
-                AIS_futures = [feptasks.Particle.distribute_anneal(future, check_interval) for future in futures]
-
-            step_counter += check_interval
-
-            if step_counter == self._ncmc_nsteps - 1:
-                #we have reached the max number of steps and should not resample
-                break
+        #and then we can compute the free energy
+        self.compute_sMC_free_energy()
+        _logger.info(f"Complete")
 
 
     def gather_results(self):
@@ -1321,97 +1143,100 @@ class NonequilibriumSwitchingFEP(object):
             # sampler_states = self.client.gather(self.client.map(feptasks.Particle.pull_sampler_state))
 
             successes = [feptasks.Particle.pull_success(future) for future in futures]
-            works = [feptasks.Particle.pull_full_cumulative_and_incremental_works(future) for future in futures]
-            cumulative_works = [i for i,j in works]
-            incremental_works = [j for i,j in works]
-            shadow_works = [feptasks.Particle.pull_shadow_work(future) for future in futures]
-            timers = [feptasks.Particle.pull_timers(future) for future in futures]
-            sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
-
-            for future, success, cum_work, incremental_work, shadow_work, timer, sampler_state in zip(futures, successes, cumulative_works, incremental_works, shadow_works, timers, sampler_states):
-                if success:
-                    self._nonequilibrium_cum_work[_direction].append(cum_work)
-                    self._nonequilibrium_incremental_work[_direction].append(incremental_work)
-                    self._nonequilibrium_shadow_work[_direction].append(shadow_work)
-                    self._nonequilibrium_timers[_direction].append(timer)
-                    self.end_sampler_states[_direction].append(sampler_state)
-                else:
-                    self._failures.append(future.result()) #pull the entire particle class
-
+            self._nonequilibrium_cumulative_work[_direction] = np.array([feptasks.Particle.pull_cumulative_work_profile(future) for future, success in zip(futures, successes) if success])
+            self._nonequilibrium_shadow_work[_direction] = np.array([feptasks.Particle.pull_shadow_work(future) for future, success in zip(futures, successes) if success])
+            self._nonequilibrium_timers[_direction] = [feptasks.Particle.pull_timers(future) for future, success in zip(futures, successes) if success]
+            self.end_sampler_states[_direction] = [feptasks.Particle.pull_sampler_state(future) for future, success in zip(futures, successes) if success]
+            labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
+            self._failures[_direction] = [label[0] for label, success in zip(labels, successes) if not success]
+            try:
+                labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
+                labels_shape = labels.shape
+                degeneracy = np.array([len(set(labels[:,i])) - len(set(labels[:,i + 1])) for i in reversed(range(labels_shape[1])[:-1])])
+                self.path_degeneracy[_direction]
+            except:
+                pass
 
     def compute_sMC_free_energy(self):
         """
-        Given self._nonequilibrium_cum_work and self._nonequilibrium_incremental_work, compute the free energy profile
+        Given self._nonequilibrium_cumulative_work, compute the free energy profile
         """
-        from scipy.misc import logsumexp
-        _logger.debug(f"Computing sMC free energy...")
-        #from scipy.misc import logsumexp
-        self.cumulative_weights = {_direction: None for _direction in self._nonequilibrium_cum_work.keys()}
-        self.incremental_weights = {_direction: None for _direction in self._nonequilibrium_incremental_work.keys()}
-        self.dg_profile = {_direction: None for _direction in self._nonequilibrium_incremental_work.keys()}
-        self.cumulative_dg = {_direction: [0.0] for _direction in self._nonequilibrium_incremental_work.keys()}
-        self.dg = {_direction: None for _direction in self._nonequilibrium_incremental_work.keys()}
+        for _direction, works in self._nonequilibrium_cumulative_work.items():
+            if works is not None:
+                dg_mean_profile = np.array([np.average(works[:,i]) for i in range(works.shape[1])])
+                dg_std_profile = np.array([np.std(works[:,i]) for i in range(works.shape[1])])
+                self.dg_profile[_direction] = (dg_mean_profile, dg_std_profile)
 
-        for _direction, value in self._nonequilibrium_cum_work.items():
-            _logger.debug(f"Computing cumulative weights {_direction} direction...")
-            #first we have to normalize the cumulative works
-            cum_log_weights = -np.array(self._nonequilibrium_cum_work[_direction])
-            _logger.debug(f"\tcumulative log weights: {cum_log_weights}")
-            if cum_log_weights.size == 0:
-                continue
-            shape = cum_log_weights.shape
-            _logger.debug(f"\tshape of cumulative weights: {shape}")
-            for i in range(shape[1]):
-                normalization_constant = np.exp(logsumexp(cum_log_weights[:,i]))
-                cum_log_weights[:,i] = np.exp(cum_log_weights[:,i]) / normalization_constant
+        if all(work is not None for work in self._nonequilibrium_cumulative_work.values()):
+            #then we can compute a BAR estimate
+            self.dg = pymbar.BAR(self._nonequilibrium_cumulative_work['forward'][:,-1], self._nonequilibrium_cumulative_work['reverse'][:,-1])
 
-            self.cumulative_weights[_direction] = cum_log_weights
-            _logger.debug(f"\tnormalized cumulative weights: {self.cumulative_weights[_direction]}")
 
-            #then put the incremental weights into a numpy array
-            self.incremental_weights[_direction] = np.exp(-np.array(self._nonequilibrium_incremental_work[_direction]))
-            _logger.debug(f"\tincremental weights: {self.incremental_weights[_direction]}")
-
-        #now we can compute the incremental log coefficients
-        for _direction, value in self.cumulative_weights.items():
-            _logger.debug(f"Computing incremental log coefficients: {_direction} direction.")
-            if value is None:
-                continue
-            cum_weights = np.array([arr[:-1] for arr in value])
-            shape = cum_weights.T.shape
-            mean = []
-            std = []
-            for i in range(shape[0]):
-                mean.append(np.dot(cum_weights.T[i, :], -np.log(self.incremental_weights[_direction][:,i])))
-                _logger.debug(f"\tmean of time {i}: {mean[-1]}")
-                std.append(np.sqrt(np.dot(cum_weights.T[i, :], -np.log(self.incremental_weights[_direction][:,i])**2) - mean[-1]**2))
-                _logger.debug
-            # self.ratio_profile[_direction] = -np.log(np.array(mat))
-            self.dg_profile[_direction] = (mean, std)
-            for i in mean:
-                incremental = self.cumulative_dg[_direction][-1] + i
-                self.cumulative_dg[_direction].append(incremental)
-
-            _logger.debug(f"\tfree energy profile: {self.dg_profile[_direction]}")
-            self.dg[_direction] = np.sum(self.dg_profile[_direction])
-
-    def compute_AIS_free_energy(self):
+    def attempt_resample(self, observable = 'ESS', resampling_method = 'multinomial', resample_observable_threshold = 0.5):
         """
-        Compute the BAR estimate
+        Attempt to resample particles given an observable diagnostic and a resampling method.
+
+        Parameters
+        ----------
+        observable : str, default 'ESS'
+            the observable used as a resampling diagnostic
+        resampling_method: str, default multinomial
+            method used to resample
+        resample_observable_threshold : float, default 0.5
+            the threshold to diagnose a resampling event
+
+        Returns
+        -------
+        observable_value: dict
+            the value of the observable for each direction
         """
-        forward_cum_works = np.array(self._nonequilibrium_cum_work['forward'])[:,-1]
-        reverse_cum_works = np.array(self._nonequilibrium_cum_work['reverse'])[:,-1]
-        self.dg = pymbar.BAR(forward_cum_works, reverse_cum_works, compute_uncertainty=True)
+        _logger.debug(f"\tAttempting to resample...")
+        normalized_observable_values = {_direction: None for _direction in self.particle_futures.keys()}
+        for _direction, futures in self.particle_futures.items():
 
+            #first, we have to pull the information for the diagnostic
+            _logger.debug(f"\t\tdirection: {_direction}")
+            work_tuples = [feptasks.Particle.pull_work_increments(future) for future in futures]
+            works_prev = np.array([tup[0] for tup in work_tuples])
+            works_incremental = np.array([tup[1] - tup[0] for tup in work_tuples])
+            cumulative_works = np.array([tup[1] for tup in work_tuples])
+            _logger.debug(f"\tincremental works: {works_incremental}")
+            if observable == 'ESS':
+                normalized_observable_value = NonequilibriumSwitchingFEP.ESS(works_prev, works_incremental) / len(works_incremental)
+            elif observable == 'CESS':
+                normalized_observable_value = NonequilibriumSwitchingFEP.CESS(works_prev, works_incremental) / len(works_incremental)
+            elif observable not in self.allowable_observables:
+                raise Exception(f"{observable} is not a currently supported observable")
+            else:
+                raise Exception(f"{observable} is supported but there is no method!")
 
+            #decide whether to resample
+            _logger.debug(f"\tnormalized observable value: {normalized_observable_value}")
+            if normalized_observable_value <= resample_observable_threshold: #then we resample
+                _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling")
 
+                #pull the sampler states and cumulative works
+                sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
 
+                #resample
+                if resampling_method == 'multinomial':
+                    resampled_works, resampled_sampler_states, resampled_labels = NonequilibriumSwitchingFEP.multinomial_resample(cumulative_works, sampler_states, num_resamples = len(sampler_states))
+                    _logger.debug(f"\tresampled labels: {resampled_labels}")
+                elif resampling_method not in self.allowable_resampling_methods:
+                    raise Exception(f"{resampling_method} is not a currently supported resampling method")
+                else:
+                    raise Exception(f"{resampling_method} is supported but there is no method!")
 
+                #push resamples
+                resample_futures = [feptasks.Particle.push_resamples(future, sampler_state, label, work) for future, sampler_state, label, work in zip(futures, resampled_sampler_states, resampled_labels, resampled_works)]
+                self.particle_futures.update({_direction: resample_futures})
+                normalized_observable_value = 1.0
+            else:
+                _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
 
+            normalized_observable_values[_direction] = normalized_observable_value
 
-
-
-
+        return normalized_observable_values
 
     @staticmethod
     def ESS(works_prev, works_incremental):
@@ -1430,13 +1255,12 @@ class NonequilibriumSwitchingFEP(object):
         ESS: float
             effective sample size
         """
-        prev_weights_normalization = np.exp(logsumexp(-works_prev))
-        prev_weights_normalized = np.exp(-works_prev) / prev_weights_normalization
-        _logger.debug(f"\t\tnormalized weights: {prev_weights_normalized}")
+        prev_weights_normalized = np.exp(-works_prev - logsumexp(-works_prev))
+        #_logger.debug(f"\t\tnormalized weights: {prev_weights_normalized}")
         incremental_weights_unnormalized = np.exp(-works_incremental)
-        _logger.debug(f"\t\tincremental weights (unnormalized): {incremental_weights_unnormalized}")
+        #_logger.debug(f"\t\tincremental weights (unnormalized): {incremental_weights_unnormalized}")
         ESS = np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(np.power(prev_weights_normalized, 2), np.power(incremental_weights_unnormalized, 2))
-        _logger.debug(f"\t\tESS: {ESS}")
+        #_logger.debug(f"\t\tESS: {ESS}")
         return ESS
 
     @staticmethod
@@ -1458,12 +1282,12 @@ class NonequilibriumSwitchingFEP(object):
         """
         prev_weights_normalization = np.exp(logsumexp(-works_prev))
         prev_weights_normalized = np.exp(-works_prev) / prev_weights_normalization
-        _logger.debug(f"\t\tnormalized weights: {prev_weights_normalized}")
+        #_logger.debug(f"\t\tnormalized weights: {prev_weights_normalized}")
         incremental_weights_unnormalized = np.exp(-works_incremental)
-        _logger.debug(f"\t\tincremental weights (unnormalized): {incremental_weights_unnormalized}")
+        #_logger.debug(f"\t\tincremental weights (unnormalized): {incremental_weights_unnormalized}")
         N = len(prev_weights_normalized)
         CESS = N * np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(prev_weights_normalized, np.power(incremental_weights_unnormalized, 2))
-        _logger.debug(f"\t\tCESS: {CESS}")
+        #_logger.debug(f"\t\tCESS: {CESS}")
         return CESS
 
     @staticmethod
@@ -1490,97 +1314,126 @@ class NonequilibriumSwitchingFEP(object):
         resampled_labels : list of ints
             resampled labels for tracking particle duplicates
         """
-        normalization_constant = np.exp(logsumexp(-cumulative_works))
-        normalized_weights = np.exp(-cumulative_works)/normalization_constant
+        normalized_weights = np.exp(-cumulative_works - logsumexp(-cumulative_works))
         resampled_labels = np.random.choice(len(normalized_weights), num_resamples, p=normalized_weights, replace = True)
         resampled_sampler_states = [sampler_states[i] for i in resampled_labels]
-        resampled_works = np.array([1.0/num_resamples] * num_resamples)
+        resampled_works = np.array([np.average(cumulative_works)] * num_resamples)
 
         return resampled_works, resampled_sampler_states, resampled_labels
 
-
-    def binary_search(self, lambdas, current_index, cumulative_works, sampler_states, thermodynamic_state, observable_measure = 'CESS', observable_threshold = 0.9):
+    @staticmethod
+    def binary_search(first_index, last_index, observables, observable_threshold):
         """
-        Given a sequence of lambdas, starting at current lambda, find largest lambda at which CESS_lambda <= CESS_threshold.
+        Given corresponding first_index and last_index of an  observable list or numpy array, conduct a binary search to find index at which the threshold
+        is not exceeded.
 
         Parameters
         ----------
-        lambdas: np.array
-            array of all possible lambdas (between 0 and 1)
-        current_index : int
-            index corresponding to current lambda.  All CESS values will be computed
-            w.r.t. lambdas[current_index + n] where n = 1, 2, ..., m.  where lambdas[m] = lambdas[-1].
-        cumulative_works : np.array
-            generalized accumulated works at time t-1 for all particles
-        sampler_states : list of (openmmtools.states.SamplerState)
-            list of sampler states at time t-1 for all particles
-        thermodynamic_state : openmmtools.states.CompoundThermodynamicState
-            thermodynamic state associated with the SamplerStates
-        observable_measure : str, default CESS
-            the measure used to threshold
+        first_index: int
+            first index of the obserables list of interest
+        last_index: int
+            last index of the observables list of interest
+        observable : list of floats
+            observable list
         observable_threshold : float
             the threshold of the observable used to satisfy the binary search criterion
 
         Returns
         -------
-        lambda_index: int
-            index corresponding to the next lambda for annealing
+        critical_index: int
+            index satisfying binary search
         """
-        #first compute the incremental works of all the lambdas at current_index
-        current_lambda = lambdas[current_index]
-        future_lambdas = lambdas[current_index+1, :]
-        thermodynamic_state.set_alchemical_parameters(current_lambda, self._protocol)
-        current_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-        future_rps = []
-        for _lambda in future_lambdas:
-            thermodynamic_state.set_alchemical_parameters(_lambda, self._protocol)
-            rps = [feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in _sampler_states]
-            future_rps.append(rps)
-        future_rps = np.array(future_rps)
-        incremental_works = np.array([np.add(future_rps[i,:], -1 * current_rps) for i in range(len(future_lambdas))])
+        _logger.debug(f"\t\t\tfirst, last indices: {first_index}, {last_index}")
 
-        if observable_measure == 'CESS':
-            #comute the CESS for all samples
-            observables = [NonequilibriumSwitchingFEP.CESS(cumulative_works, incremental_works[i,:])/N for i in range(len(future_lambdas))]
-        else:
-            raise Exception(f"{observable_measure} is not a supported observable method.")
+        #first check if we should omit the entire procedure
+        if (observables[last_index - 1] >= observable_threshold) and (observables[last_index] >= observable_threshold):
+            return last_index
 
-        #now to conduct the binary search on the observables
-        first, last = 0, len(future_lambdas) - 1
-
-        while (first <= last):
-            midpoint = (first + last) // 2
-            if midpoint == first:
-                choice_index = first
-                break
-            if midpoint == last:
-                choice_index = midpoint
-                break
+        L, R = first_index, last_index
+        while (L <= R):
+            midpoint = (L + R) // 2
+            _logger.debug(f"\t\t\tL, R, midpoint: {(L, R, midpoint)}")
+            _logger.debug(f"\t\t\tobservable at {midpoint}: {observables[midpoint]}")
             if (observables[midpoint] >= observable_threshold) and (observables[midpoint + 1] < observable_threshold):
                 choice_index = midpoint
-                break
+                _logger.debug(f"\t\t\tfound choice index: {choice_index}")
+                return choice_index
             elif observables[midpoint] >= observable_threshold:
-                midpoint += 1
-            elif observables[midpoint] < observable_measure:
-                midpoint -= 1
+                L = midpoint + 1
+            elif observables[midpoint] < observable_threshold:
+                R = midpoint - 1
 
-        choice_lambda = future_lambdas[choice_index]
-        return lambdas.index(choice_lambda)
+        _logger.debug(f"\t\t\tfound choice index: {first_index}")
+        return first_index
 
+    def trailblaze(self, thermodynamic_state, observable = 'ESS', observable_threshold = 0.9):
+        """
+        Given a sequence of lambdas, starting at current lambda, find largest lambda at which CESS_lambda <= CESS_threshold.
 
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.CompoundThermodynamicState
+            thermodynamic state associated with the SamplerStates
+        observable : str, default ESS
+            the measure used to threshold
+        observable_threshold : float
+            the threshold of the observable used to satisfy the binary search criterion
+        """
+        from perses.annihilation.lambda_protocol import LambdaProtocol
+        online_protocols = {'forward': np.linspace(0, 1, self._n_lambdas), 'reverse': np.linspace(1, 0, self._n_lambdas)}
+        for _direction, futures in self.particle_futures.items():
 
+            #skip if current index is last index
+            if self.step_counters[_direction] == self._n_lambdas - 1:
+                continue
 
+            #first gather the cumulative works and sampler states
+            _logger.debug(f"\t\tgathering cumulative works and sampler states")
+            cumulative_works = np.array([feptasks.Particle.pull_cumulative_work(future) for future in futures])
+            sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
 
+            #first compute the incremental works of all the lambdas at current_index
+            current_lambda = online_protocols[_direction][self.step_counters[_direction]]
+            future_lambdas = online_protocols[_direction][(self.step_counters[_direction] + 1) :]
+            thermodynamic_state.set_alchemical_parameters(current_lambda, LambdaProtocol(functions = self._protocol))
+            current_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+            future_rps = []
+            _logger.debug(f"\t\tcomputing incremental works...")
+            for _lambda in future_lambdas:
+                thermodynamic_state.set_alchemical_parameters(_lambda, LambdaProtocol(functions = self._protocol))
+                rps = [feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states]
+                future_rps.append(rps)
+            future_rps = np.array(future_rps)
+            incremental_works = np.array([np.add(future_rps[i,:], -1 * current_rps) for i in range(len(future_lambdas))])
+            #_logger.debug(f"\t\tincremental works: {incremental_works}")
 
+            _logger.debug(f"\t\tcomputing observables")
+            if observable == 'ESS':
+                normalized_observable_values = np.array([NonequilibriumSwitchingFEP.ESS(cumulative_works, incremental_works[i,:]) / len(current_rps) for i in range(incremental_works.shape[0])])
+            elif observable == 'CESS':
+                normalized_observable_values = np.array([NonequilibriumSwitchingFEP.CESS(cumulative_works, incremental_works[i,:]) / len(current_rps) for i in range(incremental_works.shape[0])])
+            elif observable not in self.allowable_observables:
+                raise Exception(f"{observable} is not a currently supported observable")
+            else:
+                raise Exception(f"{observable} is supported but there is no method!")
+            _logger.debug(f"\t\tobservables: {normalized_observable_values}")
 
-
-
-
-
-
-
-
-
+            _logger.debug(f"\t\tcomputing choice index from binary search...")
+            #now to conduct the binary search on the observables
+            choice_index = NonequilibriumSwitchingFEP.binary_search(first_index = 0,
+                                                                    last_index = len(future_lambdas) - 1,
+                                                                    observables = normalized_observable_values,
+                                                                    observable_threshold = observable_threshold)
+            choice_lambda = future_lambdas[choice_index]
+            _logger.debug(f"\t\tchoice lambda: {choice_lambda}")
+            next_protocol_index = self.step_counters[_direction] + choice_index + 1
+            _logger.debug(f"\t\tnext protocol index: {next_protocol_index}")
+            increment = next_protocol_index - self.step_counters[_direction]
+            _logger.debug(f"\t\tannealing particles with one step over {increment} lambda values")
+            AIS_futures = [feptasks.Particle.distribute_anneal(future, num_steps = 1, increment = increment) for future in futures]
+            self.particle_futures.update({_direction: AIS_futures})
+            self.step_counters[_direction] += increment
+            _logger.info(f"\t\tstep_counters: {[(_direction + ': ' + str(val) + '/' + str(self._n_lambdas - 1)) for _direction, val in self.step_counters.items()]}")
 
 
     def equilibrate(self, n_equilibration_iterations = 1, endstates = [0,1], max_size = 1024*1e3, decorrelate=False, timer = False, minimize = False):
