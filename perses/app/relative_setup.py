@@ -723,8 +723,8 @@ class NonequilibriumSwitchingFEP(object):
         self.online_timer = []
         self._failures = copy.deepcopy(self._nonequilibrium_cumulative_work)
         self.survival = copy.deepcopy(self._nonequilibrium_cumulative_work)
-        self.dg_profile = copy.deepcopy(self._nonequilibrium_cumulative_work)
-        self.dg = None
+        self.dg_EXP = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self.dg_BAR = None
 
         # create the thermodynamic state
         self.relative_transform = relative_transform
@@ -1181,13 +1181,11 @@ class NonequilibriumSwitchingFEP(object):
         """
         for _direction, works in self._nonequilibrium_cumulative_work.items():
             if works is not None:
-                dg_mean_profile = np.array([np.average(works[:,i]) for i in range(works.shape[1])])
-                dg_std_profile = np.array([np.std(works[:,i]) for i in range(works.shape[1])])
-                self.dg_profile[_direction] = (dg_mean_profile, dg_std_profile)
+                self.dg_EXP[_direction] = pymbar.EXP(works[:,-1])
 
         if all(work is not None for work in self._nonequilibrium_cumulative_work.values()):
             #then we can compute a BAR estimate
-            self.dg = pymbar.BAR(self._nonequilibrium_cumulative_work['forward'][:,-1], self._nonequilibrium_cumulative_work['reverse'][:,-1])
+            self.dg_BAR = pymbar.BAR(self._nonequilibrium_cumulative_work['forward'][:,-1], self._nonequilibrium_cumulative_work['reverse'][:,-1])
 
 
     def attempt_resample(self, observable = 'ESS', resampling_method = 'multinomial', resample_observable_threshold = 0.5):
