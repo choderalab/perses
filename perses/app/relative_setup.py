@@ -1159,6 +1159,7 @@ class NonequilibriumSwitchingFEP(object):
             self.end_sampler_states[_direction] = [feptasks.Particle.pull_sampler_state(future) for future, success in zip(futures, successes) if success]
             labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
             self._failures[_direction] = [label[0] for label, success in zip(labels, successes) if not success]
+            self.particle_futures.update({_direction: None})
             try:
                 max_step = max(self.iterations[_direction])
                 iterations = [i/max_step for i in self.iterations[_direction]]
