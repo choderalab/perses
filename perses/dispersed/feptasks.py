@@ -295,9 +295,9 @@ class Particle():
                 self.failures.append(e)
             _logger.info(f"###########################")
 
-        #now just update the sampler state
-        _logger.debug(f"updating sampler state from context")
-        self.sampler_state.update_from_context(self.context)
+        #now just update the sampler state (now, this is done later when we pull the sampler state)
+        # _logger.debug(f"updating sampler state from context")
+        # self.sampler_state.update_from_context(self.context)
 
         #if the protocol is done, then finish
         if self.current_index == len(self.lambdas) - 1:
@@ -479,6 +479,7 @@ class Particle():
         """
         client-callable function to pull the sampler state from the task.particle class
         """
+        task.particle.sampler_state.update_from_context(task.particle.context, ignore_velocities=True)
         return task.particle.sampler_state
 
     @staticmethod
@@ -564,7 +565,8 @@ class Particle():
         It simply overwrites the particle.sampler_state, appends to self.label and corrects the work
         """
         task.particle.sampler_state = sampler_state
-        task.particle.sampler_state.apply_to_context(task.particle.context)
+        task.particle.sampler_state.apply_to_context(task.particle.context, ignore_velocities=True)
+        task.particle.context.setVelocitiesToTemperature(task.particle.thermodynamic_state.temperature) #randomize velocities @ temp
         task.particle.label.append(label)
         task.particle._cumulative_work[-1] = work
         return task
