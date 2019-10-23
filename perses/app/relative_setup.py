@@ -680,8 +680,6 @@ class NonequilibriumSwitchingFEP(object):
         self._n_equil_steps = n_equilibrium_steps_per_iteration
         self._trajectory_prefix = trajectory_prefix
         self._trajectory_directory = trajectory_directory
-        self._zero_endpoint_n_atoms = topology_proposal.n_atoms_old
-        self._one_endpoint_n_atoms = topology_proposal.n_atoms_new
         self._atom_selection = atom_selection
         self._current_iteration = 0
         self._endpoint_growth_thermostates = dict()
