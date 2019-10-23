@@ -549,6 +549,13 @@ class Particle():
         """
         return task.particle.label
 
+    @staticmethod
+    def pull_last_label(task):
+        """
+        client-callable function to pull the last label from the task.particle_class
+        """
+        return task.particle.label[-1]
+
 
     @staticmethod
     def push_resamples(task, sampler_state, label, work):
@@ -623,17 +630,6 @@ class Particle():
             nonequilibrium_trajectory.save_hdf5(trajectory_filename)
 
         return True
-
-
-
-
-
-
-
-
-
-
-
 
 def check_EquilibriumFEPTask(task):
     """

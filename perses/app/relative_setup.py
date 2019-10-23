@@ -607,10 +607,10 @@ class NonequilibriumSwitchingFEP(object):
     This class manages Nonequilibrium switching based relative free energy calculations, carried out on a distributed computing framework.
     """
 
-    def __init__(self, hybrid_factory, geometry_engine, use_dispersion_correction=False, protocol = 'default',
+    def __init__(self, hybrid_factory, protocol = 'default',
                  n_lambdas = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
                  atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
-                 ncmc_save_interval = None, write_ncmc_configuration = False):
+                 ncmc_save_interval = None, write_ncmc_configuration = False, relative_transform = True):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class.
         NOTE : defining self.client and self.cluster renders this class non-pickleable; call self.deactivate_client() to close the cluster/client
@@ -619,10 +619,6 @@ class NonequilibriumSwitchingFEP(object):
         ----------
         hybrid_factory : perses.annihilation.relative.HybridTopologyFactory
             hybrid topology factory
-        geometry_engine : perses.rjmc.geometry.FFAllAngleGeometryEngine
-            geometry engine used to create and compute the RJMCMC; we use this to compute the importance weight from the old/new system to the hybrid system (neglecting added valence terms)
-        use_dispersion_correction : bool, default False
-            Whether to use the (expensive) dispersion correction
         protocol : dict of str: str, default protocol as defined by top of file
             How each force's scaling parameter relates to the main lambda that is switched by the integrator from 0 to 1
         n_lambdas : int, default 100
@@ -647,6 +643,8 @@ class NonequilibriumSwitchingFEP(object):
             We will assert that the n_lambdas % ncmc_save_interval = 0; otherwise, the protocol will not be complete
         write_ncmc_configuration : bool, default False
             whether to write ncmc annealing perturbations; if True, will write every ncmc_save_interval iterations
+        relative_transform : bool, default True
+            whether a relative or absolute alchemical transformation will be conducted.  This extends the utility of the NonequilibriumSwitchingFEP to absolute transforms.
         """
         #Specific to LSF clusters
         # NOTE: assume that the
@@ -656,7 +654,6 @@ class NonequilibriumSwitchingFEP(object):
         _logger.info(f"writing HybridTopologyFactory")
         self._factory = hybrid_factory
         topology_proposal = self._factory._topology_proposal
-        self.geometry_engine = geometry_engine
         self._ncmc_save_interval = n_lambdas if not ncmc_save_interval else ncmc_save_interval
         _logger.debug(f"ncmc save interval set as {self._ncmc_save_interval}")
 
@@ -690,19 +687,6 @@ class NonequilibriumSwitchingFEP(object):
         self._endpoint_growth_thermostates = dict()
         self._timestep = timestep
 
-        #instantiate growth system thermodynamic and samplerstates
-        assert not self.geometry_engine.use_sterics, f"The geometry engine has use_sterics...this is not currently supported."
-        if self.geometry_engine.forward_final_growth_system: # if it exists, we have to create a thermodynamic state and set alchemical parameters
-            self._endpoint_growth_thermostates[1] = ThermodynamicState(self.geometry_engine.forward_final_growth_system, temperature=temperature) #sampler state is compatible with new system
-        else:
-            self._endpoint_growth_thermostates[1] = None
-
-        if self.geometry_engine.reverse_final_growth_system: # if it exists, we have to create a thermodynamic state and set alchemical parameters
-            self._endpoint_growth_thermostates[0] = ThermodynamicState(self.geometry_engine.reverse_final_growth_system, temperature=temperature) #sampler state is compatible with old system
-        else:
-            self._endpoint_growth_thermostates[0] = None
-
-
         _logger.info(f"instantiating trajectory filenames")
         if self._trajectory_directory and self._trajectory_prefix:
             self._write_traj = True
@@ -715,13 +699,6 @@ class NonequilibriumSwitchingFEP(object):
             self._trajectory_filename = {0: None, 1: None}
             self._neq_traj_filename = {'forward': None, 'reverse': None}
 
-        # create the thermodynamic state
-        _logger.info(f"Instantiating thermodynamic states 0 and 1.")
-        lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(self._hybrid_system)
-        lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
-
-        lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
-        lambda_one_alchemical_state.set_alchemical_parameters(1.0)
 
         # instantiating equilibrium file/rp collection dicts
         self._eq_dict = {0: [], 1: [], '0_decorrelated': None, '1_decorrelated': None, '0_reduced_potentials': [], '1_reduced_potentials': []}
@@ -743,30 +720,35 @@ class NonequilibriumSwitchingFEP(object):
         self._nonequilibrium_cumulative_work = {'forward': None, 'reverse': None}
         self._nonequilibrium_shadow_work = copy.deepcopy(self._nonequilibrium_cumulative_work)
         self._nonequilibrium_timers = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self.online_timer = []
         self._failures = copy.deepcopy(self._nonequilibrium_cumulative_work)
-        self.path_degeneracy = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self.survival = copy.deepcopy(self._nonequilibrium_cumulative_work)
         self.dg_profile = copy.deepcopy(self._nonequilibrium_cumulative_work)
         self.dg = None
 
+        # create the thermodynamic state
+        self.relative_transform = relative_transform
+        if self.relative_transform:
+            _logger.info(f"Instantiating thermodynamic states 0 and 1.")
+            lambda_zero_alchemical_state = RelativeAlchemicalState.from_system(self._hybrid_system)
+            lambda_one_alchemical_state = copy.deepcopy(lambda_zero_alchemical_state)
 
-        # ensure their states are set appropriately
-        self._hybrid_alchemical_states = {0: lambda_zero_alchemical_state, 1: lambda_one_alchemical_state}
+            lambda_zero_alchemical_state.set_alchemical_parameters(0.0)
+            lambda_one_alchemical_state.set_alchemical_parameters(1.0)
 
-        # create the base thermodynamic state with the hybrid system
-        self._thermodynamic_state = ThermodynamicState(self._hybrid_system, temperature=temperature)
+            # ensure their states are set appropriately
+            self._hybrid_alchemical_states = {0: lambda_zero_alchemical_state, 1: lambda_one_alchemical_state}
 
-        # Create thermodynamic states for the nonalchemical endpoints
-        self._nonalchemical_thermodynamic_states = {
-            0: ThermodynamicState(topology_proposal.old_system, temperature=temperature),
-            1: ThermodynamicState(topology_proposal.new_system, temperature=temperature)}
+            # create the base thermodynamic state with the hybrid system
+            self._thermodynamic_state = ThermodynamicState(self._hybrid_system, temperature=temperature)
 
-        # Now create the compound states with different alchemical states
-        self._hybrid_thermodynamic_states = {0: CompoundThermodynamicState(self._thermodynamic_state,
-                                                                           composable_states=[
-                                                                               self._hybrid_alchemical_states[0]]),
-                                             1: CompoundThermodynamicState(copy.deepcopy(self._thermodynamic_state),
-                                                                           composable_states=[
-                                                                               self._hybrid_alchemical_states[1]])}
+            # Now create the compound states with different alchemical states
+            self._hybrid_thermodynamic_states = {0: CompoundThermodynamicState(self._thermodynamic_state,
+                                                                               composable_states=[
+                                                                                   self._hybrid_alchemical_states[0]]),
+                                                 1: CompoundThermodynamicState(copy.deepcopy(self._thermodynamic_state),
+                                                                               composable_states=[
+                                                                                   self._hybrid_alchemical_states[1]])}
 
         self._temperature = temperature
 
@@ -797,7 +779,8 @@ class NonequilibriumSwitchingFEP(object):
         self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
 
         #create observable list
-        self.observable = {_direction: [(0, 1.0)] for _direction in ['forward', 'reverse']}
+        self.iterations = {_direction: [0] for _direction in ['forward', 'reverse']}
+        self.observable = {_direction: [1.0] for _direction in ['forward', 'reverse']}
         self.allowable_resampling_methods = ['multinomial']
         self.allowable_observables = ['ESS', 'CESS']
         _logger.info(f"constructed")
@@ -843,7 +826,7 @@ class NonequilibriumSwitchingFEP(object):
         self.client.close()
         self.client = None
 
-    def compute_nonalchemical_perturbations(self, start, end, sampler_state):
+    def compute_nonalchemical_perturbations(self, start, end, sampler_state, geometry_engine):
         """
         In order to correct for the artifacts associated with CustomNonbondedForces, we need to compute the potential difference between the alchemical endstates and the
         valence energy-corrected nonalchemical endstates.
@@ -856,7 +839,29 @@ class NonequilibriumSwitchingFEP(object):
             the alternate lambda value which the equilibrium sampler state will be annealed to
         sampler_state : openmmtools.states.SamplerState
             the equilibrium sampler state of the current lambda (start)
+        geometry_engine : perses.rjmc.geometry.FFAllAngleGeometryEngine
+            geometry engine used to create and compute the RJMCMC; we use this to compute the importance weight from the old/new system to the hybrid system (neglecting added valence terms)
         """
+        if not hasattr(NonequilibriumSwitchingFEP, 'geometry_engine'):
+            self.geometry_engine = geometry_engine
+            # Create thermodynamic states for the nonalchemical endpoints
+            topology_proposal = self._factory.topology_proposal
+            self._nonalchemical_thermodynamic_states = {
+                0: ThermodynamicState(topology_proposal.old_system, temperature=self._temperature),
+                1: ThermodynamicState(topology_proposal.new_system, temperature=self._temperature)}
+
+            #instantiate growth system thermodynamic and samplerstates
+            assert not self.geometry_engine.use_sterics, f"The geometry engine has use_sterics...this is not currently supported."
+            if self.geometry_engine.forward_final_growth_system: # if it exists, we have to create a thermodynamic state and set alchemical parameters
+                self._endpoint_growth_thermostates[1] = ThermodynamicState(self.geometry_engine.forward_final_growth_system, temperature=temperature) #sampler state is compatible with new system
+            else:
+                self._endpoint_growth_thermostates[1] = None
+
+            if self.geometry_engine.reverse_final_growth_system: # if it exists, we have to create a thermodynamic state and set alchemical parameters
+                self._endpoint_growth_thermostates[0] = ThermodynamicState(self.geometry_engine.reverse_final_growth_system, temperature=temperature) #sampler state is compatible with old system
+            else:
+                self._endpoint_growth_thermostates[0] = None
+
         #define the nonalchemical_perturbation_args for endstate perturbations before running nonequilibrium switching
         _lambda, _lambda_rev = start, end
         nonalchemical_perturbation_args = {'hybrid_thermodynamic_states': [self._hybrid_thermodynamic_states[_lambda], self._hybrid_thermodynamic_states[_lambda_rev]],
@@ -1050,13 +1055,14 @@ class NonequilibriumSwitchingFEP(object):
         self.compute_sMC_free_energy()
         _logger.info(f"Complete")
 
-    def algorithm_4(self, observable = 'ESS', trailblaze_observable_threshold = None, resample_observable_threshold = 0.9, check_interval = 1, resampling_method = 'multinomial'):
+    def algorithm_4(self, observable = 'ESS', trailblaze_observable_threshold = 0.0, resample_observable_threshold = 0.0, check_interval = 1, resampling_method = 'multinomial'):
         """
         conduct algorithm 4 according to https://arxiv.org/abs/1303.3123
         It consists of the following procedure:
         1.  trailblaze the next incremental lambda value with a dense, linear spacing of lambdas
         2.
         """
+        import time
         _logger.info(f"Conducting resampling adaptive sMC with trailblaze...")
 
         #check resampler
@@ -1068,10 +1074,11 @@ class NonequilibriumSwitchingFEP(object):
             raise Exception(f"{observable} is not a currently supported observable")
 
         #check trailblaze
-        if trailblaze_observable_threshold is None:
+        if float(trailblaze_observable_threshold) == 0.0:
             trailblaze = False
         else:
             trailblaze = True
+            thermodynamic_state = copy.deepcopy(self._hybrid_thermodynamic_states[0])
 
         #ensure that the check interval is a factor of the number of _n_lambdas
         if check_interval >= self._n_lambdas - 1:
@@ -1086,12 +1093,13 @@ class NonequilibriumSwitchingFEP(object):
 
         _logger.info(f"All setups are complete; proceeding with annealing and resampling until the final lambda is weighed.")
         while any(val < self._n_lambdas - 1 for val in self.step_counters.values()):
+            start = time.time()
             _logger.info(f"\tstep_counters: {[(_direction + ': ' + str(val) + '/' + str(self._n_lambdas - 1)) for _direction, val in self.step_counters.items()]}")
 
             #we attempt to trailblaze
             if trailblaze:
                 _logger.debug(f"\ttrailblaze is True; trailblazing...")
-                self.trailblaze(thermodynamic_state = copy.deepcopy(self._hybrid_thermodynamic_states[0]),
+                self.trailblaze(thermodynamic_state = thermodynamic_state,
                                 observable = observable,
                                 observable_threshold = trailblaze_observable_threshold)
             else: #we increment by 1
@@ -1106,7 +1114,9 @@ class NonequilibriumSwitchingFEP(object):
 
             #attempt to resample all directions
             normalized_observable_values = self.attempt_resample(observable = observable, resampling_method = resampling_method, resample_observable_threshold = resample_observable_threshold)
-            [self.observable[_direction].append((self.step_counters[_direction], i)) for _direction, i in normalized_observable_values.items()]
+            [self.observable[_direction].append(i) for _direction, i in normalized_observable_values.items()]
+            [self.iterations[_direction].append(self.step_counters[_direction]) for _direction in normalized_observable_values.keys()]
+            self.online_timer.append(time.time() - start)
 
         #check to ensure that all of the remote timers are equal to the online timer
         for _direction, futures in self.particle_futures.items():
@@ -1150,11 +1160,19 @@ class NonequilibriumSwitchingFEP(object):
             labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
             self._failures[_direction] = [label[0] for label, success in zip(labels, successes) if not success]
             try:
+                max_step = max(self.iterations[_direction])
+                iterations = [i/max_step for i in self.iterations[_direction]]
+                first_one = iterations.index(1.)
+                shrunken_iterations = np.array(iterations[:first_one + 1])
+                self.iterations.update({_direction: shrunken_iterations})
+
                 labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
-                labels_shape = labels.shape
-                degeneracy = np.array([len(set(labels[:,i])) - len(set(labels[:,i + 1])) for i in reversed(range(labels_shape[1])[:-1])])
-                self.path_degeneracy[_direction]
-            except:
+                num_particles, num_switches = labels.shape
+                survival = np.array([len(set(list(labels[:, i]))) / num_particles for i in range(num_switches)])
+                _logger.debug(f"\tlabels: {labels}")
+                self.survival[_direction] = survival
+            except Exception as e:
+                _logger.info(f"{e}")
                 pass
 
     def compute_sMC_free_energy(self):
@@ -1218,9 +1236,12 @@ class NonequilibriumSwitchingFEP(object):
                 #pull the sampler states and cumulative works
                 sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
 
+                #pull previous labels
+                previous_labels = [feptasks.Particle.pull_last_label(future) for future in futures]
+
                 #resample
                 if resampling_method == 'multinomial':
-                    resampled_works, resampled_sampler_states, resampled_labels = NonequilibriumSwitchingFEP.multinomial_resample(cumulative_works, sampler_states, num_resamples = len(sampler_states))
+                    resampled_works, resampled_sampler_states, resampled_labels = NonequilibriumSwitchingFEP.multinomial_resample(cumulative_works, sampler_states, num_resamples = len(sampler_states), previous_labels = previous_labels)
                     _logger.debug(f"\tresampled labels: {resampled_labels}")
                 elif resampling_method not in self.allowable_resampling_methods:
                     raise Exception(f"{resampling_method} is not a currently supported resampling method")
@@ -1291,7 +1312,7 @@ class NonequilibriumSwitchingFEP(object):
         return CESS
 
     @staticmethod
-    def multinomial_resample(cumulative_works, sampler_states, num_resamples):
+    def multinomial_resample(cumulative_works, sampler_states, num_resamples, previous_labels):
         """
         from a list of cumulative works and sampler states, resample the sampler states N times with replacement
         from a multinomial distribution conditioned on the weights w_i \propto e^{-cumulative_works_i}
@@ -1304,6 +1325,8 @@ class NonequilibriumSwitchingFEP(object):
             list of sampler states at time t for all particles
         num_resamples : int, default len(sampler_states)
             number of resamples to conduct; default doesn't change the number of particles
+        previous_labels : list of int
+            previous labels of the particles
 
         Returns
         -------
@@ -1311,15 +1334,16 @@ class NonequilibriumSwitchingFEP(object):
             resampled works (uniform)
         resampled_sampler_states : list of (openmmtools.states.SamplerState)
             resampled sampler states of size num_resamples
-        resampled_labels : list of ints
+        corrected resampled_labels : list of ints
             resampled labels for tracking particle duplicates
         """
         normalized_weights = np.exp(-cumulative_works - logsumexp(-cumulative_works))
         resampled_labels = np.random.choice(len(normalized_weights), num_resamples, p=normalized_weights, replace = True)
         resampled_sampler_states = [sampler_states[i] for i in resampled_labels]
         resampled_works = np.array([np.average(cumulative_works)] * num_resamples)
+        corrected_resampled_labels = np.array([previous_labels[i] for i in resampled_labels])
 
-        return resampled_works, resampled_sampler_states, resampled_labels
+        return resampled_works, resampled_sampler_states, corrected_resampled_labels
 
     @staticmethod
     def binary_search(first_index, last_index, observables, observable_threshold):
@@ -1395,39 +1419,47 @@ class NonequilibriumSwitchingFEP(object):
             #first compute the incremental works of all the lambdas at current_index
             current_lambda = online_protocols[_direction][self.step_counters[_direction]]
             future_lambdas = online_protocols[_direction][(self.step_counters[_direction] + 1) :]
-            thermodynamic_state.set_alchemical_parameters(current_lambda, LambdaProtocol(functions = self._protocol))
+            thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = current_lambda)
+            #thermodynamic_state.set_alchemical_parameters(current_lambda, LambdaProtocol(functions = self._protocol))
             current_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-            future_rps = []
             _logger.debug(f"\t\tcomputing incremental works...")
+            normalized_observable_values = []
             for _lambda in future_lambdas:
-                thermodynamic_state.set_alchemical_parameters(_lambda, LambdaProtocol(functions = self._protocol))
-                rps = [feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states]
-                future_rps.append(rps)
-            future_rps = np.array(future_rps)
-            incremental_works = np.array([np.add(future_rps[i,:], -1 * current_rps) for i in range(len(future_lambdas))])
-            #_logger.debug(f"\t\tincremental works: {incremental_works}")
+                thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = _lambda)
+                #thermodynamic_state.set_alchemical_parameters(_lambda, LambdaProtocol(functions = self._protocol))
+                future_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+                incremental_works = np.array(np.add(future_rps, -1 * current_rps))
+                #_logger.debug(f"\t\tcomputing observables")
+                if observable == 'ESS':
+                    observed_measure = NonequilibriumSwitchingFEP.ESS(cumulative_works, incremental_works) / len(current_rps)
+                elif observable == 'CESS':
+                    observed_measure = NonequilibriumSwitchingFEP.CESS(cumulative_works, incremental_works) / len(current_rps)
+                elif observable not in self.allowable_observables:
+                    raise Exception(f"{observable} is not a currently supported observable")
+                else:
+                    raise Exception(f"{observable} is supported but there is no method!")
 
-            _logger.debug(f"\t\tcomputing observables")
-            if observable == 'ESS':
-                normalized_observable_values = np.array([NonequilibriumSwitchingFEP.ESS(cumulative_works, incremental_works[i,:]) / len(current_rps) for i in range(incremental_works.shape[0])])
-            elif observable == 'CESS':
-                normalized_observable_values = np.array([NonequilibriumSwitchingFEP.CESS(cumulative_works, incremental_works[i,:]) / len(current_rps) for i in range(incremental_works.shape[0])])
-            elif observable not in self.allowable_observables:
-                raise Exception(f"{observable} is not a currently supported observable")
-            else:
-                raise Exception(f"{observable} is supported but there is no method!")
+                if observed_measure < observable_threshold:
+                    _logger.debug(f"observable exceeding threshold: {observed_measure}")
+                    break
+                normalized_observable_values.append(observed_measure)
+
+            normalized_observable_values = np.array(normalized_observable_values)
             _logger.debug(f"\t\tobservables: {normalized_observable_values}")
 
             _logger.debug(f"\t\tcomputing choice index from binary search...")
             #now to conduct the binary search on the observables
-            choice_index = NonequilibriumSwitchingFEP.binary_search(first_index = 0,
-                                                                    last_index = len(future_lambdas) - 1,
-                                                                    observables = normalized_observable_values,
-                                                                    observable_threshold = observable_threshold)
-            choice_lambda = future_lambdas[choice_index]
-            _logger.debug(f"\t\tchoice lambda: {choice_lambda}")
-            next_protocol_index = self.step_counters[_direction] + choice_index + 1
-            _logger.debug(f"\t\tnext protocol index: {next_protocol_index}")
+            # choice_index = NonequilibriumSwitchingFEP.binary_search(first_index = 0,
+            #                                                         last_index = len(normalized_observable_values) - 1,
+            #                                                         observables = normalized_observable_values,
+            #                                                         observable_threshold = observable_threshold)
+            if len(normalized_observable_values) == len(future_lambdas):
+                #then there we can only jump to the last lambda
+                next_protocol_index = len(online_protocols[_direction]) - 1
+            else:
+                num_skips = len(normalized_observable_values)
+                next_protocol_index = self.step_counters[_direction] + num_skips + 1
+            _logger.debug(f"\t\tnext protocol index, lambda: {next_protocol_index}, {online_protocols[_direction][next_protocol_index]}")
             increment = next_protocol_index - self.step_counters[_direction]
             _logger.debug(f"\t\tannealing particles with one step over {increment} lambda values")
             AIS_futures = [feptasks.Particle.distribute_anneal(future, num_steps = 1, increment = increment) for future in futures]
@@ -1540,7 +1572,15 @@ class NonequilibriumSwitchingFEP(object):
                     self._eq_files_dict[state] = corrected_dict
                     _logger.debug(f"\t corrected_dict for state {state}: {corrected_dict}")
 
-
+    def modify_thermodynamic_state(self, thermodynamic_state, current_lambda):
+        """
+        modify a thermodynamic state in place
+        """
+        if self.relative_transform:
+            thermodynamic_state.set_alchemical_parameters(current_lambda, LambdaProtocol(functions = self._protocol))
+            return thermodynamic_state
+        else:
+            raise Exception(f"modifying a local thermodynamic state when self.relative_transform = False is not supported.  Aborting!")
     def pull_trajectory_snapshot(self, endstate):
         """
         Draw randomly a single snapshot from self._eq_files_dict
@@ -1592,91 +1632,3 @@ class NonequilibriumSwitchingFEP(object):
         [t0, g, Neff_max] = pymbar.timeseries.detectEquilibration(timeseries_array)
 
         return timeseries_array[t0:], g, Neff_max
-
-    def _endpoint_perturbations(self, direction = None, num_subsamples = 100):
-        """
-        Compute the correlation-adjusted free energy at the endpoints to the nonalchemical systems,
-        corrected nonalchemical systems, and alchemical endpoints with EXP
-        Returns
-        -------
-        df0, ddf0 : list of float
-            endpoint pertubation with error for lambda 0, kT
-        df1, ddf1 : list of float
-            endpoint perturbation for lambda 1, kT
-        """
-        _logger.debug(f"conducting EXP averaging on hybrid reduced potentials and the valence_adjusted endpoint potentials...")
-        free_energies = []
-
-        #defining reduced potential differences of the hybrid systems...
-        if direction == None:
-            directions = ['forward', 'reverse']
-        else:
-            if direction != 'forward' and direction != 'reverse':
-                raise Exception(f"direction must be 'forward' or 'reverse'; direction argument was given as {direction}")
-        for _direction in directions:
-            if _direction == 'forward':
-                start_lambda, end_lambda = 0, 1
-            elif _direction == 'reverse':
-                start_lambda, end_lambda = 1, 0
-            else:
-                raise Exception(f"direction may only be 'forward' or 'reverse'; the indicated direction was {_direction}")
-
-            if self._alchemical_reduced_potentials[f"from_{start_lambda}"] == [] or self._alchemical_reduced_potentials[f"to_{end_lambda}"] == []:
-                raise Exception(f"direction of perturbation calculation was {_direction} but alchemical reduced potentials returned an empty list")
-            if self._nonalchemical_reduced_potentials[f"from_{start_lambda}"] == []:
-                raise Exception(f"direction of perturbation calculation was {_direction} but nonalchemical reduced potentials returned an empty list")
-
-            alchemical_reduced_potential_differences = [i-j for i, j in zip(self._alchemical_reduced_potentials[f"to_{end_lambda}"], self._alchemical_reduced_potentials[f"from_{start_lambda}"])]
-            nonalchemical_reduced_potential_differences = [(i + j) - k for i, j, k in zip(self._nonalchemical_reduced_potentials[f"from_{start_lambda}"], self._added_valence_reduced_potentials[f"from_{start_lambda}"], self._alchemical_reduced_potentials[f"from_{start_lambda}"])]
-
-            #now to decorrelate the differences:
-            [alch_t0, alch_g, alch_Neff_max, alch_A_t, alch_full_uncorrelated_indices] = feptasks.compute_timeseries(np.array(alchemical_reduced_potential_differences))
-            [nonalch_t0, nonalch_g, nonalch_Neff_max, nonalch_A_t, nonalch_full_uncorrelated_indices] = feptasks.compute_timeseries(np.array(nonalchemical_reduced_potential_differences))
-
-            _logger.debug(f"alchemical decorrelation_results for {_direction}: (t0: {alch_t0}, g: {alch_g}, Neff_max: {alch_Neff_max})")
-            _logger.debug(f"nonalchemical decorrelation_results for {start_lambda}: (t0: {nonalch_t0}, g: {nonalch_g}, Neff_max: {nonalch_Neff_max})")
-
-            self._alchemical_reduced_potential_differences[_direction] = np.array([alchemical_reduced_potential_differences[i] for i in alch_full_uncorrelated_indices])
-            self._nonalchemical_reduced_potential_differences[start_lambda] = np.array([nonalchemical_reduced_potential_differences[i] for i in nonalch_full_uncorrelated_indices])
-
-            #now to bootstrap results
-            alchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._alchemical_reduced_potential_differences[_direction], size = (len(self._alchemical_reduced_potential_differences[_direction]))), compute_uncertainty=False) for _ in range(num_subsamples)])
-            self._EXP[_direction] = (np.average(alchemical_exp_results), np.std(alchemical_exp_results)/np.sqrt(num_subsamples))
-            _logger.debug(f"alchemical exp result for {_direction}: {self._EXP[_direction]}")
-
-            nonalchemical_exp_results = np.array([pymbar.EXP(np.random.choice(self._nonalchemical_reduced_potential_differences[start_lambda], size = (len(self._nonalchemical_reduced_potential_differences[start_lambda]))), compute_uncertainty=False) for _ in range(num_subsamples)])
-            self._EXP[start_lambda] = (np.average(nonalchemical_exp_results), np.std(nonalchemical_exp_results)/np.sqrt(num_subsamples))
-            _logger.debug(f"nonalchemical exp result for {start_lambda}: {self._EXP[start_lambda]}")
-
-    def _alchemical_free_energy(self, num_subsamples = 100):
-        """
-        Compute (by bootstrapping) the BAR estimate for forward and reverse protocols.
-        """
-
-        for _direction in ['forward', 'reverse']:
-            if self._nonequilibrium_cum_work[_direction] == []:
-                raise Exception(f"Attempt to compute BAR estimate failed because self._nonequilibrium_cum_work[{_direction}] has no work values")
-
-        work_subsamples = {'forward': [np.random.choice(self._nonequilibrium_cum_work['forward'], size = (len(self._nonequilibrium_cum_work['forward']))) for _ in range(num_subsamples)],
-                           'reverse': [np.random.choice(self._nonequilibrium_cum_work['reverse'], size = (len(self._nonequilibrium_cum_work['reverse']))) for _ in range(num_subsamples)]}
-
-        bar_estimates = np.array([pymbar.BAR(forward_sample, reverse_sample, compute_uncertainty=False) for forward_sample, reverse_sample in zip(work_subsamples['forward'], work_subsamples['reverse'])])
-        df, ddf = np.average(bar_estimates), np.std(bar_estimates) / np.sqrt(num_subsamples)
-        self._BAR = [df, ddf]
-        return (df, ddf)
-
-
-
-
-
-    @property
-    def current_free_energy_estimate(self):
-        """
-        Estimate the free energy based on currently available values
-        """
-        # Make sure the task queue is empty (all pending calcs are complete) before computing free energy
-        # Make sure the task queue is empty (all pending calcs are complete) before computing free energy
-        self._endpoint_perturbations()
-        [df, ddf] = self._alchemical_free_energy()
-
-        return df, ddf
