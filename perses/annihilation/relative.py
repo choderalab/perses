@@ -371,7 +371,7 @@ class HybridTopologyFactory(object):
 
         #The union of the two will give the core atoms that can result from either new or old topology
         total_core_atoms = core_atoms_from_old.union(core_atoms_from_new)
-        assert sorted(core_atoms_from_old) == sorted(core_atoms_from_new), 'Core atoms must match between old and new systems'
+        assert set(core_atoms_from_old) == set(core_atoms_from_new), 'Core atoms must match between old and new systems'
 
         #as a side effect, we can now compute the environment atom indices too, by subtracting the core indices
         #from the mapped atom set (since any atom that is mapped but not core is environment)
