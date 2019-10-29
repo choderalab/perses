@@ -611,9 +611,9 @@ class DaskClient(object):
     LSF: bool, default False
         whether we are using the LSF dask Client
     num_processes: int, default 2
-        number of processes to run
+        number of processes to run.  If not LSF, this argument does nothing
     adapt: bool, default False
-        whether to use an adaptive scheduler
+        whether to use an adaptive scheduler.  If not LSF, this argument does nothing
     """
     def __init__(self):
         _logger.info(f"Initializing DaskClient")
@@ -648,8 +648,9 @@ class DaskClient(object):
         NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
         This must be called before pickling
         """
-        self.client.close()
-        self.client = None
+        if self.client is not None:
+            self.client.close()
+            self.client = None
 
     def scatter(self, df):
         """
@@ -1193,7 +1194,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                     self.particle_futures.update({_direction: AIS_futures})
 
             #we wait for the futures
-            [self.wait(self.particle_futures[_direction]) for _direction self.particle_futures.keys()]
+            [self.wait(self.particle_futures[_direction]) for _direction in self.particle_futures.keys()]
 
             #attempt to resample all directions
             normalized_observable_values = self.attempt_resample(observable = observable,
@@ -1336,7 +1337,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
                 #pull previous labels
                 #previous_labels = [feptasks.Particle.pull_last_label(future) for future in futures]
-                previous_labels = self.gather_results(self.deploy(feptasks.pull_last_label, (futures,)))
+                previous_labels = self.gather_results(self.deploy(feptasks.Particle.pull_last_label, (futures,)))
 
                 #resample
                 resampled_works, resampled_sampler_states, resampled_labels = self.allowable_resampling_methods[resampling_method](cumulative_works,
@@ -1353,7 +1354,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                 _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
 
             #wait for resamples
-            [self.wait(self.particle_futures[_direction]) for _direction self.particle_futures.keys()]
+            [self.wait(self.particle_futures[_direction]) for _direction in self.particle_futures.keys()]
 
             normalized_observable_values[_direction] = normalized_observable_value
 
@@ -1488,7 +1489,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
         _base_max_val = max_val
         _logger.debug(f"\t\t\tmin, max values: {min_val}, {max_val}. ")
         cumulative_work_futures = self.deploy(feptasks.Particle.pull_cumulative_work, (futures,))
-        sampler_state_futures = self.deploy(feptasls.Particle.pull_sampler_state, (futures,))
+        sampler_state_futures = self.deploy(feptasks.Particle.pull_sampler_state, (futures,))
         cumulative_works = np.array(self.gather_results(cumulative_work_futures))
         sampler_states = self.gather_results(sampler_state_futures)
         thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = min_val)
