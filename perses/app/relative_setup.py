@@ -995,7 +995,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
             the interval with which to save configurations of the nonequilibrium trajectory.
             If None, the iterval is set to ncmc_save_interval, so only one configuration is saved.
             If ncmc_save_interval does not evenly divide into n_lambdas, an error is thrown.
-        collision_rate : float*openmm.simtk.picoseconds**(-1)
+        collision_rate : float*openmm.simtk.picoseconds**(-1), default np.inf/unit.picoseconds
             collision rate for integrator /unit.picoseconds
 
         LSF: bool, default False
@@ -1224,6 +1224,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
         #and then we can compute the free energy
         self.compute_sMC_free_energy()
+        self.deactivate_client()
         _logger.info(f"Complete!")
 
 
@@ -1523,7 +1524,16 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
         return midpoint
 
-    def equilibrate(self, n_equilibration_iterations = 1, endstates = [0,1], max_size = 1024*1e3, decorrelate=False, timer = False, minimize = False):
+    def equilibrate(self,
+                    n_equilibration_iterations = 1,
+                    endstates = [0,1],
+                    max_size = 1024*1e3,
+                    decorrelate=False,
+                    timer = False,
+                    minimize = False,
+                    LSF = False,
+                    num_processes = 2,
+                    adapt = False):
         """
         Run the equilibrium simulations a specified number of times at the lambda 0, 1 states. This can be used to equilibrate
         the simulation before beginning the free energy calculation.
@@ -1543,6 +1553,14 @@ class NonequilibriumSwitchingFEP(DaskClient):
             processes in the feptask equilibration scheme.
         minimize : bool, default False
             Whether to minimize the sampler state before conducting equilibration. This is passed directly to feptasks.run_equilibration
+
+        LSF: bool, default False
+            whether we are using the LSF dask Client
+        num_processes : int, default 2
+            number of processes to run.  This argument does nothing if not LSF
+        adapt : bool, default False
+            whether to use an adaptive scheduler.
+
         Returns
         -------
         equilibrium_result : perses.dispersed.feptasks.EquilibriumResult
@@ -1591,7 +1609,12 @@ class NonequilibriumSwitchingFEP(DaskClient):
         #distributed.progress(remote_EquilibriumFEPTask_list, notebook = False)
 
         #futures_EquilibriumFEPTask_list = self.client.map(feptasks.run_equilibrium, remote_EquilibriumFEPTask_list)
-        eq_results = [feptasks.run_equilibrium(task) for task in EquilibriumFEPTask_list]
+        self.activate_client(LSF = LSF,
+                            num_processes = num_processes,
+                            adapt = adapt)
+        eq_results = self.gather_results(self.deploy(feptasks.run_equilibrium, (EquilibriumFEPTask_list,)))
+        #eq_results = [feptasks.run_equilibrium(task) for task in EquilibriumFEPTask_list]
+        self.deactivate_client()
         #distributed.progress(futures_EquilibriumFEPTask_list, notebook = False)
 
 
