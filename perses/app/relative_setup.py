@@ -974,6 +974,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                               n_particles = 5,
                               direction = None,
                               ncmc_save_interval = None,
+                              collision_rate = np.inf/unit.picoseconds,
                               LSF = False,
                               num_processes = 2,
                               adapt = False):
@@ -994,6 +995,8 @@ class NonequilibriumSwitchingFEP(DaskClient):
             the interval with which to save configurations of the nonequilibrium trajectory.
             If None, the iterval is set to ncmc_save_interval, so only one configuration is saved.
             If ncmc_save_interval does not evenly divide into n_lambdas, an error is thrown.
+        collision_rate : float*openmm.simtk.picoseconds**(-1)
+            collision rate for integrator /unit.picoseconds
 
         LSF: bool, default False
             whether we are using the LSF dask Client
@@ -1019,6 +1022,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
         _logger.debug(f"ncmc save interval set as {self._ncmc_save_interval}")
         self._n_lambdas = n_lambdas
+        self._collision_rate = collision_rate
 
         # Now we have to pull the files
         if direction == None:
@@ -1048,6 +1052,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                                'trajectory_filename': None,
                                'write_configuration': self._write_ncmc_configuration,
                                'timestep': self._timestep,
+                               'collision_rate': self._collision_rate,
                                'measure_shadow_work': self._measure_shadow_work,
                                'label': self._current_iteration,
                                'lambda_protocol': self._protocol
@@ -1097,6 +1102,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                     trailblaze_observable_threshold = 0.0,
                     resample_observable_threshold = 0.0,
                     num_integration_steps = 1,
+                    collision_rate = np.inf,
                     resampling_method = 'multinomial',
                     online_protocol = None):
         """
