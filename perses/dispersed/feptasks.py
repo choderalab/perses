@@ -52,6 +52,8 @@ class Particle():
         Splitting string for integrator
     temperature : unit.Quantity(float, units = unit.kelvin)
         temperature at which to run the simulation
+    collision_rate : unit.Quantity(float, units = 1/unit.picoseconds)
+        integrator collision rate
     timestep : float
         size of timestep (units of time)
     work_save_interval : int, default None
@@ -125,6 +127,7 @@ class Particle():
                  direction,
                  splitting = 'V R O R V',
                  temperature = 300*unit.kelvin,
+                 collision_rate = np.inf/unit.picoseconds,
                  timestep = 1.0*unit.femtosecond,
                  work_save_interval = None,
                  top = None,
@@ -163,14 +166,33 @@ class Particle():
 
         #create lambda protocol
         self._nsteps = nsteps
-        self.lambdas = np.linspace(self.start_lambda, self.end_lambda, self._nsteps)
-        self.current_index = int(0)
+        if self._nsteps is None:
+            self.trailblaze = True
+            self._work_save_interval = work_save_interval # this is allowed to be None, in which case, the save_config method will never be called
+            #likewise, if work work save interval is longer than the trailblazed lambda protocol, the save_configuration method will never be called
+            self.current_lambda = self.start_lambda
+            self.importance_samples = 1 #including the zero state
+            #if we opt to trailblaze, we don't define a self.lambdas linsapce
+            #instead, we define a self.current lambda and set it to the value of the start lambda
+        else:
+            self.trailblaze = False
+            self.lambdas = np.linspace(self.start_lambda, self.end_lambda, self._nsteps)
+            self.current_index = int(0)
+            self.current_lambda = self.lambdas[self.current_index]
+            if work_save_interval is None:
+                self._work_save_interval = work_save_interval
+            else:
+                self._work_save_interval = work_save_interval
+            #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
+            #work before the end of the protocol as the end
+            if self._nsteps % self._work_save_interval != 0:
+                raise ValueError("The work writing interval must be a factor of the total number of steps")
 
         #create sampling objects
         self.sampler_state = sampler_state
         self.thermodynamic_state = thermodynamic_state
         _logger.debug(f"thermodynamic state: {self.thermodynamic_state}")
-        self.integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = np.inf/unit.picosecond)
+        self.integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = collision_rate)
         #platform = openmm.Platform.getPlatformByName(platform_name)
         self.context = openmm.Context(self.thermodynamic_state.system, self.integrator)
         #self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, integrator)
@@ -191,11 +213,6 @@ class Particle():
         init_state = self.context.getState(getEnergy=True)
         self.initial_energy = self._beta * (init_state.getPotentialEnergy() + init_state.getKineticEnergy())
 
-        if work_save_interval is None:
-            self._work_save_interval = self._nsteps
-        else:
-            self._work_save_interval = work_save_interval
-
         self._save_configuration = save_configuration
         self._measure_shadow_work = measure_shadow_work
         if self._save_configuration:
@@ -203,11 +220,6 @@ class Particle():
                 raise Exception(f"cannot save configuration when trajectory_filename is None")
             else:
                 self._trajectory_filename = trajectory_filename
-
-        #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
-        #work before the end of the protocol as the end
-        if self._nsteps % self._work_save_interval != 0:
-            raise ValueError("The work writing interval must be a factor of the total number of steps")
 
         #use the number of step moves plus one, since the first is always zero
         self._cumulative_work = [0.0]
@@ -236,80 +248,85 @@ class Particle():
         self.failures = []
         _logger.debug(f"Initialization complete!")
 
-    def anneal(self, num_steps = None, increment = 1):
+    def anneal(self, new, num_integration_steps = 1):
         """Propagate the state through the integrator.
-        This updates the SamplerState after the integration. It will an mcmc protocol specified by the number of steps
+        This updates the SamplerState after the integration. It will an mcmc protocol specified by the next lambda
 
         Parameters
         ----------
-        num_steps: int, default None
-            number of steps to propagate the particle
-        increment: int, default 1
-            the lambda index to increment for each step
+        new: int or float
+            if float: is presumed to be the new lambda for the next importance weight
+            if int: is presumed to be the index of the corresponding lambda for annealing
+        num_integration_steps: int, default 1
+            the number of integration steps to propagate the particle at a given lambda
         """
-        _logger.info(f"Annealing {num_steps} steps...")
-        _logger.debug(f"\tcurrent labels: {self.label}")
-        if not num_steps:
-            num_steps = self._nsteps - 1
-
-        #check that the num_steps doesn't overshoot end lambda
-        if self.current_index == len(self.lambdas) - 1:
-            raise Exception(f"the lambda protocol is already complete")
-
-        if self.current_index + num_steps * increment >= len(self.lambdas):
-            raise Exception(f"you specified {num_steps * increment} steps, but there are only {len(self.lambdas)} lambda values, or {len(self.lambdas) - 1} steps to be conducted...aborting!")
-
-        _logger.debug(f"conducting iteration loop")
-        for _ in range(num_steps): #anneal for step steps
+        #first, we must check the trailblaze
+        if type(new) == float or isinstance(new, np.float64):
+            if not self.trailblaze:
+                raise Exception(f"Annealing to lambda = {new}, but Particle is not trailblazing.  Aborting")
+            _logger.info(f"Computing importance weight and propagating\
+                with respect to lambda = {new} from {self.current_lambda} and propagating {num_integration_steps} steps...")
+            self.current_lambda = new
             try:
-                #print current state
                 prep_start = time.time()
-                current_lambda = self.lambdas[self.current_index]
-                _logger.info(f"\tcurrent index: {self.current_index} / {len(self.lambdas) - 1}")
-                _logger.info(f"\tcurrent lambda: {self.thermodynamic_state.global_lambda}")
-
-                #compute the importance weights and increment lambda
-                self.compute_incremental_work(self.current_index + increment)
-                _logger.debug(f"\tincrementing current index by {increment}")
-                self.current_index += increment
-                _logger.info(f"final lambda: {self.current_index} / {len(self.lambdas) - 1}")
-                _logger.info(f"\tcurrent lambda: {self.thermodynamic_state.global_lambda}")
-
-                #sample next state
-                _logger.debug(f"\tintegrating one step")
-                self.integrator.step(1)
-
-                #save protocol time
+                self.compute_incremental_work(new)
+                self.integrator.step(num_integration_steps)
                 self._timers['protocol'].append(time.time() - prep_start)
-                _logger.debug(f"\tlocal timer: {self._timers['protocol'][-1]}")
-
-                #save configuration
-                _logger.debug(f"\tsaving configuration")
-                self.save_configuration()
-
+                self.current_lambda = new
+                self.importance_samples += 1
+                iteration = self.importance_samples
+                self.save_configuration(iteration)
                 #we can resample outside of this if necessary
-
             except Exception as e:
                 _logger.info(f"\tdetected failure: {e}")
                 self.succeed = False
                 self.failures.append(e)
-            _logger.info(f"###########################")
 
-        #now just update the sampler state (now, this is done later when we pull the sampler state)
-        # _logger.debug(f"updating sampler state from context")
-        # self.sampler_state.update_from_context(self.context)
+        elif type(new) == int:
+            if self.trailblaze:
+                raise Exception(f"Annealing to index = {new}, but Particle is trailblazing.  Aborting")
+            num_steps = new - self.current_index
+            if self.current_index + num_steps >= len(self.lambdas):
+                raise Exception(f"you specified {num_steps} steps, but there are only {len(self.lambdas)} lambda values, or {len(self.lambdas) - 1} steps to be conducted...aborting!")
+            _logger.info(f"Computing importance weight and propagating to index {new}. Annealing from lambda = {self.lambdas[self.current_index]}\
+                to {self.lambdas[new]}, corresponding to {num_steps} steps.")
+            for _ in range(num_steps): #anneal for step steps
+                try:
+                    prep_start = time.time()
+                    current_lambda = self.lambdas[self.current_index]
+                    new_lambda = self.lambdas[self.current_index + 1]
+                    self.compute_incremental_work(new_lambda)
+                    self.current_index += increment
+                    self.integrator.step(num_integration_steps)
+                    self._timers['protocol'].append(time.time() - prep_start)
+                    iteration = self.current_index
+                    self.save_configuration(iteration)
+                    self.current_lambda = new_lambda
+                    #we can resample outside of this if necessary
+                except Exception as e:
+                    _logger.info(f"\tdetected failure: {e}")
+                    self.succeed = False
+                    self.failures.append(e)
 
-        #if the protocol is done, then finish
-        if self.current_index == len(self.lambdas) - 1:
-            _logger.info(f"detected final lambda (i.e. {self.current_index} / {len(self.lambdas) - 1})...")
+        else:
+            raise Exception(f"new ({new} is neither a float nor an integer  it is a{type(new)}.  Aborting.)")
+
+        #attempt termination
+        self.attempt_termination()
+
+    def attempt_termination(self):
+        """
+        Attempt to terminate the annealing protocol and return the Particle attributes.
+        """
+        if self.current_lambda == self.end_lambda: #then we terminate
+            _logger.info(f"detected final lambda")
             if self._save_configuration:
-                _logger.debug(f"saving configuration")
-
+                _logger.info(f"saving configuration")
                 self._trajectory = md.Trajectory(np.array(self._trajectory_positions), self._topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
                 Particle.write_nonequilibrium_trajectory(self._trajectory, self._trajectory_filename)
 
             if self._measure_shadow_work:
-                _logger.debug(f"measuring shadow work")
+                _logger.info(f"measuring shadow work")
                 total_heat = self.integrator.get_heat(dimensionless=True)
                 final_state = self.context.getState(getEnergy=True)
                 self.final_energy = self._beta * (final_state.getPotentialEnergy() + final_state.getKineticEnergy())
@@ -319,37 +336,27 @@ class Particle():
                 self._shadow_work = 0.0
 
 
-    def compute_incremental_work(self, index):
+
+    def compute_incremental_work(self, _lambda):
         """
         compute the incremental work of a lambda update
         """
         old_rp = self._beta * self.context.getState(getEnergy=True).getPotentialEnergy()
-        _logger.debug(f"\t\told rp: {old_rp}")
 
         #update thermodynamic state and context
-        _logger.debug(f"\t\tincrementing lambda...")
-        new_lambda = self.lambdas[index]
-        _logger.debug(f"\t\tnew lambda: {new_lambda}")
-        _logger.debug(f"\t\tupdating thermodynamic state to new lambda")
-        self.thermodynamic_state.set_alchemical_parameters(new_lambda, lambda_protocol = self.lambda_protocol_class)
+        self.thermodynamic_state.set_alchemical_parameters(_lambda, lambda_protocol = self.lambda_protocol_class)
         self.thermodynamic_state.apply_to_context(self.context)
-
-        #compute new rp
         new_rp = self._beta * self.context.getState(getEnergy=True).getPotentialEnergy()
-        _logger.debug(f"\t\tnew_rp: {new_rp}")
-
-        #incremental work
-        _logger.debug(f"\t\tupdating incremental and cumulative works")
         self._cumulative_work.append(self._cumulative_work[-1] + (new_rp - old_rp))
-        _logger.debug(f"\t\tcumulative_work: {self._cumulative_work}")
 
-
-    def save_configuration(self):
+    def save_configuration(self, iteration):
         """
         pass a conditional save function
         """
         #now to save the protocol work if necessary
-        if (self.current_index) % self._work_save_interval == 0: #we save the protocol work if the remainder is zero
+        if self._work_save_interval is None:
+            return
+        if iteration % self._work_save_interval == 0: #we save the protocol work if the remainder is zero
             _logger.debug(f"\t\tsaving protocol")
             save_start = time.time()
             #self._kinetic_energy.append(self._beta * context.getState(getEnergy=True).getKineticEnergy()) #maybe if we want kinetic energy in the future
@@ -396,6 +403,7 @@ class Particle():
              trajectory_filename: (<str, optional, default None>; Full filepath of trajectory files. If none, trajectory files are not written.),
              write_configuration: (<boolean, default False>; Whether to also write configurations of the trajectory at the requested interval.),
              timestep: (<unit.Quantity=float*unit.femtoseconds>; dynamical timestep),
+             collision_rate : (unit.Quantity = float/unit.picoseconds; collision rate)
              measure_shadow_work: (<bool, default False>; Whether to compute the shadow work; there is additional overhead in the integrator cost),
              lambda_protocol: (<str, default 'default'; lambda protocol with which to conduct annealing >)
             }
@@ -440,7 +448,7 @@ class Particle():
         return NonequilibriumFEPTask(particle = particle, inputs = inputs_dict)
 
     @staticmethod
-    def distribute_anneal(task, num_steps, increment = 1):
+    def distribute_anneal(task, new, num_integration_steps = 1):
         """
         client-callable function to call Particle.anneal method
 
@@ -448,10 +456,11 @@ class Particle():
         ----------
         task: NonequilibriumFEPTask
             the particle-containing task on which to call Particle.anneal()
-        num_steps: int
-            number of steps to take
-        increment: int
-            the number of lambda increments per step
+        new: int or float
+            if float: is presumed to be the new lambda for the next importance weight
+            if int: is presumed to be the index of the corresponding lambda for annealing
+        num_integration_steps: int, default 1
+            the number of integration steps to propagate the particle at a given lambda
 
         Returns
         -------
@@ -459,7 +468,7 @@ class Particle():
             the particle-containing task on which anneal was called
 
         """
-        task.particle.anneal(num_steps, increment)
+        task.particle.anneal(new, num_integration_steps)
         return task
 
     @staticmethod
@@ -511,7 +520,7 @@ class Particle():
         return task.particle._cumulative_work[-2:]
 
     @staticmethod
-    def pull_current_index(task):
+    def pull_current_lambda(task):
         """
         client-callable function to pull the current index from the task.particle class
 
@@ -520,7 +529,7 @@ class Particle():
         current_index: int
             the index of the particle iterator
         """
-        return task.particle.current_index
+        return task.particle.current_lambda
 
     @staticmethod
     def pull_shadow_work(task):
@@ -602,6 +611,7 @@ class Particle():
                       'atom_indices_to_save',
                       'write_configuration',
                       'lambda_protocol',
+                      'collision_rate',
                       'measure_shadow_work',
                       'label',
                       'trajectory_filename']

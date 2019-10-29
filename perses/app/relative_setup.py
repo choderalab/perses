@@ -602,15 +602,135 @@ class RelativeFEPSetup(object):
     def vacuum_new_positions(self):
         return self._vacuum_positions_new
 
-class NonequilibriumSwitchingFEP(object):
+class DaskClient(object):
+    """
+    This class manages the dask scheduler.
+
+    Parameters
+    ----------
+    LSF: bool, default False
+        whether we are using the LSF dask Client
+    num_processes: int, default 2
+        number of processes to run
+    adapt: bool, default False
+        whether to use an adaptive scheduler
+    """
+    def __init__(self):
+        _logger.info(f"Initializing DaskClient")
+
+    def activate_client(self,
+                        LSF = True,
+                        num_processes = 2,
+                        adapt = False):
+
+        if LSF:
+            from dask_jobqueue import LSFCluster
+            cluster = LSFCluster()
+            self._adapt = adapt
+            self.num_processes = processes
+
+            if self._adapt:
+                _logger.debug(f"adapting cluster from 1 to {self.num_processes} processes")
+                cluster.adapt(minimum = 2, maximum = self.num_processes, interval = "1s")
+            else:
+                _logger.debug(f"scaling cluster to {self.num_processes} processes")
+                cluster.scale(self.num_processes)
+
+            _logger.debug(f"scheduling cluster with client")
+            self.client = distributed.Client(cluster)
+        else:
+            self.client = None
+            self._adapt = False
+            self.num_processes = 0
+
+    def deactivate_client(self):
+        """
+        NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
+        This must be called before pickling
+        """
+        self.client.close()
+        self.client = None
+
+    def scatter(self, df):
+        """
+        wrapper to scatter the local data df
+        """
+        if self.client is None:
+            #don't actually scatter
+            return df
+        else:
+            return self.client.scatter(df)
+
+    def deploy(self, func, arguments):
+        """
+        wrapper to map a function and its arguments to the client for scheduling
+
+        Arguments
+        ---------
+        func : function to map
+            arguments: tuple of the arguments that the function will take
+        argument : tuple of argument lists
+
+        Returns
+        ---------
+        futures
+        """
+        if self.client is None:
+            if len(arguments) == 1:
+                futures = [func(plug) for plug in arguments[0]]
+            else:
+                futures = [func(*plug) for plug in zip(*arguments)]
+        else:
+            futures = self.client.map(func, *arguments)
+        return futures
+
+    def gather_results(self, futures):
+        """
+        wrapper to gather a function given its arguments
+
+        Arguments
+        ---------
+        futures : future pointers
+
+        Returns
+        ---------
+        results
+        """
+        if self.client is None:
+            return futures
+        else:
+            results = self.client.gather(futures)
+            return results
+
+    def wait(self, futures):
+        """
+        wrapper to wait until futures are complete.
+        """
+        if self.client is None:
+            pass
+        else:
+            distributed.wait(futures)
+
+class NonequilibriumSwitchingFEP(DaskClient):
     """
     This class manages Nonequilibrium switching based relative free energy calculations, carried out on a distributed computing framework.
     """
 
-    def __init__(self, hybrid_factory, protocol = 'default',
-                 n_lambdas = 100, n_equilibrium_steps_per_iteration = 100, temperature=300.0 * unit.kelvin, trajectory_directory=None, trajectory_prefix=None,
-                 atom_selection="not water", eq_splitting_string="V R O R V", neq_splitting_string = "V R O R V", measure_shadow_work=False, timestep=1.0*unit.femtoseconds,
-                 ncmc_save_interval = None, write_ncmc_configuration = False, relative_transform = True):
+    def __init__(self,
+                 hybrid_factory,
+                 protocol = 'default',
+                 n_equilibrium_steps_per_iteration = 100,
+                 temperature=300.0 * unit.kelvin,
+                 trajectory_directory=None,
+                 trajectory_prefix=None,
+                 atom_selection="not water",
+                 eq_splitting_string="V R O R V",
+                 neq_splitting_string = "V R O R V",
+                 measure_shadow_work=False,
+                 timestep=1.0*unit.femtoseconds,
+                 ncmc_save_interval = None,
+                 write_ncmc_configuration = False,
+                 relative_transform = True):
         """
         Create an instance of the NonequilibriumSwitchingFEP driver class.
         NOTE : defining self.client and self.cluster renders this class non-pickleable; call self.deactivate_client() to close the cluster/client
@@ -621,8 +741,7 @@ class NonequilibriumSwitchingFEP(object):
             hybrid topology factory
         protocol : dict of str: str, default protocol as defined by top of file
             How each force's scaling parameter relates to the main lambda that is switched by the integrator from 0 to 1
-        n_lambdas : int, default 100
-            Number of steps per NCMC trajectory
+            In this case,  the trailblaze threshold must be set explicitly
         n_equilibrium_steps_per_iteration : int, default 100
             Number of steps to run in an iteration of equilibration to generate an iid sample
         temperature : float unit.Quantity
@@ -654,14 +773,6 @@ class NonequilibriumSwitchingFEP(object):
         _logger.info(f"writing HybridTopologyFactory")
         self._factory = hybrid_factory
         topology_proposal = self._factory._topology_proposal
-        self._ncmc_save_interval = n_lambdas if not ncmc_save_interval else ncmc_save_interval
-        _logger.debug(f"ncmc save interval set as {self._ncmc_save_interval}")
-
-        #we have to make sure that there is no remainder from n_lambdas % ncmc_save_interval
-        try:
-            assert n_lambdas % self._ncmc_save_interval == 0
-        except ValueError:
-            print(f"The work writing interval must be a factor of the total number of ncmc steps; otherwise, the ncmc protocol is incomplete!")
 
         # use default functions if none specified
         self._protocol = protocol
@@ -676,7 +787,6 @@ class NonequilibriumSwitchingFEP(object):
         # set up some class attributes
         self._hybrid_system = self._factory.hybrid_system
         self._initial_hybrid_positions = self._factory.hybrid_positions
-        self._n_lambdas = n_lambdas
         self._n_equil_steps = n_equilibrium_steps_per_iteration
         self._trajectory_prefix = trajectory_prefix
         self._trajectory_directory = trajectory_directory
@@ -779,50 +889,9 @@ class NonequilibriumSwitchingFEP(object):
         #create observable list
         self.iterations = {_direction: [0] for _direction in ['forward', 'reverse']}
         self.observable = {_direction: [1.0] for _direction in ['forward', 'reverse']}
-        self.allowable_resampling_methods = ['multinomial']
-        self.allowable_observables = ['ESS', 'CESS']
+        self.allowable_resampling_methods = {'multinomial': NonequilibriumSwitchingFEP.multinomial_resample}
+        self.allowable_observables = {'ESS': NonequilibriumSwitchingFEP.ESS, 'CESS': NonequilibriumSwitchingFEP.CESS}
         _logger.info(f"constructed")
-
-    def activate_client(self, LSF = True, processes = 2, adapt = False):
-        """
-        NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
-        Arguments
-        ----------
-        LSF: bool, default True
-            whether to use the LSFCuster
-        processes: int, default 4 (number of GPUs in a lilac node)
-            number of processes to run in parallel
-        adapt: bool, default False
-            whether to adapt the cluster size dynamically; if True, default minimum is 2 and maximum is processes
-        """
-        if LSF:
-            from dask_jobqueue import LSFCluster
-            cluster = LSFCluster()
-            self._adapt = adapt
-            self._processes = processes
-
-            if self._adapt:
-                _logger.debug(f"adapting cluster from 1 to {self._processes} processes")
-                cluster.adapt(minimum = 2, maximum = self._processes, interval = "1s")
-            else:
-                _logger.debug(f"scaling cluster to {self._processes} processes")
-                cluster.scale(self._processes)
-
-            _logger.debug(f"scheduling cluster with client")
-            self.client = distributed.Client(cluster)
-        else:
-            self.client = distributed.Client()
-            self._adapt = False
-            self._processes = 0
-
-
-    def deactivate_client(self):
-        """
-        NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
-        This must be called before pickling
-        """
-        self.client.close()
-        self.client = None
 
     def compute_nonalchemical_perturbations(self, start, end, sampler_state, geometry_engine):
         """
@@ -900,19 +969,56 @@ class NonequilibriumSwitchingFEP(object):
         self._alchemical_reduced_potentials[f"to_{_lambda_rev}"].append(hybrid_reduced_potentials[1])
 
 
-    def instantiate_particles(self, n_particles = 5, direction = None):
+    def instantiate_particles(self,
+                              n_lambdas = None,
+                              n_particles = 5,
+                              direction = None,
+                              ncmc_save_interval = None,
+                              LSF = False,
+                              num_processes = 2,
+                              adapt = False):
         """
         Instantiate sMC particles. This entails loading n_iterations snapshots from disk (from each endstate of specified)
         and distributing Particle classes.
 
-        Parameters
+        Arguments
         ----------
+        n_lambdas : int, default None
+            number of lambdas values.
+            if None, then we must give an online protocol in algorithm 4 or allow for trailblaze
         n_particles : int, optional, default 5
             The number of times to run the entire sequence described above (concurrency)
-        direction : str
+        direction : str, default None
             which direction to conduct the simulation, 'forward', 'reverse', or None; None will run both
+        ncmc_save_interval : int, default None
+            the interval with which to save configurations of the nonequilibrium trajectory.
+            If None, the iterval is set to ncmc_save_interval, so only one configuration is saved.
+            If ncmc_save_interval does not evenly divide into n_lambdas, an error is thrown.
+
+        LSF: bool, default False
+            whether we are using the LSF dask Client
+        num_processes : int, default 2
+            number of processes to run.  This argument does nothing if not LSF
+        adapt : bool, default False
+            whether to use an adaptive scheduler.
+
         """
         _logger.debug(f"conducting nonequilibrium_switching with {n_particles} iterations")
+
+        #check n_lambdas
+        if n_lambdas is None:
+            _logger.info(f"n_lambdas is set to None; presuming trailblazed protocol")
+            self._ncmc_save_interval = ncmc_save_interval
+        else:
+            self._ncmc_save_interval = ncmc_save_interval
+            try:
+                if self._ncmc_save_interval is not None:
+                    assert n_lambdas % self._ncmc_save_interval == 0
+            except ValueError:
+                print(f"The work writing interval must be a factor of the total number of ncmc steps; otherwise, the ncmc protocol is incomplete!")
+
+        _logger.debug(f"ncmc save interval set as {self._ncmc_save_interval}")
+        self._n_lambdas = n_lambdas
 
         # Now we have to pull the files
         if direction == None:
@@ -966,6 +1072,13 @@ class NonequilibriumSwitchingFEP(object):
                 self._current_iteration += 1
                 _logger.debug(f"\titeration {self._current_iteration} of direction {_direction} complete")
 
+        #activate the client
+        self.activate_client(LSF = LSF,
+                            num_processes = num_processes,
+                            adapt = adapt)
+
+
+
         #now to scatter the jobs and map
         self.particle_futures = {_direction: None for _direction in directions}
         for _direction in directions: #for the moment, we don
@@ -974,86 +1087,18 @@ class NonequilibriumSwitchingFEP(object):
             # distributed.progress(remote_NonquilibriumFEPTask_list, notebook = False)
             # futures = self.client.map(feptasks.Particle.launch_particle, remote_NonquilibriumFEPTask_list)
             # distributed.progress(futures, notebook = False)
-            futures = [feptasks.Particle.launch_particle(i) for i in NonequilibriumFEPSetup_dict[_direction]]
+            futures = self.deploy(feptasks.Particle.launch_particle, (NonequilibriumFEPSetup_dict[_direction],))
+            #futures = [feptasks.Particle.launch_particle(i) for i in NonequilibriumFEPSetup_dict[_direction]]
             self.particle_futures[_direction] = futures
+            self.wait(futures)
 
-    def resampling_adaptive_sMC(self, observable = 'ESS', resample_observable_threshold = 0.9, check_interval = 1, resampling_method = 'multinomial'):
-        """
-        Conduct annealed importance sampling with adaptive resampling.
-        Once the annealing has evolved for check_interval_steps, the CESS is computed, and if it is found to be below
-        CESS_threshold, resampling is conducted.
-
-        Parameters
-        ----------
-        observable : str, default CESS
-            the observable used to check resample_observable_threshold
-        resample_observable_threshold : float, default 0.9
-            the thresholding used for resampling; 0 < resample_observable_threshold <= 1
-        check_interval : int, default 1
-            the interval with which to conduct resampling if the CESS_threshold is surpassed.
-            Default is to check after every step of annealing
-        resampling method : str, default 'multinomial'
-            the method used to resample. The default is multinomial.
-            Multinomial is the only accepted resampling scheme at the moment.
-        """
-        _logger.info(f"Conducting resampling adaptive sMC...")
-
-        #check resampler
-        if resampling_method not in self.allowable_resampling_methods:
-            raise Exception(f"{resampling_method} is not a currently supported resampling method.")
-
-        #check observable
-        if observable not in self.allowable_observables:
-            raise Exception(f"{observable} is not a currently supported observable")
-
-        #ensure that the check interval is a factor of the number of _n_lambdas
-        if check_interval >= self._n_lambdas - 1:
-            raise Exception(f"the check interval was specified as {check_interval}, but only {self._n_lambdas - 1} annealing steps can be called.  Aborting!")
-        elif (self._n_lambdas - 1) % check_interval != 0:
-            raise Exception(f"the check interval ({check_interval}) does not evenly divide into the number of annealing steps ({self._n_lambdas}) to be had.  Aborting!")
-        else:
-            max_number_of_resamples = (self._n_lambdas - 1) // check_interval
-
-        step_counter = 0
-        _logger.info(f"All setups are complete; proceeding with annealing and resampling until the final lambda is weighed.")
-        while step_counter < self._n_lambdas - 1:
-            _logger.info(f"\tsteps_counter: {step_counter} / {self._n_lambdas - 1}")
-            _logger.debug(f"\tdistributing annealing for {check_interval} steps...")
-            for _direction, futures in self.particle_futures.items():
-                _logger.debug(f"\t\tdirection: {_direction}")
-                _logger.debug(f"################################")
-                AIS_futures = [feptasks.Particle.distribute_anneal(future, check_interval) for future in futures]
-                _logger.debug(f"################################")
-                self.particle_futures.update({_direction: AIS_futures})
-
-            step_counter += check_interval
-            _logger.debug(f"\tnew step_counter: {step_counter} / {self._n_lambdas - 1}")
-
-            #attempt to resample all directions
-            normalized_observable_values = self.attempt_resample(observable = observable, resampling_method = resampling_method, resample_observable_threshold = resample_observable_threshold)
-            [self.observable[_direction].append((step_counter, i)) for _direction, i in normalized_observable_values.items()]
-            _logger.debug(f"################################################################")
-
-        #check to ensure that all of the remote timers are equal to the online timer
-        if step_counter == self._n_lambdas - 1:
-            _logger.debug(f"\tfinal step count is achieved; left while loop")
-            for _direction, futures in self.particle_futures.items():
-                #we have reached the max number of steps; check this
-                indices = [feptasks.Particle.pull_current_index(future) for future in futures]
-                if all(index == self._n_lambdas - 1 for index in indices):
-                    pass
-                else:
-                    raise Exception(f"the indices are {indices} but they are not equal to {self._n_lambdas - 1}.  the direction is {_direction}")
-
-
-        #now we can parse the outputs
-        self.gather_results()
-
-        #and then we can compute the free energy
-        self.compute_sMC_free_energy()
-        _logger.info(f"Complete")
-
-    def algorithm_4(self, observable = 'ESS', trailblaze_observable_threshold = 0.0, resample_observable_threshold = 0.0, check_interval = 1, resampling_method = 'multinomial'):
+    def algorithm_4(self,
+                    observable = 'ESS',
+                    trailblaze_observable_threshold = 0.0,
+                    resample_observable_threshold = 0.0,
+                    num_integration_steps = 1,
+                    resampling_method = 'multinomial',
+                    online_protocol = None):
         """
         conduct algorithm 4 according to https://arxiv.org/abs/1303.3123
         It consists of the following procedure:
@@ -1061,79 +1106,122 @@ class NonequilibriumSwitchingFEP(object):
         2.
         """
         import time
-        _logger.info(f"Conducting resampling adaptive sMC with trailblaze...")
+        _logger.info(f"Conducting resampling adaptive sMC...")
 
-        #check resampler
-        if resampling_method not in self.allowable_resampling_methods:
+        if resampling_method not in self.allowable_resampling_methods: #check resampler
             raise Exception(f"{resampling_method} is not a currently supported resampling method.")
-
-        #check observable
-        if observable not in self.allowable_observables:
+        elif observable not in self.allowable_observables.keys(): #check observable
             raise Exception(f"{observable} is not a currently supported observable")
 
-        #check trailblaze
-        if float(trailblaze_observable_threshold) == 0.0:
-            trailblaze = False
+        if online_protocol is None:
+            _logger.info(f"online protocol is none...")
+            if self._n_lambdas is None:
+                _logger.debug(f"_n_lambdas was not specified.  trailblazing")
+                _trailblaze = True
+                if trailblaze_observable_threshold == 0.0:
+                    raise Exception(f"_trailblaze = True, but the observable threshold is set to 0.0.  Aborting.")
+                self.online_protocol = {'forward': [0.0], 'reverse': [1.0]}
+            else:
+                _logger.debug(f"_n_lambdas was specified but online protocol was not; creating linearly-spaced lambda protocol; not trailblazing")
+                self.online_protocol = {'forward': np.linspace(0, 1, self._n_lambdas), 'reverse': np.linspace(1, 0, self._n_lambdas)}
+                _trailblaze = False
         else:
-            trailblaze = True
-            thermodynamic_state = copy.deepcopy(self._hybrid_thermodynamic_states[0])
+            _logger.debug(f"online protocol was specified; not trailblazing")
+            _trailblaze = False
+            self.online_protocol = online_protocol
+            if self._n_lambdas is not None:
+                assert len(self.online_protocol) == self._n_lambdas, f"online_protocol was specified, but its length is not the specified number of lambdas.  Aborting."
+            for _direction in self.particle_futures.keys():
+                if _direction == 'forward':
+                    assert 'forward' in self.online_protocol.keys(), f"'forward' not in online_protocol.keys()"
+                    assert self.online_protocol['forward'][0] == 0.0 and self.online_protocol['forward'][-1] == 1.0, f"the forward endstates should be 0.0 and 1.0"
+                elif _direction == 'reverse':
+                    assert 'reverse' in self.online_protocol.keys(), f"'reverse' not in online_protocol.keys()"
+                    assert self.online_protocol['reverse'][0] == 1.0 and self.online_protocol['reverse'][-1] == 0.0, f"the reverse endstates should be 1.0 and 0.0"
 
-        #ensure that the check interval is a factor of the number of _n_lambdas
-        if check_interval >= self._n_lambdas - 1:
-            raise Exception(f"the check interval was specified as {check_interval}, but only {self._n_lambdas - 1} annealing steps can be called.  Aborting!")
-        elif (self._n_lambdas - 1) % check_interval != 0:
-            raise Exception(f"the check interval ({check_interval}) does not evenly divide into the number of annealing steps ({self._n_lambdas}) to be had.  Aborting!")
-        else:
-            max_number_of_resamples = (self._n_lambdas - 1) // check_interval
 
+        #define a thermodynamic state
+        thermodynamic_state = copy.deepcopy(self._hybrid_thermodynamic_states[0])
+
+        #define termination lambdas
+        self.end_lambdas = {'forward': 1.0, 'reverse': 0.0}
+
+        #define a step counter
         self.step_counters = {_direction: 0 for _direction in self.particle_futures.keys()}
-        online_protocols = {'forward': np.linspace(0, 1, self._n_lambdas), 'reverse': np.linspace(1, 0, self._n_lambdas)}
 
-        _logger.info(f"All setups are complete; proceeding with annealing and resampling until the final lambda is weighed.")
-        while any(val < self._n_lambdas - 1 for val in self.step_counters.values()):
+        _logger.info(f"All setups are complete; proceeding with annealing and resampling with threshold {resample_observable_threshold} until the final lambda is weighed.")
+        while True: #we must break the while loop at some point
             start = time.time()
-            _logger.info(f"\tstep_counters: {[(_direction + ': ' + str(val) + '/' + str(self._n_lambdas - 1)) for _direction, val in self.step_counters.items()]}")
 
             #we attempt to trailblaze
-            if trailblaze:
-                _logger.debug(f"\ttrailblaze is True; trailblazing...")
-                self.trailblaze(thermodynamic_state = thermodynamic_state,
-                                observable = observable,
-                                observable_threshold = trailblaze_observable_threshold)
-            else: #we increment by 1
+            if _trailblaze:
                 for _direction, futures in self.particle_futures.items():
-                    if self.step_counters[_direction] == self._n_lambdas - 1:
-                        continue #if the step counter is at the last lambda index, we continue
-                    AIS_futures = [feptasks.Particle.distribute_anneal(future, check_interval) for future in futures]
+                    _logger.debug(f"\ttrailblazing from lambda = {self.online_protocol[_direction][self.step_counters[_direction]]}")
+                    if self.online_protocol[_direction][self.step_counters[_direction]] == self.end_lambdas[_direction]:
+                        _logger.debug(f"the current lambda is the last lambda; skipping trailblaze")
+                        continue
+                    self.step_counters[_direction] += 1
+                    new_lambda = self.binary_search(futures = futures,
+                                                    min_val = self.online_protocol[_direction][-1],
+                                                    max_val = self.end_lambdas[_direction],
+                                                    observable = self.allowable_observables[observable],
+                                                    observable_threshold = trailblaze_observable_threshold ** self.step_counters[_direction],
+                                                    thermodynamic_state = thermodynamic_state,
+                                                    max_iterations=20,
+                                                    initial_guess = None,
+                                                    precision_threshold = 1e-6)
+                    _logger.debug(f"\ttrailblazing from lambda = {self.online_protocol[_direction][-1]} to lambda = {new_lambda}")
+                    self.online_protocol[_direction].append(new_lambda)
+                    AIS_futures = self.deploy(feptasks.Particle.distribute_anneal, (futures, [new_lambda]*len(futures), [num_integration_steps]*len(futures)))
+                    #AIS_futures = [feptasks.Particle.distribute_anneal(future, new_lambda, num_integration_steps) for future in futures]
                     self.particle_futures.update({_direction: AIS_futures})
 
-                    self.step_counters[_direction] += check_interval
-                    _logger.debug(f"\tnew step_counter: {self.step_counters[_direction]} / {self._n_lambdas - 1}")
+            else: #we increment by 1 index
+                for _direction, futures in self.particle_futures.items():
+                    if self.step_counters[_direction] == len(self.online_protocol[_direction]) - 1:
+                        continue #if the step counter is at the last lambda index, we continue
+                    self.step_counters[_direction] += 1
+                    new_lambda = self.online_protocol[_direction][self.step_counters[_direction]]
+                    AIS_futures = self.deploy(feptasks.Particle.distribute_anneal, (futures, [new_lambda]*len(futures), [num_integration_steps]*len(futures)))
+                    #AIS_futures = [feptasks.Particle.distribute_anneal(future, new_lambda, num_integration_steps) for future in futures]
+                    self.particle_futures.update({_direction: AIS_futures})
+
+            #we wait for the futures
+            [self.wait(self.particle_futures[_direction]) for _direction self.particle_futures.keys()]
 
             #attempt to resample all directions
-            normalized_observable_values = self.attempt_resample(observable = observable, resampling_method = resampling_method, resample_observable_threshold = resample_observable_threshold)
+            normalized_observable_values = self.attempt_resample(observable = observable,
+                                                                 resampling_method = resampling_method,
+                                                                 resample_observable_threshold = resample_observable_threshold)
             [self.observable[_direction].append(i) for _direction, i in normalized_observable_values.items()]
             [self.iterations[_direction].append(self.step_counters[_direction]) for _direction in normalized_observable_values.keys()]
             self.online_timer.append(time.time() - start)
 
+            #attempt to break from while loop:
+            if all(self.online_protocol[_direction][self.step_counters[_direction]] == self.end_lambdas[_direction] for _direction in self.particle_futures.keys()):
+                _logger.info(f"all particle future directions have reached the last iteration")
+                break
+            else:
+                _logger.info(f"\tnot all particle future directions are complete: {[(_direction, self.online_protocol[_direction][self.step_counters[_direction]]) for _direction in self.particle_futures.keys()]}")
+
         #check to ensure that all of the remote timers are equal to the online timer
         for _direction, futures in self.particle_futures.items():
             #we have reached the max number of steps; check this
-            indices = [feptasks.Particle.pull_current_index(future) for future in futures]
-            if all(index == self._n_lambdas - 1 for index in indices):
+            _lambdas = [feptasks.Particle.pull_current_lambda(future) for future in futures]
+            if all(_lambda == self.end_lambdas[_direction] for _lambda in _lambdas):
                 pass
             else:
-                raise Exception(f"the indices are {indices} but they are not equal to {self._n_lambdas - 1}.  the direction is {_direction}")
+                raise Exception(f"online protocol is complete, but for direction {_direction}, the Particle lambdas are {_lambdas}!")
 
         #now we can parse the outputs
-        self.gather_results()
+        self.gather_neq_results()
 
         #and then we can compute the free energy
         self.compute_sMC_free_energy()
-        _logger.info(f"Complete")
+        _logger.info(f"Complete!")
 
 
-    def gather_results(self):
+    def gather_neq_results(self):
         """
         Compact function for gathering results from the Scheduler
         """
@@ -1150,14 +1238,20 @@ class NonequilibriumSwitchingFEP(object):
             # timers = self.client.gather(self.client.map(feptasks.Particle.pull_timers, futures))
             # sampler_states = self.client.gather(self.client.map(feptasks.Particle.pull_sampler_state))
 
-            successes = [feptasks.Particle.pull_success(future) for future in futures]
-            self._nonequilibrium_cumulative_work[_direction] = np.array([feptasks.Particle.pull_cumulative_work_profile(future) for future, success in zip(futures, successes) if success])
-            self._nonequilibrium_shadow_work[_direction] = np.array([feptasks.Particle.pull_shadow_work(future) for future, success in zip(futures, successes) if success])
-            self._nonequilibrium_timers[_direction] = [feptasks.Particle.pull_timers(future) for future, success in zip(futures, successes) if success]
-            self.end_sampler_states[_direction] = [feptasks.Particle.pull_sampler_state(future) for future, success in zip(futures, successes) if success]
-            labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
+            successes = self.gather_results(self.deploy(feptasks.Particle.pull_success, (futures,)))
+            #successes = [feptasks.Particle.pull_success(future) for future in futures]
+            self._nonequilibrium_cumulative_work[_direction] = np.array(self.gather_results(self.deploy(feptasks.Particle.pull_cumulative_work_profile, (futures,))))
+            #self._nonequilibrium_cumulative_work[_direction] = np.array([feptasks.Particle.pull_cumulative_work_profile(future) for future, success in zip(futures, successes) if success])
+            self._nonequilibrium_shadow_work[_direction] = np.array(self.gather_results(self.deploy(feptasks.Particle.pull_shadow_work, (futures,))))
+            #self._nonequilibrium_shadow_work[_direction] = np.array([feptasks.Particle.pull_shadow_work(future) for future, success in zip(futures, successes) if success])
+            self._nonequilibrium_timers[_direction] = self.gather_results(self.deploy(feptasks.Particle.pull_timers, (futures,)))
+            #self._nonequilibrium_timers[_direction] = [feptasks.Particle.pull_timers(future) for future, success in zip(futures, successes) if success]
+            self.end_sampler_states[_direction] = self.gather_results(self.deploy(feptasks.Particle.pull_sampler_state, (futures,)))
+            #self.end_sampler_states[_direction] = [feptasks.Particle.pull_sampler_state(future) for future, success in zip(futures, successes) if success]
+            labels = np.array(self.gather_results(self.deploy(feptasks.Particle.pull_labels, (futures,))))
+            #labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
             self._failures[_direction] = [label[0] for label, success in zip(labels, successes) if not success]
-            self.particle_futures.update({_direction: None})
+            self.particle_futures.update({_direction: None}) #make object pickleable
             try:
                 max_step = max(self.iterations[_direction])
                 iterations = [i/max_step for i in self.iterations[_direction]]
@@ -1165,7 +1259,8 @@ class NonequilibriumSwitchingFEP(object):
                 shrunken_iterations = np.array(iterations[:first_one + 1])
                 self.iterations.update({_direction: shrunken_iterations})
 
-                labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
+                labels = np.array(self.gather_results(self.deploy(feptasks.Particle.pull_labels, (futures,))))
+                #labels = np.array([feptasks.Particle.pull_labels(future) for future, success in zip(futures, successes) if success])
                 num_particles, num_switches = labels.shape
                 survival = np.array([len(set(list(labels[:, i]))) / num_particles for i in range(num_switches)])
                 _logger.debug(f"\tlabels: {labels}")
@@ -1194,9 +1289,9 @@ class NonequilibriumSwitchingFEP(object):
         Parameters
         ----------
         observable : str, default 'ESS'
-            the observable used as a resampling diagnostic
+            the observable used as a resampling diagnostic; this calls a key in self.allowable_observables
         resampling_method: str, default multinomial
-            method used to resample
+            method used to resample, this calls a key in self.allowable_resampling_methods
         resample_observable_threshold : float, default 0.5
             the threshold to diagnose a resampling event
 
@@ -1208,22 +1303,20 @@ class NonequilibriumSwitchingFEP(object):
         _logger.debug(f"\tAttempting to resample...")
         normalized_observable_values = {_direction: None for _direction in self.particle_futures.keys()}
         for _direction, futures in self.particle_futures.items():
+            if self.online_protocol[_direction][self.step_counters[_direction]] == self.end_lambdas[_direction]:
+                self.observable[_direction].append(self.observable[_direction][-1])
+                continue
 
             #first, we have to pull the information for the diagnostic
             _logger.debug(f"\t\tdirection: {_direction}")
-            work_tuples = [feptasks.Particle.pull_work_increments(future) for future in futures]
+            work_tuple_futures = self.deploy(feptasks.Particle.pull_work_increments, (futures,))
+            work_tuples = self.gather_results(work_tuple_futures)
+            #work_tuples = [feptasks.Particle.pull_work_increments(future) for future in futures]
             works_prev = np.array([tup[0] for tup in work_tuples])
             works_incremental = np.array([tup[1] - tup[0] for tup in work_tuples])
             cumulative_works = np.array([tup[1] for tup in work_tuples])
             _logger.debug(f"\tincremental works: {works_incremental}")
-            if observable == 'ESS':
-                normalized_observable_value = NonequilibriumSwitchingFEP.ESS(works_prev, works_incremental) / len(works_incremental)
-            elif observable == 'CESS':
-                normalized_observable_value = NonequilibriumSwitchingFEP.CESS(works_prev, works_incremental) / len(works_incremental)
-            elif observable not in self.allowable_observables:
-                raise Exception(f"{observable} is not a currently supported observable")
-            else:
-                raise Exception(f"{observable} is supported but there is no method!")
+            normalized_observable_value = self.allowable_observables[observable](works_prev, works_incremental) / len(works_incremental)
 
             #decide whether to resample
             _logger.debug(f"\tnormalized observable value: {normalized_observable_value}")
@@ -1231,26 +1324,29 @@ class NonequilibriumSwitchingFEP(object):
                 _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling")
 
                 #pull the sampler states and cumulative works
-                sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
+                #sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
+                sampler_states = self.gather_results(self.deploy(feptasks.Particle.pull_sampler_state, (futures,)))
 
                 #pull previous labels
-                previous_labels = [feptasks.Particle.pull_last_label(future) for future in futures]
+                #previous_labels = [feptasks.Particle.pull_last_label(future) for future in futures]
+                previous_labels = self.gather_results(self.deploy(feptasks.pull_last_label, (futures,)))
 
                 #resample
-                if resampling_method == 'multinomial':
-                    resampled_works, resampled_sampler_states, resampled_labels = NonequilibriumSwitchingFEP.multinomial_resample(cumulative_works, sampler_states, num_resamples = len(sampler_states), previous_labels = previous_labels)
-                    _logger.debug(f"\tresampled labels: {resampled_labels}")
-                elif resampling_method not in self.allowable_resampling_methods:
-                    raise Exception(f"{resampling_method} is not a currently supported resampling method")
-                else:
-                    raise Exception(f"{resampling_method} is supported but there is no method!")
+                resampled_works, resampled_sampler_states, resampled_labels = self.allowable_resampling_methods[resampling_method](cumulative_works,
+                                                                                                                sampler_states,
+                                                                                                                num_resamples = len(sampler_states),
+                                                                                                                previous_labels = previous_labels)
 
                 #push resamples
-                resample_futures = [feptasks.Particle.push_resamples(future, sampler_state, label, work) for future, sampler_state, label, work in zip(futures, resampled_sampler_states, resampled_labels, resampled_works)]
+                resample_futures = self.deploy(feptasks.Particle.push_resamples, (futures, resampled_sampler_states, resampled_labels, resampled_works))
+                #resample_futures = [feptasks.Particle.push_resamples(future, sampler_state, label, work) for future, sampler_state, label, work in zip(futures, resampled_sampler_states, resampled_labels, resampled_works)]
                 self.particle_futures.update({_direction: resample_futures})
                 normalized_observable_value = 1.0
             else:
                 _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
+
+            #wait for resamples
+            [self.wait(self.particle_futures[_direction]) for _direction self.particle_futures.keys()]
 
             normalized_observable_values[_direction] = normalized_observable_value
 
@@ -1342,128 +1438,84 @@ class NonequilibriumSwitchingFEP(object):
 
         return resampled_works, resampled_sampler_states, corrected_resampled_labels
 
-    @staticmethod
-    def binary_search(first_index, last_index, observables, observable_threshold):
+    def binary_search(self,
+                      futures,
+                      min_val,
+                      max_val,
+                      observable,
+                      observable_threshold,
+                      thermodynamic_state,
+                      max_iterations=20,
+                      initial_guess = None,
+                      precision_threshold = None):
         """
-        Given corresponding first_index and last_index of an  observable list or numpy array, conduct a binary search to find index at which the threshold
-        is not exceeded.
+        Given corresponding min_val and max_val of observables, conduct a binary search to find min value for which the observable threshold
+        is exceeded.
 
-        Parameters
+        Arguments
         ----------
-        first_index: int
-            first index of the obserables list of interest
-        last_index: int
-            last index of the observables list of interest
-        observable : list of floats
-            observable list
+        futures:
+            list of dask.Future objects that point to futures
+        min_val: float
+            minimum value of binary search
+        max_val: float
+            maximum value of binary search
+        observable : function
+            function to compute an observable
         observable_threshold : float
             the threshold of the observable used to satisfy the binary search criterion
+        thermodynamic_state:
+            thermodynamic state with which to compute importance weights
+        max_iterations: int, default 20
+            maximum number of interations to conduct
+        initial_guess: float, default None
+            guess where the threshold is achieved
+        precision_threshold: float, default None
+            precision threshold below which, the max iteration will break
 
         Returns
         -------
-        critical_index: int
-            index satisfying binary search
+        midpoint: float
+            maximum value that doesn't exceed threshold
         """
-        _logger.debug(f"\t\t\tfirst, last indices: {first_index}, {last_index}")
+        _base_max_val = max_val
+        _logger.debug(f"\t\t\tmin, max values: {min_val}, {max_val}. ")
+        cumulative_work_futures = self.deploy(feptasks.Particle.pull_cumulative_work, (futures,))
+        sampler_state_futures = self.deploy(feptasls.Particle.pull_sampler_state, (futures,))
+        cumulative_works = np.array(self.gather_results(cumulative_work_futures))
+        sampler_states = self.gather_results(sampler_state_futures)
+        thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = min_val)
+        current_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
 
-        #first check if we should omit the entire procedure
-        if (observables[last_index - 1] >= observable_threshold) and (observables[last_index] >= observable_threshold):
-            return last_index
+        if initial_guess is not None:
+            midpoint = initial_guess
+        else:
+            midpoint = (min_val + max_val) * 0.5
+        _logger.debug(f"\t\t\tinitial midpoint is: {midpoint}")
 
-        L, R = first_index, last_index
-        while (L <= R):
-            midpoint = (L + R) // 2
-            _logger.debug(f"\t\t\tL, R, midpoint: {(L, R, midpoint)}")
-            _logger.debug(f"\t\t\tobservable at {midpoint}: {observables[midpoint]}")
-            if (observables[midpoint] >= observable_threshold) and (observables[midpoint + 1] < observable_threshold):
-                choice_index = midpoint
-                _logger.debug(f"\t\t\tfound choice index: {choice_index}")
-                return choice_index
-            elif observables[midpoint] >= observable_threshold:
-                L = midpoint + 1
-            elif observables[midpoint] < observable_threshold:
-                R = midpoint - 1
-
-        _logger.debug(f"\t\t\tfound choice index: {first_index}")
-        return first_index
-
-    def trailblaze(self, thermodynamic_state, observable = 'ESS', observable_threshold = 0.9):
-        """
-        Given a sequence of lambdas, starting at current lambda, find largest lambda at which CESS_lambda <= CESS_threshold.
-
-        Parameters
-        ----------
-        thermodynamic_state : openmmtools.states.CompoundThermodynamicState
-            thermodynamic state associated with the SamplerStates
-        observable : str, default ESS
-            the measure used to threshold
-        observable_threshold : float
-            the threshold of the observable used to satisfy the binary search criterion
-        """
-        from perses.annihilation.lambda_protocol import LambdaProtocol
-        online_protocols = {'forward': np.linspace(0, 1, self._n_lambdas), 'reverse': np.linspace(1, 0, self._n_lambdas)}
-        for _direction, futures in self.particle_futures.items():
-
-            #skip if current index is last index
-            if self.step_counters[_direction] == self._n_lambdas - 1:
-                continue
-
-            #first gather the cumulative works and sampler states
-            _logger.debug(f"\t\tgathering cumulative works and sampler states")
-            cumulative_works = np.array([feptasks.Particle.pull_cumulative_work(future) for future in futures])
-            sampler_states = [feptasks.Particle.pull_sampler_state(future) for future in futures]
-
-            #first compute the incremental works of all the lambdas at current_index
-            current_lambda = online_protocols[_direction][self.step_counters[_direction]]
-            future_lambdas = online_protocols[_direction][(self.step_counters[_direction] + 1) :]
-            thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = current_lambda)
-            #thermodynamic_state.set_alchemical_parameters(current_lambda, LambdaProtocol(functions = self._protocol))
-            current_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-            _logger.debug(f"\t\tcomputing incremental works...")
-            normalized_observable_values = []
-            for _lambda in future_lambdas:
-                thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = _lambda)
-                #thermodynamic_state.set_alchemical_parameters(_lambda, LambdaProtocol(functions = self._protocol))
-                future_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-                incremental_works = np.array(np.add(future_rps, -1 * current_rps))
-                #_logger.debug(f"\t\tcomputing observables")
-                if observable == 'ESS':
-                    observed_measure = NonequilibriumSwitchingFEP.ESS(cumulative_works, incremental_works) / len(current_rps)
-                elif observable == 'CESS':
-                    observed_measure = NonequilibriumSwitchingFEP.CESS(cumulative_works, incremental_works) / len(current_rps)
-                elif observable not in self.allowable_observables:
-                    raise Exception(f"{observable} is not a currently supported observable")
-                else:
-                    raise Exception(f"{observable} is supported but there is no method!")
-
-                if observed_measure < observable_threshold:
-                    _logger.debug(f"observable exceeding threshold: {observed_measure}")
-                    break
-                normalized_observable_values.append(observed_measure)
-
-            normalized_observable_values = np.array(normalized_observable_values)
-            _logger.debug(f"\t\tobservables: {normalized_observable_values}")
-
-            _logger.debug(f"\t\tcomputing choice index from binary search...")
-            #now to conduct the binary search on the observables
-            # choice_index = NonequilibriumSwitchingFEP.binary_search(first_index = 0,
-            #                                                         last_index = len(normalized_observable_values) - 1,
-            #                                                         observables = normalized_observable_values,
-            #                                                         observable_threshold = observable_threshold)
-            if len(normalized_observable_values) == len(future_lambdas):
-                #then there we can only jump to the last lambda
-                next_protocol_index = len(online_protocols[_direction]) - 1
+        for _ in range(max_iterations):
+            _logger.debug(f"\t\t\titeration {_}: current lambda: {midpoint}")
+            thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = midpoint)
+            new_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+            _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+            _logger.debug(f"\t\t\tobservable: {_observable}")
+            if _observable <= observable_threshold:
+                _logger.debug(f"\t\t\tobservable {_observable} <= observable_threshold {observable_threshold}")
+                max_val = midpoint
             else:
-                num_skips = len(normalized_observable_values)
-                next_protocol_index = self.step_counters[_direction] + num_skips + 1
-            _logger.debug(f"\t\tnext protocol index, lambda: {next_protocol_index}, {online_protocols[_direction][next_protocol_index]}")
-            increment = next_protocol_index - self.step_counters[_direction]
-            _logger.debug(f"\t\tannealing particles with one step over {increment} lambda values")
-            AIS_futures = [feptasks.Particle.distribute_anneal(future, num_steps = 1, increment = increment) for future in futures]
-            self.particle_futures.update({_direction: AIS_futures})
-            self.step_counters[_direction] += increment
-            _logger.info(f"\t\tstep_counters: {[(_direction + ': ' + str(val) + '/' + str(self._n_lambdas - 1)) for _direction, val in self.step_counters.items()]}")
+                _logger.debug(f"\t\t\tobservable {_observable} > observable_threshold {observable_threshold}")
+                min_val = midpoint
+            midpoint = (min_val + max_val) * 0.5
+            if precision_threshold is not None:
+                if _base_max_val - midpoint <= precision_threshold:
+                    _logger.debug(f"\t\t\tthe difference between the original max val ({_base_max_val}) and the midpoint is less than the precision_threshold ({precision_threshold}).  Breaking with original max val.")
+                    midpoint = _base_max_val
+                    break
+                elif max_val - min_val <= precision_threshold:
+                    _logger.debug(f"\t\t\tprecision_threshold: {precision_threshold} is exceeded.  Breaking")
+                    break
 
+        return midpoint
 
     def equilibrate(self, n_equilibration_iterations = 1, endstates = [0,1], max_size = 1024*1e3, decorrelate=False, timer = False, minimize = False):
         """
