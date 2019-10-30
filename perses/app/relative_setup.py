@@ -627,7 +627,7 @@ class DaskClient(object):
             from dask_jobqueue import LSFCluster
             cluster = LSFCluster()
             self._adapt = adapt
-            self.num_processes = processes
+            self.num_processes = num_processes
 
             if self._adapt:
                 _logger.debug(f"adapting cluster from 1 to {self.num_processes} processes")
