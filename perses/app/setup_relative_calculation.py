@@ -77,12 +77,6 @@ def getSetupOptions(filename):
         if 'n_equilibrium_steps_per_iteration' not in setup_options:
             _logger.info(f"\t\t\tn_equilibrium_steps_per_iteration not specified: default to 1000.")
             setup_options['n_equilibrium_steps_per_iteration'] = 1000
-        if 'n_steps_ncmc_protocol' not in setup_options:
-            _logger.info(f"\t\t\tn_steps_ncmc_protocol not specified: default to 25000.")
-            setup_options['n_steps_ncmc_protocol'] = 25000
-        if 'ncmc_save_interval' not in setup_options:
-            _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
-            setup_options['ncmc_save_interval'] = None
         if 'measure_shadow_work' not in setup_options:
             _logger.info(f"\t\t\tmeasure_shadow_work not specified: default to False")
             setup_options['measure_shadow_work'] = False
@@ -101,8 +95,8 @@ def getSetupOptions(filename):
             _logger.info(f"\t\t\tmax_file_size is not specified; default to 10MB")
             setup_options['max_file_size'] = 10*1024e3
         if 'lambda_protocol' not in setup_options:
-            _logger.info(f"\t\t\tlambda_protocol is not specified; default to None")
-            setup_options['lambda_protocol'] = None
+            _logger.info(f"\t\t\tlambda_protocol is not specified; default to 'default'")
+            setup_options['lambda_protocol'] = 'default'
         if 'LSF' not in setup_options:
             _logger.info(f"\t\t\tLSF is not specified; default to True")
             setup_options['LSF'] = True
@@ -126,11 +120,22 @@ def getSetupOptions(filename):
             raise Exception(f"'run_type' must be None, 'anneal', or 'equilibrate'; input was specified as {setup_options['run_type']} with type {type(setup_options['run_type'])}")
 
         #to instantiate the particles:
+        if 'n_lambdas' not in setup_options:
+            _logger.info(f"\t\t\tn_lambdas is not specified; default to None (an online protocol must be provided)")
+            setup_options['n_lambdas'] = None
         if 'n_particles' not in setup_options:
             raise Exception(f"for particle annealing, 'n_particles' must be specified")
         if 'direction' not in setup_options:
             _logger.info(f"\t\t\tdirection is not specified; default to None (running both forward and reverse)")
             setup_options['direction'] = None
+        if 'ncmc_save_interval' not in setup_options:
+            _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
+            setup_options['ncmc_save_interval'] = None
+        if 'ncmc_collision_rate_ps' not in setup_options:
+            _logger.info(f"\t\t\tcollision_rate not specified: default to np.inf.")
+            setup_options['ncmc_collision_rate_ps'] = np.inf/unit.picoseconds
+        else:
+            setup_options['ncmc_collision_rate_ps'] /= unit.picoseconds
 
         #now lastly, for the algorithm_4 options:
         if 'observable' not in setup_options:
@@ -138,16 +143,19 @@ def getSetupOptions(filename):
             setup_options['observable'] = 'ESS'
         if 'trailblaze_observable_threshold' not in setup_options:
             _logger.info(f"\t\t\ttrailblaze_observable_threshold is not specified; default to 0.0")
-            setup_options['trailblaze_observable_threshold'] = 0.0
+            setup_options['trailblaze_observable_threshold'] = None
         if 'resample_observable_threshold' not in setup_options:
             _logger.info(f"\t\t\tresample_observable_threshold is not specified; default to 0.0")
-            setup_options['resample_observable_threshold'] = 0.0
-        if 'check_interval' not in setup_options:
-            _logger.info(f"\t\t\tcheck_interval is not specified; default to 1")
-            setup_options['check_interval'] = 1
+            setup_options['resample_observable_threshold'] = None
+        if 'ncmc_num_integration_steps' not in setup_options:
+            _logger.info(f"\t\t\tncmc_num_integration_steps is not specified; default to 1")
+            setup_options['ncmc_num_integration_steps'] = 1
         if 'resampling_method' not in setup_options:
             _logger.info(f"\t\t\tresampling_method is not specified; default to 'multinomial'")
             setup_options['resampling_method'] = 'multinomial'
+        if 'online_protocol' not in setup_options:
+            _logger.info(f"\t\t\tonline_protocol is not specified; default to None")
+            setup_options['online_protocol'] = None
 
 
 
@@ -374,7 +382,6 @@ def run_setup(setup_options):
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
         ncmc_save_interval = setup_options['ncmc_save_interval']
         write_ncmc_configuration = setup_options['write_ncmc_configuration']
-        n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
 
         ne_fep = dict()
         for phase in phases:
@@ -389,7 +396,6 @@ def run_setup(setup_options):
 
             ne_fep[phase] = NonequilibriumSwitchingFEP(hybrid_factory = hybrid_factory,
                                                        protocol = setup_options['lambda_protocol'],
-                                                       n_lambdas = n_steps_ncmc_protocol,
                                                        n_equilibrium_steps_per_iteration = n_equilibrium_steps_per_iteration,
                                                        temperature = temperature,
                                                        trajectory_directory=trajectory_directory,
@@ -499,13 +505,29 @@ if __name__ == "__main__":
         for phase in setup_options['phases']:
             ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
             #ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt) #now call n processes
-            ne_fep_run.instantiate_particles(n_particles = setup_options['n_particles'],
-                                             direction = setup_options['direction'])
+            ne_fep_run.instantiate_particles(n_lambdas = None,
+                                             n_particles = setup_options['n_particles'],
+                                             direction = setup_options['direction'],
+                                             ncmc_save_interval = setup_options['ncmc_save_interval'],
+                                             collision_rate = setup_options['ncmc_collision_rate_ps']/unit.picoseconds,
+                                             LSF = setup_options['LSF'],
+                                             num_processes = setup_options['num_processes'],
+                                             adapt = setup_options['adapt'])
+
+            if setup_options['online_protocol'] is None:
+                online_protocol = None
+            elif type(setup_options['online_protocol']) == int:
+                online_protocol = {'forward': np.linspace(0,1,setup_options['online_protocol']), 'reverse': np.linspace(1,0,setup_options['online_protocol'])}
+            else:
+                #attempt to load npy array
+                online_protocol = np.load(setup_options['online_protocol'], allow_pickle = True)
+
             ne_fep_run.algorithm_4(observable = setup_options['observable'],
                                    trailblaze_observable_threshold = setup_options['trailblaze_observable_threshold'],
                                    resample_observable_threshold = setup_options['resample_observable_threshold'],
-                                   check_interval = setup_options['check_interval'],
-                                   resampling_method = setup_options['resampling_method'])
+                                   num_integration_steps = setup_options['ncmc_num_integration_steps'],
+                                   resampling_method = setup_options['resampling_method'],
+                                   online_protocol = online_protocol)
             print("calculation complete; deactivating client")
             #ne_fep_run.deactivate_client()
 
@@ -564,8 +586,21 @@ if __name__ == "__main__":
 
                 if setup_options['run_type'] == None or setup_options['run_type'] == 'equilibrate':
                     print("equilibrating...")
+                    # Now we have to pull the files
+                    if setup_options['direction'] == None:
+                        endstates = [0,1]
+                    else:
+                        endstates = [0] if setup_options['direction'] == 'forward' else [1]
                     #ne_fep_run.activate_client(LSF = LSF, processes = 2, adapt = adapt) #we only need 2 processes for equilibration
-                    ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
+                    ne_fep_run.equilibrate(n_equilibration_iterations,
+                                           endstates = endstates,
+                                           max_size = max_file_size,
+                                           decorrelate = True,
+                                           timer = True,
+                                           minimize = False,
+                                           LSF = setup_options['LSF'],
+                                           num_processes = 2,
+                                           adapt = setup_options['adapt'])
                     #ne_fep_run.deactivate_client()
                     with open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
                         pickle.dump(ne_fep_run, f)
@@ -575,13 +610,37 @@ if __name__ == "__main__":
                     print("annealing...")
                     ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
                     #ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt) #now call n processes
-                    ne_fep_run.instantiate_particles(n_particles = setup_options['n_particles'],
-                                                     direction = setup_options['direction'])
+                    ne_fep_run.instantiate_particles(n_lambdas = None,
+                                                     n_particles = setup_options['n_particles'],
+                                                     direction = setup_options['direction'],
+                                                     ncmc_save_interval = setup_options['ncmc_save_interval'],
+                                                     collision_rate = setup_options['ncmc_collision_rate_ps']/unit.picoseconds,
+                                                     LSF = setup_options['LSF'],
+                                                     num_processes = setup_options['num_processes'],
+                                                     adapt = setup_options['adapt'])
+
+                    if setup_options['online_protocol'] is None:
+                        online_protocol = None
+                    elif type(setup_options['online_protocol']) == int:
+                        online_protocol = {'forward': np.linspace(0,1,setup_options['online_protocol']), 'reverse': np.linspace(1,0,setup_options['online_protocol'])}
+                    else:
+                        #attempt to load npy array
+                        online_protocol = np.load(setup_options['online_protocol'], allow_pickle = True)
+
                     ne_fep_run.algorithm_4(observable = setup_options['observable'],
                                            trailblaze_observable_threshold = setup_options['trailblaze_observable_threshold'],
                                            resample_observable_threshold = setup_options['resample_observable_threshold'],
-                                           check_interval = setup_options['check_interval'],
-                                           resampling_method = setup_options['resampling_method'])
+                                           num_integration_steps = setup_options['ncmc_num_integration_steps'],
+                                           resampling_method = setup_options['resampling_method'],
+                                           online_protocol = online_protocol)
+
+                    # ne_fep_run.instantiate_particles(n_particles = setup_options['n_particles'],
+                    #                                  direction = setup_options['direction'])
+                    # ne_fep_run.algorithm_4(observable = setup_options['observable'],
+                    #                        trailblaze_observable_threshold = setup_options['trailblaze_observable_threshold'],
+                    #                        resample_observable_threshold = setup_options['resample_observable_threshold'],
+                    #                        check_interval = setup_options['check_interval'],
+                    #                        resampling_method = setup_options['resampling_method'])
                     print("calculation complete; deactivating client")
                     #ne_fep_run.deactivate_client()
 

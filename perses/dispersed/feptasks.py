@@ -180,7 +180,7 @@ class Particle():
             self.current_index = int(0)
             self.current_lambda = self.lambdas[self.current_index]
             if work_save_interval is None:
-                self._work_save_interval = work_save_interval
+                self._work_save_interval = self._nsteps
             else:
                 self._work_save_interval = work_save_interval
             #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
