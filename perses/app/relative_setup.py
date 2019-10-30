@@ -1233,7 +1233,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                                                                  resample_observable_threshold = resample_observable_threshold)
 
             [self.observable[_direction].append(i) for _direction, i in normalized_observable_values.items() if i is not None]
-            [self.iterations[_direction].append(self.step_counters[_direction]) for _direction, i in normalized_observable_values.items() if i is not None]
+            [self.iterations[_direction].append(self.step_counters[_direction]) for _direction in self.particle_futures.keys() if self._pass[_direction]]
             self.online_timer.append(time.time() - start)
 
             #attempt to break from while loop:
