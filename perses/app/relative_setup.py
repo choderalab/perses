@@ -1246,7 +1246,8 @@ class NonequilibriumSwitchingFEP(DaskClient):
         #check to ensure that all of the remote timers are equal to the online timer
         for _direction, futures in self.particle_futures.items():
             #we have reached the max number of steps; check this
-            _lambdas = [feptasks.Particle.pull_current_lambda(future) for future in futures]
+            _lambdas = self.gather_results(self.deploy(feptasks.Particle.pull_current_lambda, (futures,)))
+            #_lambdas = [feptasks.Particle.pull_current_lambda(future) for future in futures]
             if all(_lambda == self.end_lambdas[_direction] for _lambda in _lambdas):
                 pass
             else:
