@@ -180,13 +180,13 @@ class Particle():
             self.current_index = int(0)
             self.current_lambda = self.lambdas[self.current_index]
             if work_save_interval is None:
-                self._work_save_interval = self._nsteps
+                self._work_save_interval = None
             else:
                 self._work_save_interval = work_save_interval
-            #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
-            #work before the end of the protocol as the end
-            if self._nsteps % self._work_save_interval != 0:
-                raise ValueError("The work writing interval must be a factor of the total number of steps")
+                #check that the work write interval is a factor of the number of steps, so we don't accidentally record the
+                #work before the end of the protocol as the end
+                if self._nsteps % self._work_save_interval != 0:
+                    raise ValueError("The work writing interval must be a factor of the total number of steps")
 
         #create sampling objects
         self.sampler_state = sampler_state
@@ -194,7 +194,7 @@ class Particle():
         _logger.debug(f"thermodynamic state: {self.thermodynamic_state}")
         self.integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = collision_rate)
         #platform = openmm.Platform.getPlatformByName(platform_name)
-        self.context = self.context_cache.get_context(self.thermodynamic_state, self.integrator)
+        self.context = openmm.Context(self.thermodynamic_state.system, self.integrator)
         #self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, integrator)
         _logger.debug(f"context: {self.context}")
         self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
@@ -260,9 +260,6 @@ class Particle():
         num_integration_steps: int, default 1
             the number of integration steps to propagate the particle at a given lambda
         """
-        self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, self.integrator)
-        self.sampler_state.apply_to_context(self.context, ignore_velocities=True)
-        self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
         #first, we must check the trailblaze
         if type(new) == float or isinstance(new, np.float64):
             if not self.trailblaze:
