@@ -260,7 +260,7 @@ class Particle():
         num_integration_steps: int, default 1
             the number of integration steps to propagate the particle at a given lambda
         """
-        self.context, _ = get_context(self.thermodynamic_state, self.integrator)
+        self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, self.integrator)
         self.sampler_state.apply_to_context(self.context, ignore_velocities=True)
         self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
         #first, we must check the trailblaze
