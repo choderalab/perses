@@ -203,10 +203,6 @@ def run_setup(setup_options):
         - 'topology_proposals':
     """
     phases = setup_options['phases']
-    if len(phases) > 2:
-        _logger.info(f"\tnumber of phases is greater than 2...complex and solvent will be provided...")
-        phases = ['complex', 'solvent']
-
     known_phases = ['complex','solvent','vacuum']
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
@@ -374,8 +370,8 @@ def run_setup(setup_options):
         atom_selection = setup_options['atom_selection']
         _logger.info(f"\tatom selection detected: {atom_selection}")
     else:
-        _logger.info(f"\tno atom selection detected: default to None.")
-        atom_selection = None
+        _logger.info(f"\tno atom selection detected: default to all.")
+        atom_selection = 'all' 
 
     if setup_options['fe_type'] == 'neq':
         _logger.info(f"\tInstantiating nonequilibrium switching FEP")
@@ -604,6 +600,7 @@ if __name__ == "__main__":
                     #ne_fep_run.deactivate_client()
                     with open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
                         pickle.dump(ne_fep_run, f)
+
 
 
                 if setup_options['run_type'] == None:

@@ -797,7 +797,7 @@ class TopologyProposal(object):
                  logp_proposal=None,
                  new_to_old_atom_map=None, old_alchemical_atoms=None,
                  old_chemical_state_key=None, new_chemical_state_key=None,
-                 old_residue_name=None, new_residue_name=None,
+                 old_residue_name='MOL', new_residue_name='MOL',
                  metadata=None):
 
         if new_chemical_state_key is None or old_chemical_state_key is None:
