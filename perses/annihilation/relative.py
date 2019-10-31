@@ -370,13 +370,13 @@ class HybridTopologyFactory(object):
                                                                      self._new_to_hybrid_map, name_of_residue)
 
         #The union of the two will give the core atoms that can result from either new or old topology
-        # TODO: Shouldn't these sets be the same?
         total_core_atoms = core_atoms_from_old.union(core_atoms_from_new)
+        assert set(core_atoms_from_old) == set(core_atoms_from_new), 'Core atoms must match between old and new systems'
 
         #as a side effect, we can now compute the environment atom indices too, by subtracting the core indices
         #from the mapped atom set (since any atom that is mapped but not core is environment)
         environment_atoms = mapped_hybrid_atoms_set.difference(total_core_atoms)
-
+        
         return total_core_atoms, environment_atoms
 
     def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map, residue_to_switch):
@@ -416,6 +416,8 @@ class HybridTopologyFactory(object):
                         #we specifically want to add the hybrid atom.
                         hybrid_index = hybrid_map[atom_index]
                         core_atoms.add(hybrid_index)
+
+        assert len(core_atoms) >= 3, 'Cannot run a simulation with fewer than 3 core atoms. System has {len(core_atoms)}'        
 
         return core_atoms
 
