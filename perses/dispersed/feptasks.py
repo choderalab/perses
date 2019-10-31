@@ -194,7 +194,7 @@ class Particle():
         _logger.debug(f"thermodynamic state: {self.thermodynamic_state}")
         self.integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = splitting, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = collision_rate)
         #platform = openmm.Platform.getPlatformByName(platform_name)
-        self.context = openmm.Context(self.thermodynamic_state.system, self.integrator)
+        self.context = self.context_cache.get_context(self.thermodynamic_state, self.integrator)
         #self.context, self.integrator = self.context_cache.get_context(self.thermodynamic_state, integrator)
         _logger.debug(f"context: {self.context}")
         self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
@@ -260,6 +260,9 @@ class Particle():
         num_integration_steps: int, default 1
             the number of integration steps to propagate the particle at a given lambda
         """
+        self.context, _ = get_context(self.thermodynamic_state, self.integrator)
+        self.sampler_state.apply_to_context(self.context, ignore_velocities=True)
+        self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
         #first, we must check the trailblaze
         if type(new) == float or isinstance(new, np.float64):
             if not self.trailblaze:
