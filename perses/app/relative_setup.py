@@ -32,7 +32,7 @@ from scipy.special import logsumexp
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("relative_setup")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
  # define NamedTuples from feptasks
 # EquilibriumResult = namedtuple('EquilibriumResult', ['sampler_state', 'reduced_potentials', 'files', 'timers', 'nonalchemical_perturbations'])
@@ -1087,12 +1087,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
         #now to scatter the jobs and map
         self.particle_futures = {_direction: None for _direction in directions}
-        for _direction in directions: #for the moment, we don
-            # _logger.debug(f"scattering and mapping NonequilibriumFEPSetup_list for {_direction} direction")
-            # remote_NonquilibriumFEPTask_list = self.client.scatter(NonequilibriumFEPSetup_dict[_direction])
-            # distributed.progress(remote_NonquilibriumFEPTask_list, notebook = False)
-            # futures = self.client.map(feptasks.Particle.launch_particle, remote_NonquilibriumFEPTask_list)
-            # distributed.progress(futures, notebook = False)
+        for _direction in directions:
             futures = self.deploy(feptasks.Particle.launch_particle, (NonequilibriumFEPSetup_dict[_direction],))
             #futures = [feptasks.Particle.launch_particle(i) for i in NonequilibriumFEPSetup_dict[_direction]]
             self.particle_futures[_direction] = futures
@@ -1271,13 +1266,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
         #now gather
         for _direction, futures in self.particle_futures.items():
             _logger.debug(f"parsing {_direction} direction...")
-            #task_list = self.client.gather(futures, errors = 'skip')
-            # successes = self.client.gather(self.client.map(feptasks.Particle.pull_success, futures))
-            # cumulative_works = self.client.gather(self.client.map(feptasks.Particle.pull_cumulative_work, futures))
-            # protocol_works = self.client.gather(self.client.map(feptasks.Particle.pull_protocol_work, futures))
-            # shadow_works = self.client.gather(self.client.map(feptasks.Particle.pull_shadow_work, futures))
-            # timers = self.client.gather(self.client.map(feptasks.Particle.pull_timers, futures))
-            # sampler_states = self.client.gather(self.client.map(feptasks.Particle.pull_sampler_state))
 
             successes = self.gather_results(self.deploy(feptasks.Particle.pull_success, (futures,)))
             #successes = [feptasks.Particle.pull_success(future) for future in futures]

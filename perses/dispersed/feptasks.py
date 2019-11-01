@@ -27,7 +27,7 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("feptasks")
-_logger.setLevel(logging.WARNING)
+_logger.setLevel(logging.INFO)
 
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
