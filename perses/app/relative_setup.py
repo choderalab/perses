@@ -463,7 +463,7 @@ class RelativeFEPSetup(object):
                                                     new_system=new_solvated_system,
                                                     old_topology=old_solvated_topology, old_system=old_solvated_system,
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
-                                                    new_chemical_state_key='B',old_residue_name='MOL',new_residue_name='MOL')
+                                                    new_chemical_state_key='B')
 
         return ligand_topology_proposal, old_solvated_positions
 
@@ -518,7 +518,7 @@ class RelativeFEPSetup(object):
                                                     new_system=new_ligand_system,
                                                     old_topology=old_ligand_topology, old_system=old_ligand_system,
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
-                                                    new_chemical_state_key='B',old_residue_name='MOL',new_residue_name='MOL')
+                                                    new_chemical_state_key='B')
 
         return ligand_topology_proposal, old_ligand_positions
 
@@ -1181,7 +1181,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
         while True: #we must break the while loop at some point
             start = time.time()
             normalized_observable_values = {_direction: None for _direction in self.particle_futures.keys()}
-
             #we attempt to trailblaze
             if self._trailblaze:
                 for _direction, futures in self.particle_futures.items():
@@ -1207,7 +1206,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
                     _logger.debug(f"\ttrailblazing from lambda = {self.online_protocol[_direction][-1]} to lambda = {new_lambda}")
                     self.online_protocol[_direction].append(new_lambda)
                     AIS_futures = self.deploy(feptasks.Particle.distribute_anneal, (futures, [new_lambda]*len(futures), [num_integration_steps]*len(futures)))
-                    #AIS_futures = [feptasks.Particle.distribute_anneal(future, new_lambda, num_integration_steps) for future in futures]
                     self.particle_futures.update({_direction: AIS_futures})
 
             else: #we increment by 1 index
@@ -1223,6 +1221,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
             #we wait for the futures
             [self.wait(self.particle_futures[_direction]) for _direction in self.particle_futures.keys()]
+
 
             #attempt to resample all directions
             if resample_observable_threshold is None:
