@@ -1176,7 +1176,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
         #define a pass
         self._pass = {_direction: False for _direction in self.particle_futures.keys()}
-        self.old_futures = {_direction: None for _direction in self.particle_futures.keys()}
 
         _logger.info(f"All setups are complete; proceeding with annealing and resampling with threshold {resample_observable_threshold} until the final lambda is weighed.")
         while True: #we must break the while loop at some point
@@ -1208,7 +1207,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
                     self.online_protocol[_direction].append(new_lambda)
                     AIS_futures = self.deploy(feptasks.Particle.distribute_anneal, (futures, [new_lambda]*len(futures), [num_integration_steps]*len(futures)))
                     self.particle_futures.update({_direction: AIS_futures})
-                    self.old_futures.update({_direction: futures})
 
             else: #we increment by 1 index
                 for _direction, futures in self.particle_futures.items():
@@ -1220,13 +1218,10 @@ class NonequilibriumSwitchingFEP(DaskClient):
                     AIS_futures = self.deploy(feptasks.Particle.distribute_anneal, (futures, [new_lambda]*len(futures), [num_integration_steps]*len(futures)))
                     #AIS_futures = [feptasks.Particle.distribute_anneal(future, new_lambda, num_integration_steps) for future in futures]
                     self.particle_futures.update({_direction: AIS_futures})
-                    self.old_futures.update({_direction: futures})
 
             #we wait for the futures
             [self.wait(self.particle_futures[_direction]) for _direction in self.particle_futures.keys()]
 
-            #delete old futures
-            [self.client.cancel(_fut) for _fut in self.old_futures.values()]
 
             #attempt to resample all directions
             if resample_observable_threshold is None:
@@ -1238,7 +1233,6 @@ class NonequilibriumSwitchingFEP(DaskClient):
 
             [self.observable[_direction].append(i) for _direction, i in normalized_observable_values.items() if i is not None]
             [self.iterations[_direction].append(self.step_counters[_direction]) for _direction in self.particle_futures.keys() if not self._pass[_direction]]
-            [self.client.cancel(_fut) for _fut in old_futures.values()]
             self.online_timer.append(time.time() - start)
 
             #attempt to break from while loop:
