@@ -140,7 +140,7 @@ class Particle():
 
         _logger.debug(f"Initializing Particle...")
         start = time.time()
-        self._timers = {} #instantiate timer
+        #self._timers = {} #instantiate timer
         self.label = [label]
 
         self.context_cache = cache.global_context_cache
@@ -271,7 +271,7 @@ class Particle():
                 prep_start = time.time()
                 self.compute_incremental_work(new)
                 self.integrator.step(num_integration_steps)
-                self._timers['protocol'].append(time.time() - prep_start)
+                #self._timers['protocol'].append(time.time() - prep_start)
                 self.current_lambda = new
                 self.importance_samples += 1
                 iteration = self.importance_samples
@@ -298,7 +298,7 @@ class Particle():
                     self.compute_incremental_work(new_lambda)
                     self.current_index += increment
                     self.integrator.step(num_integration_steps)
-                    self._timers['protocol'].append(time.time() - prep_start)
+                    #self._timers['protocol'].append(time.time() - prep_start)
                     iteration = self.current_index
                     self.save_configuration(iteration)
                     self.current_lambda = new_lambda
@@ -378,7 +378,7 @@ class Particle():
                 a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*self.sampler_state.box_vectors)
                 self._trajectory_box_lengths.append([a, b, c])
                 self._trajectory_box_angles.append([alpha, beta, gamma])
-            self._timers['save'].append(time.time() - save_start)
+            #self._timers['save'].append(time.time() - save_start)
 
 
     @staticmethod
