@@ -463,7 +463,7 @@ class RelativeFEPSetup(object):
                                                     new_system=new_solvated_system,
                                                     old_topology=old_solvated_topology, old_system=old_solvated_system,
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
-                                                    new_chemical_state_key='B',old_residue_name='MOL',new_residue_name='MOL')
+                                                    new_chemical_state_key='B')
 
         return ligand_topology_proposal, old_solvated_positions
 
@@ -518,7 +518,7 @@ class RelativeFEPSetup(object):
                                                     new_system=new_ligand_system,
                                                     old_topology=old_ligand_topology, old_system=old_ligand_system,
                                                     new_to_old_atom_map=new_to_old_atom_map, old_chemical_state_key='A',
-                                                    new_chemical_state_key='B',old_residue_name='MOL',new_residue_name='MOL')
+                                                    new_chemical_state_key='B')
 
         return ligand_topology_proposal, old_ligand_positions
 
