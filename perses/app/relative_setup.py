@@ -1657,7 +1657,7 @@ class NonequilibriumSwitchingFEP(DaskClient):
                             num_processes = num_processes,
                             adapt = adapt)
         futures = self.deploy(feptasks.run_equilibrium, (EquilibriumFEPTask_list,))
-        distributed.progress(futures, notebook = False)
+        #distributed.progress(futures, notebook = False)
         eq_results = self.gather_results(futures)
         self.deactivate_client()
 
