@@ -168,7 +168,7 @@ class Particle():
         self._nsteps = nsteps
         if self._nsteps is None:
             self.trailblaze = True
-            self._work_save_interval = work_save_interval # this is allowed to be None, in which case, the save_config method will never be called
+            self._work_save_interval = None # this is allowed to be None, in which case, the save_config method will never be called
             #likewise, if work work save interval is longer than the trailblazed lambda protocol, the save_configuration method will never be called
             self.current_lambda = self.start_lambda
             self.importance_samples = 1 #including the zero state
