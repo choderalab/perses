@@ -140,7 +140,7 @@ class Particle():
 
         _logger.debug(f"Initializing Particle...")
         start = time.time()
-        #self._timers = {} #instantiate timer
+        self._timers = {} #instantiate timer
         self.label = [label]
 
         self.context_cache = cache.global_context_cache
