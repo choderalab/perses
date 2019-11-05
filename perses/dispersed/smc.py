@@ -8,6 +8,7 @@ import openmmtools.cache as cache
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
 import openmmtools.states as states
+from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 import numpy as np
 import mdtraj as md
 from perses.annihilation.relative import HybridTopologyFactory
@@ -24,11 +25,14 @@ from sys import getsizeof
 import time
 from collections import namedtuple
 from perses.annihilation.lambda_protocol import LambdaProtocol
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
+import random
+import pymbar
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
-_logger = logging.getLogger("feptasks")
-_logger.setLevel(logging.WARNING)
+_logger = logging.getLogger("sMC")
+_logger.setLevel(logging.DEBUG)
 
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
@@ -131,7 +135,7 @@ class DaskClient(object):
             results = self.client.gather(futures)
             return results
 
-    def gather_actor_result(future):
+    def gather_actor_result(self, future):
         """
         wrapper to pull the .result() of a method called to an actor
         """
@@ -141,7 +145,7 @@ class DaskClient(object):
             result = future.result()
             return result
 
-    def launch_actor(_class):
+    def launch_actor(self, _class):
         """
         wrapper to launch an actor
 
@@ -159,7 +163,8 @@ class DaskClient(object):
             actor = future.result()                    # Get back a pointer to that object
             return actor
         else:
-            return _class
+            actor = _class()
+            return actor
 
     def wait(self, futures):
         """
@@ -181,7 +186,7 @@ class SequentialMonteCarlo(DaskClient):
     def __init__(self,
                  factory,
                  lambda_protocol = 'default',
-                 temperature = 300 * unit.Kelvin,
+                 temperature = 300 * unit.kelvin,
                  trajectory_directory = 'test',
                  trajectory_prefix = 'out',
                  atom_selection = 'not water',
@@ -190,6 +195,7 @@ class SequentialMonteCarlo(DaskClient):
                  eq_splitting_string = 'V R O R V',
                  neq_splitting_string = 'V R O R V',
                  ncmc_save_interval = None,
+                 measure_shadow_work = False,
                  LSF = False,
                  num_processes = 2,
                  adapt = False):
@@ -219,9 +225,9 @@ class SequentialMonteCarlo(DaskClient):
         ncmc_save_interval : int, default None
             interval with which to write ncmc trajectory.  If None, trajectory will not be saved.
             We will assert that the n_lambdas % ncmc_save_interval = 0; otherwise, the protocol will not be complete
-        atom_selection : str, default 'not water'
-            MDTraj selection syntax for which atomic coordinates to save in the trajectories. Default strips
-            all water.
+        measure_shadow_work : bool, default False
+            whether to measure the shadow work of the integrator.
+            WARNING : this is not currently supported
         LSF: bool, default False
             whether we are using the LSF dask Client
         num_processes: int, default 2
@@ -246,6 +252,10 @@ class SequentialMonteCarlo(DaskClient):
         self.timestep = timestep
         self.collision_rate = collision_rate
 
+        self.measure_shadow_work = measure_shadow_work
+        if measure_shadow_work:
+            raise Exception(f"measure_shadow_work is not currently supported.  Aborting!")
+
 
         #handle equilibrium parameters
         self.eq_splitting_string = eq_splitting_string
@@ -266,9 +276,7 @@ class SequentialMonteCarlo(DaskClient):
         if self.trajectory_directory and self.trajectory_prefix:
             self.write_traj = True
             self.eq_trajectory_filename = {lambda_state: os.path.join(os.getcwd(), self.trajectory_directory, f"{self.trajectory_prefix}.eq.lambda_{lambda_state}.h5") for lambda_state in self.lambda_endstates['forward']}
-            _logger.debug(f"eq_traj_filenames: {self.eq_trajectory_filename}")
             self.neq_traj_filename = {direct: os.path.join(os.getcwd(), self.trajectory_directory, f"{self.trajectory_prefix}.neq.lambda_{direct}") for direct in self.lambda_endstates.keys()}
-            _logger.debug(f"neq_traj_filenames: {self.neq_traj_filename}")
             self.topology = self.factory.hybrid_topology
         else:
             self.write_traj = False
@@ -280,7 +288,7 @@ class SequentialMonteCarlo(DaskClient):
         self.atom_selection_string = atom_selection
         # subset the topology appropriately:
         if self.atom_selection_string is not None:
-            atom_selection_indices = self._factory.hybrid_topology.select(self.atom_selection_string)
+            atom_selection_indices = self.factory.hybrid_topology.select(self.atom_selection_string)
             self.atom_selection_indices = atom_selection_indices
         else:
             self.atom_selection_indices = None
@@ -289,13 +297,16 @@ class SequentialMonteCarlo(DaskClient):
         self._eq_dict = {0: [], 1: [], '0_decorrelated': None, '1_decorrelated': None, '0_reduced_potentials': [], '1_reduced_potentials': []}
         self._eq_files_dict = {0: [], 1: []}
         self._eq_timers = {0: [], 1: []}
+        self._neq_timers = {'forward': [], 'reverse': []}
 
         #instantiate nonequilibrium work dicts: the keys indicate from which equilibrium thermodynamic state the neq_switching is conducted FROM (as opposed to TO)
         self.cumulative_work = {'forward': [], 'reverse': []}
-        self.shadow_work = copy.deepcopy(self._nonequilibrium_cumulative_work)
-        self.nonequilibrium_timers = copy.deepcopy(self._nonequilibrium_cumulative_work)
-        self.failures = copy.deepcopy(self._nonequilibrium_cumulative_work)
-        self.dg_EXP = copy.deepcopy(self._nonequilibrium_cumulative_work)
+        self.incremental_work = copy.deepcopy(self.cumulative_work)
+        self.shadow_work = copy.deepcopy(self.cumulative_work)
+        self.nonequilibrium_timers = copy.deepcopy(self.cumulative_work)
+        self.total_jobs = 0
+        #self.failures = copy.deepcopy(self.cumulative_work)
+        self.dg_EXP = copy.deepcopy(self.cumulative_work)
         self.dg_BAR = None
 
 
@@ -304,19 +315,14 @@ class SequentialMonteCarlo(DaskClient):
         self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
 
         #instantiate thermodynamic state
-        lambda_alchemical_state = self.modify_thermodynamic_state(RelativeAlchemicalState.from_system(self.factory.hybrid_system), 0.0)
+        lambda_alchemical_state = RelativeAlchemicalState.from_system(self.factory.hybrid_system)
+        lambda_alchemical_state.set_alchemical_parameters(0.0, LambdaProtocol(functions = self.lambda_protocol))
         self.thermodynamic_state = CompoundThermodynamicState(ThermodynamicState(self.factory.hybrid_system, temperature = self.temperature),composable_states = [lambda_alchemical_state])
 
         # set the SamplerState for the lambda 0 and 1 equilibrium simulations
         sampler_state = SamplerState(self.factory.hybrid_positions,
-                                          box_vectors=self._hybrid_system.getDefaultPeriodicBoxVectors())
+                                          box_vectors=self.factory.hybrid_system.getDefaultPeriodicBoxVectors())
         self.sampler_states = {0: copy.deepcopy(sampler_state), 1: copy.deepcopy(sampler_state)}
-
-        #create observable list
-        self.observables = {_direction: [1.0] for _direction in self.lambda_endstates.keys()}
-        self.allowable_resampling_methods = {'multinomial': NonequilibriumSwitchingFEP.multinomial_resample}
-        self.allowable_observables = {'ESS': NonequilibriumSwitchingFEP.ESS, 'CESS': NonequilibriumSwitchingFEP.CESS}
-        self.timers = {'equilibrate': []}
 
         #Dask implementables
         self.LSF = LSF
@@ -338,11 +344,11 @@ class SequentialMonteCarlo(DaskClient):
             actor pointer if self.LSF, otherwise class object
         """
         if self.LSF:
-            LOA_actor = launch_actor(LocallyOptimalAnnealing)
+            LOA_actor = self.launch_actor(LocallyOptimalAnnealing)
         else:
-            LOA_actor = launch_actor(LocallyOptimalAnnealing)
+            LOA_actor = self.launch_actor(LocallyOptimalAnnealing)
 
-        actor_bool = LOA_actor.initialize(self.thermodynamic_state,
+        actor_bool = LOA_actor.initialize(thermodynamic_state = self.thermodynamic_state,
                                           lambda_protocol = self.lambda_protocol,
                                           timestep = self.timestep,
                                           collision_rate = self.collision_rate,
@@ -350,7 +356,8 @@ class SequentialMonteCarlo(DaskClient):
                                           neq_splitting_string = self.neq_splitting_string,
                                           ncmc_save_interval = self.ncmc_save_interval,
                                           topology = self.topology,
-                                          subset_atoms = self.topology.select(self.atom_selection_string))
+                                          subset_atoms = self.topology.select(self.atom_selection_string),
+                                          measure_shadow_work = self.measure_shadow_work)
         if self.LSF:
             assert self.gather_actor_result(actor_bool), f"Dask initialization failed"
         else:
@@ -363,8 +370,7 @@ class SequentialMonteCarlo(DaskClient):
             protocol_length,
             directions = ['forward','reverse'],
             num_integration_steps = 1,
-            return_timer = False
-            ):
+            return_timer = False):
         """
         Conduct vanilla AIS. with a linearly interpolated lambda protocol
 
@@ -381,7 +387,12 @@ class SequentialMonteCarlo(DaskClient):
         return_timer : bool, default False
             whether to time the annealing protocol
         """
-        [assert _direction in ['forward', 'reverse'] for _direction in directions]
+        self.activate_client(LSF = self.LSF,
+                            num_processes = self.num_processes,
+                            adapt = self.adapt)
+
+        for _direction in directions:
+            assert _direction in ['forward', 'reverse'], f"direction {_direction} is not an appropriate direction"
         protocols = {}
         for _direction in directions:
             if _direction == 'forward':
@@ -404,15 +415,15 @@ class SequentialMonteCarlo(DaskClient):
 
         #now we have to launch the LocallyOptimalAnnealing actors
         AIS_actors = {_direction: {} for _direction in directions}
-        total_jobs = 0
         for _direction in directions:
-            for idx in range(num_actors):
-                _actor = launch_LocallyOptimalAnnealing(protocols[_direction])
-                AIS_actors[_direction][_actor] = []
-                for jobs in range(particles_per_actor):
-                    sampler_state = pull_trajectory_snapshot(0) if _direction == 'forward' else pull_trajectory_snapshot(1)
+            for num_anneals in particles_per_actor: #particles_per_actor is a list of ints where each element is the number of annealing jobs in the actor
+                _actor = self.launch_LocallyOptimalAnnealing(protocols[_direction])
+                AIS_actors[_direction].update({_actor : []})
+                for _ in range(num_anneals): #launch num_anneals annealing jobs
+                    sampler_state = self.pull_trajectory_snapshot(0) if _direction == 'forward' else self.pull_trajectory_snapshot(1)
                     if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
-                        noneq_trajectory_filename = self.neq_traj_filename[_direction] + f".iteration_{total_jobs:04}.h5"
+                        noneq_trajectory_filename = self.neq_traj_filename[_direction] + f".iteration_{self.total_jobs:04}.h5"
+                        self.total_jobs += 1
                     else:
                         noneq_trajectory_filename = None
 
@@ -422,28 +433,43 @@ class SequentialMonteCarlo(DaskClient):
                                                  num_integration_steps = num_integration_steps,
                                                  return_timer = return_timer,
                                                  return_sampler_state = False)
+
                     AIS_actors[_direction][_actor].append(actor_future)
 
         #now that the actors are gathered, we can collect the results and put them into class attributes
         for _direction in AIS_actors.keys():
             _result_lst = [[self.gather_actor_result(_future) for _future in AIS_actors[_direction][_actor]] for _actor in AIS_actors[_direction].keys()]
             flattened_result_lst = [item for sublist in _result_lst for item in sublist]
-            [self.cumulative_work[_direction].append(np.cumsum(item[0])) for item in flattened_result_lst]
+            [self.incremental_work[_direction].append(item[0]) for item in flattened_result_lst]
             [self.nonequilibrium_timers[_direction].append(item[2]) for item in flattened_result_lst]
+
+        #compute the free energy
+        self.compute_free_energy()
+
+        #deactivate_client
+        self.deactivate_client()
+
+    def compute_free_energy(self):
+        """
+        given self.cumulative_work, compute the free energy profile
+        """
+        for _direction, works in self.incremental_work.items():
+            if works != []:
+                self.cumulative_work[_direction] = np.vstack([np.cumsum(work) for work in works])
+                final_works = self.cumulative_work[_direction][:,-1]
+                self.dg_EXP[_direction] = pymbar.EXP(final_works)
+
+        if all(work != [] for work in self.cumulative_work.values()): #then we can do BAR estimator
+            self.dg_BAR = pymbar.BAR(self.cumulative_work['forward'][:,-1], self.cumulative_work['reverse'][:,-1])
+
+
 
 
     def minimize_sampler_states(self):
         # initialize by minimizing
-        for state in self.lambda_endstates['forward']:
-            SequentialMonteCarlo.minimize(self.modify_thermodynamic_state(self.thermodynamic_state, state), self.sampler_states[key])
-
-
-    def modify_thermodynamic_state(self, thermodynamic_state, current_lambda):
-        """
-        modify a thermodynamic state in place
-        """
-        thermodynamic_state.set_alchemical_parameters(current_lambda, LambdaProtocol(functions = self.lambda_protocol))
-        return thermodynamic_state
+        for state in self.lambda_endstates['forward']: # 0.0, 1.0
+            self.thermodynamic_state.set_alchemical_parameters(state, LambdaProtocol(functions = self.lambda_protocol))
+            SequentialMonteCarlo.minimize(self.thermodynamic_state, self.sampler_states[int(state)])
 
     def pull_trajectory_snapshot(self, endstate):
         """
@@ -459,15 +485,11 @@ class SequentialMonteCarlo(DaskClient):
             sampler state with positions and box vectors if applicable
         """
         #pull a random index
-        _logger.debug(f"\tpulling a decorrelated trajectory snapshot...")
         index = random.choice(self._eq_dict[f"{endstate}_decorrelated"])
-        _logger.debug(f"\t\tpulled decorrelated index label {index}")
         files = [key for key in self._eq_files_dict[endstate].keys() if index in self._eq_files_dict[endstate][key]]
-        _logger.debug(f"\t\t files corresponding to index {index}: {files}")
         assert len(files) == 1, f"files: {files} doesn't have one entry; index: {index}, eq_files_dict: {self._eq_files_dict[endstate]}"
         file = files[0]
         file_index = self._eq_files_dict[endstate][file].index(index)
-        _logger.debug(f"\t\tfile_index: {file_index}")
 
         #now we load file as a traj and create a sampler state with it
         traj = md.load_frame(file, file_index)
@@ -477,7 +499,7 @@ class SequentialMonteCarlo(DaskClient):
 
         return sampler_state
 
-     def equilibrate(self,
+    def equilibrate(self,
                     n_equilibration_iterations = 1,
                     n_steps_per_equilibration = 5000,
                     endstates = [0,1],
@@ -513,16 +535,20 @@ class SequentialMonteCarlo(DaskClient):
         """
 
         _logger.debug(f"conducting equilibration")
+        for endstate in endstates:
+            assert endstate in [0, 1], f"the endstates contains {endstate}, which is not in [0, 1]"
 
         # run a round of equilibrium
         _logger.debug(f"iterating through endstates to submit equilibrium jobs")
+        EquilibriumFEPTask_list = []
         for state in endstates: #iterate through the specified endstates (0 or 1) to create appropriate EquilibriumFEPTask inputs
             _logger.debug(f"\tcreating lambda state {state} EquilibriumFEPTask")
-            input_dict = {'thermodynamic_state': copy.deepcopy(self.modify_thermodynamic_state(self.thermodynamic_state, state)),
-                          'nsteps_equil': self._n_equil_steps,
-                          'topology': self._factory.hybrid_topology,
+            self.thermodynamic_state.set_alchemical_parameters(float(state), lambda_protocol = LambdaProtocol(functions = self.lambda_protocol))
+            input_dict = {'thermodynamic_state': copy.deepcopy(self.thermodynamic_state),
+                          'nsteps_equil': n_steps_per_equilibration,
+                          'topology': self.factory.hybrid_topology,
                           'n_iterations': n_equilibration_iterations,
-                          'splitting': self._eq_splitting_string,
+                          'splitting': self.eq_splitting_string,
                           'atom_indices_to_save': None,
                           'trajectory_filename': None,
                           'max_size': max_size,
@@ -563,7 +589,7 @@ class SequentialMonteCarlo(DaskClient):
             _logger.debug(f"\tcomputing equilibrium task future for state = {state}")
             self._eq_dict[state].extend(eq_result.outputs['files'])
             self._eq_dict[f"{state}_reduced_potentials"].extend(eq_result.outputs['reduced_potentials'])
-            self._sampler_states[state] = eq_result.sampler_state
+            self.sampler_states.update({state: eq_result.sampler_state})
             self._eq_timers[state].append(eq_result.outputs['timers'])
 
         _logger.debug(f"collections complete.")
@@ -574,7 +600,7 @@ class SequentialMonteCarlo(DaskClient):
                 traj_filename = self.eq_trajectory_filename[state]
                 if os.path.exists(traj_filename[:-2] + f'0000' + '.h5'):
                     _logger.debug(f"\tfound traj filename: {traj_filename[:-2] + f'0000' + '.h5'}; proceeding...")
-                    [t0, g, Neff_max, A_t, uncorrelated_indices] = feptasks.compute_timeseries(np.array(self._eq_dict[f"{state}_reduced_potentials"]))
+                    [t0, g, Neff_max, A_t, uncorrelated_indices] = SequentialMonteCarlo.compute_timeseries(np.array(self._eq_dict[f"{state}_reduced_potentials"]))
                     _logger.debug(f"\tt0: {t0}; Neff_max: {Neff_max}; uncorrelated_indices: {uncorrelated_indices}")
                     self._eq_dict[f"{state}_decorrelated"] = uncorrelated_indices
 
@@ -604,7 +630,7 @@ class SequentialMonteCarlo(DaskClient):
         sampler_state : openmmtools.states.SamplerState
             The starting state at which to minimize the system.
         max_iterations : int, optional, default 20
-            The maximum number of minimization steps. Default is 20.
+            The maximum number of minimization steps. Default is 100.
 
         Returns
         -------
@@ -729,7 +755,7 @@ class SequentialMonteCarlo(DaskClient):
                     new_filename = inputs['trajectory_filename'][:-2] + f'{file_iterator:04}' + '.h5'
                     file_numsnapshots.append((new_filename, len(trajectory_positions)))
                     file_iterator +=1
-                    write_equilibrium_trajectory(trajectory, new_filename)
+                    SequentialMonteCarlo.write_equilibrium_trajectory(trajectory, new_filename)
 
                     #re_initialize the trajectory positions, box_lengths, box_angles
                     trajectory_positions, trajectory_box_lengths, trajectory_box_angles = list(), list(), list()
@@ -753,7 +779,7 @@ class SequentialMonteCarlo(DaskClient):
                 else:
                     new_filename = inputs['trajectory_filename'][:-2] + f'{file_iterator+1:04}' + '.h5'
                     file_numsnapshots.append((new_filename, len(trajectory_positions)))
-                write_equilibrium_trajectory(trajectory, new_filename)
+                SequentialMonteCarlo.write_equilibrium_trajectory(trajectory, new_filename)
 
         if timer: timers['write_traj'] = time.time() - start
 
@@ -820,11 +846,12 @@ class LocallyOptimalAnnealing():
                    lambda_protocol = 'default',
                    timestep = 1 * unit.femtoseconds,
                    collision_rate = 1 / unit.picoseconds,
-                   temperature = 300 * unit.Kelvin,
+                   temperature = 300 * unit.kelvin,
                    neq_splitting_string = 'V R O R V',
                    ncmc_save_interval = None,
                    topology = None,
-                   subset_atoms = None):
+                   subset_atoms = None,
+                   measure_shadow_work = False):
 
         self.context_cache = cache.global_context_cache
 
@@ -848,7 +875,7 @@ class LocallyOptimalAnnealing():
 
         #if we have a trajectory, set up some ancillary variables:
         if self.topology is not None:
-            n_atoms = self._topology.n_atoms
+            n_atoms = self.topology.n_atoms
             self._trajectory_positions = []
             self._trajectory_box_lengths = []
             self._trajectory_box_angles = []
@@ -893,7 +920,8 @@ class LocallyOptimalAnnealing():
         """
         #check if we can save the trajectory
         if noneq_trajectory_filename is not None:
-            raise Exception(f"The save interval is None, but a nonequilibrium trajectory filename was given!") if self.save_interval is None
+            if self.save_interval is None:
+                raise Exception(f"The save interval is None, but a nonequilibrium trajectory filename was given!")
 
         #check returnables for timers:
         if return_timer is not None:
@@ -912,18 +940,19 @@ class LocallyOptimalAnnealing():
 
         for idx, _lambda in enumerate(lambdas[1:]): #skip the first lambda
             try:
-                start_timer = time.time() if return_timer
-                incremental_work[idx] = compute_incremental_work(_lambda)
+                if return_timer:
+                    start_timer = time.time()
+                incremental_work[idx] = self.compute_incremental_work(_lambda)
                 integrator.step(num_integration_steps)
-                self.timers['protocol'].append(time.time() - protocol_start)
                 if noneq_trajectory_filename is not None:
                     self.save_configuration(idx, sampler_state, context)
-                timer[idx] = time.time() - start_timer if return_timer
+                if return_timer:
+                    timer[idx] = time.time() - start_timer
             except Exception as e:
                 print(f"failure: {e}")
                 return e
 
-        self.attempt_termination(self, noneq_trajectory_filename)
+        self.attempt_termination(noneq_trajectory_filename)
 
         #pull the last sampler state and return
         if return_sampler_state:
@@ -959,8 +988,9 @@ class LocallyOptimalAnnealing():
         self.thermodynamic_state.set_alchemical_parameters(_lambda, lambda_protocol = self.lambda_protocol_class)
         self.thermodynamic_state.apply_to_context(self.context)
         new_rp = self.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
-        incremental_work = new_rp - old_rp
-        return incremental_work
+        _incremental_work = new_rp - old_rp
+
+        return _incremental_work
 
     def save_configuration(self, iteration, sampler_state, context):
         """
@@ -968,7 +998,6 @@ class LocallyOptimalAnnealing():
         """
         if iteration % self.ncmc_save_interval == 0: #we save the protocol work if the remainder is zero
             _logger.debug(f"\t\tsaving protocol")
-            save_start = time.time()
             #self._kinetic_energy.append(self._beta * context.getState(getEnergy=True).getKineticEnergy()) #maybe if we want kinetic energy in the future
             sampler_state.update_from_context(self.context, ignore_velocities=True) #save bandwidth by not updating the velocities
 
@@ -981,12 +1010,3 @@ class LocallyOptimalAnnealing():
                 a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
                 self._trajectory_box_lengths.append([a, b, c])
                 self._trajectory_box_angles.append([alpha, beta, gamma])
-            self.timers['save'].append(time.time() - save_start)
-
-
-class AnnealedImportanceSampling(SequentialMonteCarlo):
-    """
-    This class wraps LocallyOptimalAnnealing.  Annealing can be done in serial locally.
-    This class also supports distributed annealing by using LocallyOptimalAnnealing as an actor living on a worker.
-    """
-    def __init__()
