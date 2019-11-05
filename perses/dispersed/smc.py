@@ -28,6 +28,7 @@ from perses.annihilation.lambda_protocol import LambdaProtocol
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 import random
 import pymbar
+import dask.distributed as distributed
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
