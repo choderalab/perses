@@ -29,6 +29,7 @@ from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaP
 import random
 import pymbar
 import dask.distributed as distributed
+import tqdm
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
@@ -143,6 +144,7 @@ class DaskClient(object):
         if self.client is None:
             return future
         else:
+            distributed.progress(future)
             result = future.result()
             return result
 
@@ -161,11 +163,21 @@ class DaskClient(object):
         """
         if self.client is not None:
             future = self.client.submit(_class, actor=True)  # Create a _class on a worker
+            distributed.progress(future)
             actor = future.result()                    # Get back a pointer to that object
             return actor
         else:
             actor = _class()
             return actor
+        
+    def progress(self, futures):
+        """
+        wrapper to log the progress of futures
+        """
+        if self.client is None:
+            pass
+        else:
+            distributed.progress(futures)
 
     def wait(self, futures):
         """
@@ -413,14 +425,21 @@ class SequentialMonteCarlo(DaskClient):
             #we only create one local actor and put all of the particles on it
             num_actors = 1
             particles_per_actor = [num_particles]
+            
+        _logger.info(f"num_actors: {num_actors}")
+        _logger.info(f"particles per actor: {particles_per_actor}")
 
         #now we have to launch the LocallyOptimalAnnealing actors
+        _logger.info(f"Instantiating AIS actors...")
         AIS_actors = {_direction: {} for _direction in directions}
+        all_futures = []
         for _direction in directions:
+            _logger.info(f"\tlaunching {_direction} actors...")
             for num_anneals in particles_per_actor: #particles_per_actor is a list of ints where each element is the number of annealing jobs in the actor
+                _logger.info(f"\t\tlaunching LocallyOptimalAnnealing actor")
                 _actor = self.launch_LocallyOptimalAnnealing(protocols[_direction])
                 AIS_actors[_direction].update({_actor : []})
-                for _ in range(num_anneals): #launch num_anneals annealing jobs
+                for _ in tqdm.trange(num_anneals): #launch num_anneals annealing jobs
                     sampler_state = self.pull_trajectory_snapshot(0) if _direction == 'forward' else self.pull_trajectory_snapshot(1)
                     if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
                         noneq_trajectory_filename = self.neq_traj_filename[_direction] + f".iteration_{self.total_jobs:04}.h5"
@@ -436,9 +455,11 @@ class SequentialMonteCarlo(DaskClient):
                                                  return_sampler_state = False)
 
                     AIS_actors[_direction][_actor].append(actor_future)
+                    all_futures.append(actor_future)
 
         #now that the actors are gathered, we can collect the results and put them into class attributes
         for _direction in AIS_actors.keys():
+            _logger.info(f"collecting {_direction} actor results...")
             _result_lst = [[self.gather_actor_result(_future) for _future in AIS_actors[_direction][_actor]] for _actor in AIS_actors[_direction].keys()]
             flattened_result_lst = [item for sublist in _result_lst for item in sublist]
             [self.incremental_work[_direction].append(item[0]) for item in flattened_result_lst]
