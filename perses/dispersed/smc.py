@@ -74,7 +74,7 @@ class DaskClient(object):
                 cluster.scale(self.num_processes)
 
             _logger.debug(f"scheduling cluster with client")
-            self.client = distributed.Client(cluster)
+            self.client = distributed.Client(cluster, timeout = 1800)
         else:
             self.client = None
             self._adapt = False
@@ -97,8 +97,9 @@ class DaskClient(object):
             #don't actually scatter
             return df
         else:
+            
             return self.client.scatter(df)
-
+    
     def deploy(self, func, arguments):
         """
         wrapper to map a function and its arguments to the client for scheduling
@@ -417,45 +418,55 @@ class SequentialMonteCarlo(DaskClient):
         if self.LSF: #we have to figure out how many actors to make
             if not self.adapt:
                 num_actors = self.num_processes
-                particles_per_actor = [num_particles // num_actors] * num_actors
-                particles_per_actor[-1] += num_particles % num_actors
+                num_actors_per_direction = num_actors // len(directions)
+                if num_actors % len(directions) != 0:
+                    raise Exception(f"the number of actors per direction does not divide evenly (num_actors = {num_actors} while num_directions = {len(directions)}).")
+                num_particles_per_actor = num_particles // num_actors_per_direction
+                if num_particles % num_actors_per_direction != 0:
+                    raise Exception(f"the number of particles per actor does not divide evenly (num_particles = {num_particles} while num_actors_per_direction = {num_actors_per_direction}).")
             else:
                 raise Exception(f"the client is adaptable, but AIS does not currently support an adaptive client")
         else:
             #we only create one local actor and put all of the particles on it
-            num_actors = 1
-            particles_per_actor = [num_particles]
+            num_actors = len(directions)
+            num_actors_per_direction = 1
+            num_particles_per_actor = num_particles
             
         _logger.info(f"num_actors: {num_actors}")
-        _logger.info(f"particles per actor: {particles_per_actor}")
+        _logger.info(f"particles per actor: {num_particles_per_actor}")
 
         #now we have to launch the LocallyOptimalAnnealing actors
         _logger.info(f"Instantiating AIS actors...")
         AIS_actors = {_direction: {} for _direction in directions}
         all_futures = []
+        
         for _direction in directions:
-            _logger.info(f"\tlaunching {_direction} actors...")
-            for num_anneals in particles_per_actor: #particles_per_actor is a list of ints where each element is the number of annealing jobs in the actor
-                _logger.info(f"\t\tlaunching LocallyOptimalAnnealing actor")
+            _logger.info(f"launching {_direction} actors...")
+            for actor_idx in range(num_actors_per_direction):
+                _logger.info(f"\tlaunching actor {actor_idx + 1} of {num_actors_per_direction}.")
                 _actor = self.launch_LocallyOptimalAnnealing(protocols[_direction])
                 AIS_actors[_direction].update({_actor : []})
-                for _ in tqdm.trange(num_anneals): #launch num_anneals annealing jobs
+        
+        for _direction in directions:
+            actor_dict = AIS_actors[_direction]
+            _logger.info(f"entering {_direction} direction to launch annealing jobs.")
+            for _actor in actor_dict.keys():
+                _logger.info(f"\tretrieving actor {_actor}.")
+                for job in tqdm.trange(num_particles_per_actor):
                     sampler_state = self.pull_trajectory_snapshot(0) if _direction == 'forward' else self.pull_trajectory_snapshot(1)
                     if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
                         noneq_trajectory_filename = self.neq_traj_filename[_direction] + f".iteration_{self.total_jobs:04}.h5"
                         self.total_jobs += 1
                     else:
                         noneq_trajectory_filename = None
-
+                        
                     actor_future = _actor.anneal(sampler_state = sampler_state,
                                                  lambdas = protocols[_direction],
                                                  noneq_trajectory_filename = noneq_trajectory_filename,
                                                  num_integration_steps = num_integration_steps,
                                                  return_timer = return_timer,
                                                  return_sampler_state = False)
-
                     AIS_actors[_direction][_actor].append(actor_future)
-                    all_futures.append(actor_future)
 
         #now that the actors are gathered, we can collect the results and put them into class attributes
         for _direction in AIS_actors.keys():
@@ -604,6 +615,7 @@ class SequentialMonteCarlo(DaskClient):
 
         scatter_futures = self.scatter(EquilibriumFEPTask_list)
         futures = self.deploy(SequentialMonteCarlo.run_equilibrium, (scatter_futures,))
+        self.progress(futures)
         eq_results = self.gather_results(futures)
         self.deactivate_client()
 
