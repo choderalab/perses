@@ -30,6 +30,7 @@ import random
 import pymbar
 import dask.distributed as distributed
 import tqdm
+import time
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
@@ -58,7 +59,8 @@ class DaskClient(object):
     def activate_client(self,
                         LSF = True,
                         num_processes = 2,
-                        adapt = False):
+                        adapt = False,
+                        timeout = 1800):
 
         if LSF:
             from dask_jobqueue import LSFCluster
@@ -74,7 +76,15 @@ class DaskClient(object):
                 cluster.scale(self.num_processes)
 
             _logger.debug(f"scheduling cluster with client")
-            self.client = distributed.Client(cluster, timeout = 1800)
+            self.client = distributed.Client(cluster, timeout = timeout)
+            while len(self.client.nthreads()) != self.num_processes:
+                _logger.debug(f"workers: {self.client.nthreads()}.  waiting for {self.num_processes} workers...")
+                time.sleep(3)
+            worker_threads = self.client.nthreads()
+            self.workers = {i: _worker for i, _worker in zip(range(len(worker_threads)), worker_threads.keys())}
+            self.worker_counter = 0
+            
+            #now we wait for all of our workers. 
         else:
             self.client = None
             self._adapt = False
@@ -88,6 +98,8 @@ class DaskClient(object):
         if self.client is not None:
             self.client.close()
             self.client = None
+            self.workers = None
+            self.worker_counter = 0
 
     def scatter(self, df):
         """
@@ -163,7 +175,8 @@ class DaskClient(object):
         actor : dask.distributed.Actor pointer (future)
         """
         if self.client is not None:
-            future = self.client.submit(_class, actor=True)  # Create a _class on a worker
+            future = self.client.submit(_class, workers = [self.workers[self.worker_counter]], actor=True)  # Create a _class on a worker
+            self.worker_counter += 1
             distributed.progress(future)
             actor = future.result()                    # Get back a pointer to that object
             return actor
@@ -384,7 +397,8 @@ class SequentialMonteCarlo(DaskClient):
             protocol_length,
             directions = ['forward','reverse'],
             num_integration_steps = 1,
-            return_timer = False):
+            return_timer = False,
+            rethermalize = False):
         """
         Conduct vanilla AIS. with a linearly interpolated lambda protocol
 
@@ -400,6 +414,8 @@ class SequentialMonteCarlo(DaskClient):
             number of integration steps per proposal
         return_timer : bool, default False
             whether to time the annealing protocol
+	rethermalize : bool, default False
+            whether to rethermalize velocities after proposal
         """
         self.activate_client(LSF = self.LSF,
                             num_processes = self.num_processes,
@@ -465,10 +481,14 @@ class SequentialMonteCarlo(DaskClient):
                                                  noneq_trajectory_filename = noneq_trajectory_filename,
                                                  num_integration_steps = num_integration_steps,
                                                  return_timer = return_timer,
-                                                 return_sampler_state = False)
+                                                 return_sampler_state = False,
+						 rethermalize = rethermalize)
                     AIS_actors[_direction][_actor].append(actor_future)
+                    all_futures.append(actor_future)
 
         #now that the actors are gathered, we can collect the results and put them into class attributes
+        _logger.info(f"collecting all futures...")
+        self.progress(all_futures)
         for _direction in AIS_actors.keys():
             _logger.info(f"collecting {_direction} actor results...")
             _result_lst = [[self.gather_actor_result(_future) for _future in AIS_actors[_direction][_actor]] for _actor in AIS_actors[_direction].keys()]
@@ -924,7 +944,9 @@ class LocallyOptimalAnnealing():
                noneq_trajectory_filename = None,
                num_integration_steps = 1,
                return_timer = False,
-               return_sampler_state = False):
+               return_sampler_state = False
+	       rethermalize = False):
+	       
         """
         conduct annealing across lambdas.
 
@@ -942,6 +964,8 @@ class LocallyOptimalAnnealing():
             whether to time the annealing protocol
         return_sampler_state : bool, default False
             whether to return the last sampler state
+	rethermalize : bool, default False,
+	    whether to re-initialize velocities after propagation step
 
         Returns
         -------
@@ -978,6 +1002,8 @@ class LocallyOptimalAnnealing():
                     start_timer = time.time()
                 incremental_work[idx] = self.compute_incremental_work(_lambda)
                 integrator.step(num_integration_steps)
+		if rethermalize:
+		    self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #rethermalize
                 if noneq_trajectory_filename is not None:
                     self.save_configuration(idx, sampler_state, context)
                 if return_timer:

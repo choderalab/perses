@@ -136,6 +136,9 @@ def getSetupOptions(filename):
             setup_options['ncmc_collision_rate_ps'] = np.inf/unit.picoseconds
         else:
             setup_options['ncmc_collision_rate_ps'] /= unit.picoseconds
+	if 'ncmc_rethermalize' not in setup_options:
+	    _logger.info(f"\t\t\tncmc_rethermalize not specified; default to False.")
+	    setup_options['ncmc_rethermalize'] = False
 
         #now lastly, for the algorithm_4 options:
         if 'observable' not in setup_options:
@@ -505,7 +508,8 @@ if __name__ == "__main__":
                            protocol_length = setup_options['n_lambdas'],
                            directions = setup_options['direction'],
                            num_integration_steps = setup_options['ncmc_num_integration_steps'],
-                           return_timer = True)
+                           return_timer = True,
+			   rethermalize = setup_options['ncmc_rethermalize'])
 
             # try to write out the ne_fep object as a pickle
             try:
@@ -589,7 +593,9 @@ if __name__ == "__main__":
                                    protocol_length = setup_options['n_lambdas'],
                                    directions = setup_options['direction'],
                                    num_integration_steps = setup_options['ncmc_num_integration_steps'],
-                                   return_timer = True)
+                                   return_timer = True,
+				   rethermalize = setup_options['ncmc_rethermalize'])
+
                     print("calculation complete; deactivating client")
                     #ne_fep_run.deactivate_client()
 
