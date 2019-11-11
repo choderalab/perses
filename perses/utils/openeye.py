@@ -226,13 +226,13 @@ def createOEMolFromSDF(sdf_filename, index=0):
     ----------
     sdf_filename : str
         The name of the SDF file
-    index : int, default 0
-        The index of the molecule in the SDF file
+    index : int, default 1
+        The index of the molecule in the SDF file None returns oemol for every index
 
     Returns
     -------
-    mol : openeye.oechem.OEMol object
-        The loaded oemol object
+    mol : openeye.oechem.OEMol object or list
+        The loaded oemol object or list of objects
     """
     #TODO this needs a test
     ifs = oechem.oemolistream()
@@ -247,7 +247,11 @@ def createOEMolFromSDF(sdf_filename, index=0):
         oechem.OEAssignHybridization(molecule)
         oechem.OEAddExplicitHydrogens(molecule)
 
-    mol_to_return = mol_list[index]
+    if index is not None:
+        mol_to_return = mol_list[index]
+    else:
+        mol_to_return = mol_list
+
     return mol_to_return
 
 def calculate_mol_similarity(molA, molB):

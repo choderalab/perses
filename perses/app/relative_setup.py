@@ -369,7 +369,7 @@ class RelativeFEPSetup(object):
             self._protein_pdb_filename = protein_pdb_filename
             protein_pdbfile = open(self._protein_pdb_filename, 'r')
             pdb_file = app.PDBFile(protein_pdbfile)
-            protein_pdbfile.close()
+            protein_pdbfile.close() 
             self._receptor_positions_old = pdb_file.positions
             self._receptor_topology_old = pdb_file.topology
             self._receptor_md_topology_old = md.Topology.from_openmm(self._receptor_topology_old)
