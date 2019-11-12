@@ -301,8 +301,8 @@ class RelativeFEPSetup(object):
             else:
                 self._solvated_subtracted_valence_energy = self._geometry_engine.reverse_final_context_reduced_potential - self._geometry_engine.reverse_atoms_with_positions_reduced_potential
 
-            self._solvated_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
-            self._solvated_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
+            self._solvent_forward_neglected_angles = self._geometry_engine.forward_neglected_angle_terms
+            self._solvent_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
             self._solvent_geometry_engine = copy.deepcopy(self._geometry_engine)
 
         if 'vacuum' in phases:
