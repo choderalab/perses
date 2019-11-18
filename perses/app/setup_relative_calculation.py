@@ -84,6 +84,9 @@ def getSetupOptions(filename):
         if 'write_ncmc_configuration' not in setup_options:
             _logger.info(f"\t\t\twrite_ncmc_configuration not specified: default to False")
             setup_options['write_ncmc_configuration'] = False
+        if 'neq_integrator' not in setup_options:
+            _logger.info(f"\t\t\tneq_integrator not specified; default to 'langevin'")
+            setup_options['neq_integrator'] = 'langevin'
 
         #for dask implementation
         if 'processes' not in setup_options:
@@ -128,6 +131,8 @@ def getSetupOptions(filename):
         if 'direction' not in setup_options:
             _logger.info(f"\t\t\tdirection is not specified; default to (running both forward and reverse)")
             setup_options['direction'] = ['forward', 'reverse']
+        else:
+            _logger.info(f"\t\t\tthe directions are as follows: {setup_options['direction']}")
         if 'ncmc_save_interval' not in setup_options:
             _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
             setup_options['ncmc_save_interval'] = None
@@ -136,9 +141,9 @@ def getSetupOptions(filename):
             setup_options['ncmc_collision_rate_ps'] = np.inf/unit.picoseconds
         else:
             setup_options['ncmc_collision_rate_ps'] /= unit.picoseconds
-	if 'ncmc_rethermalize' not in setup_options:
-	    _logger.info(f"\t\t\tncmc_rethermalize not specified; default to False.")
-	    setup_options['ncmc_rethermalize'] = False
+        if 'ncmc_rethermalize' not in setup_options:
+            _logger.info(f"\t\t\tncmc_rethermalize not specified; default to False.")
+            setup_options['ncmc_rethermalize'] = False
 
         #now lastly, for the algorithm_4 options:
         if 'observable' not in setup_options:
@@ -404,6 +409,7 @@ def run_setup(setup_options):
                                                  neq_splitting_string = neq_splitting,
                                                  collision_rate = setup_options['ncmc_collision_rate_ps'],
                                                  ncmc_save_interval = ncmc_save_interval,
+                                                 neq_integrator = setup_options['neq_integrator'],
                                                  LSF = setup_options['LSF'],
                                                  num_processes = setup_options['num_processes'],
                                                  adapt = setup_options['adapt'])
@@ -503,13 +509,15 @@ if __name__ == "__main__":
         out_trajectory_prefix = setup_options['out_trajectory_prefix']
         for phase in setup_options['phases']:
             ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
-
+            ne_fep_run.num_processes = setup_options['num_processes']
+            ne_fep_run.neq_integrator = setup_options['neq_integrator']
+            ne_fep_run.LSF = setup_options['LSF']
             ne_fep_run.AIS(num_particles = setup_options['n_particles'],
                            protocol_length = setup_options['n_lambdas'],
                            directions = setup_options['direction'],
                            num_integration_steps = setup_options['ncmc_num_integration_steps'],
                            return_timer = True,
-			   rethermalize = setup_options['ncmc_rethermalize'])
+                           rethermalize = setup_options['ncmc_rethermalize'])
 
             # try to write out the ne_fep object as a pickle
             try:

@@ -223,6 +223,7 @@ class SequentialMonteCarlo(DaskClient):
                  neq_splitting_string = 'V R O R V',
                  ncmc_save_interval = None,
                  measure_shadow_work = False,
+                 neq_integrator = 'langevin',
                  LSF = False,
                  num_processes = 2,
                  adapt = False):
@@ -255,6 +256,8 @@ class SequentialMonteCarlo(DaskClient):
         measure_shadow_work : bool, default False
             whether to measure the shadow work of the integrator.
             WARNING : this is not currently supported
+        neq_integrator : str, default 'langevin'
+            which integrator to use
         LSF: bool, default False
             whether we are using the LSF dask Client
         num_processes: int, default 2
@@ -280,6 +283,7 @@ class SequentialMonteCarlo(DaskClient):
         self.collision_rate = collision_rate
 
         self.measure_shadow_work = measure_shadow_work
+        self.neq_integrator = neq_integrator
         if measure_shadow_work:
             raise Exception(f"measure_shadow_work is not currently supported.  Aborting!")
 
@@ -370,6 +374,7 @@ class SequentialMonteCarlo(DaskClient):
         LOA_actor : dask.distributed.actor (or class object) of smc.LocallyOptimalAnnealing
             actor pointer if self.LSF, otherwise class object
         """
+        start_timer = time.time()
         if self.LSF:
             LOA_actor = self.launch_actor(LocallyOptimalAnnealing)
         else:
@@ -384,11 +389,15 @@ class SequentialMonteCarlo(DaskClient):
                                           ncmc_save_interval = self.ncmc_save_interval,
                                           topology = self.topology,
                                           subset_atoms = self.topology.select(self.atom_selection_string),
-                                          measure_shadow_work = self.measure_shadow_work)
+                                          measure_shadow_work = self.measure_shadow_work,
+                                          integrator = self.neq_integrator)
         if self.LSF:
             assert self.gather_actor_result(actor_bool), f"Dask initialization failed"
         else:
             assert actor_bool, f"local initialization failed"
+        
+        end_timer = time.time() - start_timer
+        _logger.info(f"\t\t launch_LocallyOptimalAnnealing took {end_timer} seconds")
 
         return LOA_actor
 
@@ -414,7 +423,7 @@ class SequentialMonteCarlo(DaskClient):
             number of integration steps per proposal
         return_timer : bool, default False
             whether to time the annealing protocol
-	rethermalize : bool, default False
+        rethermalize : bool, default False
             whether to rethermalize velocities after proposal
         """
         self.activate_client(LSF = self.LSF,
@@ -463,35 +472,46 @@ class SequentialMonteCarlo(DaskClient):
                 _actor = self.launch_LocallyOptimalAnnealing(protocols[_direction])
                 AIS_actors[_direction].update({_actor : []})
         
-        for _direction in directions:
-            actor_dict = AIS_actors[_direction]
-            _logger.info(f"entering {_direction} direction to launch annealing jobs.")
-            for _actor in actor_dict.keys():
-                _logger.info(f"\tretrieving actor {_actor}.")
-                for job in tqdm.trange(num_particles_per_actor):
+        for job in tqdm.trange(num_particles_per_actor):
+            start_timer = time.time()
+            for _direction in directions:
+                actor_dict = AIS_actors[_direction]
+                _logger.info(f"entering {_direction} direction to launch annealing jobs.")
+                for _actor in actor_dict.keys():
+                    _logger.info(f"\tretrieving actor {_actor}.")
                     sampler_state = self.pull_trajectory_snapshot(0) if _direction == 'forward' else self.pull_trajectory_snapshot(1)
                     if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
                         noneq_trajectory_filename = self.neq_traj_filename[_direction] + f".iteration_{self.total_jobs:04}.h5"
                         self.total_jobs += 1
                     else:
                         noneq_trajectory_filename = None
-                        
+
                     actor_future = _actor.anneal(sampler_state = sampler_state,
-                                                 lambdas = protocols[_direction],
-                                                 noneq_trajectory_filename = noneq_trajectory_filename,
-                                                 num_integration_steps = num_integration_steps,
-                                                 return_timer = return_timer,
-                                                 return_sampler_state = False,
-						 rethermalize = rethermalize)
+                                                     lambdas = protocols[_direction],
+                                                     noneq_trajectory_filename = noneq_trajectory_filename,
+                                                     num_integration_steps = num_integration_steps,
+                                                     return_timer = return_timer,
+                                                     return_sampler_state = False,
+                                                     rethermalize = rethermalize)
                     AIS_actors[_direction][_actor].append(actor_future)
-                    all_futures.append(actor_future)
+                    
+            #now we collect the jobs
+            for _direction in directions:
+                actor_dict = AIS_actors[_direction]
+                for _actor in actor_dict.keys():
+                    _future = AIS_actors[_direction][_actor][-1]
+                    result = self.gather_actor_result(_future)
+                    AIS_actors[_direction][_actor][-1] = result
+            
+            end_timer = time.time() - start_timer
+            _logger.info(f"iteration took {end_timer} seconds.")
+                    
 
         #now that the actors are gathered, we can collect the results and put them into class attributes
-        _logger.info(f"collecting all futures...")
-        self.progress(all_futures)
+        _logger.info(f"organizing all results...")
         for _direction in AIS_actors.keys():
             _logger.info(f"collecting {_direction} actor results...")
-            _result_lst = [[self.gather_actor_result(_future) for _future in AIS_actors[_direction][_actor]] for _actor in AIS_actors[_direction].keys()]
+            _result_lst = [[_future for _future in AIS_actors[_direction][_actor]] for _actor in AIS_actors[_direction].keys()]
             flattened_result_lst = [item for sublist in _result_lst for item in sublist]
             [self.incremental_work[_direction].append(item[0]) for item in flattened_result_lst]
             [self.nonequilibrium_timers[_direction].append(item[2]) for item in flattened_result_lst]
@@ -895,6 +915,8 @@ class LocallyOptimalAnnealing():
     The initialize method will create an appropriate context and the appropriate storage objects,
     but must be called explicitly.
     """
+    supported_integrators = ['langevin', 'hmc']
+    
     def initialize(self,
                    thermodynamic_state,
                    lambda_protocol = 'default',
@@ -905,7 +927,8 @@ class LocallyOptimalAnnealing():
                    ncmc_save_interval = None,
                    topology = None,
                    subset_atoms = None,
-                   measure_shadow_work = False):
+                   measure_shadow_work = False,
+                   integrator = 'langevin'):
 
         self.context_cache = cache.global_context_cache
 
@@ -915,7 +938,21 @@ class LocallyOptimalAnnealing():
             measure_heat = False
 
         self.thermodynamic_state = thermodynamic_state
-        self.integrator = integrators.LangevinIntegrator(temperature = temperature, timestep = timestep, splitting = neq_splitting_string, measure_shadow_work = measure_shadow_work, measure_heat = measure_heat, constraint_tolerance = 1e-6, collision_rate = collision_rate)
+        if integrator == 'langevin':
+            self.integrator = integrators.LangevinIntegrator(temperature = temperature, 
+                                                             timestep = timestep, 
+                                                             splitting = neq_splitting_string, 
+                                                             measure_shadow_work = measure_shadow_work, 
+                                                             measure_heat = measure_heat, 
+                                                             constraint_tolerance = 1e-6, 
+                                                             collision_rate = collision_rate)
+        elif integrator == 'hmc':
+            self.integrator = integrators.HMCIntegrator(temperature = temperature, 
+                                                        nsteps = 2,
+                                                        timestep = timestep/2)
+        else:
+            raise Exception(f"integrator {integrator} is not supported. supported integrators include {supported_integrators}")
+            
         self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
 
         #create temperatures
@@ -944,9 +981,8 @@ class LocallyOptimalAnnealing():
                noneq_trajectory_filename = None,
                num_integration_steps = 1,
                return_timer = False,
-               return_sampler_state = False
-	       rethermalize = False):
-	       
+               return_sampler_state = False,
+               rethermalize = False):
         """
         conduct annealing across lambdas.
 
@@ -964,8 +1000,8 @@ class LocallyOptimalAnnealing():
             whether to time the annealing protocol
         return_sampler_state : bool, default False
             whether to return the last sampler state
-	rethermalize : bool, default False,
-	    whether to re-initialize velocities after propagation step
+        rethermalize : bool, default False,
+            whether to re-initialize velocities after propagation step
 
         Returns
         -------
@@ -991,7 +1027,7 @@ class LocallyOptimalAnnealing():
         #first set the thermodynamic state to the proper alchemical state and pull context, integrator
         self.thermodynamic_state.set_alchemical_parameters(lambdas[0], lambda_protocol = self.lambda_protocol_class)
         self.context, integrator = self.context_cache.get_context(self.thermodynamic_state, self.integrator)
-        integrator.reset()
+        #integrator.reset()
         sampler_state.apply_to_context(self.context, ignore_velocities=True)
         self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
         integrator.step(num_integration_steps) #we have to propagate the start state
@@ -1002,8 +1038,8 @@ class LocallyOptimalAnnealing():
                     start_timer = time.time()
                 incremental_work[idx] = self.compute_incremental_work(_lambda)
                 integrator.step(num_integration_steps)
-		if rethermalize:
-		    self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #rethermalize
+                if rethermalize:
+                    self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #rethermalize
                 if noneq_trajectory_filename is not None:
                     self.save_configuration(idx, sampler_state, context)
                 if return_timer:
@@ -1013,6 +1049,11 @@ class LocallyOptimalAnnealing():
                 return e
 
         self.attempt_termination(noneq_trajectory_filename)
+        
+#         try:
+#             _logger.debug(f"\t\t\t\tintegrator acceptance rate: {integrator.acceptance_rate}")
+#         except:
+#             pass
 
         #pull the last sampler state and return
         if return_sampler_state:
