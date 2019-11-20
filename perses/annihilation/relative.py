@@ -496,7 +496,7 @@ class HybridTopologyFactory(object):
                     # TODO: We can skip this if we have already checked for constraints changing lengths
                     if constraint_lengths[hybrid_atoms] != length:
                         raise Exception('Constraint length is changing for atoms {} in hybrid system: old {} new {}'.format(hybrid_atoms, constraint_lengths[hybrid_atoms], length))
-        _logger.info(f"\t_handle_constraints: constraint_lengths dict: {constraint_lengths}")
+        _logger.debug(f"\t_handle_constraints: constraint_lengths dict: {constraint_lengths}")
 
     def _determine_interaction_group(self, atoms_in_interaction):
         """
