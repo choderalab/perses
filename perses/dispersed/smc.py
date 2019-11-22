@@ -454,31 +454,6 @@ class SequentialMonteCarlo(DaskClient):
 
         return num_actors, num_actors_per_direction, num_particles_per_actor, sMC_actors
 
-<<<<<<< HEAD
-=======
-    def _actor_collection(self, _dict):
-        """
-        wrapper for actor future collections
-
-        Arguments
-        ----------
-        _dict : dict (dict of directions of 2d list of dask.distributed.ActorFutures)
-
-        Returns
-        -------
-        results_dict : _dict of 2d list of SequentialMonteCarlo.anneal results
-        """
-
-        #now we collect the jobs
-        for _direction in directions:
-            actor_dict = AIS_actors[_direction]
-            for _actor in actor_dict.keys():
-                _future = AIS_actors[_direction][_actor][-1]
-                result = self.gather_actor_result(_future)
-                AIS_actors[_direction][_actor][-1] = result
-
->>>>>>> 51995494c40d6fa3f62816b5977c79ffbd196017
-
     def AIS(self,
             num_particles,
             protocol_length,
