@@ -125,9 +125,9 @@ def getSetupOptions(filename):
 
         #to instantiate the particles:
         if 'trailblaze' not in setup_options:
-            assert 'lambdas' in setup_option, f"'lambdas' is not in setup_options, and 'trailblaze' is False. One must be specified.  Aborting!"
-            assert type(setup_options['lambdas']) in [list, int] ,f"lambdas is not a list or tuple.  Aborting!"
-            setup_options['trailblaze'] == None
+            assert 'lambdas' in setup_options, f"'lambdas' is not in setup_options, and 'trailblaze' is False. One must be specified.  Aborting!"
+            assert type(setup_options['lambdas']) in [dict, int] ,f"lambdas is not a list or tuple.  Aborting!"
+            setup_options['trailblaze'] = None
             _logger.info(f"\t\tresample is not specified; defaulting to None.")
         else:
             assert type(setup_options['trailblaze']) == dict
@@ -516,12 +516,14 @@ if __name__ == "__main__":
 
     _logger.info(f"Getting setup options from {yaml_filename}")
     setup_options = getSetupOptions(yaml_filename)
-    if 'protocols' in setup_options:
-        if type(setup_options['protocols']) == int:
-            protocols = {}
+    if 'lambdas' in setup_options:
+        if type(setup_options['lambdas']) == int:
+            lambdas = {}
             for _direction in setup_options['direction']:
                 lims = (0,1) if _direction == 'forward' else (1,0)
-                protocols[_direction] = np.linspace(lim[0], lim[1], setup_options['protocol'])
+                lambdas[_direction] = np.linspace(lims[0], lims[1], setup_options['lambdas'])
+    else:
+        lambdas = setup_options['lambdas']
                 
     if setup_options['run_type'] == 'anneal':
         _logger.info(f"skipping setup and annealing...")
@@ -534,7 +536,7 @@ if __name__ == "__main__":
             ne_fep_run.neq_integrator = setup_options['neq_integrator']
             ne_fep_run.LSF = setup_options['LSF']
             ne_fep_run.sMC_anneal(num_particles = setup_options['n_particles'],
-                                  protocols = protocols,
+                                  protocols = lambdas,
                                   directions = setup_options['direction'],
                                   num_integration_steps = setup_options['ncmc_num_integration_steps'],
                                   return_timer = True,
