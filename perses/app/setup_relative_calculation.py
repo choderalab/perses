@@ -124,8 +124,21 @@ def getSetupOptions(filename):
             raise Exception(f"'run_type' must be None, 'anneal', or 'equilibrate'; input was specified as {setup_options['run_type']} with type {type(setup_options['run_type'])}")
 
         #to instantiate the particles:
-        if 'n_lambdas' not in setup_options:
-            raise Exception(f"n_lambdas must be specified to create the lambda protocol")
+        if 'trailblaze' not in setup_options:
+            assert 'lambdas' in setup_option, f"'lambdas' is not in setup_options, and 'trailblaze' is False. One must be specified.  Aborting!"
+            assert type(setup_options['lambdas']) in [list, int] ,f"lambdas is not a list or tuple.  Aborting!"
+            setup_options['trailblaze'] == None
+            _logger.info(f"\t\tresample is not specified; defaulting to None.")
+        else:
+            assert type(setup_options['trailblaze']) == dict
+            
+        if 'resample' in setup_options:
+            assert type(setup_options['resample']) == dict, f"'resample' is not a dict"
+            assert set(['criterion', 'method', 'threshold']).issubset(set(list(setup_options['resample'].keys()))), f"'resample' does not contain necessary keys"
+        else:
+            _logger.info(f"\t\tresample is not specified; defaulting to None")
+            setup_options['resample'] = None
+            
         if 'n_particles' not in setup_options:
             raise Exception(f"for particle annealing, 'n_particles' must be specified")
         if 'direction' not in setup_options:
@@ -144,6 +157,7 @@ def getSetupOptions(filename):
         if 'ncmc_rethermalize' not in setup_options:
             _logger.info(f"\t\t\tncmc_rethermalize not specified; default to False.")
             setup_options['ncmc_rethermalize'] = False
+        
 
         #now lastly, for the algorithm_4 options:
         if 'observable' not in setup_options:
@@ -502,6 +516,13 @@ if __name__ == "__main__":
 
     _logger.info(f"Getting setup options from {yaml_filename}")
     setup_options = getSetupOptions(yaml_filename)
+    if 'protocols' in setup_options:
+        if type(setup_options['protocols']) == int:
+            protocols = {}
+            for _direction in setup_options['direction']:
+                lims = (0,1) if _direction == 'forward' else (1,0)
+                protocols[_direction] = np.linspace(lim[0], lim[1], setup_options['protocol'])
+                
     if setup_options['run_type'] == 'anneal':
         _logger.info(f"skipping setup and annealing...")
         trajectory_prefix = setup_options['trajectory_prefix']
@@ -512,12 +533,14 @@ if __name__ == "__main__":
             ne_fep_run.num_processes = setup_options['num_processes']
             ne_fep_run.neq_integrator = setup_options['neq_integrator']
             ne_fep_run.LSF = setup_options['LSF']
-            ne_fep_run.AIS(num_particles = setup_options['n_particles'],
-                           protocol_length = setup_options['n_lambdas'],
-                           directions = setup_options['direction'],
-                           num_integration_steps = setup_options['ncmc_num_integration_steps'],
-                           return_timer = True,
-                           rethermalize = setup_options['ncmc_rethermalize'])
+            ne_fep_run.sMC_anneal(num_particles = setup_options['n_particles'],
+                                  protocols = protocols,
+                                  directions = setup_options['direction'],
+                                  num_integration_steps = setup_options['ncmc_num_integration_steps'],
+                                  return_timer = True,
+                                  rethermalize = setup_options['ncmc_rethermalize'],
+                                  trailblaze = setup_options['trailblaze'],
+                                  resample = setup_options['resample'])
 
             # try to write out the ne_fep object as a pickle
             try:
@@ -597,12 +620,14 @@ if __name__ == "__main__":
                 if setup_options['run_type'] == None:
                     print("annealing...")
                     ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
-                    ne_fep_run.AIS(num_particles = setup_options['n_particles'],
-                                   protocol_length = setup_options['n_lambdas'],
-                                   directions = setup_options['direction'],
-                                   num_integration_steps = setup_options['ncmc_num_integration_steps'],
-                                   return_timer = True,
-				   rethermalize = setup_options['ncmc_rethermalize'])
+                    ne_fep_run.sMC_anneal(num_particles = setup_options['n_particles'],
+                                          protocols = protocols,
+                                          directions = setup_options['direction'],
+                                          num_integration_steps = setup_options['ncmc_num_integration_steps'],
+                                          return_timer = True,
+                                          rethermalize = setup_options['ncmc_rethermalize'],
+                                          trailblaze = setup_options['trailblaze'],
+                                          resample = setup_options['resample'])
 
                     print("calculation complete; deactivating client")
                     #ne_fep_run.deactivate_client()

@@ -451,27 +451,6 @@ class SequentialMonteCarlo(DaskClient):
 
         return num_actors, num_actors_per_direction, num_particles_per_actor, sMC_actors
 
-    def _actor_collection(self, _dict):
-        """
-        wrapper for actor future collections
-
-        Arguments
-        ----------
-        _dict : dict (dict of directions of 2d list of dask.distributed.ActorFutures)
-
-        Returns
-        -------
-        results_dict : _dict of 2d list of SequentialMonteCarlo.anneal results
-        """
-
-                    #now we collect the jobs
-                    for _direction in directions:
-                        actor_dict = AIS_actors[_direction]
-                        for _actor in actor_dict.keys():
-                            _future = AIS_actors[_direction][_actor][-1]
-                            result = self.gather_actor_result(_future)
-                            AIS_actors[_direction][_actor][-1] = result
-
 
     def AIS(self,
             num_particles,
@@ -574,8 +553,8 @@ class SequentialMonteCarlo(DaskClient):
                    num_integration_steps = 1,
                    return_timer = False,
                    rethermalize = False,
-                   trailblaze_criterion = ('ESS', 0.95),
-                   resample_controls_dict = None):
+                   trailblaze = None,
+                   resample = None):
         """
         Conduct generalized sMC annealing with trailblazing functionality.
 
@@ -593,9 +572,12 @@ class SequentialMonteCarlo(DaskClient):
             whether to time the annealing protocol
         rethermalize : bool, default False
             whether to rethermalize velocities after proposal
-        trailblaze_criterion : tuple of (str, float), default ('ESS', 0.95)
+        trailblaze : dict, default None
             which observable/criterion to use for trailblazing and the threshold
-        resample_controls_dict : dict, default None
+            if None, trailblazing is not conducted;
+            else: the dict must have the following format:
+                {'criterion': str, 'threshold': float}
+        resample : dict, default None
             the resample dict specifies the resampling criterion and threshold, as well as the resampling method used.  if None, no resampling is conduced;
             otherwise, the resample dict must take the following form:
             {'criterion': str, 'method': str, 'threshold': float}
@@ -606,16 +588,16 @@ class SequentialMonteCarlo(DaskClient):
 
         if protocols is not None:
             assert set(protocols.keys()) == set(directions), f"protocols are specified, but do not match the directions in the specified directions"
-            if trailblaze_criterion is not None:
+            if trailblaze is not None:
                 raise Exception(f"the protocols were specified, as was the trailblaze criterion.  Only one can be defined")
-            trailblaze = False
+            _trailblaze = False
             starting_lines = {_direction: protocols[_direction][0] for _direction in directions}
             finish_lines = {_direction: protocols[_direction][-1] for _direction in directions}
             self.protocols = protocols
         else:
-            assert trailblaze_criterion is not None, f"the protocols weren't specified, and neither was the trailblaze criterion; one must be specified"
-            assert trailblaze_criterion[0] in list(supported_observables.keys()), f"{trailblaze_criterion[0]} is not an allowed observable.}"
-            trailblaze = True
+            assert trailblaze is not None, f"the protocols weren't specified, and neither was the trailblaze criterion; one must be specified"
+            assert set(list(trailblaze.keys())).issubset(set(['criterion', 'threshold'])), f"trailblaze does not contain 'criterion' and 'threshold'"
+            _trailblaze = True
             starting_lines, finish_lines = {}
             if 'forward' in directions:
                 finish_lines['forward'] = 1.0
@@ -626,12 +608,12 @@ class SequentialMonteCarlo(DaskClient):
             self.protocols = {_direction : [starting_lines[_direction]] for _direction in directions}
 
 
-        if resample_controls_dict is not None:
-            assert resample_controls_dict['criterion'] in list(supported_observables.keys()), f"the specified resampling criterion is not supported."
+        if resample is not None:
+            assert resample['criterion'] in list(supported_observables.keys()), f"the specified resampling criterion is not supported."
             assert resample_method['method'] in list(supported_resampling_methods), f"the specified resampling method is not supported."
-            resample = True
+            _resample = True
         else:
-            resample = False
+            _resample = False
 
         for _direction in directions:
             assert _direction in ['forward', 'reverse'], f"direction {_direction} is not an appropriate direction"
@@ -641,9 +623,8 @@ class SequentialMonteCarlo(DaskClient):
         sMC_actor_futures = {_direction: [[[None] * num_particles_per_actor] for _ in range(num_actors_per_direction)]}
         sMC_sampler_states = {_direction: np.array([[self.pull_trajectory_snapshot(starting_lines[_direction]) for _ in range(num_particles_per_actor)] for __ in range(num_actors_per_direction)])}
         sMC_particle_ancestries = {_direction : [np.arange(num_actors_per_direction * num_particles_per_actor).reshape(num_actors_per_direction, num_particles_per_actor) for _direction in directions]}
-        sMC_cumulative_works = copy.deepcopy(sMC_actor_futures)
+        sMC_cumulative_works = {_direction : [np.zeros((num_actors_per_direction, num_particles_per_actor))]}
         sMC_observables = {_direction : [1.] for _direction in directions}
-        [sMC_cumulative_works[_direction] = [np.zeros((num_actors_per_direction, num_particles_per_actor))] for _direction in sMC_cumulative_weights.keys()]
 
         #now we can launch annealing jobs and manage them on-the-fly
         current_lambdas = starting_lines
@@ -653,7 +634,7 @@ class SequentialMonteCarlo(DaskClient):
             local_incremental_work_collector = {_direction : np.zeros((num_actors_per_direction, num_particles_per_actor)) for _direction in directions}
             start_timer = time.time()
             #if trailblaze is true, we have to choose the next lambda from the previous sampler states and weights
-            if trailblaze:
+            if _trailblaze:
                 for _direction in directions:
                     if current_lambdas[_direction] == finish_lines[_direction]: #if this direction is done...
                         pass #we pass the direction
@@ -670,8 +651,8 @@ class SequentialMonteCarlo(DaskClient):
                                                                      cumulative_works = cumulative_works,
                                                                      start_val = current_lambdas[_direction],
                                                                      end_val = finish_lines[_direction],
-                                                                     observable = supported_observables[trailblaze_criterion[0]],
-                                                                     observable_threshold = trailblaze_criterion[1],
+                                                                     observable = supported_observables[trailblaze['criterion']],
+                                                                     observable_threshold = trailblaze['threshold'],
                                                                      initial_guess = initial_guess)
                         protocols[_direction].append(_new_lambda)
                         sMC_observables[_direction].append(observable)
@@ -691,7 +672,7 @@ class SequentialMonteCarlo(DaskClient):
                         else:
                             noneq_trajectory_filename = None
 
-                        if (not trailblaze) and (not resample):
+                        if (not _trailblaze) and (not _resample):
                             #then we are just doing vanilla AIS, in which case, it is not necessary to perform a single incremental lambda perturbation
                             #instead, we can run the entire defined protocol
                             _lambdas = self.protocols[_direction]
@@ -720,13 +701,13 @@ class SequentialMonteCarlo(DaskClient):
 
 
             #resample if necessary
-            if resample:
+            if _resample:
                 for _direction in directions:
                     normalized_observable_value, resampled_works, resampled_indices = self._resample(incremental_works = local_incremental_work_collector[_direction].flatten(),
                                                                                                      cumulative_works = sMC_cumulative_works[_direction][-1],
-                                                                                                     observable = resample_controls_dict['criterion'],
-                                                                                                     resampling_method = resample_controls_dict['method'],
-                                                                                                     resample_observable_threshold = resample_controls_dict['threshold'])
+                                                                                                     observable = resample['criterion'],
+                                                                                                     resampling_method = resample['method'],
+                                                                                                     resample_observable_threshold = resample['threshold'])
                     sMC_observables[_direction].append(normalized_observable_value)
 
                     sMC_cumulative_works[_direction].append(resampled_works.reshape(num_actors_per_direction, num_particles_per_actor))
@@ -748,7 +729,7 @@ class SequentialMonteCarlo(DaskClient):
 
         self.compute_sMC_free_energy(sMC_cumulative_works)
         self.sMC_observables = sMC_observables
-        if resample:
+        if _resample:
             self.survival_rate = SequentialMonteCarlo.compute_survival_rate(sMC_particle_ancestries)
             self.particle_ancestries = {_direction : np.array([q.flatten() for q in sMC_particle_ancestries[_direction]]) for _direction in sMC_particle_ancestries.keys()}
 
@@ -966,7 +947,7 @@ class SequentialMonteCarlo(DaskClient):
                     self._eq_files_dict[state] = corrected_dict
                     _logger.debug(f"\t corrected_dict for state {state}: {corrected_dict}")
 
-       def _resample(self,
+        def _resample(self,
                             incremental_works,
                             cumulative_works,
                             observable = 'ESS',
@@ -1026,7 +1007,7 @@ class SequentialMonteCarlo(DaskClient):
         return normalized_observable_value, resampled_works, resampled_indices
 
 
-       def binary_search(self,
+        def binary_search(self,
                       sampler_states,
                       cumulative_works,
                       start_val,
@@ -1036,82 +1017,82 @@ class SequentialMonteCarlo(DaskClient):
                       max_iterations=20,
                       initial_guess = None,
                       precision_threshold = None):
-        """
-        Given corresponding start_val and end_val of observables, conduct a binary search to find min value for which the observable threshold
-        is exceeded.
-        Arguments
-        ----------
-        sampler_states : np.array(openmmtools.states.SamplerState)
-            numpy array of sampler states
-        cumulative_works : np.array(float)
-            cumulative works of corresponding sampler states
-        start_val: float
-            start value of binary search
-        end_val: float
-            end value of binary search
-        observable : function
-            function to compute an observable
-        observable_threshold : float
-            the threshold of the observable used to satisfy the binary search criterion
-        max_iterations: int, default 20
-            maximum number of interations to conduct
-        initial_guess: float, default None
-            guess where the threshold is achieved
-        precision_threshold: float, default None
-            precision threshold below which, the max iteration will break
+            """
+            Given corresponding start_val and end_val of observables, conduct a binary search to find min value for which the observable threshold
+            is exceeded.
+            Arguments
+            ----------
+            sampler_states : np.array(openmmtools.states.SamplerState)
+                numpy array of sampler states
+            cumulative_works : np.array(float)
+                cumulative works of corresponding sampler states
+            start_val: float
+                start value of binary search
+            end_val: float
+                end value of binary search
+            observable : function
+                function to compute an observable
+            observable_threshold : float
+                the threshold of the observable used to satisfy the binary search criterion
+            max_iterations: int, default 20
+                maximum number of interations to conduct
+            initial_guess: float, default None
+                guess where the threshold is achieved
+            precision_threshold: float, default None
+                precision threshold below which, the max iteration will break
 
-        Returns
-        -------
-        midpoint: float
-            maximum value that doesn't exceed threshold
-        _observable : float
-            observed value of observable
-        """
-        _base_end_val = end_val
-        _logger.debug(f"\t\t\tmin, max values: {start_val}, {end_val}. ")
-        cumulative_work_futures = self.deploy(feptasks.Particle.pull_cumulative_work, (futures,))
-        sampler_state_futures = self.deploy(feptasks.Particle.pull_sampler_state, (futures,))
-        cumulative_works = np.array(self.gather_results(cumulative_work_futures))
-        sampler_states = self.gather_results(sampler_state_futures)
-        thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = start_val)
-        current_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+            Returns
+            -------
+            midpoint: float
+                maximum value that doesn't exceed threshold
+            _observable : float
+                observed value of observable
+            """
+            _base_end_val = end_val
+            _logger.debug(f"\t\t\tmin, max values: {start_val}, {end_val}. ")
+            cumulative_work_futures = self.deploy(feptasks.Particle.pull_cumulative_work, (futures,))
+            sampler_state_futures = self.deploy(feptasks.Particle.pull_sampler_state, (futures,))
+            cumulative_works = np.array(self.gather_results(cumulative_work_futures))
+            sampler_states = self.gather_results(sampler_state_futures)
+            thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = start_val)
+            current_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
 
-        if initial_guess is not None:
-            midpoint = initial_guess
-        else:
-            midpoint = (start_val + end_val) * 0.5
-        _logger.debug(f"\t\t\tinitial midpoint is: {midpoint}")
-
-        for _ in range(max_iterations):
-            _logger.debug(f"\t\t\titeration {_}: current lambda: {midpoint}")
-            thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = midpoint)
-            new_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-            _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
-            _logger.debug(f"\t\t\tobservable: {_observable}")
-            if _observable <= observable_threshold:
-                _logger.debug(f"\t\t\tobservable {_observable} <= observable_threshold {observable_threshold}")
-                end_val = midpoint
+            if initial_guess is not None:
+                midpoint = initial_guess
             else:
-                _logger.debug(f"\t\t\tobservable {_observable} > observable_threshold {observable_threshold}")
-                start_val = midpoint
-            midpoint = (start_val + end_val) * 0.5
-            if precision_threshold is not None:
-                if abs(_base_end_val - midpoint) <= precision_threshold:
-                    _logger.debug(f"\t\t\tthe difference between the original max val ({_base_end_val}) and the midpoint is less than the precision_threshold ({precision_threshold}).  Breaking with original max val.")
-                    midpoint = _base_end_val
-                    thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = midpoint)
-                    new_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-                    _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
-                    break
-                elif abs(end_val - start_val) <= precision_threshold:
-                    _logger.debug(f"\t\t\tprecision_threshold: {precision_threshold} is exceeded.  Breaking")
-                    midpoint = end_val
-                    thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = midpoint)
-                    new_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-                    _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
-                    break
+                midpoint = (start_val + end_val) * 0.5
+            _logger.debug(f"\t\t\tinitial midpoint is: {midpoint}")
 
-        return midpoint, _observable
+            for _ in range(max_iterations):
+                _logger.debug(f"\t\t\titeration {_}: current lambda: {midpoint}")
+                thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = midpoint)
+                new_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+                _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+                _logger.debug(f"\t\t\tobservable: {_observable}")
+                if _observable <= observable_threshold:
+                    _logger.debug(f"\t\t\tobservable {_observable} <= observable_threshold {observable_threshold}")
+                    end_val = midpoint
+                else:
+                    _logger.debug(f"\t\t\tobservable {_observable} > observable_threshold {observable_threshold}")
+                    start_val = midpoint
+                midpoint = (start_val + end_val) * 0.5
+                if precision_threshold is not None:
+                    if abs(_base_end_val - midpoint) <= precision_threshold:
+                        _logger.debug(f"\t\t\tthe difference between the original max val ({_base_end_val}) and the midpoint is less than the precision_threshold ({precision_threshold}).  Breaking with original max val.")
+                        midpoint = _base_end_val
+                        thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = midpoint)
+                        new_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+                        _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+                        break
+                    elif abs(end_val - start_val) <= precision_threshold:
+                        _logger.debug(f"\t\t\tprecision_threshold: {precision_threshold} is exceeded.  Breaking")
+                        midpoint = end_val
+                        thermodynamic_state = self.modify_thermodynamic_state(thermodynamic_state, current_lambda = midpoint)
+                        new_rps = np.array([feptasks.compute_reduced_potential(thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+                        _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+                        break
+
+            return midpoint, _observable
 
     @staticmethod
     def _pool_dict_results(_dict, _direction):
