@@ -464,13 +464,13 @@ class SequentialMonteCarlo(DaskClient):
         results_dict : _dict of 2d list of SequentialMonteCarlo.anneal results
         """
 
-                    #now we collect the jobs
-                    for _direction in directions:
-                        actor_dict = AIS_actors[_direction]
-                        for _actor in actor_dict.keys():
-                            _future = AIS_actors[_direction][_actor][-1]
-                            result = self.gather_actor_result(_future)
-                            AIS_actors[_direction][_actor][-1] = result
+        #now we collect the jobs
+        for _direction in directions:
+            actor_dict = AIS_actors[_direction]
+            for _actor in actor_dict.keys():
+                _future = AIS_actors[_direction][_actor][-1]
+                result = self.gather_actor_result(_future)
+                AIS_actors[_direction][_actor][-1] = result
 
 
     def AIS(self,
