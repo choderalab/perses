@@ -18,6 +18,7 @@ from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
 from openmoltools import forcefield_generators
 from perses.utils.openeye import *
+from perses.app.utils import *
 
 #import perses dask Client
 from perses.app.relative_setup import DaskClient
@@ -29,7 +30,7 @@ _logger.setLevel(logging.INFO)
 ENERGY_THRESHOLD = 1e-4
 from openmmtools.constants import kB
 
-class Experiments(DaskClient):
+class BuildProposalNetwork(object):
     """
     Create a NetworkX graph representing the set of chemical states to be sampled.
     Vertices represent nonalchemical states (i.e. ligands/protein mutants).
@@ -44,9 +45,20 @@ class Experiments(DaskClient):
                          'forcefield_files': ['gaff.xml', 'amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
                          'neglect_angles': False,
                          'anneal_14s': False,
-                         'water_model': 'tip3p'}
+                         'water_model': 'tip3p',
+                         'use_dispersion_correction': False,
+                         'softcore_alpha': None,
+                         'bond_softening_constant': 1.0,
+                         'angle_softening_constant': 1.0,
+                         'soften_only_new': False,
+                         'softcore_LJ_v2': True,
+                         'softcore_electrostatics': True,
+                         'softcore_LJ_v2_alpha': 0.85,
+                         'softcore_electrostatics_alpha': 0.3,
+                         'softcore_sigma_Q': 1.0}
 
     known_phases = ['vacuum', 'solvent', 'complex'] # we omit complex phase in the known_phases if a receptor_filename is None
+    supported_connectivities = {'fully_connected': generate_fully_connected_adjacency_matrix} #we can add other options later, but this is a good vanilla one to start with
 
     def __init__(self,
                  ligand_input,
@@ -70,6 +82,8 @@ class Experiments(DaskClient):
             strings (corresponding to connectivity defaults), a 2d np.array specifying the explicit connectivity
             matrix for indexed ligands, or a list of tuples corresponding to pairwise ligand index connections.
             The default is 'fully_connected', which specified a fully connected (i.e. complete or single-clique) graph.
+            If the graph_connectivity is input as a 2d numpy array, values represent the weights of the transform.  0 weights entail no connectivity.
+            The self.adjacency_matrix argument produced as a result contains the log(weights) of the transform as entries.
         cost : str, default None
             this is currently a placeholder variable for the specification of the sampling method to be used on the graph.
         resources : dict?, default None
@@ -107,7 +121,7 @@ class Experiments(DaskClient):
         _logger.info(f"Parsing ligand input file...")
         self.ligand_input = ligand_input
         self.receptor_filename = receptor_filename
-        self.graph_connectivity = self._create_connectivity_matrix(graph_connectivity)
+        self.adjacency_matrix = self._create_connectivity_matrix(graph_connectivity)
         self.cost = cost
         self.resources = resources
         self._parse_ligand_input()
@@ -137,31 +151,112 @@ class Experiments(DaskClient):
                                                         neglect_angles = default_arguments['neglect_angles'],
                                                         use_14_nonbondeds = not default_arguments['anneal_14s'])
 
-    def create_network(self):
+    def create_network_proposals(self):
         """
         This is the main function of the class.  It builds a networkx graph on all of the transformations.
         """
         import networkx as nx
-        graph = nx.DiGraph()
+        self.network = nx.DiGraph()
 
         #first, let's add the nodes
         for index, smiles in self.smiles_list:
             node_attribs = {'smiles': smiles}
-            graph.add_node(index, **node_attribs)
+            self.network.add_node(index, **node_attribs)
 
         #then, let's add the edges
-        nonzero_edge_rows, nonzero_edge_cols = np.nonzero(self.graph_connectivity)
-        for i, j in zip(nonzero_edge_rows, nonzero_edge_cols):
-            current_oemol, current_positions, current_topology = self.ligand_oemol_pos_top[i]
-            proposed_oemol, proposed_positions, proposed_topology = self.ligand_oemol_pos_top[j]
-            proposals =  self._generate_proposals(current_oemol = current_oemol,
-                                                  proposed_oemol = proposed_oemol, 
-                                                  current_positions = current_positions,
-                                                  current_topology = current_topology)
-            graph.add_edge(i,j, **proposals)
-            graph.edges[i,j]['weight'] = self.graph_connectivity[i,j]
+        n_rows, n_cols = self.adjacency_matrix.shape
+        for i, j in zip(range(n_rows), range(n_cols)):
+            if i == j:
+                if not np.isinf(self.adjacency_matrix[i,j]):
+                    _logger.warning(f"the log weight of the diagonal for ligand {i} is not -np.inf; treating as such...")
+                    self.adjacency_matrix[i,j] = -np.inf
+            if not np.isinf(self.adjacency_matrix[i,j]):
+                current_oemol, current_positions, current_topology = self.ligand_oemol_pos_top[i]
+                proposed_oemol, proposed_positions, proposed_topology = self.ligand_oemol_pos_top[j]
+                proposals =  self._generate_proposals(current_oemol = current_oemol,
+                                                      proposed_oemol = proposed_oemol,
+                                                      current_positions = current_positions,
+                                                      current_topology = current_topology)
+                self.network.add_edge(i,j)
+                self.network.edges[i,j]['log_weight'] = self.adjacency_matrix[i,j]
+                self.network.edges[i,j]['proposals'] = proposals
 
-        return graph
+        #make the adjacency_matrix a graph attribute
+        self.network.graph['adjacency_matrix'] = self.adjacency_matrix
+
+    def _create_hybrid_topology_factory(self, start, end):
+        """
+        add hybrid topology factories to the self.network
+        """
+        _logger.info(f"entering edge {edge} to build and validate HybridTopologyFactory")
+        for _phase, property_dict in self.network.edges[start, end]['proposals'].items():
+            _logger.info(f"\tcreating hybrid_factory for phase {_phase}")
+            hybrid_factory = HybridTopologyFactory(topology_proposal = property_dict['topology_proposal'],
+                                                   current_positions = property_dict['current_positions'],
+                                                   new_positions = property_dict['proposed_positions'],
+                                                   use_dispersion_correction = default_arguments['use_dispersion_correction'],
+                                                   functions=None,
+                                                   softcore_alpha = default_arguments['softcore_alpha'],
+                                                   bond_softening_constant = default_arguments['bond_softening_constant'],
+                                                   angle_softening_constant = default_arguments['angle_softening_constant'],
+                                                   soften_only_new = default_arguments['soften_only_new'],
+                                                   neglected_new_angle_terms = property_dict['forward_neglected_angles'],
+                                                   neglected_old_angle_terms = property_dict['reverse_neglected_angles'],
+                                                   softcore_LJ_v2 = default_arguments['softcore_LJ_v2'],
+                                                   softcore_electrostatics = default_arguments['softcore_electrostatics'],
+                                                   softcore_LJ_v2_alpha = default_arguments['softcore_LJ_v2_alpha'],
+                                                   softcore_electrostatics_alpha = default_arguments['softcore_electrostatics_alpha'],
+                                                   softcore_sigma_Q = default_arguments['softcore_sigma_Q'],
+                                                   interpolate_old_and_new_14s = default_arguments['anneal_14s'])
+            try:
+                endstate_energy_errors = validate_endstate_energies(topology_proposal = property_dict['topology_proposal'],
+                                                                    htf = hybrid_factory,
+                                                                    added_energy = property_dict['added_valence_energy'],
+                                                                    subtracted_energy = property_dict['subtracted_valence_energy'],
+                                                                    beta = self.beta,
+                                                                    ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+                self.network.edges[start, end]['validated'] = True
+                _logger.info(f"\t\tendstate energies validated to within {ENERGY_THRESHOLD}!")
+            except Exception as e:
+                _logger.warning(f"\t\t{e}")
+                _logger.warning(f"\t\tdetected failure to validate system.  omitting this edge.")
+                self.network.edges[start, end]['validated'] = False
+                self.network.edges[start, end]['log_weight'] = -np.inf
+                self.adjacency_matrix[start, end] = -np.inf
+
+
+            self.network.edges[start, end]['proposals'][_phase]['hybrid_factory'] = hybrid_factory
+            self.network.edges[start, end]['proposals'][_phase]['endstate_energy_errors'] = endstate_energy_errors
+
+
+
+
+
+    def add_edge_post_hoc(self,
+                          start_index,
+                          end_index, weight):
+
+
+    def _create_connectivity_matrix(self, graph_connectivity):
+        """
+        create a numpy 2d adjacency matrix for the digraph.
+
+        Arguments
+        ---------
+        graph_connectivity : str or np.array() (2D)
+            the key or explicit connectivity matrix with weights
+
+        Returns
+        -------
+        adjacency_matrix : np.array (2d)
+            adjacency matrix used to specify weights
+        """
+        if type(graph_connectivity) == str:
+            assert graph_connectivity in supported_connectivity_strings, f"{graph_connectivity} is not supported.  Supported arguments are {supported_connectivity_strings}."
+            return supported_connectivities[graph_connectivity](len(self.smiles_list))
+        elif type(graph_connectivity) == np.ndarray:
+            #we simply convert the weights into log weights
+            return np.log(graph_connectivity)
 
 
     def _parse_ligand_input(self):
@@ -179,7 +274,7 @@ class Experiments(DaskClient):
             _logger.debug(f"ligand input is a str; checking for .smi and .sdf file.")
             if self._ligand_input[-3:] == 'smi':
                 _logger.info(f"Detected .smi format.  Proceeding...")
-                smiles_list = load_smi(self.ligand_input)
+                self.smiles_list = load_smi(self.ligand_input)
 
                 #create a ligand data list to hold all ligand oemols, systems, positions, topologies
                 for smiles in self.smiles_list:
@@ -556,6 +651,7 @@ class Experiments(DaskClient):
 
             #now to add it to phases
             proposals.update({'complex': {'topology_proposal': copy.deepcopy(complex_topology_proposal),
+                                          'current_positions': solvated_complex_positions,
                                           'proposed_positions': proposed_solvated_complex_positions,
                                           'logp_proposal': complex_logp_proposal,
                                           'logp_reverse': complex_logp_reverse,
@@ -595,6 +691,7 @@ class Experiments(DaskClient):
 
             #now to add it to phases
             proposals.update({'solvent': {'topology_proposal': copy.deepcopy(solvated_ligand_topology_proposal),
+                                          'current_positions': solvated_ligand_positions,
                                           'proposed_positions': proposed_solvated_ligand_positions,
                                           'logp_proposal': solvent_logp_proposal,
                                           'logp_reverse': solvent_logp_reverse,
@@ -641,6 +738,7 @@ class Experiments(DaskClient):
 
             #now to add it to phases
             proposals.update({'vacuum': {'topology_proposal': copy.deepcopy(vacuum_ligand_topology_proposal),
+                                          'current_positions': vacuum_ligand_positions,
                                           'proposed_positions': proposed_vacuum_ligand_positions,
                                           'logp_proposal': vacuum_logp_proposal,
                                           'logp_reverse': vacuum_logp_reverse,
