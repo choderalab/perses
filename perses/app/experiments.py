@@ -151,7 +151,7 @@ class BuildProposalNetwork(object):
                                                         neglect_angles = default_arguments['neglect_angles'],
                                                         use_14_nonbondeds = not default_arguments['anneal_14s'])
 
-    def create_network_proposals(self):
+    def create_network(self):
         """
         This is the main function of the class.  It builds a networkx graph on all of the transformations.
         """
@@ -164,29 +164,143 @@ class BuildProposalNetwork(object):
             self.network.add_node(index, **node_attribs)
 
         #then, let's add the edges
-        n_rows, n_cols = self.adjacency_matrix.shape
-        for i, j in zip(range(n_rows), range(n_cols)):
-            if i == j:
-                if not np.isinf(self.adjacency_matrix[i,j]):
-                    _logger.warning(f"the log weight of the diagonal for ligand {i} is not -np.inf; treating as such...")
-                    self.adjacency_matrix[i,j] = -np.inf
-            if not np.isinf(self.adjacency_matrix[i,j]):
-                current_oemol, current_positions, current_topology = self.ligand_oemol_pos_top[i]
-                proposed_oemol, proposed_positions, proposed_topology = self.ligand_oemol_pos_top[j]
-                proposals =  self._generate_proposals(current_oemol = current_oemol,
-                                                      proposed_oemol = proposed_oemol,
-                                                      current_positions = current_positions,
-                                                      current_topology = current_topology)
-                self.network.add_edge(i,j)
-                self.network.edges[i,j]['log_weight'] = self.adjacency_matrix[i,j]
-                self.network.edges[i,j]['proposals'] = proposals
+        for index, log_weight in np.ndenumerate(self.adjacency_matrix):
+            i, j = index[0], index[1]
+            success = self.add_network_edge(start = i,
+                                            end = j,
+                                            weight = np.exp(log_weight))
+
 
         #make the adjacency_matrix a graph attribute
         self.network.graph['adjacency_matrix'] = self.adjacency_matrix
 
+    def manipulate_edge_post_hoc(self,
+                                 start,
+                                 end,
+                                 weight = 1.):
+        """
+        This is a function to add network edges post hoc if the practitioner decides another edge is necessary
+
+        Arguments
+        ---------
+        start_index : int
+            int index of the starting ligand (see self.ligand_list)
+        end_index : int
+            int index of the ligand that the edge points to (from start_index)
+        weight : float, default 1.0
+            weight of the edge
+
+        Returns
+        -------
+        success : bool
+            whether the intended edge was added and validated
+        """
+        success = self.add_network_edge(start = start,
+                                        end = end,
+                                        weight = np.exp(log_weight))
+
+        self.network.graph['adjacency_matrix'][start, end] = self.adjacency_matrix[start,end]
+
+        return success
+
+    def add_network_edge(self,
+                         start,
+                         end,
+                         weight):
+        """
+        This is a function to add network edges
+
+        Arguments
+        ---------
+        start_index : int
+            int index of the starting ligand (see self.ligand_list)
+        end_index : int
+            int index of the ligand that the edge points to (from start_index)
+        weight : float, default 1.0
+            weight of the edge
+
+        Returns
+        -------
+        success : bool
+            whether the intended edge was added and validated
+        """
+        i, j = start, end
+        log_weight = np.log(weight)
+        _logger.info(f"creating proposals for edge {(i,j)}")
+
+        if i == j:
+            if not np.isinf(log_weight):
+                _logger.warning(f"\tthe log weight of the self-transition for ligand {i} is not -np.inf; treating as such...")
+                self.adjacency_matrix[i,j] = -np.inf
+            return False
+
+        if not np.isinf(log_weight):
+            current_oemol, current_positions, current_topology = self.ligand_oemol_pos_top[i]
+            proposed_oemol, proposed_positions, proposed_topology = self.ligand_oemol_pos_top[j]
+            proposals =  self._generate_proposals(current_oemol = current_oemol,
+                                                  proposed_oemol = proposed_oemol,
+                                                  current_positions = current_positions,
+                                                  current_topology = current_topology)
+            self.network.add_edge(i,j)
+            self.network.edges[i,j]['proposals'] = proposals
+
+            _logger.info(f"\tcreating hybrid factories.  iterating through proposal phases...")
+            for _phase, property_dict in self.network.edges[i, j]['proposals'].items():
+                _logger.info(f"\t\tcreating hybrid_factory for phase {_phase}")
+                hybrid_factory = HybridTopologyFactory(topology_proposal = property_dict['topology_proposal'],
+                                                       current_positions = property_dict['current_positions'],
+                                                       new_positions = property_dict['proposed_positions'],
+                                                       use_dispersion_correction = default_arguments['use_dispersion_correction'],
+                                                       functions=None,
+                                                       softcore_alpha = default_arguments['softcore_alpha'],
+                                                       bond_softening_constant = default_arguments['bond_softening_constant'],
+                                                       angle_softening_constant = default_arguments['angle_softening_constant'],
+                                                       soften_only_new = default_arguments['soften_only_new'],
+                                                       neglected_new_angle_terms = property_dict['forward_neglected_angles'],
+                                                       neglected_old_angle_terms = property_dict['reverse_neglected_angles'],
+                                                       softcore_LJ_v2 = default_arguments['softcore_LJ_v2'],
+                                                       softcore_electrostatics = default_arguments['softcore_electrostatics'],
+                                                       softcore_LJ_v2_alpha = default_arguments['softcore_LJ_v2_alpha'],
+                                                       softcore_electrostatics_alpha = default_arguments['softcore_electrostatics_alpha'],
+                                                       softcore_sigma_Q = default_arguments['softcore_sigma_Q'],
+                                                       interpolate_old_and_new_14s = default_arguments['anneal_14s'])
+                try:
+                    endstate_energy_errors = validate_endstate_energies(topology_proposal = property_dict['topology_proposal'],
+                                                                        htf = hybrid_factory,
+                                                                        added_energy = property_dict['added_valence_energy'],
+                                                                        subtracted_energy = property_dict['subtracted_valence_energy'],
+                                                                        beta = self.beta,
+                                                                        ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+
+                    validated = True
+                    _logger.info(f"\t\tendstate energies validated to within {ENERGY_THRESHOLD}!")
+                    success_counter += 1
+                except Exception as e:
+                    _logger.warning(f"\t\t{e}")
+                    _logger.warning(f"\t\tdetected failure to validate system.  omitting this edge.")
+                    validated = False
+                    self.network.edges[start, end]['log_weight'] = -np.inf
+                    self.adjacency_matrix[start, end] = -np.inf
+
+
+                self.network.edges[start, end]['proposals'][_phase]['hybrid_factory'] = hybrid_factory
+                self.network.edges[start, end]['proposals'][_phase]['endstate_energy_errors'] = endstate_energy_errors
+                self.network.edges[start, end]['proposals'][_phase]['validated'] = validated
+
+            #check if all of the phases in the edge are validated
+            if all(self.network.edges[i, j]['proposals'][_phase]['validated'] for _phase in self.network.edges[i, j]['proposals'].keys()):
+                self.network.edges[start, end]['log_weight'] = log_weight
+                return True
+            else:
+                self.network.edges[start, end]['log_weight'] = -np.inf
+                self.adjacency_matrix[start, end] = -np.inf
+                return False
+
     def _create_hybrid_topology_factory(self, start, end):
         """
         add hybrid topology factories to the self.network
+
+
         """
         _logger.info(f"entering edge {edge} to build and validate HybridTopologyFactory")
         for _phase, property_dict in self.network.edges[start, end]['proposals'].items():
@@ -228,13 +342,23 @@ class BuildProposalNetwork(object):
             self.network.edges[start, end]['proposals'][_phase]['hybrid_factory'] = hybrid_factory
             self.network.edges[start, end]['proposals'][_phase]['endstate_energy_errors'] = endstate_energy_errors
 
-
-
-
-
-    def add_edge_post_hoc(self,
+    def manipulate_edge_post_hoc(self,
                           start_index,
-                          end_index, weight):
+                          end_index,
+                          weight = 1.0):
+        """
+        This is a function to add network edges post hoc if the practitioner decides another edge is necessary
+
+        Arguments
+        ---------
+        start_index : int
+            int index of the starting ligand (see self.ligand_list)
+        end_index : int
+            int index of the ligand that the edge points to (from start_index)
+        weight : float, default 1.0
+            weight of the edge
+        """
+        return
 
 
     def _create_connectivity_matrix(self, graph_connectivity):
