@@ -806,12 +806,11 @@ class NEQSimulation(AlchemicalSimulation):
                                 adapt=self.adapt)
             _logger.info(f'Finished {phase} phase')
             _logger.info(f'Storing output')
-            path = os.path.join(f'{self.output_directory}/{self.output_prefix}_{phase}_fep.eq.pkl'
+            path = os.path.join(f"{self.output_directory}/{self.output_prefix}_{phase}_fep.eq.pkl")
             with open(path, 'wb') as f:
                 pickle.dump(ne_fep_run, f)
             _logger.info(f'Finished storing {phase} phase')
 
-    def run_anneal(self):
-        _logger.info('Running annealing stage of NEQ simulation.')
-        for phase in self.phases:
-            
+    # def run_anneal(self):
+    #     _logger.info('Running annealing stage of NEQ simulation.')
+    #     for phase in self.phases:
