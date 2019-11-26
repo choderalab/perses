@@ -25,6 +25,7 @@ import mdtraj as md
 import simtk.openmm.app as app
 import simtk.openmm as openmm
 from io import StringIO
+import copy
 
 #import perses dask Client
 from perses.app.relative_setup import DaskClient
@@ -102,20 +103,20 @@ class BuildProposalNetwork(object):
             hybrid factory (i.e. the alchemical system), the single-topology mapping criteria, and the sampler-specific
             parameters (i.e. parameters specific to Replica Exchange, SAMS, and sMC.)
 
-        forcefield_files : list of str
-            The list of ffxml files that contain the forcefields that will be used
-        pressure : Quantity, units of pressure
-            Pressure to use in the barostat
-        temperature : Quantity, units of temperature
-            Temperature to use for the Langevin integrator
-        solvent_padding : Quantity, units of length
-            The amount of padding to use when adding solvent
-        neglect_angles : bool
-            Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
-        anneal_14s : bool, default False
-            Whether to anneal 1,4 interactions over the protocol;
-                if True, then geometry_engine takes the argument use_14_nonbondeds = False;
-                if False, then geometry_engine takes the argument use_14_nonbondeds = True;
+            forcefield_files : list of str
+                The list of ffxml files that contain the forcefields that will be used
+            pressure : Quantity, units of pressure
+                Pressure to use in the barostat
+            temperature : Quantity, units of temperature
+                Temperature to use for the Langevin integrator
+            solvent_padding : Quantity, units of length
+                The amount of padding to use when adding solvent
+            neglect_angles : bool
+                Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
+            anneal_14s : bool, default False
+                Whether to anneal 1,4 interactions over the protocol;
+                    if True, then geometry_engine takes the argument use_14_nonbondeds = False;
+                    if False, then geometry_engine takes the argument use_14_nonbondeds = True;
 
 
 
@@ -166,7 +167,7 @@ class BuildProposalNetwork(object):
         self.network = nx.DiGraph()
 
         #first, let's add the nodes
-        for index, smiles in self.smiles_list:
+        for index, smiles in enumerate(self.smiles_list):
             node_attribs = {'smiles': smiles}
             self.network.add_node(index, **node_attribs)
 
@@ -244,6 +245,7 @@ class BuildProposalNetwork(object):
         if not np.isinf(log_weight):
             current_oemol, current_positions, current_topology = self.ligand_oemol_pos_top[i]
             proposed_oemol, proposed_positions, proposed_topology = self.ligand_oemol_pos_top[j]
+            _logger.info(f"\tcreating topology and geometry proposals.")
             proposals =  self._generate_proposals(current_oemol = current_oemol,
                                                   proposed_oemol = proposed_oemol,
                                                   current_positions = current_positions,
@@ -576,7 +578,10 @@ class BuildProposalNetwork(object):
         modeller.addHydrogens(forcefield = self.system_generator._forcefield)
         if not vacuum:
             _logger.info(f"\tpreparing to add solvent")
-            modeller.addSolvent(self.system_generator._forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
+            modeller.addSolvent(self.system_generator._forcefield,
+                                model=model,
+                                padding = self.default_arguments['solvent_padding'],
+                                ionicStrength = 0.15*unit.molar)
         else:
             _logger.info(f"\tSkipping solvation of vacuum perturbation")
         solvated_topology = modeller.getTopology()
@@ -662,7 +667,7 @@ class BuildProposalNetwork(object):
 
         return ligand_topology_proposal, old_solvated_positions
 
-    def _generate_vacuum_topologies(self, topology_proposal, old_positions):
+    def _generate_vacuum_topologies(self, topology_proposal, old_positions, system_generator):
         """
         This method generates ligand-only topologies and positions from a TopologyProposal containing a solvated complex.
         The output of this method is then used when building the solvent-phase simulation with the same atom map.
@@ -673,6 +678,8 @@ class BuildProposalNetwork(object):
             topology proposal to parse
         old_positions : array
             Positions of the fully solvated protein ligand syste
+        system_generator : perses.rjmc.TopologyProposal.SystemGenerator
+            the system generator used to create the system
 
         Returns
         -------
@@ -703,8 +710,8 @@ class BuildProposalNetwork(object):
         new_ligand_topology = new_ligand_topology.to_openmm()
 
         # create the new ligand system:
-        old_ligand_system = self.system_generator.build_system(old_ligand_topology)
-        new_ligand_system = self.system_generator.build_system(new_ligand_topology)
+        old_ligand_system = system_generator.build_system(old_ligand_topology)
+        new_ligand_system = system_generator.build_system(new_ligand_topology)
 
         new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
@@ -719,7 +726,7 @@ class BuildProposalNetwork(object):
 
         return ligand_topology_proposal, old_ligand_positions
 
-    def _handle_valence_energies(topology_proposal):
+    def _handle_valence_energies(self, topology_proposal):
         """
         simple wrapper function to return forward and reverse valence energies from the complex proposal
 
@@ -764,6 +771,7 @@ class BuildProposalNetwork(object):
         """
         proposals = {}
         if 'complex' in self.default_arguments['phases']:
+            _logger.debug(f"\t\tcomplex:")
             assert self.nonbonded_method == app.PME, f"Complex phase is specified, but the nonbonded method is not {app.PME} (is currently {self.nonbonded_method})."
             complex_md_topology, complex_topology, complex_positions = self._setup_complex_phase(current_oemol, current_positions, current_topology)
             solvated_complex_topology, solvated_complex_positions, solvated_complex_system = self._solvate(complex_topology,
@@ -800,6 +808,7 @@ class BuildProposalNetwork(object):
                                           })
 
         if 'solvent' in self.default_arguments['phases']:
+            _logger.debug(f"\t\tsolvent:")
             if 'complex' in self.default_arguments['phases']:
                 assert 'complex' in proposals.keys(), f"'complex' is a phase that should have been handled, but it is not in proposals."
                 assert self.nonbonded_method == app.PME, f"solvent phase is specified, but the nonbonded method is not {app.PME} (is currently {self.nonbonded_method})."
@@ -834,12 +843,13 @@ class BuildProposalNetwork(object):
                                           'logp_proposal': solvent_logp_proposal,
                                           'logp_reverse': solvent_logp_reverse,
                                           'added_valence_energy': solvated_added_valence_energy,
-                                          'subtracted_valence_energy': solvent_subtracted_valence_energy,
+                                          'subtracted_valence_energy': solvated_subtracted_valence_energy,
                                           'forward_neglected_angles': solvated_forward_neglected_angles,
                                           'reverse_neglected_angles': solvated_reverse_neglected_angles}
                                           })
 
         if 'vacuum' in self.default_arguments['phases']:
+            _logger.debug(f"\t\tvacuum:")
             vacuum_system_generator = SystemGenerator(self.default_arguments['forcefield_files'],
                                                       forcefield_kwargs={'removeCMMotion': False,
                                                                          'nonbondedMethod': app.NoCutoff,
@@ -855,17 +865,19 @@ class BuildProposalNetwork(object):
                                                                                proposed_mol = proposed_oemol)
             elif 'complex' in self.default_arguments['phases']:
                 vacuum_ligand_topology_proposal, vacuum_ligand_positions = self._generate_vacuum_topologies(complex_topology_proposal,
-                                                                                                            solvated_complex_positions)
+                                                                                                            solvated_complex_positions,
+                                                                                                            vacuum_system_generator)
             elif 'solvent' in self.default_arguments['phases']:
-                vacuum_topology_proposal, vacuum_ligand_positions = self._generate_vacuum_topologies(solvated_ligand_topology_proposal,
-                                                                                                  solvated_ligand_positions)
+                vacuum_ligand_topology_proposal, vacuum_ligand_positions = self._generate_vacuum_topologies(solvated_ligand_topology_proposal,
+                                                                                                     solvated_ligand_positions,
+                                                                                                     vacuum_system_generator)
             else:
                 raise Exeption(f"There is an unnacounted for error in the topology proposal generation for vacuum phase.  Aborting!")
 
             proposed_vacuum_ligand_positions, vacuum_logp_proposal = self.geometry_engine.propose(vacuum_ligand_topology_proposal,
                                                                                                   vacuum_ligand_positions,
                                                                                                   self.beta)
-            vacuum_logp_reverse = self.geonetry_engine.logp_reverse(vacuum_ligand_topology_proposal,
+            vacuum_logp_reverse = self.geometry_engine.logp_reverse(vacuum_ligand_topology_proposal,
                                                                     proposed_vacuum_ligand_positions,
                                                                     vacuum_ligand_positions,
                                                                     self.beta)

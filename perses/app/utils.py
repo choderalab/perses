@@ -19,9 +19,6 @@ from perses.tests.utils import validate_endstate_energies
 from openmoltools import forcefield_generators
 from perses.utils.openeye import *
 
-#import perses dask Client
-from perses.app.relative_setup import DaskClient
-
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("utils")
 _logger.setLevel(logging.INFO)
