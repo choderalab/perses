@@ -202,7 +202,7 @@ class DaskClient(object):
         else:
             distributed.wait(futures)
 
-class SequentialMonteCarlo(DaskClient):
+class SequentialMonteCarlo():
     """
     This class represents an sMC particle that runs a nonequilibrium switching protocol.
     It is a batteries-included engine for conducting sequential Monte Carlo sampling.
@@ -398,7 +398,9 @@ class SequentialMonteCarlo(DaskClient):
 
         return LOA_actor
 
-    def _actor_distribution(self, directions, num_particles):
+    def _actor_distribution(self,
+                            directions,
+                            num_particles):
         """
         wrapper to decide the distribution of actors
 
