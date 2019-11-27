@@ -31,7 +31,7 @@ import copy
 from perses.app.relative_setup import DaskClient
 
 logging.basicConfig(level = logging.NOTSET)
-_logger = logging.getLogger("setup_relative_calculation")
+_logger = logging.getLogger("BuildProposalNetwork")
 _logger.setLevel(logging.DEBUG)
 
 ENERGY_THRESHOLD = 1e-4
@@ -174,9 +174,14 @@ class BuildProposalNetwork(object):
         #then, let's add the edges
         for index, log_weight in np.ndenumerate(self.adjacency_matrix):
             i, j = index[0], index[1]
+            _logger.info(f"creating edge between ligand {i} and {j}.")
             success = self.add_network_edge(start = i,
                                             end = j,
                                             weight = np.exp(log_weight))
+            if success:
+                _logger.info(f"edge between ligand {i} and {j} is validated!")
+            else:
+                _logger.info(f"edge between ligand {i} and {j} failed")
 
 
         #make the adjacency_matrix a graph attribute
@@ -283,7 +288,6 @@ class BuildProposalNetwork(object):
 
                     validated = True
                     _logger.info(f"\t\tendstate energies validated to within {ENERGY_THRESHOLD}!")
-                    success_counter += 1
                 except Exception as e:
                     _logger.warning(f"\t\t{e}")
                     _logger.warning(f"\t\tdetected failure to validate system.  omitting this edge.")
@@ -587,7 +591,17 @@ class BuildProposalNetwork(object):
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
 
-        # canonicalize the solvated positions: turn tuples into np.array
+        # #now we have to fix the bond atoms
+        # new_bonds = []
+        # atom_dict = {atom.index : atom for atom in solvated_topology.atoms()}
+        #
+        # for bond in solvated_topology.bonds():
+        #     idx1, idx2 = bond[0].index, bond[1].index
+        #     new_bond = app.topology.Bond(atom1=atom_dict[idx1], atom2=atom_dict[idx2])
+        #     new_bonds.append(new_bond)
+        #
+        # solvated_topology._bonds = new_bonds
+
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
         solvated_system = self.system_generator.build_system(solvated_topology)
         return solvated_topology, solvated_positions, solvated_system
@@ -796,7 +810,7 @@ class BuildProposalNetwork(object):
             complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
 
             #now to add it to phases
-            proposals.update({'complex': {'topology_proposal': copy.deepcopy(complex_topology_proposal),
+            proposals.update({'complex': {'topology_proposal': complex_topology_proposal,
                                           'current_positions': solvated_complex_positions,
                                           'proposed_positions': proposed_solvated_complex_positions,
                                           'logp_proposal': complex_logp_proposal,
@@ -837,7 +851,7 @@ class BuildProposalNetwork(object):
             solvated_reverse_neglected_angles = self.geometry_engine.reverse_neglected_angle_terms
 
             #now to add it to phases
-            proposals.update({'solvent': {'topology_proposal': copy.deepcopy(solvated_ligand_topology_proposal),
+            proposals.update({'solvent': {'topology_proposal': solvated_ligand_topology_proposal,
                                           'current_positions': solvated_ligand_positions,
                                           'proposed_positions': proposed_solvated_ligand_positions,
                                           'logp_proposal': solvent_logp_proposal,
@@ -887,7 +901,7 @@ class BuildProposalNetwork(object):
             vacuum_reverse_neglected_angles = self.geometry_engine.reverse_neglected_angle_terms
 
             #now to add it to phases
-            proposals.update({'vacuum': {'topology_proposal': copy.deepcopy(vacuum_ligand_topology_proposal),
+            proposals.update({'vacuum': {'topology_proposal': vacuum_ligand_topology_proposal,
                                           'current_positions': vacuum_ligand_positions,
                                           'proposed_positions': proposed_vacuum_ligand_positions,
                                           'logp_proposal': vacuum_logp_proposal,
