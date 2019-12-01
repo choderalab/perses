@@ -70,7 +70,7 @@ class Parallelism(object):
                 cluster = LSFCluster()
                 if num_processes is None:
                     self._adapt = True
-                    cluster.adapt(minimum = 2, interval = '1s')
+                    cluster.adapt(minimum = 1, interval = '1s')
                 else:
                     self._adapt = False
                     self.num_processes = num_processes
@@ -145,7 +145,10 @@ class Parallelism(object):
             return df
         else:
             if self.library[0] == 'dask':
-                return self.client.scatter(df)
+                if workers is None:
+                    return self.client.scatter(df)
+                else:
+                    return self.client.scatter(df, workers)
             else:
                 raise Exception(f"the client is not NoneType but the library is not supported")
 
@@ -170,7 +173,35 @@ class Parallelism(object):
                 futures = [func(*plug) for plug in zip(*arguments)]
         else:
             if self.library[0] == 'dask':
-                futures = self.client.map(func, *arguments)
+                futures = self.client.map(func, *arguments, workers = workers)
+            else:
+                raise Exception(f"{self.library} is supported, but without deployment functionality!")
+
+        return futures
+
+    def run_all(self, func, arguments, workers):
+        """
+        wrapper to run a function and its arguments to the client for scheduling.
+        the same function and arguments is run on all workers
+
+        Arguments
+        ---------
+        func : function to map
+            arguments: tuple of the arguments that the function will take
+        argument : tuple of argument lists
+
+        Returns
+        ---------
+        futures
+        """
+        if self.client is None:
+            if len(arguments) == 1:
+                futures = [func(plug) for plug in arguments[0]]
+            else:
+                futures = [func(*plug) for plug in zip(*arguments)]
+        else:
+            if self.library[0] == 'dask':
+                futures = self.client.run(func, *arguments, workers = workers)
             else:
                 raise Exception(f"{self.library} is supported, but without deployment functionality!")
 
@@ -243,7 +274,11 @@ class Parallelism(object):
         if self.client is None:
             pass
         else:
-            distributed.progress(futures)
+            if self.library[0] == 'dask':
+                distributed.progress(futures)
+            else:
+                raise Exception(f"{self.library} is supported, but without actor launch functionality!")
+
 
     def wait(self, futures):
         """
