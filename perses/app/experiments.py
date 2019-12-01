@@ -42,8 +42,9 @@ class BuildProposalNetwork(object):
     Create a NetworkX graph representing the set of chemical states to be sampled.
     Vertices represent nonalchemical states (i.e. ligands/protein mutants).
     Edges represent the alchemical transformations between nonalchemical states.
+    Specifically, this class creates topology proposals, geometry_proposals, HybridTopologyFactory objects, and Simulation objects for each edge.
     """
-    default_arguments = {'pressure': 1.0 * unit.atmosphere,
+    proposal_arguments = {'pressure': 1.0 * unit.atmosphere,
                          'temperature': 300.0 * unit.kelvin,
                          'solvent_padding': 9.0 * unit.angstroms,
                          'hmass': 4 * unit.amus,
@@ -64,6 +65,14 @@ class BuildProposalNetwork(object):
                          'softcore_electrostatics_alpha': 0.3,
                          'softcore_sigma_Q': 1.0}
 
+    supported_simulations = {
+                             'repex':{},
+                             'sams': {},
+                             'smc': {}
+                             }
+
+    simulation_arguments = {}
+
     known_phases = ['vacuum', 'solvent', 'complex'] # we omit complex phase in the known_phases if a receptor_filename is None
     supported_connectivities = {'fully_connected': generate_fully_connected_adjacency_matrix} #we can add other options later, but this is a good vanilla one to start with
 
@@ -73,7 +82,8 @@ class BuildProposalNetwork(object):
                  graph_connectivity = 'fully_connected',
                  cost = None,
                  resources = None,
-                 _select_arguments = None):
+                 proposal_parameters = None,
+                 simulation_parameters = None):
         """
         Initialize NetworkX graph and build connectivity with a `graph_connectivity` input.
 
@@ -97,7 +107,7 @@ class BuildProposalNetwork(object):
             this is yet another placeholder variable for the allocation of resources
 
 
-        _select_arguments: dict, default None
+        proposal_parameters: dict, default None
             The following dict is parseable from a setup yaml, but have defaults given if no setup yaml is given.
             They mostly consist of the thermodynamic state of the graph, several potential modifications to the
             hybrid factory (i.e. the alchemical system), the single-topology mapping criteria, and the sampler-specific
@@ -117,11 +127,23 @@ class BuildProposalNetwork(object):
                 Whether to anneal 1,4 interactions over the protocol;
                     if True, then geometry_engine takes the argument use_14_nonbondeds = False;
                     if False, then geometry_engine takes the argument use_14_nonbondeds = True;
+            simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None)
+                the simulation parameters to put into the appropriate simulation object
+                if type(simulation_parameters) == tuple:
+                    #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
+                    #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
+                    #if dict is None, then default 'repex' parameters will be used
+                elif type(simulation_parameters) == np.2darray of dicts, each dict has the keys corresponding to appropriate phases
+                                                                         and each entry is a tuple of (flavor (i.e. 'repex', 'sams', 'neq'), _dict (or None)).
+                                                                         where _dict has the appropriate parameters.
+                                                                         if _dict is None, then default parameters corresponding to the appropriate phase are used.
+
+
 
 
 
         TODO:
-        1. change the name of 'default_arguments' to something more appropriate.
+        1. change the name of 'proposal_arguments' to something more appropriate.
         2. allow custom atom mapping for all edges in graph.  currently, we can only specify one of three mapping schemes for all molecules
         3.
         """
@@ -134,9 +156,9 @@ class BuildProposalNetwork(object):
         self.adjacency_matrix = self._create_connectivity_matrix(graph_connectivity)
 
         #Now we must create some defaults for thermodynamic states
-        _logger.debug(f"kwargs: {_select_arguments}")
-        self._create_select_arguments(_select_arguments)
-        self.beta = 1.0 / (kB * self.default_arguments['temperature'])
+        _logger.debug(f"kwargs: {proposal_parameters}")
+        self._create_proposal_parameters(proposal_parameters)
+        self.beta = 1.0 / (kB * self.proposal_arguments['temperature'])
 
         #Now we can create a system generator for each phase.
         self._create_system_generator()
@@ -144,7 +166,7 @@ class BuildProposalNetwork(object):
         #Now create the proposal engine
         self.proposal_engine = SmallMoleculeSetProposalEngine(self.smiles_list,
                                                               self.system_generator,
-                                                              map_strength = self.default_arguments['map_strength'],
+                                                              map_strength = self.proposal_arguments['map_strength'],
                                                               residue_name='MOL')
         #create a geometry engine
         self.geometry_engine = FFAllAngleGeometryEngine(metadata=None,
@@ -156,8 +178,8 @@ class BuildProposalNetwork(object):
                                                         storage=None,
                                                         bond_softening_constant=1.0,
                                                         angle_softening_constant=1.0,
-                                                        neglect_angles = self.default_arguments['neglect_angles'],
-                                                        use_14_nonbondeds = not self.default_arguments['anneal_14s'])
+                                                        neglect_angles = self.proposal_arguments['neglect_angles'],
+                                                        use_14_nonbondeds = not self.proposal_arguments['anneal_14s'])
 
     def create_network(self):
         """
@@ -264,20 +286,20 @@ class BuildProposalNetwork(object):
                 hybrid_factory = HybridTopologyFactory(topology_proposal = property_dict['topology_proposal'],
                                                        current_positions = property_dict['current_positions'],
                                                        new_positions = property_dict['proposed_positions'],
-                                                       use_dispersion_correction = self.default_arguments['use_dispersion_correction'],
+                                                       use_dispersion_correction = self.proposal_arguments['use_dispersion_correction'],
                                                        functions=None,
-                                                       softcore_alpha = self.default_arguments['softcore_alpha'],
-                                                       bond_softening_constant = self.default_arguments['bond_softening_constant'],
-                                                       angle_softening_constant = self.default_arguments['angle_softening_constant'],
-                                                       soften_only_new = self.default_arguments['soften_only_new'],
+                                                       softcore_alpha = self.proposal_arguments['softcore_alpha'],
+                                                       bond_softening_constant = self.proposal_arguments['bond_softening_constant'],
+                                                       angle_softening_constant = self.proposal_arguments['angle_softening_constant'],
+                                                       soften_only_new = self.proposal_arguments['soften_only_new'],
                                                        neglected_new_angle_terms = property_dict['forward_neglected_angles'],
                                                        neglected_old_angle_terms = property_dict['reverse_neglected_angles'],
-                                                       softcore_LJ_v2 = self.default_arguments['softcore_LJ_v2'],
-                                                       softcore_electrostatics = self.default_arguments['softcore_electrostatics'],
-                                                       softcore_LJ_v2_alpha = self.default_arguments['softcore_LJ_v2_alpha'],
-                                                       softcore_electrostatics_alpha = self.default_arguments['softcore_electrostatics_alpha'],
-                                                       softcore_sigma_Q = self.default_arguments['softcore_sigma_Q'],
-                                                       interpolate_old_and_new_14s = self.default_arguments['anneal_14s'])
+                                                       softcore_LJ_v2 = self.proposal_arguments['softcore_LJ_v2'],
+                                                       softcore_electrostatics = self.proposal_arguments['softcore_electrostatics'],
+                                                       softcore_LJ_v2_alpha = self.proposal_arguments['softcore_LJ_v2_alpha'],
+                                                       softcore_electrostatics_alpha = self.proposal_arguments['softcore_electrostatics_alpha'],
+                                                       softcore_sigma_Q = self.proposal_arguments['softcore_sigma_Q'],
+                                                       interpolate_old_and_new_14s = self.proposal_arguments['anneal_14s'])
                 try:
                     endstate_energy_errors = validate_endstate_energies(topology_proposal = property_dict['topology_proposal'],
                                                                         htf = hybrid_factory,
@@ -321,20 +343,20 @@ class BuildProposalNetwork(object):
             hybrid_factory = HybridTopologyFactory(topology_proposal = property_dict['topology_proposal'],
                                                    current_positions = property_dict['current_positions'],
                                                    new_positions = property_dict['proposed_positions'],
-                                                   use_dispersion_correction = self.default_arguments['use_dispersion_correction'],
+                                                   use_dispersion_correction = self.proposal_arguments['use_dispersion_correction'],
                                                    functions=None,
-                                                   softcore_alpha = self.default_arguments['softcore_alpha'],
-                                                   bond_softening_constant = self.default_arguments['bond_softening_constant'],
-                                                   angle_softening_constant = self.default_arguments['angle_softening_constant'],
-                                                   soften_only_new = self.default_arguments['soften_only_new'],
+                                                   softcore_alpha = self.proposal_arguments['softcore_alpha'],
+                                                   bond_softening_constant = self.proposal_arguments['bond_softening_constant'],
+                                                   angle_softening_constant = self.proposal_arguments['angle_softening_constant'],
+                                                   soften_only_new = self.proposal_arguments['soften_only_new'],
                                                    neglected_new_angle_terms = property_dict['forward_neglected_angles'],
                                                    neglected_old_angle_terms = property_dict['reverse_neglected_angles'],
-                                                   softcore_LJ_v2 = self.default_arguments['softcore_LJ_v2'],
-                                                   softcore_electrostatics = self.default_arguments['softcore_electrostatics'],
-                                                   softcore_LJ_v2_alpha = self.default_arguments['softcore_LJ_v2_alpha'],
-                                                   softcore_electrostatics_alpha = self.default_arguments['softcore_electrostatics_alpha'],
-                                                   softcore_sigma_Q = self.default_arguments['softcore_sigma_Q'],
-                                                   interpolate_old_and_new_14s = self.default_arguments['anneal_14s'])
+                                                   softcore_LJ_v2 = self.proposal_arguments['softcore_LJ_v2'],
+                                                   softcore_electrostatics = self.proposal_arguments['softcore_electrostatics'],
+                                                   softcore_LJ_v2_alpha = self.proposal_arguments['softcore_LJ_v2_alpha'],
+                                                   softcore_electrostatics_alpha = self.proposal_arguments['softcore_electrostatics_alpha'],
+                                                   softcore_sigma_Q = self.proposal_arguments['softcore_sigma_Q'],
+                                                   interpolate_old_and_new_14s = self.proposal_arguments['anneal_14s'])
             try:
                 endstate_energy_errors = validate_endstate_energies(topology_proposal = property_dict['topology_proposal'],
                                                                     htf = hybrid_factory,
@@ -444,39 +466,39 @@ class BuildProposalNetwork(object):
             raise Exception(f"the ligand input can only be a string pointing to an .sdf or .smi file.  Aborting!")
         self.ligand_md_topologies = [md.Topology.from_openmm(item[2]) for item in self.ligand_oemol_pos_top]
 
-    def _create_select_arguments(self, _select_arguments):
+    def _create_proposal_parameters(self, proposal_parameters):
         """
-        Define kwargs that will replace default_arguments. note we ar just updating the class attributes
+        Define kwargs that will replace proposal_arguments. note we ar just updating the class attributes
 
         Arguments
         ---------
-        _select_arguments : dict
-            dict of default arguments; must match the same keys of self.default_arguments
+        proposal_parameters : dict
+            dict of default arguments; must match the same keys of self.proposal_arguments
         """
-        if _select_arguments is not None:
+        if proposal_parameters is not None:
             #first update the __dict__ with kwargs
-            #assert that every keyword is in the set of default_arguments:
-            assert set(_select_arguments.keys()).issubset(set(self.default_arguments.keys())), f"keys: {_select_arguments.keys()} is not a subset of default argument keys: {self.default_arguments.keys()}"
-            for keyword in _select_arguments.keys():
-                #assert keyword in default_arguments.keys(), f"kwarg keyword {keyword} is not in default argument keys: {default_arguments.keys()}"
-                assert type(_select_arguments[keyword]) == type(self.default_arguments[keyword]), f"kwarg {keyword}: {_select_arguments[keyword]} type ({type(_select_arguments[keyword])}) is not the appropriate type ({type(self.default_arguments[keyword])})"
+            #assert that every keyword is in the set of proposal_arguments:
+            assert set(proposal_parameters.keys()).issubset(set(self.proposal_arguments.keys())), f"keys: {proposal_parameters.keys()} is not a subset of default argument keys: {self.proposal_arguments.keys()}"
+            for keyword in proposal_parameters.keys():
+                #assert keyword in proposal_arguments.keys(), f"kwarg keyword {keyword} is not in default argument keys: {proposal_arguments.keys()}"
+                assert type(proposal_parameters[keyword]) == type(self.proposal_arguments[keyword]), f"kwarg {keyword}: {proposal_parameters[keyword]} type ({type(proposal_parameters[keyword])}) is not the appropriate type ({type(self.proposal_arguments[keyword])})"
 
             #specal phasese argument:
-            if 'phases' in _select_arguments.keys():
-                assert set(_select_arguments['phases']).issubset(set(self.known_phases)), f"{set(_select_arguments['phases'])} is not a subset of known phases: {set(self.known_phases)}.  Aborting!"
+            if 'phases' in proposal_parameters.keys():
+                assert set(proposal_parameters['phases']).issubset(set(self.known_phases)), f"{set(proposal_parameters['phases'])} is not a subset of known phases: {set(self.known_phases)}.  Aborting!"
 
-            args_left_as_default = set(self.default_arguments.keys()).difference(set(_select_arguments.keys()))
+            args_left_as_default = set(self.proposal_arguments.keys()).difference(set(proposal_parameters.keys()))
 
             for arg in args_left_as_default:
-                _logger.info(f"{arg} was left as default of {self.default_arguments[arg]}")
+                _logger.info(f"{arg} was left as default of {self.proposal_arguments[arg]}")
 
-            self.default_arguments.update(_select_arguments)
+            self.proposal_arguments.update(proposal_parameters)
 
         #update the nonbonded method from the default arguments...
-        if 'complex' in self.default_arguments['phases'] or 'solvent' in self.default_arguments['phases']:
+        if 'complex' in self.proposal_arguments['phases'] or 'solvent' in self.proposal_arguments['phases']:
             self.nonbonded_method = app.PME
             _logger.info(f"Detected complex or solvent phases: setting PME nonbonded method.")
-        elif 'vacuum' in self.default_arguments['phases']:
+        elif 'vacuum' in self.proposal_arguments['phases']:
             self.nonbonded_method = app.NoCutoff
             _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
 
@@ -484,25 +506,25 @@ class BuildProposalNetwork(object):
         """
         Wrap the process for generating a dict of system generators for each phase.
         """
-        if self.default_arguments['pressure'] is not None:
+        if self.proposal_arguments['pressure'] is not None:
             if self.nonbonded_method == app.PME:
-                barostat = openmm.MonteCarloBarostat(self.default_arguments['pressure'],
-                                                     self.default_arguments['temperature'],
+                barostat = openmm.MonteCarloBarostat(self.proposal_arguments['pressure'],
+                                                     self.proposal_arguments['temperature'],
                                                      50)
             else:
                 barostat = None
-            self.system_generator = SystemGenerator(self.default_arguments['forcefield_files'],
+            self.system_generator = SystemGenerator(self.proposal_arguments['forcefield_files'],
                                                     barostat=barostat,
                                                      forcefield_kwargs={'removeCMMotion': False,
                                                                         'nonbondedMethod': self.nonbonded_method,
                                                                         'constraints' : app.HBonds,
-                                                                        'hydrogenMass' : self.default_arguments['hmass']})
+                                                                        'hydrogenMass' : self.proposal_arguments['hmass']})
         else:
             self.system_generator = SystemGenerator(forcefield_files,
                                                     forcefield_kwargs={'removeCMMotion': False,
                                                                        'nonbondedMethod': self.nonbonded_method,
                                                                        'constraints' : app.HBonds,
-                                                                       'hydrogenMass' : self.default_arguments['hmass']})
+                                                                       'hydrogenMass' : self.proposal_arguments['hmass']})
 
         self.system_generator._forcefield.loadFile(StringIO(self.ligand_ffxml))
 
@@ -584,7 +606,7 @@ class BuildProposalNetwork(object):
             _logger.info(f"\tpreparing to add solvent")
             modeller.addSolvent(self.system_generator._forcefield,
                                 model=model,
-                                padding = self.default_arguments['solvent_padding'],
+                                padding = self.proposal_arguments['solvent_padding'],
                                 ionicStrength = 0.15*unit.molar)
         else:
             _logger.info(f"\tSkipping solvation of vacuum perturbation")
@@ -784,13 +806,13 @@ class BuildProposalNetwork(object):
 
         """
         proposals = {}
-        if 'complex' in self.default_arguments['phases']:
+        if 'complex' in self.proposal_arguments['phases']:
             _logger.debug(f"\t\tcomplex:")
             assert self.nonbonded_method == app.PME, f"Complex phase is specified, but the nonbonded method is not {app.PME} (is currently {self.nonbonded_method})."
             complex_md_topology, complex_topology, complex_positions = self._setup_complex_phase(current_oemol, current_positions, current_topology)
             solvated_complex_topology, solvated_complex_positions, solvated_complex_system = self._solvate(complex_topology,
                                                                                                            complex_positions,
-                                                                                                           model = self.default_arguments['water_model'],
+                                                                                                           model = self.proposal_arguments['water_model'],
                                                                                                            vacuum = False)
             solvated_complex_md_topology = md.Topology.from_openmm(solvated_complex_topology)
             complex_topology_proposal = self.proposal_engine.propose(current_system = solvated_complex_system,
@@ -821,9 +843,9 @@ class BuildProposalNetwork(object):
                                           'reverse_neglected_angles': complex_reverse_neglected_angles}
                                           })
 
-        if 'solvent' in self.default_arguments['phases']:
+        if 'solvent' in self.proposal_arguments['phases']:
             _logger.debug(f"\t\tsolvent:")
-            if 'complex' in self.default_arguments['phases']:
+            if 'complex' in self.proposal_arguments['phases']:
                 assert 'complex' in proposals.keys(), f"'complex' is a phase that should have been handled, but it is not in proposals."
                 assert self.nonbonded_method == app.PME, f"solvent phase is specified, but the nonbonded method is not {app.PME} (is currently {self.nonbonded_method})."
                 solvated_ligand_topology_proposal, solvated_ligand_positions = self._generate_solvent_topologies(topology_proposal = complex_topology_proposal,
@@ -831,7 +853,7 @@ class BuildProposalNetwork(object):
             else:
                 solvated_ligand_topology, solvated_ligand_positions, solvated_ligand_system = self._solvate(current_topology,
                                                                                                             current_positions,
-                                                                                                            model = self.default_arguments['water_model'],
+                                                                                                            model = self.proposal_arguments['water_model'],
                                                                                                             vacuum = False)
                 solvated_ligand_md_topology = md.Topology.from_openmm(solvated_ligand_topology)
                 solvated_ligand_topology_proposal = self.proposal_engine.propose(current_system = solvated_ligand_system,
@@ -862,14 +884,14 @@ class BuildProposalNetwork(object):
                                           'reverse_neglected_angles': solvated_reverse_neglected_angles}
                                           })
 
-        if 'vacuum' in self.default_arguments['phases']:
+        if 'vacuum' in self.proposal_arguments['phases']:
             _logger.debug(f"\t\tvacuum:")
-            vacuum_system_generator = SystemGenerator(self.default_arguments['forcefield_files'],
+            vacuum_system_generator = SystemGenerator(self.proposal_arguments['forcefield_files'],
                                                       forcefield_kwargs={'removeCMMotion': False,
                                                                          'nonbondedMethod': app.NoCutoff,
                                                                          'constraints' : app.HBonds})
             vacuum_system_generator._forcefield.loadFile(StringIO(self.ligand_ffxml))
-            if 'complex' not in self.default_arguments['phases'] and 'solvent' not in self.default_arguments['phases']:
+            if 'complex' not in self.proposal_arguments['phases'] and 'solvent' not in self.proposal_arguments['phases']:
                 vacuum_ligand_topology, vacuum_ligand_positions, vacuum_ligand_system = self._solvate(current_topology,
                                                                                                       current_positions,
                                                                                                       vacuum=True)
@@ -877,11 +899,11 @@ class BuildProposalNetwork(object):
                                                                                vacuum_ligand_topology,
                                                                                current_mol = current_oemol,
                                                                                proposed_mol = proposed_oemol)
-            elif 'complex' in self.default_arguments['phases']:
+            elif 'complex' in self.proposal_arguments['phases']:
                 vacuum_ligand_topology_proposal, vacuum_ligand_positions = self._generate_vacuum_topologies(complex_topology_proposal,
                                                                                                             solvated_complex_positions,
                                                                                                             vacuum_system_generator)
-            elif 'solvent' in self.default_arguments['phases']:
+            elif 'solvent' in self.proposal_arguments['phases']:
                 vacuum_ligand_topology_proposal, vacuum_ligand_positions = self._generate_vacuum_topologies(solvated_ligand_topology_proposal,
                                                                                                      solvated_ligand_positions,
                                                                                                      vacuum_system_generator)
@@ -913,3 +935,35 @@ class BuildProposalNetwork(object):
                                           })
 
         return proposals
+
+
+
+
+
+class Experiment():
+    """
+    Main class with which to conduct computation on a network of ligands/protein mutations in different phases.
+    The following class will hold 3 main methods:
+    """
+    default_setup_arguments = {'pressure': 1.0 * unit.atmosphere,
+                             'temperature': 300.0 * unit.kelvin,
+                             'solvent_padding': 9.0 * unit.angstroms,
+                             'hmass': 4 * unit.amus,
+                             'map_strength': 'default',
+                             'phases': ['vacuum', 'solvent', 'complex'],
+                             'forcefield_files': ['gaff.xml', 'amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
+                             'neglect_angles': False,
+                             'anneal_14s': False,
+                             'water_model': 'tip3p',
+                             'use_dispersion_correction': False,
+                             'softcore_alpha': None,
+                             'bond_softening_constant': 1.0,
+                             'angle_softening_constant': 1.0,
+                             'soften_only_new': False,
+                             'softcore_LJ_v2': True,
+                             'softcore_electrostatics': True,
+                             'softcore_LJ_v2_alpha': 0.85,
+                             'softcore_electrostatics_alpha': 0.3,
+                             'softcore_sigma_Q': 1.0}
+
+    default_simulation_arguments = {}
