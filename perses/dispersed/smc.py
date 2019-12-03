@@ -196,17 +196,17 @@ class SequentialMonteCarlo():
         sampler_state = SamplerState(self.factory.hybrid_positions,
                                           box_vectors=self.factory.hybrid_system.getDefaultPeriodicBoxVectors())
         self.sampler_states = {0: copy.deepcopy(sampler_state), 1: copy.deepcopy(sampler_state)}
-        
-        
+
+
         #implement the appropriate parallelism
         self.implement_parallelism(external_parallelism = external_parallelism,
                                    internal_parallelism = internal_parallelism)
-            
+
     def implement_parallelism(self, external_parallelism, internal_parallelism):
         """
         Function to implement the approprate parallelism given input arguments.
         This is exposed as a method in case the class already exists and the user wants to change the parallelism scheme.
-        
+
         Arguments
         ---------
         external_parallelism : dict('parallelism': perses.dispersed.parallel.Parallelism, 'available_workers': list(str)), default None
@@ -214,7 +214,7 @@ class SequentialMonteCarlo():
         internal_parallelism : dict, default {'library': ('dask', 'LSF'), 'num_processes': 2}
             dictionary of parameters to instantiate a client and run parallel computation internally.  internal parallelization is handled by default
             if None, external worker arguments have to be specified, otherwise, no parallel computation will be conducted, and annealing will be conducted locally.
-        
+
         """
         #parallelism implementables
         if external_parallelism is not None and internal_parallelism is not None:
@@ -236,7 +236,7 @@ class SequentialMonteCarlo():
 
         if external_parallelism is not None and internal_parallelism is not None:
             raise Exception(f"external parallelism were given, but an internal parallelization scheme was also specified.  Aborting!")
-        
+
 
     def _activate_annealing_workers(self):
         """
@@ -286,101 +286,6 @@ class SequentialMonteCarlo():
         else:
             raise Exception(f"either internal or external parallelism must be True.")
 
-    # def AIS(self,
-    #         num_particles,
-    #         protocol_length,
-    #         directions = ['forward','reverse'],
-    #         num_integration_steps = 1,
-    #         return_timer = False,
-    #         rethermalize = False):
-    #     """
-    #     Conduct vanilla AIS. with a linearly interpolated lambda protocol
-    #
-    #     Arguments
-    #     ----------
-    #     num_particles : int
-    #         number of particles to run in each direction
-    #     protocol_length : int
-    #         number of lambdas
-    #     directions : list of str, default ['forward', 'reverse']
-    #         the directions to run.
-    #     num_integration_steps : int
-    #         number of integration steps per proposal
-    #     return_timer : bool, default False
-    #         whether to time the annealing protocol
-    #     rethermalize : bool, default False
-    #         whether to rethermalize velocities after proposal
-    #     """
-    #     self.activate_client(LSF = self.LSF,
-    #                         num_processes = self.num_processes,
-    #                         adapt = self.adapt)
-    #
-    #     for _direction in directions:
-    #         assert _direction in ['forward', 'reverse'], f"direction {_direction} is not an appropriate direction"
-    #     protocols = {}
-    #     for _direction in directions:
-    #         if _direction == 'forward':
-    #             protocol = np.linspace(0, 1, protocol_length)
-    #         elif _direction == 'reverse':
-    #             protocol = np.linspace(1, 0, protocol_length)
-    #         protocols.update({_direction: protocol})
-    #
-    #     num_actors, num_actors_per_direction, num_particles_per_actor, AIS_actors = self._actor_distribution(directions = directions,
-    #                                                                                                          num_particles = num_particles)
-    #     AIS_actor_futures = {_direction: [[[None] * num_particles_per_actor] for _ in range(num_actors_per_direction)]}
-    #     AIS_actor_results = copy.deepcopy(AIS_actor_futures)
-    #
-    #     for job in tqdm.trange(num_particles_per_actor):
-    #         start_timer = time.time()
-    #         for _direction in directions:
-    #             _logger.info(f"entering {_direction} direction to launch annealing jobs.")
-    #             for _actor in range(num_actors_per_direction):
-    #                 _logger.info(f"\tretrieving actor {_actor}.")
-    #                 sampler_state = self.pull_trajectory_snapshot(0) if _direction == 'forward' else self.pull_trajectory_snapshot(1)
-    #                 if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
-    #                     noneq_trajectory_filename = self.neq_traj_filename[_direction] + f".iteration_{self.total_jobs:04}.h5"
-    #                     self.total_jobs += 1
-    #                 else:
-    #                     noneq_trajectory_filename = None
-    #
-    #                 actor_future = AIS_actors[_direction][_actor].anneal(sampler_state = sampler_state,
-    #                                                                      lambdas = protocols[_direction],
-    #                                                                      label = self.total_jobs,
-    #                                                                      noneq_trajectory_filename = noneq_trajectory_filename,
-    #                                                                      num_integration_steps = num_integration_steps,
-    #                                                                      return_timer = return_timer,
-    #                                                                      return_sampler_state = False,
-    #                                                                      rethermalize = rethermalize,
-    #                                                                      )
-    #                 AIS_actor_futures[_direction][_actor][job] = actor_future
-    #
-    #
-    #         #now we collect the jobs
-    #         for _direction in directions:
-    #             for _actor in range(num_actors_per_direction):
-    #                 _future = AIS_actors_futures[_direction][_actor][job]
-    #                 result = self.gather_actor_result(_future)
-    #                 AIS_actor_results[_direction][_actor][job] = result
-    #
-    #         end_timer = time.time() - start_timer
-    #         _logger.info(f"iteration took {end_timer} seconds.")
-    #
-    #
-    #     #now that the actors are gathered, we can collect the results and put them into class attributes
-    #     _logger.info(f"organizing all results...")
-    #     for _direction in AIS_actor_results.keys():
-    #         _result_lst = AIS_actor_results[_direction]
-    #         _logger.info(f"collecting {_direction} actor results...")
-    #         flattened_result_lst = [item for sublist in _result_lst for item in sublist]
-    #         [self.incremental_work[_direction].append(item[0]) for item in flattened_result_lst]
-    #         [self.nonequilibrium_timers[_direction].append(item[2]) for item in flattened_result_lst]
-    #
-    #     #compute the free energy
-    #     self.compute_free_energy()
-    #
-    #     #deactivate_client
-    #     self.deactivate_client()
-
     def sMC_anneal(self,
                    num_particles,
                    protocols = {'forward': np.linspace(0,1, 1000), 'reverse': np.linspace(1,0,1000)},
@@ -417,6 +322,7 @@ class SequentialMonteCarlo():
             otherwise, the resample dict must take the following form:
             {'criterion': str, 'method': str, 'threshold': float}
         """
+        _logger.debug(f"conducting sMC_anneal")
         #first some bookkeeping/validation
         for _direction in directions:
             assert _direction in ['forward', 'reverse'], f"direction {_direction} is not an appropriate direction"
@@ -457,7 +363,7 @@ class SequentialMonteCarlo():
         _logger.info(f"initializing organizing dictionaries...")
 
         self._activate_annealing_workers()
-        
+
         if self.internal_parallelism:
             workers = None
         elif self.external_parallelism:
@@ -497,13 +403,13 @@ class SequentialMonteCarlo():
             _AIS = True
         else:
             _AIS = False
-            
+
         _lambdas = {}
 
         while current_lambdas != finish_lines: # respect the while loop; it is a dangerous creature
             _logger.info(f"entering iteration {iteration_number}; current lambdas are: {current_lambdas}")
             start_timer = time.time()
-            
+
             if _AIS:
                 local_incremental_work_collector = {_direction : np.zeros((num_particles, self.protocols[_direction].shape[0])) for _direction in directions}
             else:
@@ -656,7 +562,7 @@ class SequentialMonteCarlo():
             end_timer = time.time() - start_timer
             iteration_number += 1
             _logger.info(f"iteration took {end_timer} seconds.")
-        
+
         self._deactivate_annealing_workers()
         self.compute_sMC_free_energy(sMC_cumulative_works, _AIS)
         self.sMC_observables = sMC_observables

@@ -66,70 +66,56 @@ class Parallelism(object):
             self.workers = {}
 
         elif library[0] == 'dask':
+            _logger.debug(f"detected dask parallelism...")
             if library[1] == 'LSF':
+                _logger.debug(f"detected LSF scheduler")
                 from dask_jobqueue import LSFCluster
+                _logger.debug(f"creating cluster...")
                 cluster = LSFCluster()
                 if num_processes is None:
+                    _logger.debug(f"adaptive cluster")
                     self._adapt = True
                     cluster.adapt(minimum = 1, interval = '1s')
                 else:
+                    _logger.debug(f"nonadaptive cluster")
                     self._adapt = False
                     self.num_processes = num_processes
                     cluster.scale(self.num_processes)
 
+                _logger.debug(f"creating client with cluster")
                 self.client = distributed.Client(cluster, timeout = timeout)
                 if not self._adapt:
                     while len(self.client.nthreads()) != self.num_processes:
+                        _logger.debug(f"waiting for worker request fulfillment...")
                         time.sleep(5)
                 worker_threads = self.client.nthreads()
                 self.workers = {i: _worker for i, _worker in zip(range(len(worker_threads)), worker_threads.keys())}
+                _logger.debug(f"workers initialized: {self.workers}")
             else:
                 raise Exception(f"{library[1]} is supported, but without client-activation functionality!")
-
-        # if LSF:
-        #     from dask_jobqueue import LSFCluster
-        #     cluster = LSFCluster()
-        #     self._adapt = adapt
-        #     self.num_processes = num_processes
-        #
-        #     if self._adapt:
-        #         _logger.debug(f"adapting cluster from 1 to {self.num_processes} processes")
-        #         cluster.adapt(minimum = 2, maximum = self.num_processes, interval = "1s")
-        #     else:
-        #         _logger.debug(f"scaling cluster to {self.num_processes} processes")
-        #         cluster.scale(self.num_processes)
-        #
-        #     _logger.debug(f"scheduling cluster with client")
-        #     self.client = distributed.Client(cluster, timeout = timeout)
-        #     while len(self.client.nthreads()) != self.num_processes:
-        #         _logger.debug(f"workers: {self.client.nthreads()}.  waiting for {self.num_processes} workers...")
-        #         time.sleep(3)
-        #     worker_threads = self.client.nthreads()
-        #     self.workers = {i: _worker for i, _worker in zip(range(len(worker_threads)), worker_threads.keys())}
-        #     self.worker_counter = 0
-        #
-        #     #now we wait for all of our workers.
-        # else:
-        #     self.client = None
-        #     self._adapt = False
-        #     self.num_processes = 0
 
     def deactivate_client(self):
         """
         NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
         This must be called before pickling
         """
+        _logger.debug(f"attempting to deactivate client...")
         if self.library is not None:
+            _logger.debug(f"library ({self.library}) is not None; attempting to close client")
             if self.library[0] == 'dask':
+                _logger.debug(f"detected dask parallelism...")
                 if self.client is not None:
+                    _logger.debug(f"closing client...")
                     self.client.close()
+                    _logger.debug(f"client closed successfully")
                 else:
                     _logger.warning(f"the client is NoneType.")
         else:
             _logger.warning(f"the library is NoneType.")
-        
+
         _attrs_to_delete = ['library', 'client', '_adapt', 'num_processes', 'workers']
         for _attr in _attrs_to_delete:
+            _logger.debug(f"deleting parallelism attribute {_attr}")
             delattr(self, _attr)
 
     def scatter(self, df, workers = None):
