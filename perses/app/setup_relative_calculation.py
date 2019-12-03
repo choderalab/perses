@@ -124,6 +124,7 @@ def getSetupOptions(filename):
             raise Exception(f"'run_type' must be None, 'anneal', or 'equilibrate'; input was specified as {setup_options['run_type']} with type {type(setup_options['run_type'])}")
 
         #to instantiate the particles:
+
         if 'trailblaze' not in setup_options:
             assert 'lambdas' in setup_options, f"'lambdas' is not in setup_options, and 'trailblaze' is False. One must be specified.  Aborting!"
             assert type(setup_options['lambdas']) in [dict, int] ,f"lambdas is not a list or tuple.  Aborting!"
@@ -146,6 +147,7 @@ def getSetupOptions(filename):
             setup_options['direction'] = ['forward', 'reverse']
         else:
             _logger.info(f"\t\t\tthe directions are as follows: {setup_options['direction']}")
+
         if 'ncmc_save_interval' not in setup_options:
             _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
             setup_options['ncmc_save_interval'] = None
@@ -157,7 +159,6 @@ def getSetupOptions(filename):
         if 'ncmc_rethermalize' not in setup_options:
             _logger.info(f"\t\t\tncmc_rethermalize not specified; default to False.")
             setup_options['ncmc_rethermalize'] = False
-        
 
         #now lastly, for the algorithm_4 options:
         if 'observable' not in setup_options:
@@ -649,6 +650,7 @@ if __name__ == "__main__":
                                           rethermalize = setup_options['ncmc_rethermalize'],
                                           trailblaze = setup_options['trailblaze'],
                                           resample = setup_options['resample'])
+
 
                     print("calculation complete; deactivating client")
                     #ne_fep_run.deactivate_client()

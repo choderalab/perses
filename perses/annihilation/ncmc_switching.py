@@ -4,7 +4,7 @@ import copy
 import logging
 import traceback
 from simtk import openmm, unit
-from perses.dispersed.feptasks import NonequilibriumSwitchingMove, compute_reduced_potential
+from perses.dispersed.feptasks import Particle, compute_reduced_potential
 from perses.storage import NetCDFStorageView
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.tests.utils import quantity_is_finite

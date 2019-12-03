@@ -226,6 +226,7 @@ class RelativeAlchemicalState(AlchemicalState):
        lambda_value : float
            The new value for all defined parameters.
        """
+       self.global_lambda = global_lambda
        for parameter_name in lambda_protocol.functions:
            lambda_value = lambda_protocol.functions[parameter_name](global_lambda)
            setattr(self, parameter_name, lambda_value)
