@@ -48,7 +48,7 @@ def compute_survival_rate(sMC_particle_ancestries):
 
     Arguments
     ---------
-    sMC_particle_ancestries : dict of {_direction : np.2darray(ints)}
+    sMC_particle_ancestries : dict of {_direction : list(np.array(ints))}
         dict of the particle ancestor indices
 
     Returns
@@ -57,11 +57,11 @@ def compute_survival_rate(sMC_particle_ancestries):
         the particle survival rate as a function of step
     """
     survival_rate = {}
-    for _direction in sMC_particle_ancestries.keys():
+    for _direction, _lst in sMC_particle_ancestries.items():
         rate = []
-        num_starting_particles = np.multiply(*sMC_particle_ancestries[_direction][0].shape)
+        num_starting_particles = len(_lst[0])
         for step in range(len(sMC_particle_ancestries[_direction])):
-            rate.append(float(len(set(sMC_particle_ancestries[_direction][step].flatten()))) / num_starting_particles)
+            rate.append(float(len(set(sMC_particle_ancestries[_direction][step]))) / num_starting_particles)
         survival_rate[_direction] = rate
 
     return survival_rate
@@ -403,8 +403,8 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
 ################################################################
 ##################Distributed Tasks#############################
 ################################################################
-def activate_LocallyOptimalAnnealing(remote_worker = True,
-                                     thermodynamic_state,
+def activate_LocallyOptimalAnnealing(thermodynamic_state,
+                                     remote_worker = True,
                                      lambda_protocol = 'default',
                                      timestep = 1 * unit.femtoseconds,
                                      collision_rate = 1 / unit.picoseconds,
@@ -447,10 +447,7 @@ def deactivate_worker_attributes(remote_worker = True):
     else:
         _class = self
 
-    try:
-        delattr(_class, 'annealing_class')
-    except:
-        pass
+    delattr(_class, 'annealing_class')
 
     address = worker.address if remote_worker else 0
     return address
@@ -474,14 +471,14 @@ def call_anneal_method(remote_worker,
     else:
         _class = self
 
-    incremental_work, new_sampler_state, timer = _class.anneal(sampler_state = sampler_state,
-                                                               lambdas = lambdas,
-                                                               noneq_trajectory_filename = noneq_trajectory_filename,
-                                                               num_integration_steps = num_integration_steps,
-                                                               return_timer = return_timer,
-                                                               return_sampler_state = return_sampler_state,
-                                                               rethermalize = rethermalize,
-                                                               initial_propagation = initial_propagation)
+    incremental_work, new_sampler_state, timer = _class.annealing_class.anneal(sampler_state = sampler_state,
+                                                                               lambdas = lambdas,
+                                                                               noneq_trajectory_filename = noneq_trajectory_filename,
+                                                                               num_integration_steps = num_integration_steps,
+                                                                               return_timer = return_timer,
+                                                                               return_sampler_state = return_sampler_state,
+                                                                               rethermalize = rethermalize,
+                                                                               initial_propagation = initial_propagation)
     return incremental_work, new_sampler_state, timer
 
 

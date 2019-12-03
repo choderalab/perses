@@ -90,8 +90,8 @@ def getSetupOptions(filename):
 
         #for dask implementation
         if 'processes' not in setup_options:
-            _logger.info(f"\t\t\tprocesses is not specified; default to 100")
-            setup_options['processes'] = 100
+            _logger.info(f"\t\t\tprocesses is not specified; default to 0")
+            setup_options['processes'] = 0
         if 'adapt' not in setup_options:
             _logger.info(f"\t\t\tadapt is not specified; default to True")
             setup_options['adapt'] = True
@@ -102,8 +102,8 @@ def getSetupOptions(filename):
             _logger.info(f"\t\t\tlambda_protocol is not specified; default to 'default'")
             setup_options['lambda_protocol'] = 'default'
         if 'LSF' not in setup_options:
-            _logger.info(f"\t\t\tLSF is not specified; default to True")
-            setup_options['LSF'] = True
+            _logger.info(f"\t\t\tLSF is not specified; default to False")
+            setup_options['LSF'] = False
 
         if 'run_type' not in setup_options:
             _logger.info(f"\t\t\trun_type is not specified; default to None")
@@ -400,6 +400,11 @@ def run_setup(setup_options):
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
         ncmc_save_interval = setup_options['ncmc_save_interval']
         write_ncmc_configuration = setup_options['write_ncmc_configuration']
+        if setup_options['LSF']:
+            _internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': setup_options['processes']}
+        else:
+            _internal_parallelism = None
+            
 
         ne_fep = dict()
         for phase in phases:
@@ -423,10 +428,7 @@ def run_setup(setup_options):
                                                  neq_splitting_string = neq_splitting,
                                                  collision_rate = setup_options['ncmc_collision_rate_ps'],
                                                  ncmc_save_interval = ncmc_save_interval,
-                                                 neq_integrator = setup_options['neq_integrator'],
-                                                 LSF = setup_options['LSF'],
-                                                 num_processes = setup_options['num_processes'],
-                                                 adapt = setup_options['adapt'])
+                                                 internal_parallelism = _internal_parallelism)
 
         print("Nonequilibrium switching driver class constructed")
 
@@ -534,7 +536,12 @@ if __name__ == "__main__":
         out_trajectory_prefix = setup_options['out_trajectory_prefix']
         for phase in setup_options['phases']:
             ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
-            ne_fep_run.num_processes = setup_options['num_processes']
+            #implement the appropriate parallelism, otherwise the default from the previous incarnation of the ne_fep_run will be used.
+            if setup_options['LSF']:
+                _internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': setup_options['processes']}
+            else:
+                _internal_parallelism = None
+            ne_fep_run.implement_parallelism(external_parallelism = None, internal_parallelism = _internal_parallelism)
             ne_fep_run.neq_integrator = setup_options['neq_integrator']
             ne_fep_run.LSF = setup_options['LSF']
             ne_fep_run.sMC_anneal(num_particles = setup_options['n_particles'],

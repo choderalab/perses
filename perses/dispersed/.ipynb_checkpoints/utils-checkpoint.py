@@ -40,7 +40,7 @@ _logger.setLevel(logging.DEBUG)
 
 #cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
-              
+
 #smc functions
 def compute_survival_rate(sMC_particle_ancestries):
     """
@@ -48,7 +48,7 @@ def compute_survival_rate(sMC_particle_ancestries):
 
     Arguments
     ---------
-    sMC_particle_ancestries : dict of {_direction : np.2darray(ints)}
+    sMC_particle_ancestries : dict of {_direction : list(np.array(ints))}
         dict of the particle ancestor indices
 
     Returns
@@ -57,11 +57,11 @@ def compute_survival_rate(sMC_particle_ancestries):
         the particle survival rate as a function of step
     """
     survival_rate = {}
-    for _direction in sMC_particle_ancestries.keys():
+    for _direction, _lst in sMC_particle_ancestries.items():
         rate = []
-        num_starting_particles = np.multiply(*sMC_particle_ancestries[_direction][0].shape)
+        num_starting_particles = len(_lst[0])
         for step in range(len(sMC_particle_ancestries[_direction])):
-            rate.append(float(len(set(sMC_particle_ancestries[_direction][step].flatten()))) / num_starting_particles)
+            rate.append(float(len(set(sMC_particle_ancestries[_direction][step]))) / num_starting_particles)
         survival_rate[_direction] = rate
 
     return survival_rate
@@ -399,3 +399,296 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
         context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
+
+################################################################
+##################Distributed Tasks#############################
+################################################################
+def activate_LocallyOptimalAnnealing(thermodynamic_state,
+                                     remote_worker = True,
+                                     lambda_protocol = 'default',
+                                     timestep = 1 * unit.femtoseconds,
+                                     collision_rate = 1 / unit.picoseconds,
+                                     temperature = 300 * unit.kelvin,
+                                     neq_splitting_string = 'V R O R V',
+                                     ncmc_save_interval = None,
+                                     topology = None,
+                                     subset_atoms = None,
+                                     measure_shadow_work = False,
+                                     integrator = 'langevin'):
+    """
+    Function to set worker attributes for annealing.
+    """
+    supported_integrators = ['langevin', 'hmc']
+
+    if remote_worker:
+        _class = distributed.get_worker()
+    else:
+        _class = self
+
+    _class.annealing_class = LocallyOptimalAnnealing()
+    _class.annealing_class.initialize(thermodynamic_state = thermodynamic_state,
+                                      lambda_protocol = lambda_protocol,
+                                      timestep = timestep,
+                                      collision_rate = collision_rate,
+                                      temperature = temperature,
+                                      neq_splitting_string = neq_splitting_string,
+                                      ncmc_save_interval = ncmc_save_interval,
+                                      topology = topology,
+                                      subset_atoms = subset_atoms,
+                                      measure_shadow_work = measure_shadow_work,
+                                      integrator = integrator)
+
+def deactivate_worker_attributes(remote_worker = True):
+    """
+    Function to remove worker attributes for annealing
+    """
+    if remote_worker:
+        _class = distributed.get_worker()
+    else:
+        _class = self
+
+    delattr(_class, 'annealing_class')
+
+    address = worker.address if remote_worker else 0
+    return address
+
+def call_anneal_method(remote_worker,
+                       sampler_state,
+                       lambdas,
+                       noneq_trajectory_filename = None,
+                       num_integration_steps = 1,
+                       return_timer = False,
+                       return_sampler_state = False,
+                       rethermalize = False,
+                       initial_propagation = True):
+    """
+    this function calls LocallyOptimalAnnealing.anneal;
+    since we can only map functions with parallelisms (no actors), we need to submit a function that calls
+    the LocallyOptimalAnnealing.anneal method.
+    """
+    if remote_worker:
+        _class = distributed.get_worker()
+    else:
+        _class = self
+
+    incremental_work, new_sampler_state, timer = _class.annealing_class.anneal(sampler_state = sampler_state,
+                                                                               lambdas = lambdas,
+                                                                               noneq_trajectory_filename = noneq_trajectory_filename,
+                                                                               num_integration_steps = num_integration_steps,
+                                                                               return_timer = return_timer,
+                                                                               return_sampler_state = return_sampler_state,
+                                                                               rethermalize = rethermalize,
+                                                                               initial_propagation = initial_propagation)
+    return incremental_work, new_sampler_state, timer
+
+
+
+class LocallyOptimalAnnealing():
+    """
+    Actor for locally optimal annealed importance sampling.
+    The initialize method will create an appropriate context and the appropriate storage objects,
+    but must be called explicitly.
+    """
+    supported_integrators = ['langevin', 'hmc']
+
+    def initialize(self,
+                   thermodynamic_state,
+                   lambda_protocol = 'default',
+                   timestep = 1 * unit.femtoseconds,
+                   collision_rate = 1 / unit.picoseconds,
+                   temperature = 300 * unit.kelvin,
+                   neq_splitting_string = 'V R O R V',
+                   ncmc_save_interval = None,
+                   topology = None,
+                   subset_atoms = None,
+                   measure_shadow_work = False,
+                   integrator = 'langevin'):
+
+        self.context_cache = cache.global_context_cache
+
+        if measure_shadow_work:
+            measure_heat = True
+        else:
+            measure_heat = False
+
+        self.thermodynamic_state = thermodynamic_state
+        if integrator == 'langevin':
+            self.integrator = integrators.LangevinIntegrator(temperature = temperature,
+                                                             timestep = timestep,
+                                                             splitting = neq_splitting_string,
+                                                             measure_shadow_work = measure_shadow_work,
+                                                             measure_heat = measure_heat,
+                                                             constraint_tolerance = 1e-6,
+                                                             collision_rate = collision_rate)
+        elif integrator == 'hmc':
+            self.integrator = integrators.HMCIntegrator(temperature = temperature,
+                                                        nsteps = 2,
+                                                        timestep = timestep/2)
+        else:
+            raise Exception(f"integrator {integrator} is not supported. supported integrators include {self.supported_integrators}")
+
+        self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
+
+        #create temperatures
+        self.beta = 1.0 / (kB*temperature)
+        self.temperature = temperature
+
+        self.save_interval = ncmc_save_interval
+
+        self.topology = topology
+        self.subset_atoms = subset_atoms
+
+        #if we have a trajectory, set up some ancillary variables:
+        if self.topology is not None:
+            n_atoms = self.topology.n_atoms
+            self._trajectory_positions = []
+            self._trajectory_box_lengths = []
+            self._trajectory_box_angles = []
+
+        #set a bool variable for pass or failure
+        self.succeed = True
+        return True
+
+    def anneal(self,
+               sampler_state,
+               lambdas,
+               noneq_trajectory_filename = None,
+               num_integration_steps = 1,
+               return_timer = False,
+               return_sampler_state = False,
+               rethermalize = False,
+               initial_propagation = True):
+        """
+        conduct annealing across lambdas.
+        Arguments
+        ---------
+        sampler_state : openmmtools.states.SamplerState
+            The starting state at which to minimize the system.
+        noneq_trajectory_filename : str, default None
+            Name of the nonequilibrium trajectory file to which we write
+        lambdas : np.array
+            numpy array of the lambdas to run
+        num_integration_steps : np.array or int, default 1
+            the number of integration steps to be conducted per proposal
+        return_timer : bool, default False
+            whether to time the annealing protocol
+        return_sampler_state : bool, default False
+            whether to return the last sampler state
+        rethermalize : bool, default False,
+            whether to re-initialize velocities after propagation step
+        initial_propagation : bool, default True
+            whether to take an initial propagation step before a proposal/weight
+        Returns
+        -------
+        incremental_work : np.array of shape (1, len(lambdas) - 1)
+            cumulative works for every lambda
+        sampler_state : openmmtools.states.SamplerState
+            configuration at last lambda after proposal
+        timer : np.array
+            timers
+        """
+        #check if we can save the trajectory
+        if noneq_trajectory_filename is not None:
+            if self.save_interval is None:
+                raise Exception(f"The save interval is None, but a nonequilibrium trajectory filename was given!")
+
+        #check returnables for timers:
+        if return_timer is not None:
+            timer = np.zeros(len(lambdas) - 1)
+        else:
+            timer = None
+
+        incremental_work = np.zeros(len(lambdas) - 1)
+        #first set the thermodynamic state to the proper alchemical state and pull context, integrator
+        self.thermodynamic_state.set_alchemical_parameters(lambdas[0], lambda_protocol = self.lambda_protocol_class)
+        self.context, integrator = self.context_cache.get_context(self.thermodynamic_state, self.integrator)
+        if initial_propagation:
+            sampler_state.apply_to_context(self.context, ignore_velocities=True)
+            self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
+            integrator.step(num_integration_steps) #we have to propagate the start state
+        else:
+            sampler_state.apply_to_context(self.context, ignore_velocities=False)
+
+        for idx, _lambda in enumerate(lambdas[1:]): #skip the first lambda
+            try:
+                if return_timer:
+                    start_timer = time.time()
+                incremental_work[idx] = self.compute_incremental_work(_lambda)
+                integrator.step(num_integration_steps)
+                if rethermalize:
+                    self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #rethermalize
+                if noneq_trajectory_filename is not None:
+                    self.save_configuration(idx, sampler_state, context)
+                if return_timer:
+                    timer[idx] = time.time() - start_timer
+            except Exception as e:
+                print(f"failure: {e}")
+                return e, None, None
+
+        self.attempt_termination(noneq_trajectory_filename)
+
+#         try:
+#             _logger.debug(f"\t\t\t\tintegrator acceptance rate: {integrator.acceptance_rate}")
+#         except:
+#             pass
+
+        #pull the last sampler state and return
+        if return_sampler_state:
+            if rethermalize:
+                sampler_state.update_from_context(self.context, ignore_velocities=True)
+            else:
+                sampler_state.update_from_context(self.context, ignore_velocities=True)
+
+            return (incremental_work, sampler_state, timer)
+        else:
+            return (incremental_work, None, timer)
+
+
+
+    def attempt_termination(self, noneq_trajectory_filename):
+        """
+        Attempt to terminate the annealing protocol and return the Particle attributes.
+        """
+        if noneq_trajectory_filename is not None:
+            _logger.info(f"saving configuration")
+            trajectory = md.Trajectory(np.array(self._trajectory_positions), self.topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
+            write_nonequilibrium_trajectory(trajectory, noneq_trajectory_filename)
+
+        self._trajectory_positions = []
+        self._trajectory_box_lengths = []
+        self._trajectory_box_angles = []
+
+
+    def compute_incremental_work(self, _lambda):
+        """
+        compute the incremental work of a lambda update on the thermodynamic state.
+        function also updates the thermodynamic state and the context
+        """
+        old_rp = self.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+
+        #update thermodynamic state and context
+        self.thermodynamic_state.set_alchemical_parameters(_lambda, lambda_protocol = self.lambda_protocol_class)
+        self.thermodynamic_state.apply_to_context(self.context)
+        new_rp = self.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+        _incremental_work = new_rp - old_rp
+
+        return _incremental_work
+
+    def save_configuration(self, iteration, sampler_state, context):
+        """
+        pass a conditional save function
+        """
+        if iteration % self.ncmc_save_interval == 0: #we save the protocol work if the remainder is zero
+            _logger.debug(f"\t\tsaving protocol")
+            #self._kinetic_energy.append(self._beta * context.getState(getEnergy=True).getKineticEnergy()) #maybe if we want kinetic energy in the future
+            sampler_state.update_from_context(self.context, ignore_velocities=True) #save bandwidth by not updating the velocities
+
+            if self.subset_atoms is None:
+                self._trajectory_positions.append(sampler_state.positions[:, :].value_in_unit_system(unit.md_unit_system))
+            else:
+                self._trajectory_positions.append(sampler_state.positions[self.subset_atoms, :].value_in_unit_system(unit.md_unit_system))
+
+                #get the box angles and lengths
+                a, b, c, alpha, beta, gamma = mdtrajutils.unitcell.box_vectors_to_lengths_and_angles(*sampler_state.box_vectors)
+                self._trajectory_box_lengths.append([a, b, c])
+                self._trajectory_box_angles.append([alpha, beta, gamma])
