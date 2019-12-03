@@ -65,7 +65,7 @@ class BuildProposalNetwork(object):
                          'softcore_electrostatics_alpha': 0.3,
                          'softcore_sigma_Q': 1.0}
 
-    supported_simulations = {
+    simulation_arguments = {
                              'repex':{},
                              'sams': {},
                              'smc': {}
@@ -84,6 +84,8 @@ class BuildProposalNetwork(object):
                  resources = None,
                  proposal_parameters = None,
                  simulation_parameters = None):
+
+        supported_simulation_types = {}
         """
         Initialize NetworkX graph and build connectivity with a `graph_connectivity` input.
 
@@ -105,8 +107,6 @@ class BuildProposalNetwork(object):
             this is currently a placeholder variable for the specification of the sampling method to be used on the graph.
         resources : dict?, default None
             this is yet another placeholder variable for the allocation of resources
-
-
         proposal_parameters: dict, default None
             The following dict is parseable from a setup yaml, but have defaults given if no setup yaml is given.
             They mostly consist of the thermodynamic state of the graph, several potential modifications to the
@@ -127,16 +127,16 @@ class BuildProposalNetwork(object):
                 Whether to anneal 1,4 interactions over the protocol;
                     if True, then geometry_engine takes the argument use_14_nonbondeds = False;
                     if False, then geometry_engine takes the argument use_14_nonbondeds = True;
-            simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None)
-                the simulation parameters to put into the appropriate simulation object
-                if type(simulation_parameters) == tuple:
-                    #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
-                    #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
-                    #if dict is None, then default 'repex' parameters will be used
-                elif type(simulation_parameters) == np.2darray of dicts, each dict has the keys corresponding to appropriate phases
-                                                                         and each entry is a tuple of (flavor (i.e. 'repex', 'sams', 'neq'), _dict (or None)).
-                                                                         where _dict has the appropriate parameters.
-                                                                         if _dict is None, then default parameters corresponding to the appropriate phase are used.
+        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None)
+            the simulation parameters to put into the appropriate simulation object
+            if type(simulation_parameters) == tuple:
+                #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
+                #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
+                #if dict is None, then default 'repex' parameters will be used
+            elif type(simulation_parameters) == np.2darray of dicts, each dict has the keys corresponding to appropriate phases
+                                                                     and each entry is a tuple of (flavor (i.e. 'repex', 'sams', 'neq'), _dict (or None)).
+                                                                     where _dict has the appropriate parameters.
+                                                                     if _dict is None, then default parameters corresponding to the appropriate phase are used.
 
 
 
@@ -935,9 +935,6 @@ class BuildProposalNetwork(object):
                                           })
 
         return proposals
-
-
-
 
 
 class Experiment():
