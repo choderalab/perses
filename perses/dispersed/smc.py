@@ -242,7 +242,9 @@ class SequentialMonteCarlo():
         """
         wrapper to distribute workers and create appropriate worker attributes for annealing
         """
+        _logger.debug(f"activating annealing workers...")
         if self.internal_parallelism:
+            _logger.debug(f"found internal parallelism; activating client")
             #we have to activate the client
             self.parallelism.activate_client(library = self.parallelism_parameters['library'],
                                              num_processes = self.parallelism_parameters['num_processes'])
@@ -276,6 +278,7 @@ class SequentialMonteCarlo():
         wrapper to deactivate workers and delete appropriate worker attributes for annealing
         """
         if self.internal_parallelism:
+            _logger.debug(f"found internal parallelism; deactivating client.")
             #we have to deactivate the client
             self.parallelism.deactivate_client()
         elif self.external_parallelism:

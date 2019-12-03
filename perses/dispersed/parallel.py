@@ -107,6 +107,7 @@ class Parallelism(object):
                 if self.client is not None:
                     _logger.debug(f"closing client...")
                     self.client.close()
+                    self.client = None
                     _logger.debug(f"client closed successfully")
                 else:
                     _logger.warning(f"the client is NoneType.")
@@ -114,6 +115,7 @@ class Parallelism(object):
             _logger.warning(f"the library is NoneType.")
 
         _attrs_to_delete = ['library', 'client', '_adapt', 'num_processes', 'workers']
+        assert self.client is None, f"the client is not None!"
         for _attr in _attrs_to_delete:
             _logger.debug(f"deleting parallelism attribute {_attr}")
             delattr(self, _attr)
