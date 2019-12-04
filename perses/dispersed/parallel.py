@@ -39,6 +39,17 @@ _logger = logging.getLogger("parallelism")
 _logger.setLevel(logging.DEBUG)
 
 class Parallelism(object):
+    """
+    This class maintains a running parallelism (with support for the parallelism libraries and schedulers
+    specified in `supported libraries`).
+    The class can currently support the following generalized parallel functions:
+        - cluster and client activation/deactivation and maintenance
+        - scatter local data to distributed memory
+        - deploy/gather a function and list arguments to distributed workers
+        - deploy/gather a function with a single set of appropriate arguments to all workers
+        - launch and perform operations on actors
+        - block until computation is complete with 'wait' or monitor progress
+    """
     supported_libraries = {'dask': ['LSF']}
 
     def activate_client(self,
@@ -96,8 +107,8 @@ class Parallelism(object):
 
     def deactivate_client(self):
         """
-        NonequilibriumSwitchingFEP is not pickleable with the self.client or self.cluster activated.
-        This must be called before pickling
+        deactivate a cluster that is maintained by a local client.  attributes associated with
+        client instantiation are deleted.
         """
         _logger.debug(f"attempting to deactivate client...")
         if self.library is not None:
@@ -122,7 +133,19 @@ class Parallelism(object):
 
     def scatter(self, df, workers = None):
         """
-        wrapper to scatter the local data df
+        wrapper to scatter the local data to distributed memory
+
+        Arguments
+        ---------
+        df : object
+            any python object to be distributed to workers
+        workers : list of str
+            worker addresses
+
+        Return
+        ------
+        scatter_future : <generalized> future
+            scattered future
         """
         if self.client is None:
             #don't actually scatter
@@ -130,9 +153,11 @@ class Parallelism(object):
         else:
             if self.library[0] == 'dask':
                 if workers is None:
-                    return self.client.scatter(df)
+                    scatter_future = self.client.scatter(df)
+                    return scatter_future
                 else:
-                    return self.client.scatter(df, workers)
+                    scatter_future = self.client.scatter(df, workers)
+                    return scatter_future
             else:
                 raise Exception(f"the client is not NoneType but the library is not supported")
 
@@ -142,14 +167,17 @@ class Parallelism(object):
 
         Arguments
         ---------
-        func : function to map
-            arguments: tuple of the arguments that the function will take
-        argument : tuple of argument lists, default None
+        func : function
+            python function to distribute
+        arguments : tuple of lists, default None
             if None, then the default workers are all workers
+        workers : list of str, default None
+            worker address list
 
         Returns
         ---------
-        futures
+        futures: <generalized> future object
+            futures of the map
         """
         if self.client is None:
             if len(arguments) == 1:
@@ -168,18 +196,21 @@ class Parallelism(object):
 
     def run_all(self, func, arguments, workers):
         """
-        wrapper to run a function and its arguments to the client for scheduling.
-        the same function and arguments is run on all workers
+        distribute single function with single set of arguments to all workers
 
         Arguments
         ---------
-        func : function to map
-            arguments: tuple of the arguments that the function will take
-        argument : tuple of arguments
+        func : function
+            python function to distribute
+        arguments : tuple of args, default None
+            if None, then the default workers are all workers
+        workers : list of str, default None
+            worker address list
 
         Returns
         ---------
-        futures
+        futures: <generalized> future object
+            futures of the map
         """
         if self.client is None:
             if len(arguments) == 1:
@@ -200,11 +231,13 @@ class Parallelism(object):
 
         Arguments
         ---------
-        futures : future pointers
+        futures : list of <generalized> futures
+            futures that are to be gathered
 
         Returns
         ---------
-        results
+        results: <generalized> function output
+            the results of the futures
         """
         if self.client is None:
             return futures
@@ -218,6 +251,11 @@ class Parallelism(object):
     def gather_actor_result(self, future):
         """
         wrapper to pull the .result() of a method called to an actor
+
+        Arguments
+        ---------
+        future : <generalized> future
+            the future object to be collected from an actor
         """
         if self.client is None:
             return future
@@ -257,6 +295,11 @@ class Parallelism(object):
     def progress(self, futures):
         """
         wrapper to log the progress of futures
+
+        Arguments
+        ---------
+        futures : list of <generalized> futures
+            futures that are to be gathered
         """
         if self.client is None:
             pass
@@ -270,6 +313,11 @@ class Parallelism(object):
     def wait(self, futures):
         """
         wrapper to wait until futures are complete.
+
+        Arguments
+        ---------
+        futures : list of <generalized> futures
+            futures that are to be gathered
         """
         if self.client is None:
             pass

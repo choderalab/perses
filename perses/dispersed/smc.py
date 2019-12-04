@@ -451,7 +451,7 @@ class SequentialMonteCarlo():
             for _direction in directions:
                 if current_lambdas[_direction] == finish_lines[_direction]:
                     _logger.info(f"\tdirection {_direction} is complete.  omitting annealing")
-                    omit_local_incremental_append[_direction] == True
+                    omit_local_incremental_append[_direction] = True
                     continue
                 worker_retrieval[_direction] = time.time()
                 _logger.info(f"\tentering {_direction} direction to launch annealing jobs.")
@@ -567,13 +567,28 @@ class SequentialMonteCarlo():
             _logger.info(f"iteration took {end_timer} seconds.")
 
         self._deactivate_annealing_workers()
-        self.compute_sMC_free_energy(sMC_cumulative_works, _AIS)
+        if not _AIS:
+            for _direction in directions:
+                _lst = sMC_cumulative_works[_direction]
+                sMC_cumulative_works.update({_direction: np.array(lst).T})
+        self.compute_sMC_free_energy(sMC_cumulative_works)
         self.sMC_observables = sMC_observables
         if _resample:
             self.survival_rate = compute_survival_rate(sMC_particle_ancestries)
             self.particle_ancestries = {_direction : np.array([q.flatten() for q in sMC_particle_ancestries[_direction]]) for _direction in sMC_particle_ancestries.keys()}
 
-    def compute_sMC_free_energy(self, cumulative_work_dict, AIS):
+    def compute_sMC_free_energy(self, cumulative_work_dict):
+        """
+        Method to compute the free energy of sMC_anneal type cumultaive work dicts, whether the dicts are constructed
+        via AIS or generalized sMC.  The self.cumulative_works, self.dg_EXP, and self.dg_BAR (if applicable) are returned as
+        instance attributes.
+
+        Arguments
+        ---------
+        cumulative_work_dict : dict
+            dictionary of the form {_direction <str>: np.2darray }
+            where _direction is 'forward' or 'reverse' and np.2darray is of the shape (num_particles, iteration_number + 2)
+        """
         _logger.debug(f"computing free energies...")
         self.cumulative_work = {}
         self.dg_EXP = {}
@@ -590,6 +605,9 @@ class SequentialMonteCarlo():
             self.dg_BAR = pymbar.BAR(self.cumulative_work['forward'][:, -1], self.cumulative_work['reverse'][:, -1])
 
     def minimize_sampler_states(self):
+        """
+        simple wrapper function to minimize the input sampler states
+        """
         # initialize by minimizing
         for state in self.lambda_endstates['forward']: # 0.0, 1.0
             self.thermodynamic_state.set_alchemical_parameters(state, LambdaProtocol(functions = self.lambda_protocol))

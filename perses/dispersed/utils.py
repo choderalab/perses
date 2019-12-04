@@ -66,16 +66,6 @@ def compute_survival_rate(sMC_particle_ancestries):
 
     return survival_rate
 
-
-def _pool_dict_results(_dict, _direction):
-    """
-    simple function to pool all of the actor results
-    """
-    _results_lst = list(_dict.values())
-    flattened_result_lst = [item for sublist in _result_lst for item in sublist]
-    return flattened_result_lst
-
-
 def minimize(thermodynamic_state,
              sampler_state,
              max_iterations = 100):
@@ -177,6 +167,15 @@ def CESS(works_prev, works_incremental):
 def compute_timeseries(reduced_potentials):
     """
     Use pymbar timeseries to compute the uncorrelated samples in an array of reduced potentials.  Returns the uncorrelated sample indices.
+
+    Arguments
+    ---------
+    reduced_potentials : np.array of floats
+        reduced potentials from which a timeseries is to be extracted
+
+    Returns
+    -------
+    t0 : float
     """
     from pymbar import timeseries
     t0, g, Neff_max = timeseries.detectEquilibration(reduced_potentials) #computing indices of uncorrelated timeseries
@@ -193,9 +192,10 @@ def run_equilibrium(task):
     reduced potentials.  This is the guess as to the burn-in time for a production.  After which, a single mcmc move of nsteps_equil
     will be conducted at a time, including a time-series (pymbar) analysis to determine whether the data are decorrelated.
     The loop will conclude when a single configuration yields an iid sample.  This will be saved.
-    Parameters
-    ----------
-    task : FEPTask namedtuple
+
+    Arguments
+    ---------
+    task : EquilibriumFEPTask namedtuple
         The namedtuple should have an 'input' argument.  The 'input' argument is a dict characterized with at least the following keys and values:
         {
          thermodynamic_state: (<openmmtools.states.CompoundThermodynamicState>; compound thermodynamic state comprising state at lambda = 0 (1)),
@@ -211,6 +211,11 @@ def run_equilibrium(task):
          file_iterator: (<int, default 0>; which index to begin writing files),
          timestep: (<unit.Quantity=float*unit.femtoseconds>; dynamical timestep)
          }
+
+    Returns
+    -------
+    out_task : EquilibriumFEPTask namedtuple
+        output EquilibriumFEPTask after equilibration
     """
     inputs = task.inputs
 
@@ -310,17 +315,20 @@ def run_equilibrium(task):
     if not timer:
         timers = {}
 
-    return EquilibriumFEPTask(sampler_state = sampler_state, inputs = task.inputs, outputs = {'reduced_potentials': reduced_potentials, 'files': file_numsnapshots, 'timers': timers})
+    out_task = EquilibriumFEPTask(sampler_state = sampler_state, inputs = task.inputs, outputs = {'reduced_potentials': reduced_potentials, 'files': file_numsnapshots, 'timers': timers})
+    return out_task
 
 def write_equilibrium_trajectory(trajectory: md.Trajectory, trajectory_filename: str) -> float:
     """
     Write the results of an equilibrium simulation to disk. This task will append the results to the given filename.
-    Parameters
+
+    Arguments
     ----------
     trajectory : md.Trajectory
         the trajectory resulting from an equilibrium simulation
     trajectory_filename : str
         the name of the trajectory file to which we should append
+
     Returns
     -------
     True
@@ -340,12 +348,14 @@ def write_nonequilibrium_trajectory(nonequilibrium_trajectory, trajectory_filena
     """
     Write the results of a nonequilibrium switching trajectory to a file. The trajectory is written to an
     mdtraj hdf5 file.
-    Parameters
+
+    Arguments
     ----------
     nonequilibrium_trajectory : md.Trajectory
         The trajectory resulting from a nonequilibrium simulation
     trajectory_filename : str
         The full filepath for where to store the trajectory
+
     Returns
     -------
     True : bool
@@ -358,35 +368,14 @@ def write_nonequilibrium_trajectory(nonequilibrium_trajectory, trajectory_filena
 def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState) -> float:
     """
     Compute the reduced potential of the given SamplerState under the given ThermodynamicState.
-    Parameters
+
+    Arguments
     ----------
     thermodynamic_state : openmmtools.states.ThermodynamicState
         The thermodynamic state under which to compute the reduced potential
     sampler_state : openmmtools.states.SamplerState
         The sampler state for which to compute the reduced potential
-    Returns
-    -------
-    reduced_potential : float
-        unitless reduced potential (kT)
-    """
-    if type(cache.global_context_cache) == cache.DummyContextCache:
-        integrator = openmm.VerletIntegrator(1.0) #we won't take any steps, so use a simple integrator
-        context, integrator = cache.global_context_cache.get_context(thermodynamic_state, integrator)
-    else:
-        context, integrator = cache.global_context_cache.get_context(thermodynamic_state)
-    sampler_state.apply_to_context(context, ignore_velocities=True)
-    return thermodynamic_state.reduced_potential(context)
 
-
-def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sampler_state: states.SamplerState) -> float:
-    """
-    Compute the reduced potential of the given SamplerState under the given ThermodynamicState.
-    Parameters
-    ----------
-    thermodynamic_state : openmmtools.states.ThermodynamicState
-        The thermodynamic state under which to compute the reduced potential
-    sampler_state : openmmtools.states.SamplerState
-        The sampler state for which to compute the reduced potential
     Returns
     -------
     reduced_potential : float
@@ -560,6 +549,7 @@ class LocallyOptimalAnnealing():
                initial_propagation = True):
         """
         conduct annealing across lambdas.
+
         Arguments
         ---------
         sampler_state : openmmtools.states.SamplerState
@@ -648,6 +638,11 @@ class LocallyOptimalAnnealing():
     def attempt_termination(self, noneq_trajectory_filename):
         """
         Attempt to terminate the annealing protocol and return the Particle attributes.
+
+        Arguments
+        ---------
+        noneq_trajectory_filename : str, default None
+            Name of the nonequilibrium trajectory file to which we write
         """
         if noneq_trajectory_filename is not None:
             _logger.info(f"saving configuration")
@@ -663,6 +658,11 @@ class LocallyOptimalAnnealing():
         """
         compute the incremental work of a lambda update on the thermodynamic state.
         function also updates the thermodynamic state and the context
+
+        Arguments
+        ---------
+        _lambda : float
+            the lambda value used to update the importance sample
         """
         old_rp = self.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
 
@@ -677,6 +677,15 @@ class LocallyOptimalAnnealing():
     def save_configuration(self, iteration, sampler_state, context):
         """
         pass a conditional save function
+
+        Arguments
+        ---------
+        iteration : int
+            the iteration index
+        sampler_state : openmmtools.states.SamplerState
+            sampler state to save
+        context : simtk.openmm.app.Context
+            context used to update the sampler state
         """
         if iteration % self.ncmc_save_interval == 0: #we save the protocol work if the remainder is zero
             _logger.debug(f"\t\tsaving protocol")
