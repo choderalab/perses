@@ -466,7 +466,7 @@ class SequentialMonteCarlo():
                 _logger.info(f"\t\tthe current lambdas for annealing are {_lambdas}")
 
                 if self.protocols[_direction][iteration_number + 1] == finish_lines[_direction]:
-                    last_increment[_direction] == True
+                    last_increment[_direction] = True
 
                 #make iterable lists for anneal deployment
                 iterables = []
@@ -514,6 +514,7 @@ class SequentialMonteCarlo():
                     local_incremental_work_collector[_direction] += np.array(_incremental_works).flatten()
                 else:
                     local_incremental_work_collector[_direction][:, 1:] = np.array(_incremental_works)
+                    _logger.debug(f"AIS local local_incremental_work_collector: {local_incremental_work_collector}")
 
                 #append the sampler_states
                 sMC_sampler_states[_direction] = np.array(_sampler_states)
