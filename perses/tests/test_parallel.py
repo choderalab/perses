@@ -60,4 +60,18 @@ def test_Parallelism_local():
     """
     following function will create a local Parallelism instance and run all of the used methods.
     """
-    
+    _parallel = parallel.Parallelism()
+
+
+
+
+
+
+
+@nottest
+@skipIf(istravis, "Skip helper function on travis")
+def dummy_function(_arg):
+    """
+    dummy function to distribute;
+    """
+    return _arg

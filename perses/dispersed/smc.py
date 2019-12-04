@@ -593,15 +593,10 @@ class SequentialMonteCarlo():
         _logger.debug(f"computing free energies...")
         self.cumulative_work = {}
         self.dg_EXP = {}
-        if not AIS:
-            for _direction, _lst in cumulative_work_dict.items():
-                if not AIS:
-                    arranged_array = np.array(_lst).T
-                else:
-                    arranged_array = _lst
-                self.cumulative_work[_direction] = arranged_array
-                self.dg_EXP[_direction] = np.array([pymbar.EXP(arranged_array[:,i]) for i in range(arranged_array.shape[1])])
-        #_logger.info(f"cumulative_work: {self.cumulative_work}")
+        for _direction, _lst in cumulative_work_dict.items():
+            self.cumulative_work[_direction] = _lst
+            self.dg_EXP[_direction] = np.array([pymbar.EXP(_lst[:,i]) for i in range(_lst.shape[1])])
+        _logger.debug(f"cumulative_work for {_direction}: {self.cumulative_work[_direction]}")
         if len(list(self.cumulative_work.keys())) == 2:
             self.dg_BAR = pymbar.BAR(self.cumulative_work['forward'][:, -1], self.cumulative_work['reverse'][:, -1])
 
