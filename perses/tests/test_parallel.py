@@ -6,24 +6,7 @@ from simtk import unit, openmm
 import numpy as np
 import os
 from nose.tools import nottest
-
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import StringIO
-
-from perses.annihilation.relative import HybridTopologyFactory
-from perses.rjmc.geometry import FFAllAngleGeometryEngine
-from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, SystemGenerator, TopologyProposal
-from perses.tests import utils
-import openeye.oechem as oechem
-from openmmtools import alchemy
-from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
-import openmmtools.mcmc as mcmc
-import openmmtools.cache as cache
 from unittest import skipIf
-
-import pymbar.timeseries as timeseries
 
 import copy
 import pymbar
@@ -34,41 +17,75 @@ from perses.dispersed import parallel
 
 istravis = os.environ.get('TRAVIS', None) == 'true'
 
-try:
-    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
-except Exception:
-    cache.global_context_cache.platform = openmm.Platform.getPlatformByName("Reference")
-
-#############################################
-# CONSTANTS
-#############################################
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
-temperature = 300.0 * unit.kelvin
-kT = kB * temperature
-beta = 1.0/kT
-CARBON_MASS = 12.01
-ENERGY_THRESHOLD = 1e-1
-REFERENCE_PLATFORM = openmm.Platform.getPlatformByName("CPU")
 
 
-
-
-
-
-@skipIf(istravis, "Skip helper function on travis")
 def test_Parallelism_local():
     """
     following function will create a local Parallelism instance and run all of the used methods.
     """
     _parallel = parallel.Parallelism()
+
+    #test client activation
     _parallel.activate_client(library = None, num_processes = None)
+
     data = np.arange(10)
-    df = _parallel.scatter
+
+    run_parallelism(_parallel, data)
+
+@skipIf(istravis, "Skip helper function on travis")
+def test_Parallelism_distributed():
+    """
+    following function will create a distributed Parallelism instance and run all of the used methods.
+    Note : this can only be run on a nosetest since travis cannot access dask_jobqueue or any python distributed libraries.
+    """
+    _parallel = parallel.Parallelism()
+
+    #test client activation
+    _parallel.activate_client(library = ('dask', 'LSF'), num_processes = 2)
+    data = np.arange(10)
+    run_parallelism(_parallel, data)
 
 
 
 
 
+
+
+
+
+@nottest
+@skipIf(istravis, "Skip helper function on travis")
+def run_parallelism(_parallel, data):
+    """
+    helper function to run through the parallelism tests
+
+    Arguments
+    ---------
+    _parallel : perses.dispersed.parallelism.Parallelism
+        parallelism object to run tests on
+    data : np.array
+        test python object to distribute
+    """
+    #test scatter
+    df = _parallel.scatter(data)
+
+    #test deploy
+    futures = _parallel.deploy(dummy_function,
+                              (df,),
+                              workers = list(_parallel.workers.values()))
+    #progress
+    _parallel.progress(futures)
+
+    #wait
+    _parallel.wait(futures)
+
+    #collect deployment
+    results = _parallel.gather_results(futures)
+
+    #attempt a run all
+    run_all_futures = _parallel.run_all(dummy_function,
+                                        (data,),
+                                        workers = list(_parallel.workers.values()))
 
 
 @nottest

@@ -67,8 +67,9 @@ class Parallelism(object):
         timeout : int
             number of seconds to wait to fulfill the workers order
         """
-        assert library[0] in list(self.supported_libraries.keys()), f"{library[0]} is not a supported parallelism. (supported parallelisms are {self.supported_libraries.keys()})"
-        assert library[1] in list(self.supported_libraries[library[0]]), f"{library[1]} is not a supported . (supported parallelisms are {self.supported_libraries[library[0]]})"
+        if library is not None:
+            assert library[0] in list(self.supported_libraries.keys()), f"{library[0]} is not a supported parallelism. (supported parallelisms are {self.supported_libraries.keys()})"
+            assert library[1] in list(self.supported_libraries[library[0]]), f"{library[1]} is not a supported . (supported parallelisms are {self.supported_libraries[library[0]]})"
         self.library = library
         if not library:
             self.client = None
