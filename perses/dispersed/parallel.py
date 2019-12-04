@@ -117,7 +117,7 @@ class Parallelism(object):
                 _logger.debug(f"detected dask parallelism...")
                 if self.client is not None:
                     _logger.debug(f"closing client...")
-                    self.client.close()
+                    self.client.cluster.close()
                     self.client = None
                     _logger.debug(f"client closed successfully")
                 else:
