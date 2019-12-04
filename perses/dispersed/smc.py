@@ -571,7 +571,7 @@ class SequentialMonteCarlo():
         if not _AIS:
             for _direction in directions:
                 _lst = sMC_cumulative_works[_direction]
-                sMC_cumulative_works.update({_direction: np.array(lst).T})
+                sMC_cumulative_works.update({_direction: np.array(_lst).T})
         self.compute_sMC_free_energy(sMC_cumulative_works)
         self.sMC_observables = sMC_observables
         if _resample:

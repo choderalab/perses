@@ -61,6 +61,9 @@ def test_Parallelism_local():
     following function will create a local Parallelism instance and run all of the used methods.
     """
     _parallel = parallel.Parallelism()
+    _parallel.activate_client(library = None, num_processes = None)
+    data = np.arange(10)
+    df = _parallel.scatter
 
 
 
