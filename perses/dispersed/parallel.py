@@ -78,8 +78,9 @@ class Parallelism(object):
             self._adapt = False
             self.num_processes = 0
             self.workers = {}
+            return
 
-        elif library[0] == 'dask':
+        if library[0] == 'dask':
             _logger.debug(f"detected dask parallelism...")
             if library[1] == 'LSF':
                 _logger.debug(f"detected LSF scheduler")
