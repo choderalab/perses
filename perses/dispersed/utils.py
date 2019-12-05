@@ -432,13 +432,15 @@ def deactivate_worker_attributes(remote_worker = True):
     Function to remove worker attributes for annealing
     """
     if remote_worker == True:
+        _logger.debug(f"remote_worker is True, getting worker")
         _class = distributed.get_worker()
     else:
+        _logger.debug(f"remote worker is not True; getting local worker as 'self'")
         _class = remote_worker
 
     delattr(_class, 'annealing_class')
 
-    address = worker.address if remote_worker else 0
+    address = _class.address if remote_worker == True else 0
     return address
 
 def call_anneal_method(remote_worker,
