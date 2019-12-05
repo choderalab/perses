@@ -256,7 +256,7 @@ class SequentialMonteCarlo():
             raise Exception(f"either internal or external parallelism must be True.")
 
         #now client.run to broadcast the vars
-        broadcast_remote_worker = True if self.parallelism.client is not None else self
+        broadcast_remote_worker = 'remote' if self.parallelism.client is not None else self
 
 
         addresses = self.parallelism.run_all(func = activate_LocallyOptimalAnnealing, #func
@@ -290,7 +290,7 @@ class SequentialMonteCarlo():
         elif self.external_parallelism:
             #the client is already active; we don't have the authority to deactivate
             workers = self.parallelism_parameters['available_workers']
-            pass_remote_worker = True if self.parallelism.client is not None else self
+            pass_remote_worker = 'remote' if self.parallelism.client is not None else self
             deactivate_worker_attributes(remote_worker = pass_remote_worker)
         else:
             raise Exception(f"either internal or external parallelism must be True.")
@@ -380,7 +380,7 @@ class SequentialMonteCarlo():
             workers = self.parallelism_parameters['available_workers']
 
         _logger.debug(f"in choosing the remote worker, the parallelism client is: {self.parallelism.client}")
-        remote_worker = True if self.parallelism.client is not None else self
+        remote_worker = 'remote' if self.parallelism.client is not None else self
         _logger.debug(f"the remote worker is: {remote_worker}")
 
         sMC_futures = {_direction: None for _direction in directions}

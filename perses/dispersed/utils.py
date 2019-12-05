@@ -393,7 +393,7 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
 ##################Distributed Tasks#############################
 ################################################################
 def activate_LocallyOptimalAnnealing(thermodynamic_state,
-                                     remote_worker = True,
+                                     worker,
                                      lambda_protocol = 'default',
                                      timestep = 1 * unit.femtoseconds,
                                      collision_rate = 1 / unit.picoseconds,
@@ -409,7 +409,7 @@ def activate_LocallyOptimalAnnealing(thermodynamic_state,
     """
     supported_integrators = ['langevin', 'hmc']
 
-    if remote_worker == True:
+    if remote_worker == 'remote':
         _class = distributed.get_worker()
     else:
         _class = remote_worker
@@ -427,11 +427,11 @@ def activate_LocallyOptimalAnnealing(thermodynamic_state,
                                       measure_shadow_work = measure_shadow_work,
                                       integrator = integrator)
 
-def deactivate_worker_attributes(remote_worker = True):
+def deactivate_worker_attributes(remote_worker):
     """
     Function to remove worker attributes for annealing
     """
-    if remote_worker == True:
+    if remote_worker == 'remote':
         _logger.debug(f"remote_worker is True, getting worker")
         _class = distributed.get_worker()
     else:
@@ -440,7 +440,7 @@ def deactivate_worker_attributes(remote_worker = True):
 
     delattr(_class, 'annealing_class')
 
-    address = _class.address if remote_worker == True else 0
+    address = _class.address if remote_worker == 'remote' else 0
     return address
 
 def call_anneal_method(remote_worker,
@@ -457,7 +457,7 @@ def call_anneal_method(remote_worker,
     since we can only map functions with parallelisms (no actors), we need to submit a function that calls
     the LocallyOptimalAnnealing.anneal method.
     """
-    if remote_worker == True:
+    if remote_worker == 'remote':
         _class = distributed.get_worker()
     else:
         _class = remote_worker
