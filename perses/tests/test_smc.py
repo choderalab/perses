@@ -61,28 +61,43 @@ external_parallelism = None
 internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': 2}
 os.system(f"mkdir {trajectory_directory}")
 
-def test_local_AIS():
+@nottest
+@skipIf(istravis, "Skip helper function on travis")
+def sMC_setup():
+    """
+    function to setup local sMC
+    """
     ne_fep = SequentialMonteCarlo(factory = hybrid_factory,
-                                  lambda_protocol = lambda_protocol,
-                                  temperature = temperature,
-                                  trajectory_directory = trajectory_directory,
-                                  trajectory_prefix = trajectory_prefix,
-                                  atom_selection = atom_selection,
-                                  timestep = timestep,
-                                  eq_splitting_string = eq_splitting_string,
-                                  neq_splitting_string = neq_splitting_string,
-                                  collision_rate = collision_rate,
-                                  ncmc_save_interval = ncmc_save_interval,
-                                  external_parallelism = None,
-                                  internal_parallelism = None)
+                                      lambda_protocol = lambda_protocol,
+                                      temperature = temperature,
+                                      trajectory_directory = trajectory_directory,
+                                      trajectory_prefix = trajectory_prefix,
+                                      atom_selection = atom_selection,
+                                      timestep = timestep,
+                                      eq_splitting_string = eq_splitting_string,
+                                      neq_splitting_string = neq_splitting_string,
+                                      collision_rate = collision_rate,
+                                      ncmc_save_interval = ncmc_save_interval,
+                                      external_parallelism = None,
+                                      internal_parallelism = None)
     ne_fep.minimize_sampler_states()
-    ne_fep.equilibrate(n_equilibration_iterations = 5,
-                       n_steps_per_equilibration = 1,
-                       endstates = [0,1],
-                       decorrelate = True,
-                       timer = True,
-                       minimize = False)
-    ne_fep.sMC_anneal(num_particles = 5,
+    ne_fep.equilibrate(n_equilibration_iterations = 10,
+                           n_steps_per_equilibration = 1,
+                           endstates = [0,1],
+                           decorrelate = True,
+                           timer = True,
+                           minimize = False)
+    return ne_fep
+
+def test_local_sMC():
+    """
+    test local annealed importance sampling
+    """
+    ne_fep = sMC_setup()
+
+    #test vanilla AIS
+    print('run AIS with protocol')
+    ne_fep.sMC_anneal(num_particles = 10,
                       protocols = {'forward': np.linspace(0,1,9), 'reverse': np.linspace(1,0,9)},
                       directions = ['forward', 'reverse'],
                       num_integration_steps = 1,
@@ -90,6 +105,38 @@ def test_local_AIS():
                       rethermalize = False,
                       trailblaze = None,
                       resample = None)
+
+    # #test AIS_trailblaze
+    print('run AIS with trailblaze')
+    ne_fep.sMC_anneal(num_particles = 10,
+                          protocols = None,
+                          directions = ['forward', 'reverse'],
+                          num_integration_steps = 1,
+                          return_timer = True,
+                          rethermalize = False,
+                          trailblaze = {'criterion': 'ESS', 'threshold': 0.95},
+                          resample = None)
+
+    # #test sMC resample with protocol
+    ne_fep.sMC_anneal(num_particles = 10,
+                          protocols = {'forward': np.linspace(0,1,9), 'reverse': np.linspace(1,0,9)},
+                          directions = ['forward', 'reverse'],
+                          num_integration_steps = 1,
+                          return_timer = True,
+                          rethermalize = False,
+                          trailblaze = None,
+                          resample = None)
+
+    # #test sMC resample with trailblaze
+    ne_fep.sMC_anneal(num_particles = 10,
+                          protocols = None,
+                          directions = ['forward', 'reverse'],
+                          num_integration_steps = 1,
+                          return_timer = True,
+                          rethermalize = False,
+                          trailblaze = {'criterion': 'ESS', 'threshold': 0.99},
+                          resample = {'criterion': 'ESS', 'method': 'multinomial', 'threshold': 0.95})
+
     try:
         os.system(f"rm -r {trajectory_directory}")
     except Exception as e:
