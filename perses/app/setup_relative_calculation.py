@@ -51,6 +51,9 @@ def getSetupOptions(filename):
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
+    if 'run_type' not in setup_options:
+        _logger.info(f"\t\t\trun_type is not specified; default to None")
+        setup_options['run_type'] = None
     _logger.info(f"\tDetecting fe_type...")
     if setup_options['fe_type'] == 'sams':
         _logger.info(f"\t\tfe_type: sams")
@@ -666,10 +669,6 @@ if __name__ == "__main__":
                 _logger.info(f'\tRunning {phase} phase...')
                 hss_run = hss[phase]
 
-                _logger.info(f"\t\tminimizing...\n\n")
-                hss_run.minimize()
-                _logger.info(f"\n\n")
-
                 _logger.info(f"\t\tequilibrating...\n\n")
                 hss_run.equilibrate(n_equilibration_iterations)
                 _logger.info(f"\n\n")
@@ -697,10 +696,6 @@ if __name__ == "__main__":
             for phase in setup_options['phases']:
                 print(f'Running {phase} phase')
                 hss_run = hss[phase]
-
-                _logger.info(f"\t\tminimizing...\n\n")
-                hss_run.minimize()
-                _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tequilibrating...\n\n")
                 hss_run.equilibrate(n_equilibration_iterations)
