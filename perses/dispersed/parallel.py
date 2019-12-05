@@ -67,11 +67,13 @@ class Parallelism(object):
         timeout : int
             number of seconds to wait to fulfill the workers order
         """
+        self.library = library
         if library is not None:
+            _logger.debug(f"library is not None")
             assert library[0] in list(self.supported_libraries.keys()), f"{library[0]} is not a supported parallelism. (supported parallelisms are {self.supported_libraries.keys()})"
             assert library[1] in list(self.supported_libraries[library[0]]), f"{library[1]} is not a supported . (supported parallelisms are {self.supported_libraries[library[0]]})"
-        self.library = library
-        if not library:
+        elif library is None:
+            _logger.debug(f"library is None")
             self.client = None
             self._adapt = False
             self.num_processes = 0
@@ -214,10 +216,7 @@ class Parallelism(object):
             futures of the map
         """
         if self.client is None:
-            if len(arguments) == 1:
-                futures = [func(plug) for plug in arguments[0]]
-            else:
-                futures = [func(*plug) for plug in zip(*arguments)]
+            futures = func(*arguments)
         else:
             if self.library[0] == 'dask':
                 futures = self.client.run(func, *arguments, workers = workers)

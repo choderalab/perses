@@ -409,10 +409,10 @@ def activate_LocallyOptimalAnnealing(thermodynamic_state,
     """
     supported_integrators = ['langevin', 'hmc']
 
-    if remote_worker:
+    if remote_worker == True:
         _class = distributed.get_worker()
     else:
-        _class = self
+        _class = remote_worker
 
     _class.annealing_class = LocallyOptimalAnnealing()
     _class.annealing_class.initialize(thermodynamic_state = thermodynamic_state,
@@ -455,10 +455,10 @@ def call_anneal_method(remote_worker,
     since we can only map functions with parallelisms (no actors), we need to submit a function that calls
     the LocallyOptimalAnnealing.anneal method.
     """
-    if remote_worker:
+    if remote_worker == True:
         _class = distributed.get_worker()
     else:
-        _class = self
+        _class = remote_worker
 
     incremental_work, new_sampler_state, timer = _class.annealing_class.anneal(sampler_state = sampler_state,
                                                                                lambdas = lambdas,

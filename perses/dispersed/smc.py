@@ -231,7 +231,7 @@ class SequentialMonteCarlo():
         else:
             _logger.warning(f"both internal and external parallelisms are unspecified.  Defaulting to not_parallel.")
             self.external_parallelism, self.internal_parallelism = False, True
-            self.parallelism_parameters = {'library': None, 'num_processes': 0}
+            self.parallelism_parameters = {'library': None, 'num_processes': None}
             self.parallelism, self.workers = Parallelism(), 0
 
         if external_parallelism is not None and internal_parallelism is not None:
@@ -244,7 +244,7 @@ class SequentialMonteCarlo():
         """
         _logger.debug(f"activating annealing workers...")
         if self.internal_parallelism:
-            _logger.debug(f"found internal parallelism; activating client")
+            _logger.debug(f"found internal parallelism; activating client with the following parallelism parameters: {self.parallelism_parameters}")
             #we have to activate the client
             self.parallelism.activate_client(library = self.parallelism_parameters['library'],
                                              num_processes = self.parallelism_parameters['num_processes'])
@@ -256,7 +256,8 @@ class SequentialMonteCarlo():
             raise Exception(f"either internal or external parallelism must be True.")
 
         #now client.run to broadcast the vars
-        broadcast_remote_worker = True if self.parallelism.client is not None else False
+        broadcast_remote_worker = True if self.parallelism.client is not None else self
+
 
         addresses = self.parallelism.run_all(func = activate_LocallyOptimalAnnealing, #func
                                              arguments = (copy.deepcopy(self.thermodynamic_state), #arg: thermodynamic state
@@ -284,7 +285,7 @@ class SequentialMonteCarlo():
         elif self.external_parallelism:
             #the client is already active; we don't have the authority to deactivate
             workers = self.parallelism_parameters['available_workers']
-            pass_remote_worker = True if self.parallelism.client is not None else False
+            pass_remote_worker = True if self.parallelism.client is not None else self
             deactivate_worker_attributes(remote_worker = pass_remote_worker)
         else:
             raise Exception(f"either internal or external parallelism must be True.")
@@ -350,6 +351,7 @@ class SequentialMonteCarlo():
                 finish_lines['reverse'] = 0.0
                 starting_lines['reverse'] = 1.0
             self.protocols = {_direction : [starting_lines[_direction]] for _direction in directions}
+            _logger.debug(f"starting lines: {starting_lines}")
 
 
         if resample is not None:
@@ -372,7 +374,9 @@ class SequentialMonteCarlo():
         elif self.external_parallelism:
             workers = self.parallelism_parameters['available_workers']
 
-        remote_worker = True if self.parallelism.client is not None else False
+        _logger.debug(f"in choosing the remote worker, the parallelism client is: {self.parallelism.client}")
+        remote_worker = True if self.parallelism.client is not None else self
+        _logger.debug(f"the remote worker is: {remote_worker}")
 
         sMC_futures = {_direction: None for _direction in directions}
         _logger.debug(f"\tsMC_futures: {sMC_futures}")
@@ -623,6 +627,7 @@ class SequentialMonteCarlo():
             sampler state with positions and box vectors if applicable
         """
         #pull a random index
+        assert endstate in [0,1], f"the endstate ({endstate}) is not 0 or 1"
         index = random.choice(self._eq_dict[f"{endstate}_decorrelated"])
         files = [key for key in self._eq_files_dict[endstate].keys() if index in self._eq_files_dict[endstate][key]]
         assert len(files) == 1, f"files: {files} doesn't have one entry; index: {index}, eq_files_dict: {self._eq_files_dict[endstate]}"
@@ -727,7 +732,12 @@ class SequentialMonteCarlo():
             futures = self.parallelism.deploy(run_equilibrium, (scatter_futures,), workers = workers)
         elif self.internal_parallelism:
             #we have to activate the client
-            self.parallelism.activate_client(library = self.parallelism_parameters['library'], num_processes = min(len(endstates), self.parallelism_parameters['num_processes']))
+            if self.parallelism_parameters['library'] is None: #then we are running locally
+                _parallel_processes = 0
+            else:
+                _parallel_processes = min(len(endstates), self.parallelism_parameters['num_processes'])
+
+            self.parallelism.activate_client(library = self.parallelism_parameters['library'], num_processes = _parallel_processes)
             scatter_futures = self.parallelism.scatter(EquilibriumFEPTask_list)
             futures = self.parallelism.deploy(run_equilibrium, (scatter_futures,))
         else:
