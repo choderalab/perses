@@ -431,10 +431,10 @@ def deactivate_worker_attributes(remote_worker = True):
     """
     Function to remove worker attributes for annealing
     """
-    if remote_worker:
+    if remote_worker == True:
         _class = distributed.get_worker()
     else:
-        _class = self
+        _class = remote_worker
 
     delattr(_class, 'annealing_class')
 

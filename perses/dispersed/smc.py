@@ -281,7 +281,12 @@ class SequentialMonteCarlo():
         if self.internal_parallelism:
             _logger.debug(f"found internal parallelism; deactivating client.")
             #we have to deactivate the client
+            if self.parallelism.client is None:
+                #then we are running local annealing
+                deactivate_worker_attributes(remote_worker = self)
+
             self.parallelism.deactivate_client()
+
         elif self.external_parallelism:
             #the client is already active; we don't have the authority to deactivate
             workers = self.parallelism_parameters['available_workers']
