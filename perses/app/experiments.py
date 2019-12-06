@@ -68,10 +68,42 @@ class BuildProposalNetwork(object):
     simulation_arguments = {
                              'repex':{},
                              'sams': {},
-                             'smc': {}
+                             'smc': {
+                                     ##__init__##
+                                     'lambda_protocol': 'default',
+                                     'trajectory_directory': 'neq_{index0}_to_{index1}',
+                                     'trajectory_prefix': '{phase}',
+                                     'atom_selection': "not water",
+                                     'timestep:' 4 * unit.femtoseconds,
+                                     'collision_rate': 1. / unit.picoseconds,
+                                     'eq_splitting_string': 'V R O R V',
+                                     'neq_splitting_string': 'V R O R V',
+                                     'ncmc_save_interval': None,
+                                     'measure_shadow_work': False,
+                                     'neq_integrator': 'langevin',
+                                     'external_parallelism': None,
+                                     'internal_parallelism': {'library': ('dask', 'LSF'),
+                                                              'num_processes': 1},
+                                     ##sMC_anneal##
+                                     'num_particles': 100,
+                                     'protocols': {'forward': np.linspace(0,1, 1000),
+                                                   'reverse': np.linspace(1,0,1000)},
+                                     'directions': ['forward', 'reverse'],
+                                     'num_integration_steps' : 1,
+                                     'return_timer': False,
+                                     'rethermalize': False,
+                                     'trailblaze': None,
+                                     'resample': None,
+                                     ##equilibrate##
+                                     'n_equilibration_iterations': 1,
+                                     'n_steps_per_equilibration': 5000,
+                                     'endstates': [0,1],
+                                     'max_size': 1024*1e3,
+                                     'decorrelate': True,
+                                     'timer': False,
+                                     'minimize': False
+                                     }
                              }
-
-    simulation_arguments = {}
 
     known_phases = ['vacuum', 'solvent', 'complex'] # we omit complex phase in the known_phases if a receptor_filename is None
     supported_connectivities = {'fully_connected': generate_fully_connected_adjacency_matrix} #we can add other options later, but this is a good vanilla one to start with
