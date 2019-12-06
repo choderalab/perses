@@ -2697,12 +2697,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             atom_map[molecule1_atom] is the corresponding molecule2 atom
         """
         for cycle in SmallMoleculeSetProposalEngine.enumerate_cycle_basis(molecule1):
+            cycle_size = len(cycle)
             for bond in cycle:
-                # All bonds in this cycle must also be present in molecule2
-                if not ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
-                    return True # there are no corresponding atoms in molecule2
-                if not atom_map[bond.GetBgn()].GetBond(atom_map[bond.GetEnd()]):
-                    return True # corresponding atoms have no bond in molecule2
+                if ((bond.GetBgn() in atom_map) and (bond.GetEnd() in atom_map)):
+                    if not oechem.OEAtomIsInRingSize(atom_map[bond.GetBgn()], cycle_size):
+                        return True
+                    if not oechem.OEAtomIsInRingSize(atom_map[bond.GetEnd()], cycle_size):
+                        return True
         return False # no rings in molecule1 are broken in molecule2
 
     @staticmethod
@@ -2710,7 +2711,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """Returns True if the transformation allows ring systems to be broken or created."""
         pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
         target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
-
         pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
         if SmallMoleculeSetProposalEngine.breaks_rings_in_transformation(current_mol, proposed_mol, pattern_to_target_map):
             return False
@@ -2815,7 +2815,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return atom_map
 
     @staticmethod
-    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=True):
+    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=False):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -2857,9 +2857,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             matches = [m for m in matches if SmallMoleculeSetProposalEngine.preserves_rings(m, oegraphmol_current, oegraphmol_proposed)]
 
         if not matches:
-            #raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
-            _logger.warn(f"There are no atom map matches that preserve the ring!  It is advisable to conduct a manual atom map.")
-            return {}
+            raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
 
         top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches) #remove the matches with the lower rank score (filter out bad degeneracies)
         _logger.debug(f"\tthere are {len(top_matches)} top matches")
