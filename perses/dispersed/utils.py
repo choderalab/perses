@@ -393,7 +393,7 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
 ##################Distributed Tasks#############################
 ################################################################
 def activate_LocallyOptimalAnnealing(thermodynamic_state,
-                                     worker,
+                                     remote_worker,
                                      lambda_protocol = 'default',
                                      timestep = 1 * unit.femtoseconds,
                                      collision_rate = 1 / unit.picoseconds,
