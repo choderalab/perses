@@ -117,7 +117,6 @@ class BuildProposalNetwork(object):
                  proposal_parameters = None,
                  simulation_parameters = None):
 
-        supported_simulation_types = {}
         """
         Initialize NetworkX graph and build connectivity with a `graph_connectivity` input.
 
@@ -159,7 +158,7 @@ class BuildProposalNetwork(object):
                 Whether to anneal 1,4 interactions over the protocol;
                     if True, then geometry_engine takes the argument use_14_nonbondeds = False;
                     if False, then geometry_engine takes the argument use_14_nonbondeds = True;
-        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None)
+        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or tuple of np.array
             the simulation parameters to put into the appropriate simulation object
             if type(simulation_parameters) == tuple:
                 #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
@@ -240,6 +239,9 @@ class BuildProposalNetwork(object):
 
         #make the adjacency_matrix a graph attribute
         self.network.graph['adjacency_matrix'] = self.adjacency_matrix
+
+        #the last thing we have to do is add simulation objects to each phase of each edge.
+        #like before, these can be added post_hoc if any edges fail miserably.
 
     def manipulate_edge_post_hoc(self,
                                  start,
@@ -500,7 +502,7 @@ class BuildProposalNetwork(object):
 
     def _create_proposal_parameters(self, proposal_parameters):
         """
-        Define kwargs that will replace proposal_arguments. note we ar just updating the class attributes
+        Define kwargs that will replace proposal_arguments. we are just updating the class attributes
 
         Arguments
         ---------
@@ -533,6 +535,37 @@ class BuildProposalNetwork(object):
         elif 'vacuum' in self.proposal_arguments['phases']:
             self.nonbonded_method = app.NoCutoff
             _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
+
+    def _create_simulation_parameters(self, simulation_parameters):
+        """
+        Define kwargs that will replace simulation_arguments.  again, this is simply updating the class attributes
+
+        Arguments
+        ---------
+        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or tuple of np.array
+            the simulation parameters to put into the appropriate simulation object
+            if type(simulation_parameters) == tuple:
+                #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
+                #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
+                #if dict is None, then default 'repex' parameters will be used
+            elif type(simulation_parameters) == np.2darray of dicts, each dict has the keys corresponding to appropriate phases
+                                                                     and each entry is a tuple of (flavor (i.e. 'repex', 'sams', 'neq'), _dict (or None)).
+                                                                     where _dict has the appropriate parameters.
+                                                                     if _dict is None, then default parameters corresponding to the appropriate phase are used.
+
+
+        """
+        if type(simulation_parameters) == tuple:
+            assert len(simulation_parameters) == 2, f"simulation_parameters is not a tuple with 2 entries"
+            assert simulation_parameters[0] in list(self.simulation_arguments.keys()), f"{simulation_parameters[0]} is not a supported "
+            assert type(simulation_parameters[1]) in [dict, None], f"the second argument of 'simulation_parameters' must be a dict or None"
+            if simulation_parameters[1] is None:
+                _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with default parameters")
+            else:
+                _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with non-default parameters")
+                assert set(simulation_parameters[1].keys()).issubset(set(self.simulation_arguments[simulation_parameters[0]].keys())), f"there are extra arguments in 'simulation_parameters': {set(simulation_parameters[1].keys()).difference(set(self.simulation_arguments[simulation_parameters[0]].keys()))}"
+                args_left_as_default = set(self.simulation_arguments[simulation_parameters[0]].keys()).difference(set(simulation_parameters[1].keys()))
+
 
     def _create_system_generator(self):
         """
