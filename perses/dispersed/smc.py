@@ -529,11 +529,6 @@ class SequentialMonteCarlo():
 
                 print(f"\t{_direction} retrieval time: {time.time() - worker_retrieval[_direction]}")
 
-            #report the updated logger dicts
-            for _direction in directions:
-                if current_lambdas[_direction] != finish_lines[_direction]:
-                    current_lambdas[_direction] = _lambdas[_direction][-1]
-
             #resample if necessary
             if _resample:
                 assert not _AIS, f"attempting to resample, but only AIS is being conducted (sequential importance sampling)"
@@ -567,6 +562,11 @@ class SequentialMonteCarlo():
                         if not omit_local_incremental_append[_direction]:
                             _logger.debug(f"appending incremental work")
                             sMC_cumulative_works[_direction].append(np.add(sMC_cumulative_works[_direction][-1], local_incremental_work_collector[_direction]))
+
+            #report the updated logger dicts
+            for _direction in directions:
+                if current_lambdas[_direction] != finish_lines[_direction]:
+                    current_lambdas[_direction] = _lambdas[_direction][-1]
 
             end_timer = time.time() - start_timer
             iteration_number += 1
