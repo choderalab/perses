@@ -402,7 +402,6 @@ class SequentialMonteCarlo():
         _logger.debug(f"\tsMC_observables: {sMC_observables}")
 
         omit_local_incremental_append = {_direction: False for _direction in directions}
-        last_increment = {_direction: False for _direction in directions}
         worker_retrieval = {}
 
 
@@ -474,9 +473,6 @@ class SequentialMonteCarlo():
 
                 _logger.info(f"\t\tthe current lambdas for annealing are {_lambdas}")
 
-                if self.protocols[_direction][iteration_number + 1] == finish_lines[_direction]:
-                    last_increment[_direction] = True
-
                 #make iterable lists for anneal deployment
                 iterables = []
                 iterables.append([remote_worker] * num_particles) #remote_worker
@@ -535,17 +531,15 @@ class SequentialMonteCarlo():
 
             #report the updated logger dicts
             for _direction in directions:
-                current_lambdas[_direction] = _lambdas[_direction][-1]
+                if current_lambdas[_direction] != finish_lines[_direction]:
+                    current_lambdas[_direction] = _lambdas[_direction][-1]
 
             #resample if necessary
             if _resample:
                 assert not _AIS, f"attempting to resample, but only AIS is being conducted (sequential importance sampling)"
                 for _direction in directions:
-                    if current_lambdas[_direction] == finish_lines[_direction] and not last_increment[_direction]:
+                    if current_lambdas[_direction] == finish_lines[_direction]:
                         continue
-
-                    if last_increment[_direction] == True:
-                        last_increment[_direction] == False
 
                     normalized_observable_value, resampled_works, resampled_indices = self._resample(incremental_works = local_incremental_work_collector[_direction],
                                                                                                      cumulative_works = sMC_cumulative_works[_direction][-1],
@@ -568,8 +562,10 @@ class SequentialMonteCarlo():
                     for _direction in directions:
                         sMC_cumulative_works[_direction] = np.cumsum(local_incremental_work_collector[_direction], axis = 1)
                 else:
+                    _logger.debug(f"resample is False, also not AIS")
                     for _direction in directions:
                         if not omit_local_incremental_append[_direction]:
+                            _logger.debug(f"appending incremental work")
                             sMC_cumulative_works[_direction].append(np.add(sMC_cumulative_works[_direction][-1], local_incremental_work_collector[_direction]))
 
             end_timer = time.time() - start_timer
