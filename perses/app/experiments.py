@@ -158,7 +158,7 @@ class BuildProposalNetwork(object):
                 Whether to anneal 1,4 interactions over the protocol;
                     if True, then geometry_engine takes the argument use_14_nonbondeds = False;
                     if False, then geometry_engine takes the argument use_14_nonbondeds = True;
-        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or tuple of np.array
+        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or list of np.array
             the simulation parameters to put into the appropriate simulation object
             if type(simulation_parameters) == tuple:
                 #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
@@ -542,7 +542,7 @@ class BuildProposalNetwork(object):
 
         Arguments
         ---------
-        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or tuple of np.array
+        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or list of np.array
             the simulation parameters to put into the appropriate simulation object
             if type(simulation_parameters) == tuple:
                 #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
@@ -559,12 +559,51 @@ class BuildProposalNetwork(object):
             assert len(simulation_parameters) == 2, f"simulation_parameters is not a tuple with 2 entries"
             assert simulation_parameters[0] in list(self.simulation_arguments.keys()), f"{simulation_parameters[0]} is not a supported "
             assert type(simulation_parameters[1]) in [dict, None], f"the second argument of 'simulation_parameters' must be a dict or None"
-            if simulation_parameters[1] is None:
+            if simulation_parameters[1] is None or simulation_parameters[1] == {}:
                 _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with default parameters")
+                simulation_parameters[1] = {}
             else:
                 _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with non-default parameters")
                 assert set(simulation_parameters[1].keys()).issubset(set(self.simulation_arguments[simulation_parameters[0]].keys())), f"there are extra arguments in 'simulation_parameters': {set(simulation_parameters[1].keys()).difference(set(self.simulation_arguments[simulation_parameters[0]].keys()))}"
                 args_left_as_default = set(self.simulation_arguments[simulation_parameters[0]].keys()).difference(set(simulation_parameters[1].keys()))
+
+                for arg in args_left_as_default:
+                    _logger.info(f"{arg} was left as default of {self.simulation_arguments[arg]}")
+                for keyword in simulation_parameters[1].keys():
+                    #assert keyword in proposal_arguments.keys(), f"kwarg keyword {keyword} is not in default argument keys: {proposal_arguments.keys()}"
+                    assert type(simulation_parameters[keyword]) == type(self.simulation_arguments[simulation_parameters[0]][keyword]), f"{keyword} type ({type(simulation_parameters[keyword])}) is not supported"
+
+            self.simulation_arguments[simulation_parameters[0]].update(simulation_parameters[1])
+
+        elif type(simulation_parameters) == np.ndarray:
+            _logger.info(f"'simulation_parameters' detected np.ndarray as argument")
+            assert all(type(entry) == dict for entry in np.nditer(simulation_parameters)), f"each entry of an np.ndarray argument passed to 'simulation_parameters' must be a dict."
+            assert all(set(entry.keys()).issubset(set(proposal_parameters['phases'])) for entry in np.nditer(simulation_parameters)), f"the phases in 'simulation_parameters' do not agree with 'proposal_parameters'"
+            self.simulation_parameter_assertions(simulation_parameters)
+        elif type(simulation_parameters) == list:
+            _logger.info(f"'simulation_parameters' detected np.ndarray as argument")
+            assert all(type(entry) == np.ndarray for entry in simulation_parameters), f"each entry in 'simulation_parameters' must be a np.ndarray"
+            for _array in simulation_parameters:
+                self.simulation_parameter_assertions(_array)
+        elif type(simulation_parameters) == None:
+            _logger.info(f"'simulation parameters' detected as None; running 'repex' with default arguments")
+
+        self.simulation_parameters = simulation_parameters
+
+
+
+    def simulation_parameter_assertions(self, _array):
+        """
+        validates the input of the np.ndarray
+        """
+        for entry in np.nditer(_array):
+            assert set(entry.keys()).issubset(set(proposal_parameters['phases'])), f"the phases in 'simulation_parameters' do not agree with 'proposal_parameters'"
+            assert all(type(val) == tuple and len(val) == 2 for val in entry.values()), f"the values of the 'simulation_parameters' np.ndarray dictionaries must be tuples of length 2"
+            for tup in entry.values():
+                assert tup[0] in list(self.simulation_arguments.keys()), f"the simulation flavor is not supported"
+                assert set(tup[1].keys()).issubset(set(self.simulation_arguments[tup[0]].keys())), f"the simulation parameters are not a subset of the allowable simulation parameters for simulation type {tup[0]}"
+                for keyword, arg in tup[1].items():
+                    assert type(arg) == type(self.simulation_arguments[tup[0]][keyword]), f"keyword '{keyword}' type '{type(arg)}' is not supported"
 
 
     def _create_system_generator(self):
