@@ -897,15 +897,6 @@ class SequentialMonteCarlo():
         _observable : float
             observed value of observable
         """
-        def compute_observable(self, new_val, sampler_states, observable, current_rps, cumulative_works):
-            """
-            internal function to compute observables
-            """
-            self.thermodynamic_state.set_alchemical_parameters(new_val, LambdaProtocol(functions = self.lambda_protocol))
-            new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-            _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
-            return _observable
-
         _base_end_val = end_val
         right_bound = end_val
         left_bound = start_val
