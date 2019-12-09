@@ -536,9 +536,10 @@ class BuildProposalNetwork(object):
             self.nonbonded_method = app.NoCutoff
             _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
 
-    def _create_simulation_parameters(self, simulation_parameters):
+    def _validate_simulation_parameters(self, simulation_parameters):
         """
-        Define kwargs that will replace simulation_arguments.  again, this is simply updating the class attributes
+        validate simulation_parameters; 'simulation_parameters' accepts many arguments, so we need a separate function to ensure it is handled properly.
+        This will create an attribute called simulation_parameters.
 
         Arguments
         ---------
@@ -562,6 +563,7 @@ class BuildProposalNetwork(object):
             if simulation_parameters[1] is None or simulation_parameters[1] == {}:
                 _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with default parameters")
                 simulation_parameters[1] = {}
+                self.simulation_parameters = self.simulation_arguments[simulation_parameters[0]]
             else:
                 _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with non-default parameters")
                 assert set(simulation_parameters[1].keys()).issubset(set(self.simulation_arguments[simulation_parameters[0]].keys())), f"there are extra arguments in 'simulation_parameters': {set(simulation_parameters[1].keys()).difference(set(self.simulation_arguments[simulation_parameters[0]].keys()))}"
@@ -573,19 +575,30 @@ class BuildProposalNetwork(object):
                     #assert keyword in proposal_arguments.keys(), f"kwarg keyword {keyword} is not in default argument keys: {proposal_arguments.keys()}"
                     assert type(simulation_parameters[keyword]) == type(self.simulation_arguments[simulation_parameters[0]][keyword]), f"{keyword} type ({type(simulation_parameters[keyword])}) is not supported"
 
-            self.simulation_arguments[simulation_parameters[0]].update(simulation_parameters[1])
+                #for the args left as default, make them arguments of self.simulation_parameters
+                for arg in args_left_as_default:
+                    simulation_parameters.update({arg: self.simulation_arguments[simulation_parameters[0]][arg]})
+                self.simulation_parameters = simulation_parameters
 
         elif type(simulation_parameters) == np.ndarray:
             _logger.info(f"'simulation_parameters' detected np.ndarray as argument")
             assert all(type(entry) == dict for entry in np.nditer(simulation_parameters)), f"each entry of an np.ndarray argument passed to 'simulation_parameters' must be a dict."
             assert all(set(entry.keys()).issubset(set(proposal_parameters['phases'])) for entry in np.nditer(simulation_parameters)), f"the phases in 'simulation_parameters' do not agree with 'proposal_parameters'"
             self.simulation_parameter_assertions(simulation_parameters)
+            for entry in np.nditer(simulation_parameters):
+                for phase, tup in entry.items():
+                    sim_flavor, args = tup[0], tup[1]
+                    args_left_as_default = set(self.simulation_arguments[sim_flavor][1]).difference(set(args.keys()))
+                    for _arg in args_left_as_default:
+                        simulation_parameters[]
+
+
         elif type(simulation_parameters) == list:
             _logger.info(f"'simulation_parameters' detected np.ndarray as argument")
             assert all(type(entry) == np.ndarray for entry in simulation_parameters), f"each entry in 'simulation_parameters' must be a np.ndarray"
             for _array in simulation_parameters:
                 self.simulation_parameter_assertions(_array)
-        elif type(simulation_parameters) == None:
+        elif simulation_parameters is None:
             _logger.info(f"'simulation parameters' detected as None; running 'repex' with default arguments")
 
         self.simulation_parameters = simulation_parameters
@@ -595,6 +608,11 @@ class BuildProposalNetwork(object):
     def simulation_parameter_assertions(self, _array):
         """
         validates the input of the np.ndarray
+
+        Arguments
+        ---------
+        _array : np.ndarray
+            the ndarray that will be validated
         """
         for entry in np.nditer(_array):
             assert set(entry.keys()).issubset(set(proposal_parameters['phases'])), f"the phases in 'simulation_parameters' do not agree with 'proposal_parameters'"
