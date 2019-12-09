@@ -856,7 +856,7 @@ class SequentialMonteCarlo():
                   observable_threshold,
                   max_iterations=20,
                   initial_guess = None,
-                  precision_threshold = 1e-6):
+                  precision_threshold = None):
         """
         Given corresponding start_val and end_val of observables, conduct a binary search to find min value for which the observable threshold
         is exceeded.
@@ -878,7 +878,7 @@ class SequentialMonteCarlo():
             maximum number of interations to conduct
         initial_guess: float, default None
             guess where the threshold is achieved
-        precision_threshold: float, default 1e-6
+        precision_threshold: float, default None
             precision threshold below which, the max iteration will break
 
         Returns
@@ -888,7 +888,18 @@ class SequentialMonteCarlo():
         _observable : float
             observed value of observable
         """
+        def compute_observable(self, new_val, sampler_states, observable, current_rps, cumulative_works):
+            """
+            internal function to compute observables
+            """
+            self.thermodynamic_state.set_alchemical_parameters(new_val, LambdaProtocol(functions = self.lambda_protocol))
+            new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+            _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+            return _observable
+
         _base_end_val = end_val
+        right_bound = end_val
+        left_bound = start_val
         _logger.debug(f"\t\t\tmin, max values: {start_val}, {end_val}. ")
         self.thermodynamic_state.set_alchemical_parameters(start_val, LambdaProtocol(functions = self.lambda_protocol))
         current_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
@@ -896,29 +907,36 @@ class SequentialMonteCarlo():
         if initial_guess is not None:
             midpoint = initial_guess
         else:
-            midpoint = (start_val + end_val) * 0.5
+            midpoint = (left_bound + right_bound) * 0.5
 
         for _ in range(max_iterations):
-            self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
-            new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-            _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+            _observable = self.compute_observable(new_val = midpoint,
+                                             sampler_states = sampler_states,
+                                             observable = observable,
+                                             current_rps = current_rps,
+                                             cumulative_works = cumulative_works)
             if _observable <= observable_threshold:
-                end_val = midpoint
+                right_bound = midpoint
             else:
-                start_val = midpoint
-            midpoint = (start_val + end_val) * 0.5
+                left_bound = midpoint
+            midpoint = (left_bound + right_bound) * 0.5
+
             if precision_threshold is not None:
                 if abs(_base_end_val - midpoint) <= precision_threshold:
                     midpoint = _base_end_val
-                    self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
-                    new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-                    _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
-                    break
-                elif abs(end_val - start_val) <= precision_threshold:
-                    midpoint = end_val
-                    self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
-                    new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-                    _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+                    _observable = self.compute_observable(new_val = midpoint,
+                                                     sampler_states = sampler_states,
+                                                     observable = observable,
+                                                     current_rps = current_rps,
+                                                     cumulative_works = cumulative_works)
+                    continue
+                elif abs(right_bound - left_bound) <= precision_threshold:
+                    midpoint = right_bound
+                    _observable = self.compute_observable(new_val = midpoint,
+                                                     sampler_states = sampler_states,
+                                                     observable = observable,
+                                                     current_rps = current_rps,
+                                                     cumulative_works = cumulative_works)
                     break
 
         return midpoint, _observable
