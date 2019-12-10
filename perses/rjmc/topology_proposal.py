@@ -51,12 +51,12 @@ WEAK_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
 # default atom expression, requires same aromaticitiy and hybridization
 # bonds need to match in bond order
 # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 # strong requires same hybridization AND the same atom type
 # bonds are same as default, require them to match in bond order
-STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_DefaultAtoms
+STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
 STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 ################################################################################
