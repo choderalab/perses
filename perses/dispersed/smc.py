@@ -517,7 +517,7 @@ class SequentialMonteCarlo():
                 if _trailblaze:
                     #for reference's sake, report the difference between the distributed observable computed and the locally-chosen one for trailblazing
                     for _direction in directions:
-                        if current_lambdas[_direction] == finish_lines[_direction]
+                        if current_lambdas[_direction] == finish_lines[_direction]:
                             continue
                         post_observable = self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], _incremental_works) / len(incremental_work)
                         _logger.debug(f"difference between local observable and post observable: {sMC_observables[_direction][-1] - post_observable}")
