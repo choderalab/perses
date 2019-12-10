@@ -155,7 +155,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         Height in pixels
 
     """
-    from openeye import oechem
+    from openeye import oechem, oedepict
 
     # Make copies of the input molecules
     molecule1, molecule2 = oechem.OEGraphMol(molecule1), oechem.OEGraphMol(molecule2)
