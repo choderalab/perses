@@ -520,7 +520,7 @@ class SequentialMonteCarlo():
                         if current_lambdas[_direction] == finish_lines[_direction]:
                             continue
                         post_observable = self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], np.array(_incremental_works)) / len(_incremental_works)
-                        _logger.debug(f"difference between local observable and post observable: {sMC_observables[_direction][-1] - post_observable}")
+                        _logger.debug(f"difference between local observable and post observable for direction {_direction}: {sMC_observables[_direction][-1] - post_observable}")
 
 
                 #append the incremental works
