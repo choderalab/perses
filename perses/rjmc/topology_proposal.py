@@ -45,13 +45,13 @@ OESMILES_OPTIONS = oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_ISOMERIC | 
 # weak requirements for mapping atoms == more atoms mapped, more in core
 # atoms need to match in aromaticity. Same with bonds.
 # maps ethane to ethene, CH3 to NH2, but not benzene to cyclohexane
-WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic
+WEAK_ATOM_EXPRESSION = oechem.OEExprOpts_EqAromatic | oechem.OEExprOpts_EqNotAromatic | oechem.OEExprOpts_IntType
 WEAK_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
 
 # default atom expression, requires same aromaticitiy and hybridization
 # bonds need to match in bond order
 # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
-DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree
+DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_IntType
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 # strong requires same hybridization AND the same atom type
@@ -2815,6 +2815,15 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return atom_map
 
     @staticmethod
+    def _assign_ring_ids(molecule,max_ring_size=10):
+        for atom in molecule.GetAtoms():
+            rings = np.zeros((max_ring_size,), dtype=bool) 
+            for i in range(3,max_ring_size+1): # smallest feasible ring size is 3 
+                rings[i] = oechem.OEAtomIsInRingSize(atom, i)
+            int_type = int.from_bytes(rings.tobytes(), byteorder="big", signed=False)
+            atom.SetIntType(int_type)
+
+    @staticmethod
     def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=False):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
@@ -2845,6 +2854,10 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         oechem.OEAssignHybridization(proposed_molecule)
         oegraphmol_current = oechem.OEGraphMol(current_molecule) # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule) # target molecule
+        if not allow_ring_breaking:
+            # assigning ring membership to prevent ring breaking 
+            SmallMoleculeSetProposalEngine._assign_ring_ids(oegraphmol_current)
+            SmallMoleculeSetProposalEngine._assign_ring_ids(oegraphmol_proposed)
         #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
@@ -2857,7 +2870,16 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             matches = [m for m in matches if SmallMoleculeSetProposalEngine.preserves_rings(m, oegraphmol_current, oegraphmol_proposed)]
 
         if not matches:
-            raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
+            _logger.info('Cannot generate atom map without breaking rings, trying again with weaker mapping.')
+            mcs.SetMCSFunc(oechem.OEMCSMaxAtoms())
+            unique = False
+            matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+
+            if allow_ring_breaking is False:
+                # Filter the matches to remove any that allow ring breaking
+                matches = [m for m in matches if SmallMoleculeSetProposalEngine.preserves_rings(m, oegraphmol_current, oegraphmol_proposed)]
+            if not matches:
+                raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
 
         top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches) #remove the matches with the lower rank score (filter out bad degeneracies)
         _logger.debug(f"\tthere are {len(top_matches)} top matches")
