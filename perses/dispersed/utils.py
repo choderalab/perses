@@ -37,6 +37,7 @@ from scipy.special import logsumexp
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC_utils")
 _logger.setLevel(logging.DEBUG)
+DISTRIBUTED_ERROR_TOLERANCE = 1e-6
 
 #cache.global_context_cache.platform = configure_platform(platform_name = 'CUDA')
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
@@ -195,7 +196,7 @@ def ESS(works_prev, works_incremental):
     incremental_weights_unnormalized = np.exp(-works_incremental)
     ESS = np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(np.power(prev_weights_normalized, 2), np.power(incremental_weights_unnormalized, 2))
     normalized_ESS = ESS / len(prev_weights_normalized)
-    assert normalized_ESS >= 0.0 and normalized_ESS <= 1.0, f"the normalized ESS ({normalized_ESS} is not between 0 and 1)"
+    assert normalized_ESS >= 0.0 - DISTRIBUTED_ERROR_TOLERANCE and normalized_ESS <= 1.0 + DISTRIBUTED_ERROR_TOLERANCE, f"the normalized ESS ({normalized_ESS} is not between 0 and 1)"
     return normalized_ESS
 
 def CESS(works_prev, works_incremental):
