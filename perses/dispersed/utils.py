@@ -38,7 +38,7 @@ logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC_utils")
 _logger.setLevel(logging.DEBUG)
 
-cache.global_context_cache.platform = configure_platform('CUDA')
+#cache.global_context_cache.platform = configure_platform(platform_name = 'CUDA')
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 
 def check_platform(platform):
