@@ -192,6 +192,23 @@ def getSetupOptions(filename):
 
     return setup_options
 
+
+def get_max_expanded_cutoff(htf):
+    minimum_lengths_per_phase = []
+    for phase in htf.keys():
+        if phase == 'vacuum':
+            continue  # don't need expanded cutoff for vacuum phase
+        hybrid_system = htf[phase].hybrid_system
+        box_vectors = hybrid_system.getDefaultPeriodicBoxVectors()
+        dimensions = [x[i] for i,x in enumerate(box_vectors)]
+        minimum_length = min(dimensions)
+        minimum_lengths_per_phase.append(minimum_length)
+    max_cutoff = 0.5 * min(minimum_lengths_per_phase) # now get the shortest of all phases
+    max_cutoff -= (0.1 * unit.nanometer) # subtract a small buffer
+    _logger.info(f'Setting the expanded cutoff: {max_cutoff}')
+    return max_cutoff
+
+
 def run_setup(setup_options):
     """
     Run the setup pipeline and return the relevant setup objects based on a yaml input file.
@@ -421,6 +438,7 @@ def run_setup(setup_options):
         htf = dict()
         hss = dict()
         _logger.info(f"\tcataloging HybridTopologyFactories...")
+
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}:")
             #TODO write a SAMSFEP class that mirrors NonequilibriumSwitchingFEP
@@ -433,6 +451,9 @@ def run_setup(setup_options):
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
 
+        expanded_cutoff = get_max_expanded_cutoff(htf) 
+
+        for phase in phases:
            # Define necessary vars to check energy bookkeeping
             _top_prop = top_prop['%s_topology_proposal' % phase]
             _htf = htf[phase]
@@ -459,9 +480,12 @@ def run_setup(setup_options):
             reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
                                           checkpoint_interval=checkpoint_interval)
 
+            if phase == 'vacuum': 
+                endstates = False
+            else:
+                endstates = True
             #TODO expose more of these options in input
             if setup_options['fe_type'] == 'sams':
-                _logger.warning(f'Relative free energies do not currently work with unsampled endstates')
                 hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
                                                                                              n_steps=n_steps_per_move_application,
@@ -472,7 +496,7 @@ def run_setup(setup_options):
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates,expanded_cutoff=expanded_cutoff)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
@@ -482,7 +506,7 @@ def run_setup(setup_options):
                                                                                              splitting="V R R R O R R R V",
                                                                                              constraint_tolerance=1e-06),
                                                                                              hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates,expanded_cutoff=expanded_cutoff)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
