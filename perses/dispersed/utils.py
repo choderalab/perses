@@ -188,13 +188,15 @@ def ESS(works_prev, works_incremental):
 
     Returns
     -------
-    ESS: float
+    normalized_ESS: float
         effective sample size
     """
     prev_weights_normalized = np.exp(-works_prev - logsumexp(-works_prev))
     incremental_weights_unnormalized = np.exp(-works_incremental)
     ESS = np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(np.power(prev_weights_normalized, 2), np.power(incremental_weights_unnormalized, 2))
-    return ESS
+    normalized_ESS = ESS / len(prev_weights_normalized)
+    assert normalized_ESS >= 0.0 and normalized_ESS <= 1.0, f"the normalized ESS ({normalized_ESS} is not between 0 and 1)"
+    return normalized_ESS
 
 def CESS(works_prev, works_incremental):
     """

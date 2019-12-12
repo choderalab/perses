@@ -515,7 +515,7 @@ class SequentialMonteCarlo():
 
                 if _trailblaze:
                     #for reference's sake, report the difference between the distributed observable computed and the locally-chosen one for trailblazing
-                    post_observable = self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], np.array(_incremental_works)) / len(_incremental_works)
+                    post_observable = self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], np.array(_incremental_works))
                     _logger.debug(f"difference between local observable and post observable for direction {_direction}: {sMC_observables[_direction][-1] - post_observable}")
                     if abs(sMC_observables[_direction][-1] - post_observable) > DISTRIBUTED_ERROR_TOLERANCE:
                         raise Exception(f"the observable error between the distributed observable and the local observable > DISTRIBUTED_ERROR_TOLERANCE: ({DISTRIBUTED_ERROR_TOLERANCE})")
@@ -831,7 +831,7 @@ class SequentialMonteCarlo():
         _logger.debug(f"\tAttempting to resample...")
         num_particles = incremental_works.shape[0]
 
-        normalized_observable_value = self.supported_observables[observable](cumulative_works, incremental_works) / num_particles
+        normalized_observable_value = self.supported_observables[observable](cumulative_works, incremental_works)
         total_works = np.add(cumulative_works, incremental_works)
 
         #decide whether to resample
@@ -859,7 +859,7 @@ class SequentialMonteCarlo():
         """
         self.thermodynamic_state.set_alchemical_parameters(new_val, LambdaProtocol(functions = self.lambda_protocol))
         new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-        _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+        _observable = observable(cumulative_works, new_rps - current_rps)
         return _observable
 
 
@@ -870,9 +870,9 @@ class SequentialMonteCarlo():
                   end_val,
                   observable,
                   observable_threshold,
-                  max_iterations=20,
+                  max_iterations=100,
                   initial_guess = None,
-                  precision_threshold = None):
+                  precision_threshold = 1e-6):
         """
         Given corresponding start_val and end_val of observables, conduct a binary search to find min value for which the observable threshold
         is exceeded.
@@ -916,8 +916,8 @@ class SequentialMonteCarlo():
         else:
             midpoint = (left_bound + right_bound) * 0.5
 
-        for _ in range(max_iterations):
-            if _ != 0:
+        for iteration in range(max_iterations):
+            if iteration != 0:
                 midpoint = (left_bound + right_bound) * 0.5
 
             _observable = self.compute_observable(new_val = midpoint,
@@ -931,15 +931,7 @@ class SequentialMonteCarlo():
                 left_bound = midpoint
 
             if precision_threshold is not None:
-                if abs(_base_end_val - midpoint) <= precision_threshold:
-                    midpoint = _base_end_val
-                    _observable = self.compute_observable(new_val = midpoint,
-                                                     sampler_states = sampler_states,
-                                                     observable = observable,
-                                                     current_rps = current_rps,
-                                                     cumulative_works = cumulative_works)
-                    continue
-                elif abs(right_bound - left_bound) <= precision_threshold:
+                if abs(right_bound - left_bound) <= precision_threshold:
                     midpoint = right_bound
                     _observable = self.compute_observable(new_val = midpoint,
                                                      sampler_states = sampler_states,
@@ -948,8 +940,8 @@ class SequentialMonteCarlo():
                                                      cumulative_works = cumulative_works)
                     break
 
-        self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
-        new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-        _logger.debug(f"end binary search new_rps: {new_rps}")
-        _logger.debug(f"end binary_search positions: {[ss.positions[0,0] for ss in sampler_states]}")
+        # self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
+        # new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+        # _logger.debug(f"end binary search new_rps: {new_rps}")
+        # _logger.debug(f"end binary_search positions: {[ss.positions[0,0] for ss in sampler_states]}")
         return midpoint, _observable
