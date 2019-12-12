@@ -469,6 +469,7 @@ class SequentialMonteCarlo():
                     #instead, we can run the entire defined protocol
                     _lambdas.update({_direction: self.protocols[_direction]})
                 else:
+                    assert self.protocols[_direction][iteration_number + 1] == self.protocols[_direction][-1], f"there is a discrepancy"
                     _lambdas.update({_direction: np.array([self.protocols[_direction][iteration_number], self.protocols[_direction][iteration_number + 1]])})
 
                 _logger.info(f"\t\tthe current lambdas for annealing are {_lambdas}")
