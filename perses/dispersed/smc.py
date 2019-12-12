@@ -39,7 +39,7 @@ logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC")
 _logger.setLevel(logging.DEBUG)
 
-cache.global_context_cache.platform = configure_platform('CUDA')
+#cache.global_context_cache.platform = configure_platform('CUDA')
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 
 class SequentialMonteCarlo():
