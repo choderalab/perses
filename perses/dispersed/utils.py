@@ -70,7 +70,7 @@ def configure_platform(platform_name='Reference', fallback_platform_name='CPU'):
 
     From https://github.com/choderalab/integrator-benchmark/blob/bb307e6ebf476b652e62e41ae49730f530732da3/benchmark/testsystems/configuration.py#L17
     """
-    fallback_platform = mm.Platform.getPlatformByName(fallback_platform_name)
+    fallback_platform = openmm.Platform.getPlatformByName(fallback_platform_name)
     try:
         if platform_name.upper() == 'Reference'.upper():
             platform = openmm.Platform.getPlatformByName('Reference')
