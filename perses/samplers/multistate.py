@@ -25,7 +25,7 @@ class HybridCompatibilityMixin(object):
         self._hybrid_factory = hybrid_factory
         super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
 
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schedule=None,lambda_protocol=LambdaProtocol()):
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schedule=None,lambda_protocol=LambdaProtocol(),endstates=True,expanded_cutoff=None):
 
         from perses.dispersed import feptasks
 
@@ -69,35 +69,46 @@ class HybridCompatibilityMixin(object):
             feptasks.minimize(compound_thermodynamic_state_copy,sampler_state) 
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
-        unsampled_endstates = [thermodynamic_state_list[0],thermodynamic_state_list[-1]] # taking the first and last states of the alchemical protocol
-
-         # changing the non-bonded method for the unsampled endstates
-        unsampled_dispersion_endstates = []
-        for master_lambda,endstate in zip([0.,1.],unsampled_endstates):
-            context, context_integrator = context_cache.get_context(endstate)
-            dispersion_system = context.getSystem()
-            box_vectors = hybrid_system.getDefaultPeriodicBoxVectors()
-            dimensions = [x[i] for i,x in enumerate(box_vectors)]
-            minimum_length = min(dimensions)
-            for force in dispersion_system.getForces():
-                # expanding the cutoff for both the NonbondedForce and CustomNonbondedForce
-                if 'NonbondedForce' in force.__class__.__name__:
-                    force.setCutoffDistance((minimum_length._value/2.) - 0.5)
-                # use long range correction for the customnonbonded force
-                if force.__class__.__name__ == 'CustomNonbondedForce':
-                    force.setUseLongRangeCorrection(True)
-                # setting the default GlobalParameters for both end states, so that the long-range dispersion correction is correctly computed
-                if force.__class__.__name__ in ['NonbondedForce','CustomNonbondedForce','CustomBondForce','CustomAngleForce','CustomTorsionForce']:
-                    for parameter_index in range(force.getNumGlobalParameters()):
-                        # finding alchemical global parameters
-                        if force.getGlobalParameterName(parameter_index)[0:7] == 'lambda_':
-                            force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
-            unsampled_dispersion_endstates.append(ThermodynamicState(dispersion_system, temperature=temperature))
+        if endstates:
+            # generating unsampled endstates
+            logger.info('Generating unsampled endstates.')
+            unsampled_endstates = [thermodynamic_state_list[0],thermodynamic_state_list[-1]] # taking the first and last states of the alchemical protocol
+            if expanded_cutoff is None:
+                logger.warning('expanded_cutoff MUST be defined to use unsampled endstates, proceeding WITHOUT endstates.')
+                endstates=False
+            
+             # changing the non-bonded method for the unsampled endstates
+            unsampled_dispersion_endstates = []
+            for master_lambda,endstate in zip([0.,1.],unsampled_endstates):
+                context, context_integrator = context_cache.get_context(endstate)
+                dispersion_system = context.getSystem()
+                box_vectors = hybrid_system.getDefaultPeriodicBoxVectors()
+                dimensions = [x[i] for i,x in enumerate(box_vectors)]
+                minimum_length = min(dimensions)
+                assert ( expanded_cutoff < minimum_length ), "Expanded cutoff of the unsampled endstates cannot be larger than the shortest dimension of the system"
+                for force in dispersion_system.getForces():
+                    # expanding the cutoff for both the NonbondedForce and CustomNonbondedForce
+                    if 'CustomNonbondedForce' in force.__class__.__name__:
+                        force.setCutoffDistance(expanded_cutoff)
+                    # use long range correction for the customnonbonded force
+                    if force.__class__.__name__ == 'CustomNonbondedForce':
+                        force.setUseLongRangeCorrection(True)
+                    # setting the default GlobalParameters for both end states, so that the long-range dispersion correction is correctly computed
+                    if force.__class__.__name__ in ['NonbondedForce','CustomNonbondedForce','CustomBondForce','CustomAngleForce','CustomTorsionForce']:
+                        for parameter_index in range(force.getNumGlobalParameters()):
+                            # finding alchemical global parameters
+                            if force.getGlobalParameterName(parameter_index)[0:7] == 'lambda_':
+                                force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
+                unsampled_dispersion_endstates.append(ThermodynamicState(dispersion_system, temperature=temperature))
 
         reporter = storage_file
 
-        self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
+        if endstates:
+            self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
                     storage=reporter, unsampled_thermodynamic_states=unsampled_dispersion_endstates)
+        else:
+            self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
+                        storage=reporter)
 
 class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
     """
@@ -114,8 +125,6 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
     ReplicaExchangeSampler that supports unsampled end states with a different number of positions
     """
 
-    def __init__(self, *args, hybrid_factory=None, real_endstates=False, **kwargs):
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
         super(HybridRepexSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
         self._factory = hybrid_factory
-        self._real_endstates = real_endstates
-
