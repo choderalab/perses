@@ -430,6 +430,7 @@ class SequentialMonteCarlo():
             start_timer = time.time()
             #if trailblaze is true, we have to choose the next lambda from the previous sampler states and weights
             if _trailblaze:
+                _trailblazed_observables = {}
                 for _direction in directions:
                     if current_lambdas[_direction] == finish_lines[_direction]: #if this direction is done...
                         _logger.info(f"\tdirection {_direction} is complete.  omitting trailblazing.")
@@ -454,8 +455,8 @@ class SequentialMonteCarlo():
                         _logger.info(f"\tlambda increments: {current_lambdas[_direction]} to {_new_lambda}.")
                         _logger.info(f"\tnormalized observable: {normalized_observable}.  Observable threshold is {trailblaze['threshold'] * sMC_observables[_direction][-1]}")
                         self.protocols[_direction].append(_new_lambda)
-                        if not _resample:
-                            sMC_observables[_direction].append(normalized_observable)
+                        _trailblazed_observables.update({_direction: normalized_observable})
+
 
             for _direction in directions:
                 if current_lambdas[_direction] == finish_lines[_direction]:
@@ -473,7 +474,7 @@ class SequentialMonteCarlo():
                     assert self.protocols[_direction][iteration_number + 1] == self.protocols[_direction][-1], f"there is a discrepancy"
                     _lambdas.update({_direction: np.array([self.protocols[_direction][iteration_number], self.protocols[_direction][iteration_number + 1]])})
 
-                _logger.info(f"\t\tthe current lambdas for annealing are {_lambdas}")
+                _logger.info(f"\t\tthe current lambdas for annealing are {_lambdas[_direction]}")
 
                 #make iterable lists for anneal deployment
                 iterables = []
@@ -502,7 +503,9 @@ class SequentialMonteCarlo():
             self.parallelism.progress(futures = all_futures)
 
             #now we collect the finished futures
+            _collected_observables = {}
             for _direction in directions:
+                _logger.debug(f"collecting annealing jobs in direction {_direction}...")
                 if current_lambdas[_direction] == finish_lines[_direction]:
                     _logger.info(f"\tdirection {_direction} is complete.  omitting job collection")
                     continue
@@ -513,12 +516,18 @@ class SequentialMonteCarlo():
                 _sampler_states = [_iter[1] for _iter in _futures]
                 _timers = [_iter[2] for _iter in _futures]
 
-                if _trailblaze:
-                    #for reference's sake, report the difference between the distributed observable computed and the locally-chosen one for trailblazing
-                    post_observable = self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], np.array(_incremental_works))
-                    _logger.debug(f"difference between local observable and post observable for direction {_direction}: {sMC_observables[_direction][-1] - post_observable}")
-                    if abs(sMC_observables[_direction][-1] - post_observable) > DISTRIBUTED_ERROR_TOLERANCE:
-                        raise Exception(f"the observable error between the distributed observable and the local observable > DISTRIBUTED_ERROR_TOLERANCE: ({DISTRIBUTED_ERROR_TOLERANCE})")
+                #update collected observables
+                _logger.debug(f"{_direction} incremental works: {_incremental_works}")
+                _logger.debug(f"{_direction} cumulative works: {sMC_cumulative_works[_direction][-1]}")
+                _collected_observables.update({_direction: self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], np.array(_incremental_works))[0]}) #returns array but we only want the float
+                _logger.debug(f"collected observables: {_collected_observables}")
+
+
+
+                # if _trailblaze:
+                #     #for reference's sake, report the difference between the distributed observable computed and the locally-chosen one for trailblazing
+                #     if abs(_trailblazed_observables[_direction] - _collected_observables[_direction]) > DISTRIBUTED_ERROR_TOLERANCE:
+                #         raise Exception(f"the observable error between the distributed observable and the trailblazed observable > DISTRIBUTED_ERROR_TOLERANCE: ({DISTRIBUTED_ERROR_TOLERANCE})")
 
 
                 #append the incremental works
@@ -543,20 +552,28 @@ class SequentialMonteCarlo():
                     if current_lambdas[_direction] == finish_lines[_direction]:
                         continue
 
-                    normalized_observable_value, resampled_works, resampled_indices = self._resample(incremental_works = local_incremental_work_collector[_direction],
+                    normalized_observable_value, resampled_works, resampled_indices, resample_bool = self._resample(incremental_works = local_incremental_work_collector[_direction],
                                                                                                      cumulative_works = sMC_cumulative_works[_direction][-1],
                                                                                                      observable = resample['criterion'],
                                                                                                      resampling_method = resample['method'],
                                                                                                      resample_observable_threshold = resample['threshold'])
-                    sMC_observables[_direction].append(normalized_observable_value)
+                    _collected_observables.update({_direction: normalized_observable_value})
 
                     sMC_cumulative_works[_direction].append(resampled_works)
 
-                    new_sampler_states = np.array([sMC_sampler_states[_direction][i] for i in resampled_indices])
+                    new_sampler_states = np.array([copy.deepcopy(sMC_sampler_states[_direction][i]) for i in resampled_indices]) #we need a deepcopy to prevent annealing over the same sampler state in a single iteration with local annealing
                     sMC_sampler_states.update({_direction: new_sampler_states})
 
                     new_particle_ancestries = np.array([sMC_particle_ancestries[_direction][-1][i] for i in resampled_indices])
                     sMC_particle_ancestries[_direction].append(new_particle_ancestries)
+
+                    #check observables:
+                    if _trailblaze:
+                        if not resample_bool: #then the collected observable should be equal to the trailblaze observable
+                            assert abs(_collected_observables[_direction] - _trailblazed_observables[_direction]) < DISTRIBUTED_ERROR_TOLERANCE, f"collected observable {_direction}: {_collected_observables[_direction]} is not equal to _trailblazed_observables: {_trailblazed_observables[_direction]} without resample"
+                        else:
+                            assert _collected_observables[_direction] == 1.0, f"resampling occurred in direction {_direction}, but _collected_observable ({_collected_observables[_direction]}) is not 1.0"
+
             else:
                 if _AIS: #we have to make an exception to bookkeeping if we are doing vanilla AIS
                     sMC_cumulative_works = {}
@@ -569,11 +586,18 @@ class SequentialMonteCarlo():
                         if not omit_local_incremental_append[_direction]:
                             _logger.debug(f"appending incremental work")
                             sMC_cumulative_works[_direction].append(np.add(sMC_cumulative_works[_direction][-1], local_incremental_work_collector[_direction]))
+                        if _trailblaze:
+                            if not current_lambdas[_direction] == finish_lines[_direction]:
+                                #for reference's sake, report the difference between the distributed observable computed and the locally-chosen one for trailblazing
+                                if abs(_trailblazed_observables[_direction] - _collected_observables[_direction]) > DISTRIBUTED_ERROR_TOLERANCE:
+                                    raise Exception(f"the observable error between the distributed observable and the trailblazed observable > DISTRIBUTED_ERROR_TOLERANCE: ({DISTRIBUTED_ERROR_TOLERANCE})")
 
-            #report the updated logger dicts
+
+            #report the updated logger dicts and observables
             for _direction in directions:
                 if current_lambdas[_direction] != finish_lines[_direction]:
-                    current_lambdas[_direction] = _lambdas[_direction][-1]
+                    current_lambdas[_direction] = _lambdas[_direction][-1] #update the lambda with the current lambda
+                    sMC_observables[_direction].append(_collected_observables[_direction]) #returns ndarray with one entry; we want that
 
             end_timer = time.time() - start_timer
             iteration_number += 1
@@ -589,6 +613,9 @@ class SequentialMonteCarlo():
         if _resample:
             self.survival_rate = compute_survival_rate(sMC_particle_ancestries)
             self.particle_ancestries = {_direction : np.array([q.flatten() for q in sMC_particle_ancestries[_direction]]) for _direction in sMC_particle_ancestries.keys()}
+        else:
+            self.survival_rate = None
+            self.particle_ancestries = None
 
     def compute_sMC_free_energy(self, cumulative_work_dict):
         """
@@ -608,7 +635,7 @@ class SequentialMonteCarlo():
         for _direction, _lst in cumulative_work_dict.items():
             self.cumulative_work[_direction] = _lst
             self.dg_EXP[_direction] = np.array([pymbar.EXP(_lst[:,i]) for i in range(_lst.shape[1])])
-        _logger.debug(f"cumulative_work for {_direction}: {self.cumulative_work[_direction]}")
+            _logger.debug(f"cumulative_work for {_direction}: {self.cumulative_work[_direction]}")
         if len(list(self.cumulative_work.keys())) == 2:
             self.dg_BAR = pymbar.BAR(self.cumulative_work['forward'][:, -1], self.cumulative_work['reverse'][:, -1])
 
@@ -825,6 +852,8 @@ class SequentialMonteCarlo():
             the resampled total works at iteration t
         resampled_indices : np.array() int
             resampled particle indices
+        resample_bool : boolean
+            whether resampling is actually conducted
 
 
         """
@@ -832,11 +861,13 @@ class SequentialMonteCarlo():
         num_particles = incremental_works.shape[0]
 
         normalized_observable_value = self.supported_observables[observable](cumulative_works, incremental_works)
+        _logger.debug(f"start resampled normalized observable value: {normalized_observable_value}")
         total_works = np.add(cumulative_works, incremental_works)
 
         #decide whether to resample
         _logger.debug(f"\tnormalized observable value: {normalized_observable_value}")
         if normalized_observable_value <= resample_observable_threshold: #then we resample
+            resample_bool = True
             _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling")
 
             #resample
@@ -845,13 +876,14 @@ class SequentialMonteCarlo():
 
             normalized_observable_value = 1.0
         else:
+            resample_bool = False
             _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
             resampled_works = total_works
             resampled_indices = np.arange(num_particles)
             normalized_observable_value = normalized_observable_value
 
-
-        return normalized_observable_value, resampled_works, resampled_indices
+        _logger.debug(f"final resampled normalized observable_value: {normalized_observable_value}")
+        return normalized_observable_value, resampled_works, resampled_indices, resample_bool
 
     def compute_observable(self, new_val, sampler_states, observable, current_rps, cumulative_works):
         """
@@ -940,8 +972,8 @@ class SequentialMonteCarlo():
                                                      cumulative_works = cumulative_works)
                     break
 
-        # self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
-        # new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-        # _logger.debug(f"end binary search new_rps: {new_rps}")
-        # _logger.debug(f"end binary_search positions: {[ss.positions[0,0] for ss in sampler_states]}")
+        self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
+        new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+        _logger.debug(f"end binary search new_rps: {new_rps}")
+        _logger.debug(f"end binary_search positions: {[ss.positions[0,0] for ss in sampler_states]}")
         return midpoint, _observable
