@@ -39,8 +39,9 @@ logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC")
 _logger.setLevel(logging.DEBUG)
 
-#cache.global_context_cache.platform = configure_platform('CUDA')
+cache.global_context_cache.platform = configure_platform('CUDA')
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
+DISTRIBUTED_ERROR_TOLERANCE = 1e-4
 
 class SequentialMonteCarlo():
     """
@@ -484,10 +485,7 @@ class SequentialMonteCarlo():
                 iterables.append([return_timer] * num_particles) #return timer
                 iterables.append([True] * num_particles) #return_sampler_state
                 iterables.append([rethermalize] * num_particles) #rethermalize
-                if _lambdas[_direction][0] == starting_lines[_direction]: #initial_propagation
-                    iterables.append([True] * num_particles) # propagate the starting lambdas
-                else:
-                    iterables.append([False] * num_particles) # do not propagate
+                iterables.append([False] * num_particles) # initial propagation: propagate the starting lambdas
 
                 for job in range(num_particles):
                     if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
@@ -519,6 +517,8 @@ class SequentialMonteCarlo():
                     #for reference's sake, report the difference between the distributed observable computed and the locally-chosen one for trailblazing
                     post_observable = self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], np.array(_incremental_works)) / len(_incremental_works)
                     _logger.debug(f"difference between local observable and post observable for direction {_direction}: {sMC_observables[_direction][-1] - post_observable}")
+                    if abs(sMC_observables[_direction][-1] - post_observable) > DISTRIBUTED_ERROR_TOLERANCE:
+                        raise Exception(f"the observable error between the distributed observable and the local observable > DISTRIBUTED_ERROR_TOLERANCE: ({DISTRIBUTED_ERROR_TOLERANCE})")
 
 
                 #append the incremental works
@@ -917,6 +917,9 @@ class SequentialMonteCarlo():
             midpoint = (left_bound + right_bound) * 0.5
 
         for _ in range(max_iterations):
+            if _ != 0:
+                midpoint = (left_bound + right_bound) * 0.5
+
             _observable = self.compute_observable(new_val = midpoint,
                                              sampler_states = sampler_states,
                                              observable = observable,
@@ -926,7 +929,6 @@ class SequentialMonteCarlo():
                 right_bound = midpoint
             else:
                 left_bound = midpoint
-            midpoint = (left_bound + right_bound) * 0.5
 
             if precision_threshold is not None:
                 if abs(_base_end_val - midpoint) <= precision_threshold:
@@ -946,4 +948,8 @@ class SequentialMonteCarlo():
                                                      cumulative_works = cumulative_works)
                     break
 
+        self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
+        new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+        _logger.debug(f"end binary search new_rps: {new_rps}")
+        _logger.debug(f"end binary_search positions: {[ss.positions[0,0] for ss in sampler_states]}")
         return midpoint, _observable

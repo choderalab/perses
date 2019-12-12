@@ -660,6 +660,7 @@ class LocallyOptimalAnnealing():
                 if return_timer:
                     start_timer = time.time()
                 incremental_work[idx] = self.compute_incremental_work(_lambda)
+                _logger.debug(f"before proposagation position: {sampler_state.positions[0,0]}")
                 integrator.step(num_integration_steps)
                 if rethermalize:
                     self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #rethermalize
@@ -720,12 +721,15 @@ class LocallyOptimalAnnealing():
         _lambda : float
             the lambda value used to update the importance sample
         """
-        old_rp = self.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+        sampler_state = SamplerState.from_context(self.context)
+        old_rp = self.thermodynamic_state.reduced_potential(sampler_state)
 
         #update thermodynamic state and context
         self.thermodynamic_state.set_alchemical_parameters(_lambda, lambda_protocol = self.lambda_protocol_class)
         self.thermodynamic_state.apply_to_context(self.context)
-        new_rp = self.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+        sampler_state.update_from_context(self.context)
+        new_rp = self.thermodynamic_state.reduced_potential(sampler_state)
+        _logger.debug(f"annealing new_rp: {new_rp}")
         _incremental_work = new_rp - old_rp
 
         return _incremental_work
