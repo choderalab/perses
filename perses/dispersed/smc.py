@@ -517,10 +517,11 @@ class SequentialMonteCarlo():
                 _timers = [_iter[2] for _iter in _futures]
 
                 #update collected observables
-                _logger.debug(f"{_direction} incremental works: {_incremental_works}")
-                _logger.debug(f"{_direction} cumulative works: {sMC_cumulative_works[_direction][-1]}")
-                _collected_observables.update({_direction: self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], np.array(_incremental_works))[0]}) #returns array but we only want the float
-                _logger.debug(f"collected observables: {_collected_observables}")
+                if _trailblaze or _resample:
+                    _logger.debug(f"{_direction} incremental works: {_incremental_works}")
+                    _logger.debug(f"{_direction} cumulative works: {sMC_cumulative_works[_direction][-1]}")
+                    _collected_observables.update({_direction: self.supported_observables[trailblaze['criterion']](sMC_cumulative_works[_direction][-1], np.array(_incremental_works))[0]}) #returns array but we only want the float
+                    _logger.debug(f"collected observables: {_collected_observables}")
 
 
 
@@ -597,7 +598,8 @@ class SequentialMonteCarlo():
             for _direction in directions:
                 if current_lambdas[_direction] != finish_lines[_direction]:
                     current_lambdas[_direction] = _lambdas[_direction][-1] #update the lambda with the current lambda
-                    sMC_observables[_direction].append(_collected_observables[_direction]) #returns ndarray with one entry; we want that
+                    if _trailblaze or _resample:
+                        sMC_observables[_direction].append(_collected_observables[_direction]) #returns ndarray with one entry; we want that
 
             end_timer = time.time() - start_timer
             iteration_number += 1
