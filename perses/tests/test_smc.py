@@ -60,6 +60,7 @@ neq_integrator = 'langevin'
 external_parallelism = None
 internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': 2}
 os.system(f"mkdir {trajectory_directory}")
+#######################
 
 @nottest
 @skipIf(istravis, "Skip helper function on travis")
@@ -91,7 +92,7 @@ def sMC_setup():
 
 def test_local_sMC():
     """
-    test local annealed importance sampling
+    test local annealed importance sampling method in it's entirety
     """
     ne_fep = sMC_setup()
 
@@ -106,38 +107,40 @@ def test_local_sMC():
                       trailblaze = None,
                       resample = None)
 
-    # #test AIS_trailblaze
-    print('run AIS with trailblaze')
-    ne_fep.sMC_anneal(num_particles = 10,
-                          protocols = None,
-                          directions = ['forward', 'reverse'],
-                          num_integration_steps = 1,
-                          return_timer = True,
-                          rethermalize = False,
-                          trailblaze = {'criterion': 'ESS', 'threshold': 0.95},
-                          resample = None)
-
-    # #test sMC resample with protocol
-    ne_fep.sMC_anneal(num_particles = 10,
-                          protocols = {'forward': np.linspace(0,1,9), 'reverse': np.linspace(1,0,9)},
-                          directions = ['forward', 'reverse'],
-                          num_integration_steps = 1,
-                          return_timer = True,
-                          rethermalize = False,
-                          trailblaze = None,
-                          resample = None)
-
-    # #test sMC resample with trailblaze
-    ne_fep.sMC_anneal(num_particles = 10,
-                          protocols = None,
-                          directions = ['forward', 'reverse'],
-                          num_integration_steps = 1,
-                          return_timer = True,
-                          rethermalize = False,
-                          trailblaze = {'criterion': 'ESS', 'threshold': 0.99},
-                          resample = {'criterion': 'ESS', 'method': 'multinomial', 'threshold': 0.95})
+    # # #test AIS_trailblaze
+    # print('run AIS with trailblaze')
+    # ne_fep.sMC_anneal(num_particles = 10,
+    #                       protocols = None,
+    #                       directions = ['forward', 'reverse'],
+    #                       num_integration_steps = 1,
+    #                       return_timer = True,
+    #                       rethermalize = False,
+    #                       trailblaze = {'criterion': 'ESS', 'threshold': 0.95},
+    #                       resample = None)
+    #
+    # # #test sMC resample with protocol
+    # ne_fep.sMC_anneal(num_particles = 10,
+    #                       protocols = {'forward': np.linspace(0,1,9), 'reverse': np.linspace(1,0,9)},
+    #                       directions = ['forward', 'reverse'],
+    #                       num_integration_steps = 1,
+    #                       return_timer = True,
+    #                       rethermalize = False,
+    #                       trailblaze = None,
+    #                       resample = None)
+    #
+    # # #test sMC resample with trailblaze
+    # ne_fep.sMC_anneal(num_particles = 10,
+    #                       protocols = None,
+    #                       directions = ['forward', 'reverse'],
+    #                       num_integration_steps = 1,
+    #                       return_timer = True,
+    #                       rethermalize = False,
+    #                       trailblaze = {'criterion': 'ESS', 'threshold': 0.99},
+    #                       resample = {'criterion': 'ESS', 'method': 'multinomial', 'threshold': 0.95})
 
     try:
         os.system(f"rm -r {trajectory_directory}")
     except Exception as e:
         print(e)
+
+def

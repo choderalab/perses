@@ -226,7 +226,7 @@ class Parallelism(object):
 
         return futures
 
-    def gather_results(self, futures):
+    def gather_results(self, futures, omit_errors = False):
         """
         wrapper to gather a function given its arguments
 
@@ -234,6 +234,10 @@ class Parallelism(object):
         ---------
         futures : list of <generalized> futures
             futures that are to be gathered
+        omit_errors : bool, default False
+            whether to skip or raise errors from the workers.
+            WARNING: this fails if self.client is None (i.e. there is no distributed scheduler).
+                     If this is the case, then the function/method pointer to `futures` must be safe
 
         Returns
         ---------
@@ -244,7 +248,8 @@ class Parallelism(object):
             return futures
         else:
             if self.library[0] == 'dask':
-                results = self.client.gather(futures)
+                _errors = 'raise' if not omit_errors else 'skip'
+                results = self.client.gather(futures, errors = _errors)
                 return results
             else:
                 raise Exception(f"{self.library} is supported, but without gather-results functionality!")
