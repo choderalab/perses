@@ -36,7 +36,7 @@ from scipy.special import logsumexp
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("parallelism")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
 class Parallelism(object):
     """
