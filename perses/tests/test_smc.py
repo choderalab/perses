@@ -142,5 +142,3 @@ def test_local_sMC():
         os.system(f"rm -r {trajectory_directory}")
     except Exception as e:
         print(e)
-
-def
