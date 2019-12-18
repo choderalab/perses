@@ -104,10 +104,15 @@ class SequentialMonteCarlo():
         neq_integrator : str, default 'langevin'
             which integrator to use
         external_parallelism : dict('parallelism': perses.dispersed.parallel.Parallelism, 'available_workers': list(str)), default None
-            an external parallelism dictionary
+            an external parallelism dictionary;
+            external_parallelism is used if the entire SequentialMonteCarlo class is allocated workers by an external client (i.e.
+            there exists a Parallelism.client object that is allocating distributed workers to several SequentialMonteCarlo classes simultaneously)
+
         internal_parallelism : dict, default {'library': ('dask', 'LSF'), 'num_processes': 2}
             dictionary of parameters to instantiate a client and run parallel computation internally.  internal parallelization is handled by default
             if None, external worker arguments have to be specified, otherwise, no parallel computation will be conducted, and annealing will be conducted locally.
+            internal_parallelism is used when the SequentialMonteCarlo class is allowed to create its own Parallelism.client object to allocate workers on a
+            cluster.
         """
         _logger.info(f"Initializing SequentialMonteCarlo")
 
