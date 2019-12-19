@@ -83,6 +83,7 @@ def load_smi(smi_file,index=None):
         file name containing strings
     index : None or int, default None
         index of smiles to return. If not provided, list of smiles is returned
+        if index is a list, will return list of specified strings
 
     Returns
     --------
@@ -94,5 +95,8 @@ def load_smi(smi_file,index=None):
     if index is None:
         return smiless
     else:
-        smiles = smiless[index]
+        if type(index) == int:
+            smiles = smiless[index]
+        elif type(index) == list:
+            smiles = [smiless[i] for i in index]
         return smiles

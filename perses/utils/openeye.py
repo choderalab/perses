@@ -226,8 +226,10 @@ def createOEMolFromSDF(sdf_filename, index=0):
     ----------
     sdf_filename : str
         The name of the SDF file
-    index : int, default 1
-        The index of the molecule in the SDF file None returns oemol for every index
+    index : int or list, default 0
+        The index of the molecule in the SDF file None returns oemol for every index;
+        if list: returns oemol list of specified indices.
+        if None, returns list of all oemols
 
     Returns
     -------
@@ -248,7 +250,10 @@ def createOEMolFromSDF(sdf_filename, index=0):
         oechem.OEAddExplicitHydrogens(molecule)
 
     if index is not None:
-        mol_to_return = mol_list[index]
+        if type(index) == int:
+            mol_to_return = mol_list[index]
+        elif type(index) == list:
+            mol_to_return = [mol_list[i] for i in index]
     else:
         mol_to_return = mol_list
 

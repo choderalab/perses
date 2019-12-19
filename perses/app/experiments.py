@@ -66,15 +66,46 @@ class BuildProposalNetwork(object):
                          'softcore_sigma_Q': 1.0}
 
     simulation_arguments = {
-                             'repex':{},
-                             'sams': {},
+                             'repex':{
+                                      ##Hybrid Sampler##
+                                      'timestep': 4 * unit.femtoseconds,
+                                      'collision_rate': 5. / unit.picoseconds,
+                                      'n_steps_per_move_application': 1,
+                                      'reassign_velocities': False,
+                                      'n_restart_attempts': 20,
+                                      'splitting': "V R R R O R R R V",
+                                      'constraint_tolerance' : 1e-6,
+                                      'offline_freq': 10,
+
+                                      ##Setup##
+                                      'n_states': 13,
+                                      #temperature is handled by proposal arguments/proposal_parameters
+                                      'atom_selection': "not water",
+                                      'checkpoint_interval': 100,
+                                      'lambda_protocol': 'default',
+                                      'trajectory_directory': 'repex_{index0}_to_{index1}',
+                                      'trajectory_prefix': '{phase}',
+
+                                      ##Equilibrate##
+                                      "n_equilibration_iterations": 1,
+
+                                      ##Extend##
+                                      'n_cycles': 1000
+                                      },
+
+                             'sams': {'flatness_criteria': 'minimum-visits',
+                                      'gamma0': 1.
+                                      #the rest of the arguments are held by 'repex', which will be updated momentarily
+                                     },
+
                              'smc': {
                                      ##__init__##
                                      'lambda_protocol': 'default',
+                                     #temperature is handled by proposal arguments/proposal_parameters
                                      'trajectory_directory': 'neq_{index0}_to_{index1}',
                                      'trajectory_prefix': '{phase}',
                                      'atom_selection': "not water",
-                                     'timestep:' 4 * unit.femtoseconds,
+                                     'timestep': 4 * unit.femtoseconds,
                                      'collision_rate': 1. / unit.picoseconds,
                                      'eq_splitting_string': 'V R O R V',
                                      'neq_splitting_string': 'V R O R V',
@@ -84,6 +115,7 @@ class BuildProposalNetwork(object):
                                      'external_parallelism': None,
                                      'internal_parallelism': {'library': ('dask', 'LSF'),
                                                               'num_processes': 1},
+
                                      ##sMC_anneal##
                                      'num_particles': 100,
                                      'protocols': {'forward': np.linspace(0,1, 1000),
@@ -94,6 +126,7 @@ class BuildProposalNetwork(object):
                                      'rethermalize': False,
                                      'trailblaze': None,
                                      'resample': None,
+
                                      ##equilibrate##
                                      'n_equilibration_iterations': 1,
                                      'n_steps_per_equilibration': 5000,
@@ -104,12 +137,17 @@ class BuildProposalNetwork(object):
                                      'minimize': False
                                      }
                              }
+    #update common simulation arguments
+    simulation_arguments['sams'].update(simulation_arguments['repex'])
+    simulation_arguments['sams']['trajectory_directory'] = 'repex_{index0}_to_{index1}'
+
 
     known_phases = ['vacuum', 'solvent', 'complex'] # we omit complex phase in the known_phases if a receptor_filename is None
     supported_connectivities = {'fully_connected': generate_fully_connected_adjacency_matrix} #we can add other options later, but this is a good vanilla one to start with
 
     def __init__(self,
                  ligand_input,
+                 ligand_indices = None,
                  receptor_filename = None,
                  graph_connectivity = 'fully_connected',
                  cost = None,
@@ -125,8 +163,13 @@ class BuildProposalNetwork(object):
         ligand_input : str
             the name of the ligand file (any openeye supported format)
             this can either be an .sdf or list of .sdf files, or a list of SMILES strings
+
+        ligand_indices : list of int
+            indices in the ligand input to parse
+
         receptor_filename : str, default None
             Receptor mol2 or pdb filename. If None, complex leg will be omitted.
+
         graph_connectivity : str or np.matrix or list of tuples, default 'fully_connected'
             The graph connectivity information for the experiment.  This accepts one of several allowable
             strings (corresponding to connectivity defaults), a 2d np.array specifying the explicit connectivity
@@ -134,10 +177,13 @@ class BuildProposalNetwork(object):
             The default is 'fully_connected', which specified a fully connected (i.e. complete or single-clique) graph.
             If the graph_connectivity is input as a 2d numpy array, values represent the weights of the transform.  0 weights entail no connectivity.
             The self.adjacency_matrix argument produced as a result contains the log(weights) of the transform as entries.
+
         cost : str, default None
             this is currently a placeholder variable for the specification of the sampling method to be used on the graph.
+
         resources : dict?, default None
             this is yet another placeholder variable for the allocation of resources
+
         proposal_parameters: dict, default None
             The following dict is parseable from a setup yaml, but have defaults given if no setup yaml is given.
             They mostly consist of the thermodynamic state of the graph, several potential modifications to the
@@ -158,7 +204,8 @@ class BuildProposalNetwork(object):
                 Whether to anneal 1,4 interactions over the protocol;
                     if True, then geometry_engine takes the argument use_14_nonbondeds = False;
                     if False, then geometry_engine takes the argument use_14_nonbondeds = True;
-        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or list of np.array
+
+        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or list of np.array, ('repex', None)
             the simulation parameters to put into the appropriate simulation object
             if type(simulation_parameters) == tuple:
                 #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
@@ -180,6 +227,7 @@ class BuildProposalNetwork(object):
         """
         _logger.info(f"Parsing ligand input file...")
         self.ligand_input = ligand_input
+        self.ligand_indices = ligand_indices
         self.receptor_filename = receptor_filename
         self.cost = cost
         self.resources = resources
@@ -190,6 +238,7 @@ class BuildProposalNetwork(object):
         _logger.debug(f"kwargs: {proposal_parameters}")
         self._create_proposal_parameters(proposal_parameters)
         self.beta = 1.0 / (kB * self.proposal_arguments['temperature'])
+        self._validate_simulation_parameters(simulation_parameters)
 
         #Now we can create a system generator for each phase.
         self._create_system_generator()
@@ -411,24 +460,6 @@ class BuildProposalNetwork(object):
             self.network.edges[start, end]['proposals'][_phase]['hybrid_factory'] = hybrid_factory
             self.network.edges[start, end]['proposals'][_phase]['endstate_energy_errors'] = endstate_energy_errors
 
-    def manipulate_edge_post_hoc(self,
-                          start_index,
-                          end_index,
-                          weight = 1.0):
-        """
-        This is a function to add network edges post hoc if the practitioner decides another edge is necessary
-
-        Arguments
-        ---------
-        start_index : int
-            int index of the starting ligand (see self.ligand_list)
-        end_index : int
-            int index of the ligand that the edge points to (from start_index)
-        weight : float, default 1.0
-            weight of the edge
-        """
-        return
-
 
     def _create_connectivity_matrix(self, graph_connectivity):
         """
@@ -467,7 +498,7 @@ class BuildProposalNetwork(object):
             _logger.debug(f"ligand input is a str; checking for .smi and .sdf file.")
             if self.ligand_input[-3:] == 'smi':
                 _logger.info(f"Detected .smi format.  Proceeding...")
-                self.smiles_list = load_smi(self.ligand_input)
+                self.smiles_list = load_smi(self.ligand_input, index = self.ligand_indices)
 
                 #create a ligand data list to hold all ligand oemols, systems, positions, topologies
                 for smiles in self.smiles_list:
@@ -489,7 +520,7 @@ class BuildProposalNetwork(object):
 
             elif self._ligand_input[-3:] == 'sdf': #
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
-                oemols = createOEMolFromSDF(self._ligand_input, index = None)
+                oemols = createOEMolFromSDF(self._ligand_input, index = self.ligand_indices)
                 positions = [extractPositionsFromOEMol(oemol) for oemol in oemols]
                 self.ligand_ffxml = forcefield_generators.generateForceFieldFromMolecules(oemols)
                 [oemol.SetTitle("MOL") for oemol in oemols]
