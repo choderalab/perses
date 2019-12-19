@@ -45,6 +45,7 @@ import tempfile
 import copy
 from openmmtools.constants import kB
 from perses.rjmc.topology_proposal import SystemGenerator
+from unittest import skipIf
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
@@ -53,6 +54,8 @@ from perses.rjmc.topology_proposal import SystemGenerator
 ################################################################################
 # TEST SYSTEMS
 ################################################################################
+
+istravis = os.environ.get('TRAVIS', None) == 'true'
 
 class PersesTestSystem(object):
     """
@@ -2405,7 +2408,8 @@ def test_testsystems():
     """
     Test instantiation of all test systems.
     """
-    testsystem_names = ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
+    #removing 'KinaseInhibitorsTestSystem'
+    testsystem_names = ['T4LysozymeInhibitorsTestSystem','AlkanesTestSystem', 'AlanineDipeptideTestSystem']
     niterations = 2 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems

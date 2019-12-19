@@ -37,9 +37,64 @@ from scipy.special import logsumexp
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC_utils")
 _logger.setLevel(logging.DEBUG)
+DISTRIBUTED_ERROR_TOLERANCE = 1e-6
 
-#cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
+#cache.global_context_cache.platform = configure_platform(platform_name = 'CUDA')
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
+
+def check_platform(platform):
+    """
+    Check whether we can construct a simulation using this platform.
+    From https://github.com/choderalab/integrator-benchmark/blob/bb307e6ebf476b652e62e41ae49730f530732da3/benchmark/testsystems/configuration.py#L17
+    """
+    try:
+        integrator = openmm.VerletIntegrator(1.0)
+        testsystem = HarmonicOscillator()
+        context = openmm.Context(testsystem.system, integrator, platform)
+        del context, testsystem, integrator
+    except Exception:
+        print('Desired platform not supported')
+
+
+def configure_platform(platform_name='Reference', fallback_platform_name='CPU'):
+    """
+    Retrieve the requested platform with platform-appropriate precision settings.
+    platform_name : str, optional, default='Reference'
+       The requested platform name
+    fallback_platform_name : str, optional, default='CPU'
+       If the requested platform cannot be provided, the fallback platform will be provided.
+    Returns
+    -------
+    platform : simtk.openmm.Platform
+       The requested platform with precision configured appropriately,
+       or the fallback platform if this is not available.
+
+    From https://github.com/choderalab/integrator-benchmark/blob/bb307e6ebf476b652e62e41ae49730f530732da3/benchmark/testsystems/configuration.py#L17
+    """
+    fallback_platform = openmm.Platform.getPlatformByName(fallback_platform_name)
+    try:
+        if platform_name.upper() == 'Reference'.upper():
+            platform = openmm.Platform.getPlatformByName('Reference')
+        elif platform_name.upper() == "CPU":
+            platform = openmm.Platform.getPlatformByName("CPU")
+        elif platform_name.upper() == 'OpenCL'.upper():
+            platform = openmm.Platform.getPlatformByName('OpenCL')
+            platform.setPropertyDefaultValue('OpenCLPrecision', 'mixed')
+        elif platform_name.upper() == 'CUDA'.upper():
+            platform = openmm.Platform.getPlatformByName('CUDA')
+            platform.setPropertyDefaultValue('CudaPrecision', 'mixed')
+            platform.setPropertyDefaultValue('DeterministicForces', 'true')
+        else:
+            raise (ValueError("Invalid platform name"))
+
+        check_platform(platform)
+
+    except:
+        print(
+        "Warning: Returning {} platform instead of requested platform {}".format(fallback_platform_name, platform_name))
+        platform = fallback_platform
+
+    return platform
 
 #smc functions
 def compute_survival_rate(sMC_particle_ancestries):
@@ -134,13 +189,15 @@ def ESS(works_prev, works_incremental):
 
     Returns
     -------
-    ESS: float
+    normalized_ESS: float
         effective sample size
     """
     prev_weights_normalized = np.exp(-works_prev - logsumexp(-works_prev))
     incremental_weights_unnormalized = np.exp(-works_incremental)
     ESS = np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(np.power(prev_weights_normalized, 2), np.power(incremental_weights_unnormalized, 2))
-    return ESS
+    normalized_ESS = ESS / len(prev_weights_normalized)
+    assert normalized_ESS >= 0.0 - DISTRIBUTED_ERROR_TOLERANCE and normalized_ESS <= 1.0 + DISTRIBUTED_ERROR_TOLERANCE, f"the normalized ESS ({normalized_ESS} is not between 0 and 1)"
+    return normalized_ESS
 
 def CESS(works_prev, works_incremental):
     """
@@ -160,8 +217,8 @@ def CESS(works_prev, works_incremental):
     prev_weights_normalization = np.exp(logsumexp(-works_prev))
     prev_weights_normalized = np.exp(-works_prev) / prev_weights_normalization
     incremental_weights_unnormalized = np.exp(-works_incremental)
-    N = len(prev_weights_normalized)
-    CESS = N * np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(prev_weights_normalized, np.power(incremental_weights_unnormalized, 2))
+    CESS = np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(prev_weights_normalized, np.power(incremental_weights_unnormalized, 2))
+    assert CESS >= 0.0 - DISTRIBUTED_ERROR_TOLERANCE and CESS <= 1.0 + DISTRIBUTED_ERROR_TOLERANCE, f"the CESS ({CESS} is not between 0 and 1)"
     return CESS
 
 def compute_timeseries(reduced_potentials):
@@ -175,7 +232,15 @@ def compute_timeseries(reduced_potentials):
 
     Returns
     -------
-    t0 : float
+    t0 : int
+        production region index
+    g : float
+        statistical inefficiency
+    Neff_max : int
+        effective number of samples in production region
+    full_uncorrelated_indices : list of ints
+        uncorrelated indices
+
     """
     from pymbar import timeseries
     t0, g, Neff_max = timeseries.detectEquilibration(reduced_potentials) #computing indices of uncorrelated timeseries
@@ -415,27 +480,27 @@ def activate_LocallyOptimalAnnealing(thermodynamic_state,
         _class = remote_worker
 
     _class.annealing_class = LocallyOptimalAnnealing()
-    _class.annealing_class.initialize(thermodynamic_state = thermodynamic_state,
-                                      lambda_protocol = lambda_protocol,
-                                      timestep = timestep,
-                                      collision_rate = collision_rate,
-                                      temperature = temperature,
-                                      neq_splitting_string = neq_splitting_string,
-                                      ncmc_save_interval = ncmc_save_interval,
-                                      topology = topology,
-                                      subset_atoms = subset_atoms,
-                                      measure_shadow_work = measure_shadow_work,
-                                      integrator = integrator)
+    assert _class.annealing_class.initialize(thermodynamic_state = thermodynamic_state,
+                                             lambda_protocol = lambda_protocol,
+                                             timestep = timestep,
+                                             collision_rate = collision_rate,
+                                             temperature = temperature,
+                                             neq_splitting_string = neq_splitting_string,
+                                             ncmc_save_interval = ncmc_save_interval,
+                                             topology = topology,
+                                             subset_atoms = subset_atoms,
+                                             measure_shadow_work = measure_shadow_work,
+                                             integrator = integrator)
 
 def deactivate_worker_attributes(remote_worker):
     """
     Function to remove worker attributes for annealing
     """
     if remote_worker == 'remote':
-        _logger.debug(f"remote_worker is True, getting worker")
+        _logger.debug(f"\t\tremote_worker is True, getting worker")
         _class = distributed.get_worker()
     else:
-        _logger.debug(f"remote worker is not True; getting local worker as 'self'")
+        _logger.debug(f"\t\tremote worker is not True; getting local worker as 'self'")
         _class = remote_worker
 
     delattr(_class, 'annealing_class')
@@ -451,7 +516,7 @@ def call_anneal_method(remote_worker,
                        return_timer = False,
                        return_sampler_state = False,
                        rethermalize = False,
-                       initial_propagation = True):
+                       compute_incremental_work = True):
     """
     this function calls LocallyOptimalAnnealing.anneal;
     since we can only map functions with parallelisms (no actors), we need to submit a function that calls
@@ -462,15 +527,15 @@ def call_anneal_method(remote_worker,
     else:
         _class = remote_worker
 
-    incremental_work, new_sampler_state, timer = _class.annealing_class.anneal(sampler_state = sampler_state,
+    incremental_work, new_sampler_state, timer, _pass = _class.annealing_class.anneal(sampler_state = sampler_state,
                                                                                lambdas = lambdas,
                                                                                noneq_trajectory_filename = noneq_trajectory_filename,
                                                                                num_integration_steps = num_integration_steps,
                                                                                return_timer = return_timer,
                                                                                return_sampler_state = return_sampler_state,
                                                                                rethermalize = rethermalize,
-                                                                               initial_propagation = initial_propagation)
-    return incremental_work, new_sampler_state, timer
+                                                                               compute_incremental_work = compute_incremental_work)
+    return incremental_work, new_sampler_state, timer, _pass
 
 
 
@@ -495,50 +560,55 @@ class LocallyOptimalAnnealing():
                    measure_shadow_work = False,
                    integrator = 'langevin'):
 
-        self.context_cache = cache.global_context_cache
+        try:
+            self.context_cache = cache.global_context_cache
 
-        if measure_shadow_work:
-            measure_heat = True
-        else:
-            measure_heat = False
+            if measure_shadow_work:
+                measure_heat = True
+            else:
+                measure_heat = False
 
-        self.thermodynamic_state = thermodynamic_state
-        if integrator == 'langevin':
-            self.integrator = integrators.LangevinIntegrator(temperature = temperature,
-                                                             timestep = timestep,
-                                                             splitting = neq_splitting_string,
-                                                             measure_shadow_work = measure_shadow_work,
-                                                             measure_heat = measure_heat,
-                                                             constraint_tolerance = 1e-6,
-                                                             collision_rate = collision_rate)
-        elif integrator == 'hmc':
-            self.integrator = integrators.HMCIntegrator(temperature = temperature,
-                                                        nsteps = 2,
-                                                        timestep = timestep/2)
-        else:
-            raise Exception(f"integrator {integrator} is not supported. supported integrators include {self.supported_integrators}")
+            self.thermodynamic_state = thermodynamic_state
+            if integrator == 'langevin':
+                self.integrator = integrators.LangevinIntegrator(temperature = temperature,
+                                                                 timestep = timestep,
+                                                                 splitting = neq_splitting_string,
+                                                                 measure_shadow_work = measure_shadow_work,
+                                                                 measure_heat = measure_heat,
+                                                                 constraint_tolerance = 1e-6,
+                                                                 collision_rate = collision_rate)
+            elif integrator == 'hmc':
+                self.integrator = integrators.HMCIntegrator(temperature = temperature,
+                                                            nsteps = 2,
+                                                            timestep = timestep/2)
+            else:
+                raise Exception(f"integrator {integrator} is not supported. supported integrators include {self.supported_integrators}")
 
-        self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
+            self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
 
-        #create temperatures
-        self.beta = 1.0 / (kB*temperature)
-        self.temperature = temperature
+            #create temperatures
+            self.beta = 1.0 / (kB*temperature)
+            self.temperature = temperature
 
-        self.save_interval = ncmc_save_interval
+            self.save_interval = ncmc_save_interval
 
-        self.topology = topology
-        self.subset_atoms = subset_atoms
+            self.topology = topology
+            self.subset_atoms = subset_atoms
 
-        #if we have a trajectory, set up some ancillary variables:
-        if self.topology is not None:
-            n_atoms = self.topology.n_atoms
-            self._trajectory_positions = []
-            self._trajectory_box_lengths = []
-            self._trajectory_box_angles = []
+            #if we have a trajectory, set up some ancillary variables:
+            if self.topology is not None:
+                n_atoms = self.topology.n_atoms
+                self._trajectory_positions = []
+                self._trajectory_box_lengths = []
+                self._trajectory_box_angles = []
 
-        #set a bool variable for pass or failure
-        self.succeed = True
-        return True
+            #set a bool variable for pass or failure
+            self.succeed = True
+            return True
+        except Exception as e:
+            _logger.error(e)
+            self.succeed = False
+            return False
 
     def anneal(self,
                sampler_state,
@@ -548,7 +618,7 @@ class LocallyOptimalAnnealing():
                return_timer = False,
                return_sampler_state = False,
                rethermalize = False,
-               initial_propagation = True):
+               compute_incremental_work = True):
         """
         conduct annealing across lambdas.
 
@@ -568,8 +638,9 @@ class LocallyOptimalAnnealing():
             whether to return the last sampler state
         rethermalize : bool, default False,
             whether to re-initialize velocities after propagation step
-        initial_propagation : bool, default True
-            whether to take an initial propagation step before a proposal/weight
+        compute_incremental_work : bool, default True
+            whether to compute the incremental work or simply anneal
+
         Returns
         -------
         incremental_work : np.array of shape (1, len(lambdas) - 1)
@@ -578,6 +649,8 @@ class LocallyOptimalAnnealing():
             configuration at last lambda after proposal
         timer : np.array
             timers
+        _pass : bool
+            whether the annealing protocol passed
         """
         #check if we can save the trajectory
         if noneq_trajectory_filename is not None:
@@ -589,24 +662,29 @@ class LocallyOptimalAnnealing():
             timer = np.zeros(len(lambdas) - 1)
         else:
             timer = None
-
-        incremental_work = np.zeros(len(lambdas) - 1)
+        if compute_incremental_work:
+            incremental_work = np.zeros(len(lambdas) - 1)
         #first set the thermodynamic state to the proper alchemical state and pull context, integrator
+        self.sampler_state = sampler_state
+        if compute_incremental_work:
+            self.dummy_sampler_state = copy.deepcopy(sampler_state) #use dummy to not update velocities and save bandwidth
         self.thermodynamic_state.set_alchemical_parameters(lambdas[0], lambda_protocol = self.lambda_protocol_class)
         self.context, integrator = self.context_cache.get_context(self.thermodynamic_state, self.integrator)
-        if initial_propagation:
-            sampler_state.apply_to_context(self.context, ignore_velocities=True)
-            self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature)
-            integrator.step(num_integration_steps) #we have to propagate the start state
-        else:
-            sampler_state.apply_to_context(self.context, ignore_velocities=False)
+        self.sampler_state.apply_to_context(self.context, ignore_velocities=False)
 
         for idx, _lambda in enumerate(lambdas[1:]): #skip the first lambda
             try:
                 if return_timer:
                     start_timer = time.time()
-                incremental_work[idx] = self.compute_incremental_work(_lambda)
+                if compute_incremental_work: #compute incremental work and update the context
+                    _incremental_work = self.compute_incremental_work(_lambda)
+                    assert np.isfinite(_incremental_work) #check to make sure that the incremental work doesn't blow up; not checking velocities
+                    incremental_work[idx] = _incremental_work
+                else: #simply update the context from the thermodynamic state
+                    self.update_context(_lambda)
+
                 integrator.step(num_integration_steps)
+
                 if rethermalize:
                     self.context.setVelocitiesToTemperature(self.thermodynamic_state.temperature) #rethermalize
                 if noneq_trajectory_filename is not None:
@@ -615,25 +693,24 @@ class LocallyOptimalAnnealing():
                     timer[idx] = time.time() - start_timer
             except Exception as e:
                 print(f"failure: {e}")
-                return e, None, None
+                self.reset_dimensions()
+                return None, None, None, False
 
         self.attempt_termination(noneq_trajectory_filename)
-
-#         try:
-#             _logger.debug(f"\t\t\t\tintegrator acceptance rate: {integrator.acceptance_rate}")
-#         except:
-#             pass
 
         #pull the last sampler state and return
         if return_sampler_state:
             if rethermalize:
                 sampler_state.update_from_context(self.context, ignore_velocities=True)
             else:
-                sampler_state.update_from_context(self.context, ignore_velocities=True)
+                sampler_state.update_from_context(self.context, ignore_velocities=False)
+                assert not sampler_state.has_nan()
+            if not compute_incremental_work:
+                incremental_work = None
 
-            return (incremental_work, sampler_state, timer)
+            return (incremental_work, sampler_state, timer, True)
         else:
-            return (incremental_work, None, timer)
+            return (incremental_work, None, timer, True)
 
 
 
@@ -651,10 +728,15 @@ class LocallyOptimalAnnealing():
             trajectory = md.Trajectory(np.array(self._trajectory_positions), self.topology, unitcell_lengths=np.array(self._trajectory_box_lengths), unitcell_angles=np.array(self._trajectory_box_angles))
             write_nonequilibrium_trajectory(trajectory, noneq_trajectory_filename)
 
+        self.reset_dimensions()
+
+    def reset_dimensions(self):
+        """
+        utility method to reset trajectory positions, box_lengths, and box_angles.
+        """
         self._trajectory_positions = []
         self._trajectory_box_lengths = []
         self._trajectory_box_angles = []
-
 
     def compute_incremental_work(self, _lambda):
         """
@@ -665,16 +747,40 @@ class LocallyOptimalAnnealing():
         ---------
         _lambda : float
             the lambda value used to update the importance sample
+        sampler_state : openmmtools.states.SamplerState
+            sampler state with which to update
+
+        Return
+        ------
+        _incremental_work : float or None
+            the incremental work returned from the lambda update; if None, then there is a numerical instability
         """
-        old_rp = self.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+        self.dummy_sampler_state.update_from_context(self.context, ignore_velocities=True)
+        assert not self.dummy_sampler_state.has_nan()
+        old_rp = self.thermodynamic_state.reduced_potential(self.dummy_sampler_state)
 
         #update thermodynamic state and context
-        self.thermodynamic_state.set_alchemical_parameters(_lambda, lambda_protocol = self.lambda_protocol_class)
-        self.thermodynamic_state.apply_to_context(self.context)
-        new_rp = self.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+        self.update_context(_lambda)
+
+        self.dummy_sampler_state.update_from_context(self.context, ignore_velocities=True)
+        assert not self.dummy_sampler_state.has_nan()
+        new_rp = self.thermodynamic_state.reduced_potential(self.dummy_sampler_state)
         _incremental_work = new_rp - old_rp
 
         return _incremental_work
+
+    def update_context(self, _lambda):
+        """
+        utility function to update the class context
+
+        Arguments
+        ---------
+        _lambda : float
+            the lambda value that the self.context will be updated to
+        """
+        self.thermodynamic_state.set_alchemical_parameters(_lambda, lambda_protocol = self.lambda_protocol_class)
+        self.thermodynamic_state.apply_to_context(self.context)
+
 
     def save_configuration(self, iteration, sampler_state, context):
         """

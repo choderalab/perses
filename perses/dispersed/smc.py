@@ -39,8 +39,9 @@ logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC")
 _logger.setLevel(logging.DEBUG)
 
-#cache.global_context_cache.platform = openmm.Platform.getPlatformByName('Reference') #this is just a local version
+cache.global_context_cache.platform = configure_platform('CUDA')
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
+DISTRIBUTED_ERROR_TOLERANCE = 1e-4
 
 class SequentialMonteCarlo():
     """
@@ -103,10 +104,15 @@ class SequentialMonteCarlo():
         neq_integrator : str, default 'langevin'
             which integrator to use
         external_parallelism : dict('parallelism': perses.dispersed.parallel.Parallelism, 'available_workers': list(str)), default None
-            an external parallelism dictionary
+            an external parallelism dictionary;
+            external_parallelism is used if the entire SequentialMonteCarlo class is allocated workers by an external client (i.e.
+            there exists a Parallelism.client object that is allocating distributed workers to several SequentialMonteCarlo classes simultaneously)
+
         internal_parallelism : dict, default {'library': ('dask', 'LSF'), 'num_processes': 2}
             dictionary of parameters to instantiate a client and run parallel computation internally.  internal parallelization is handled by default
             if None, external worker arguments have to be specified, otherwise, no parallel computation will be conducted, and annealing will be conducted locally.
+            internal_parallelism is used when the SequentialMonteCarlo class is allowed to create its own Parallelism.client object to allocate workers on a
+            cluster.
         """
         _logger.info(f"Initializing SequentialMonteCarlo")
 
@@ -181,11 +187,6 @@ class SequentialMonteCarlo():
         #self.failures = copy.deepcopy(self.cumulative_work)
         self.dg_EXP = copy.deepcopy(self.cumulative_work)
         self.dg_BAR = None
-
-
-        # create an empty dict of starting and ending sampler_states
-        self.start_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
-        self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
 
         #instantiate thermodynamic state
         lambda_alchemical_state = RelativeAlchemicalState.from_system(self.factory.hybrid_system)
@@ -279,7 +280,7 @@ class SequentialMonteCarlo():
         wrapper to deactivate workers and delete appropriate worker attributes for annealing
         """
         if self.internal_parallelism:
-            _logger.debug(f"found internal parallelism; deactivating client.")
+            _logger.debug(f"\t\tfound internal parallelism; deactivating client.")
             #we have to deactivate the client
             if self.parallelism.client is None:
                 #then we are running local annealing
@@ -295,17 +296,15 @@ class SequentialMonteCarlo():
         else:
             raise Exception(f"either internal or external parallelism must be True.")
 
-    def sMC_anneal(self,
-                   num_particles,
-                   protocols = {'forward': np.linspace(0,1, 1000), 'reverse': np.linspace(1,0,1000)},
-                   directions = ['forward','reverse'],
-                   num_integration_steps = 1,
-                   return_timer = False,
-                   rethermalize = False,
-                   trailblaze = None,
-                   resample = None):
+    def AIS(self,
+            num_particles,
+            protocols = {'forward': np.linspace(0,1, 1000), 'reverse': np.linspace(1,0,1000)},
+            num_integration_steps = 1,
+            return_timer = False,
+            rethermalize = False):
         """
-        Conduct generalized sMC annealing with trailblazing functionality.
+        Conduct vanilla AIS (i.e. nonequilibrium switching FEP) with a given protocol (for each direction), specified annealing time per lambda, and support for rethermalization (i.e. velocity resampling)
+        NOTE: AIS is nan-safe?
 
         Arguments
         ----------
@@ -313,14 +312,127 @@ class SequentialMonteCarlo():
             number of particles to run in each direction
         protocols : dict of {direction : np.array}, default {'forward': np.linspace(0,1, 1000), 'reverse': np.linspace(1,0,1000)},
             the dictionary of forward and reverse protocols.  if None, the protocols will be trailblazed.
-        directions : list of str, default ['forward', 'reverse']
-            the directions to run.
         num_integration_steps : int
             number of integration steps per proposal
         return_timer : bool, default False
             whether to time the annealing protocol
         rethermalize : bool, default False
             whether to rethermalize velocities after proposal
+        """
+        _logger.debug(f"conducting vanilla AIS")
+        directions = list(protocols.keys())
+        for _direction in directions:
+            assert _direction in ['forward', 'reverse'], f"direction {_direction} is not an appropriate direction"
+
+        self.protocols = protocols
+
+        self._activate_annealing_workers()
+        if self.internal_parallelism:
+            workers = None
+        elif self.external_parallelism:
+            workers = self.parallelism_parameters['available_workers']
+        _logger.debug(f"\tin choosing the remote worker, the parallelism client is: {self.parallelism.client}")
+        remote_worker = 'remote' if self.parallelism.client is not None else self
+        _logger.debug(f"\tthe remote worker is: {remote_worker}")
+
+        sMC_futures = {_direction: None for _direction in directions} # initialize futures with None objects (we only collect these once)
+        sMC_sampler_states = {_direction: np.array([self.pull_trajectory_snapshot(int(self.protocols[_direction][0])) for _ in range(num_particles)]) for _direction in directions}
+        #Note: we can also add functionality to launch jobs on-the-fly, but for now we just randomly pull equilibrium snapshots from a pre-computed equilibrium distribution
+        self.sMC_timers = {_direction: None for _direction in directions} #the timers are collected once per particle
+        sMC_cumulative_works = {_direction : None for _direction in directions} #again, theses are only collected once
+        worker_retrieval = {} #this is an on-the-fly timer for each direction...
+        self.particle_failures = {_direction: None for _direction in directions} #log the particle failures
+
+        for _direction in directions:
+            worker_retrieval[_direction] = time.time()
+            _logger.info(f"entering {_direction} direction to launch annealing jobs.")
+            #make iterable lists for anneal deployment
+            iterables = []
+            iterables.append([remote_worker] * num_particles) #remote_worker
+            iterables.append(list(sMC_sampler_states[_direction])) #sampler_state
+            iterables.append([self.protocols[_direction]] * num_particles) #lambdas
+            iterables.append([None]*num_particles) #noneq_trajectory_filename
+            iterables.append([num_integration_steps] * num_particles) #num_integration_steps
+            iterables.append([return_timer] * num_particles) #return timer
+            iterables.append([False] * num_particles) #return_sampler_state
+            iterables.append([rethermalize] * num_particles) #rethermalize
+            _compute_incremental_works = [True] * num_particles #only compute incremental work remotely if it is AIS
+            iterables.append(_compute_incremental_works) # whether to compute incremental works
+
+            for job in range(num_particles):
+                if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
+                    iterables[3][job] = self.neq_traj_filename[_direction] + f".iteration_{job:04}.h5"
+
+
+            scattered_futures = [self.parallelism.scatter(iterable) for iterable in iterables]
+            sMC_futures[_direction] = self.parallelism.deploy(func = call_anneal_method,
+                                                              arguments = tuple(scattered_futures),
+                                                              workers = workers)
+            assert len(sMC_futures[_direction]) == num_particles, f"num_particles ({num_particles}) and the length of futures ({len(sMC_futures[_direction])}) do not match"
+
+        #collect futures into one list and see progress
+        all_futures = [item for sublist in list(sMC_futures.values()) for item in sublist]
+        self.parallelism.progress(futures = all_futures)
+
+        #now we collect the finished futures
+        _collected_observables = {}
+        for _direction in directions:
+            _logger.debug(f"collecting annealing jobs in direction {_direction}...")
+            _futures = self.parallelism.gather_results(futures = sMC_futures[_direction], omit_errors = True)
+            if remote_worker == 'remote':
+                assert len(_futures) == num_particles, f"num_particles ({num_particles}) and the length of the collected futures ({len(_futures)}) do not match.  _all_anneal_method is supposed to be safe!"
+
+
+            #collect tuple results
+            _incremental_works = [_iter[0] for _iter in _futures]
+            _sampler_states = [_iter[1] for _iter in _futures]
+            _timers = [_iter[2] for _iter in _futures]
+            _passes = [_iter[3] for _iter in _futures]
+            pass_indices = [index for index in range(num_particles) if _passes[index] == True]
+            successful_incremental_works = [item for index, item in enumerate(_incremental_works) if _passes[index] == True]
+            failed_annealing_jobs = [index for index, item in enumerate(_incremental_works) if _passes[index] == False]
+            assert all(q is not None for q in successful_incremental_works), f"all passing annealing jobs have been filtered but are still returning NoneType objects"
+            _logger.debug(f"\tfailed annealing jobs: {failed_annealing_jobs}")
+            self.particle_failures[_direction] = failed_annealing_jobs if len(failed_annealing_jobs) > 0 else None
+
+            #append the incremental works
+            _logger.debug(f"\tincremental works for direction {_direction}: {np.array(_incremental_works).shape}")
+            _concatenated_incremental_work = np.concatenate((np.array([np.zeros(len(successful_incremental_works))]).T, np.array(successful_incremental_works)), axis = 1)
+            sMC_cumulative_works[_direction] = np.cumsum(_concatenated_incremental_work, axis = 1)
+            _logger.debug(f"\tsMC cumulative works for direction {_direction}: {sMC_cumulative_works[_direction]}")
+            assert np.std(sMC_cumulative_works[_direction][:,0]) <= np.std(sMC_cumulative_works[_direction][:,-1]), f"the variance of the particle weights is not increasing..."
+
+
+            #append the _timers
+            self.sMC_timers[_direction] = _timers if return_timer else None
+
+            print(f"\t{_direction} retrieval time: {time.time() - worker_retrieval[_direction]}")
+
+        _logger.debug(f"deactivating annealing workers...")
+        self._deactivate_annealing_workers()
+        self.compute_sMC_free_energy(sMC_cumulative_works)
+        _logger.debug(f"terminating AIS successfully!")
+
+
+
+    def sMC(self,
+            num_particles,
+            protocols = {'forward': np.linspace(0,1, 1000), 'reverse': np.linspace(1,0,1000)},
+            trailblaze = None,
+            resample = None,
+            directions = ['forward','reverse'],
+            num_integration_steps = 1,
+            return_timer = False,
+            rethermalize = False):
+        """
+        Conduct SequentialMonteCarlo sampling with a trailblazed protocol.  Resampling is supported.
+
+        Arguments
+        ----------
+        num_particles : int
+            number of particles to run in each direction
+        protocols : dict of {direction : np.array}, default {'forward': np.linspace(0,1, 1000), 'reverse': np.linspace(1,0,1000)},
+            the dictionary of forward and reverse protocols.  if None, the protocols will be trailblazed.
         trailblaze : dict, default None
             which observable/criterion to use for trailblazing and the threshold
             if None, trailblazing is not conducted;
@@ -330,154 +442,209 @@ class SequentialMonteCarlo():
             the resample dict specifies the resampling criterion and threshold, as well as the resampling method used.  if None, no resampling is conduced;
             otherwise, the resample dict must take the following form:
             {'criterion': str, 'method': str, 'threshold': float}
+            the directions to run.
+        num_integration_steps : int
+            number of integration steps per proposal
+        return_timer : bool, default False
+            whether to time the annealing protocol
+        rethermalize : bool, default False
+            whether to rethermalize velocities after proposal
         """
-        _logger.debug(f"conducting sMC_anneal")
-        #first some bookkeeping/validation
+        _logger.debug(f"conducting generalized sMC...")
+
+        _logger.debug(f"conducting argument assertions...")
+        #direction assertions
         for _direction in directions:
             assert _direction in ['forward', 'reverse'], f"direction {_direction} is not an appropriate direction"
 
+        starting_lines, finish_lines = {}, {}
+
+        #check protocols:
         if protocols is not None:
-            assert set(protocols.keys()) == set(directions), f"protocols are specified, but do not match the directions in the specified directions"
-            if trailblaze is not None:
-                raise Exception(f"the protocols were specified, as was the trailblaze criterion.  Only one can be defined")
+            assert trailblaze is None, f"neither 'protocols' nor 'trailblaze' is None.  Conflict!"
+            assert all(_key in directions for _key in protocols), f"{_key} is not a supported direction.  Supported directions include {directions}"
+            assert all(type(_val) == np.ndarray for _val in protocols.values()), f"all dictionary values in 'protocols' must be np.ndarrays"
             _trailblaze = False
-            starting_lines = {_direction: protocols[_direction][0] for _direction in directions}
-            finish_lines = {_direction: protocols[_direction][-1] for _direction in directions}
-            self.protocols = protocols
         else:
-            assert trailblaze is not None, f"the protocols weren't specified, and neither was the trailblaze criterion; one must be specified"
-            assert set(list(trailblaze.keys())).issubset(set(['criterion', 'threshold'])), f"trailblaze does not contain 'criterion' and 'threshold'"
-            _trailblaze = True
-            starting_lines, finish_lines = {}, {}
-            if 'forward' in directions:
-                finish_lines['forward'] = 1.0
-                starting_lines['forward'] = 0.0
-            if 'reverse' in directions:
-                finish_lines['reverse'] = 0.0
-                starting_lines['reverse'] = 1.0
-            self.protocols = {_direction : [starting_lines[_direction]] for _direction in directions}
-            _logger.debug(f"starting lines: {starting_lines}")
+            _logger.debug(f"protocols is None; attempting to parse 'trailblaze'")
+            assert trailblaze is not None, f"both 'protocols' and 'trailblaze' are None; there is no annealing to conduct."
+            if trailblaze is not None:
+                assert set(trailblaze.keys()) == set(['criterion', 'threshold']), f"the trailblaze keys are not supported"
+                assert trailblaze['criterion'] in list(self.supported_observables.keys()), f"the specified trailblazing criterion is not supported"
+                assert type(trailblaze['threshold']) == float, f"the specified trailblaze threshold is not a float"
+                _trailblaze = True
 
+        #create end-to-ends
+        _logger.debug(f"conducting end-to-end builds...")
+        if 'forward' in directions:
+            assert protocols['forward'][0] == 0.0 and protocols['forward'][-1] == 1.0, f"the forward protocol must start at 0.0 and end at 1.0"
+            starting_lines['forward'] = 0.0
+            finish_lines['forward'] = 1.0
+        if 'reverse' in directions:
+            assert protocols['reverse'][0] == 1.0 and protocols['reverse'][-1] == 0.0, f"the reverse protocol must start at 1.0 and end at 0.0"
+            starting_lines['reverse'] = 1.0
+            finish_lines['reverse'] = 0.0
 
+        #check resample
         if resample is not None:
-            assert resample['criterion'] in list(self.supported_observables.keys()), f"the specified resampling criterion is not supported."
+            _logger.debug(f"resample is not None; conducting resampling assertions...")
+            assert set(resample.keys()) == set(['criterion', 'method', 'threshold']), f"'resample does not contain the appropriate keys.  see documentation'"
+            assert resample['criterion'] in list(self.supported_observables.keys()), f"the specified resampling criterion is not supported"
             assert resample['method'] in list(self.supported_resampling_methods), f"the specified resampling method is not supported."
+            assert type(resample['threshold'] == float), f"the resampling thrshold must be a float"
             _resample = True
         else:
+            _logger.debug(f"resampling is None")
             _resample = False
 
-        for _direction in directions:
-            assert _direction in ['forward', 'reverse'], f"direction {_direction} is not an appropriate direction"
+        #initialize the new protocols
+        _logger.debug(f"initializing protocols...")
+        self.protocols = {_direction : [starting_lines[_direction]] for _direction in directions}
+        _logger.debug(f"\tinitial protocols: {self.protocols}")
 
-        #initialize recording lists
-        _logger.info(f"initializing organizing dictionaries...")
-
+        _logger.debug(f"activating annealing workers")
         self._activate_annealing_workers()
-
         if self.internal_parallelism:
             workers = None
         elif self.external_parallelism:
             workers = self.parallelism_parameters['available_workers']
-
-        _logger.debug(f"in choosing the remote worker, the parallelism client is: {self.parallelism.client}")
+        _logger.debug(f"\tin choosing the remote worker, the parallelism client is: {self.parallelism.client}")
         remote_worker = 'remote' if self.parallelism.client is not None else self
-        _logger.debug(f"the remote worker is: {remote_worker}")
+        _logger.debug(f"\tthe remote worker is: {remote_worker}")
 
         sMC_futures = {_direction: None for _direction in directions}
         _logger.debug(f"\tsMC_futures: {sMC_futures}")
 
-        sMC_sampler_states = {_direction: np.array([self.pull_trajectory_snapshot(int(starting_lines[_direction])) for _ in range(num_particles)]) for _direction in directions}
+        sMC_sampler_states = {_direction: np.array([self.pull_trajectory_snapshot(int(self.protocols[_direction][0])) for _ in range(num_particles)]) for _direction in directions}
+        sMC_sampler_states = {_direction: None for _direction in directions}
         _logger.debug(f"\tsMC_sampler_states: {sMC_sampler_states}")
 
         sMC_timers = {_direction: [] for _direction in directions}
         _logger.debug(f"sMC_timers: {sMC_timers}")
 
-        sMC_particle_ancestries = {_direction : [np.arange(num_particles)] for _direction in directions}
-        _logger.debug(f"\tsMC_particle_ancestries: {sMC_particle_ancestries}")
+        sMC_incremental_works = {_direction: None for _direction in directions}
+        _logger.debug(f"\tsMC_incremental_works: {sMC_cumulative_works}")
+
 
         sMC_cumulative_works = {_direction : [np.zeros(num_particles)] for _direction in directions}
         _logger.debug(f"\tsMC_cumulative_works: {sMC_cumulative_works}")
 
-        sMC_observables = {_direction : [1.] for _direction in directions}
+        sMC_observables = {_direction : [] for _direction in directions}
         _logger.debug(f"\tsMC_observables: {sMC_observables}")
 
-        omit_local_incremental_append = {_direction: False for _direction in directions}
-        last_increment = {_direction: False for _direction in directions}
-        worker_retrieval = {}
+        sMC_particle_ancestries = {_direction : [np.arange(num_particles)] for _direction in directions}
+        _logger.debug(f"\tsMC_particle_ancestries: {sMC_particle_ancestries}")
 
+        worker_retrieval = {}
+        _lambdas = {}
 
         #now we can launch annealing jobs and manage them on-the-fly
         current_lambdas = starting_lines
         iteration_number = 0
-        #_logger.info(f"current protocols : {self.protocols}")
 
-        if (not _trailblaze) and (not _resample):
-            _AIS = True
-        else:
-            _AIS = False
-
-        _lambdas = {}
-
-        while current_lambdas != finish_lines: # respect the while loop; it is a dangerous creature
-            _logger.info(f"entering iteration {iteration_number}; current lambdas are: {current_lambdas}")
+        _logger.debug(f"commencing annealing...")
+        while current_lambdas != finish_lines:
+            _logger.debug(f"entering iteration {iteration_number}; current_lambdas are {current_lambdas}")
             start_timer = time.time()
 
-            if _AIS:
-                local_incremental_work_collector = {_direction : np.zeros((num_particles, self.protocols[_direction].shape[0])) for _direction in directions}
-            else:
-                local_incremental_work_collector = {_direction : np.zeros(num_particles) for _direction in directions}
+            #sample/resample
+            _logger.debug(f"\tattempting sampling/resampling...")
+            for _direction in directions:
+                if current_lambdas[_direction] == finish_lines[_direction]: #if this direction is done...
+                    _logger.info(f"\tdirection {_direction} is complete.  omitting resample.")
+                    continue
 
-            start_timer = time.time()
-            #if trailblaze is true, we have to choose the next lambda from the previous sampler states and weights
-            if _trailblaze:
-                for _direction in directions:
-                    if current_lambdas[_direction] == finish_lines[_direction]: #if this direction is done...
-                        _logger.info(f"\tdirection {_direction} is complete.  omitting trailblazing.")
-                        continue
-                    else: #we have to choose the next lambda value
-                        _logger.info(f"\ttrailblazing {_direction}...")
-                        #gather sampler states and cumulative works in a concurrent manner (i.e. flatten them)
-                        sampler_states = sMC_sampler_states[_direction]
-                        cumulative_works = sMC_cumulative_works[_direction][-1]
-                        if iteration_number == 0:
-                            initial_guess = None
-                        else:
-                            initial_guess = min([2 * self.protocols[_direction][-1] - self.protocols[_direction][-2], 1.0]) if _direction == 'forward' else max([2 * self.protocols[_direction][-1] - self.protocols[_direction][-2], 0.0])
+                if iteration_number == 0: #this is the first iteration and we have to pull sampler states unbiasedly
+                    sMC_sampler_states.update({_direction: np.array([self.pull_trajectory_snapshot(int(self.protocols[_direction][0])) for _ in range(num_particles)])})
+                elif _resample:
+                    _logger.debug(f"\tattempting to resample particles...")
+                    #Note: the cumulative works we pull for resampling are not the last cumulative works, but the second to last.
+                        #the last cumulative works are the penultimate cumulative works plus the incremental works;
+                        #however, often, the resampling criteria (if conditional, require the separation of cumulative and incremental works)
+                        #implicitly, self._resample will compute the ultimate cumulative works
+                    normalized_observable_value, resampled_works, resampled_indices, resample_bool = self._resample(incremental_works = sMC_incremental_works[_direction],
+                                                                                                 cumulative_works = sMC_cumulative_works[_direction][-2],
+                                                                                                 observable = resample['criterion'],
+                                                                                                 resampling_method = resample['method'],
+                                                                                                 resample_observable_threshold = resample['threshold'])
+                    if resample_bool:
+                        _logger.debug(f"\tresample is True")
+                        sMC_observables[_direction][-1] = normalized_observable_value #update the previous observables with the resampled observable
+                        sMC_cumulative_works[_direction][-1] = resampled_works #update the ultimate cumulative work
 
-                        _new_lambda, normalized_observable = self.binary_search(sampler_states = sampler_states,
-                                                                                cumulative_works = cumulative_works,
-                                                                                start_val = current_lambdas[_direction],
-                                                                                end_val = finish_lines[_direction],
-                                                                                observable = self.supported_observables[trailblaze['criterion']],
-                                                                                observable_threshold = trailblaze['threshold'] * sMC_observables[_direction][-1],
-                                                                                initial_guess = initial_guess)
-                        _logger.info(f"\tlambda increments: {current_lambdas[_direction]} to {_new_lambda}.")
-                        _logger.info(f"\tnormalized observable: {normalized_observable}.  Observable threshold is {trailblaze['threshold'] * sMC_observables[_direction][-1]}")
-                        self.protocols[_direction].append(_new_lambda)
-                        if not _resample:
-                            sMC_observables[_direction].append(normalized_observable)
+                        #we need a deepcopy to prevent annealing over the same sampler state in a single iteration with local annealing
+                        new_sampler_states = np.array([copy.deepcopy(sMC_sampler_states[_direction][i]) for i in resampled_indices])
+                        sMC_sampler_states.update({_direction: new_sampler_states})
+                    else:
+                        #we don't need to update the ultimate observables, cumulative works, or sampler_states
+                        pass
 
+                    #however, we do need to update the particle ancestries...
+                    new_particle_ancestries = np.array([sMC_particle_ancestries[_direction][-1][i] for i in resampled_indices])
+                    sMC_particle_ancestries[_direction].append(new_particle_ancestries)
+                else: #we are not resampling
+                    #the sampler states are updated by gathering the workers' sampler states
+                    #the observables are calculated in the trailblaze attempt pass
+                    #the cumulative works are unchanged
+                    #we do not return particle ancestries if no resampling is conducted
+                    _logger.debug(f"not resampling.  omitting sMC updates")
+                    pass
+
+            #attempt to trailblaze lambdas and launch workers
+            _logger.debug(f"\tincrementing lambdas...")
+            for _direction in directions:
+                if current_lambdas[_direction] == finish_lines[_direction]: #if this direction is done...
+                    _logger.debug(f"\tdirection {_direction} is complete.  omitting trailblazing.")
+                    continue
+
+                if _trailblaze:
+                    _logger.debug(f"\ttrailblazing lambdas in {_direction} direction")
+                    #gather sampler states and cumulative works in a concurrent manner (i.e. flatten them)
+                    sampler_states = sMC_sampler_states[_direction]
+                    cumulative_works = sMC_cumulative_works[_direction][-1]
+                    if iteration_number == 0:
+                        initial_guess = None
+                    else:
+                        initial_guess = min([2 * self.protocols[_direction][-1] - self.protocols[_direction][-2], 1.0]) if _direction == 'forward' else max([2 * self.protocols[_direction][-1] - self.protocols[_direction][-2], 0.0])
+
+                    _new_lambda, normalized_observable, incremental_works = self.binary_search(sampler_states = sampler_states,
+                                                                                               cumulative_works = cumulative_works,
+                                                                                               start_val = current_lambdas[_direction],
+                                                                                               end_val = finish_lines[_direction],
+                                                                                               observable = self.supported_observables[trailblaze['criterion']],
+                                                                                               observable_threshold = trailblaze['threshold'] * sMC_observables[_direction][-1],
+                                                                                               initial_guess = initial_guess)
+                    sMC_incremental_works.update({_direction: incremental_works})
+                    _logger.info(f"\t\tlambda increments: {current_lambdas[_direction]} to {_new_lambda}.")
+                    _logger.info(f"\t\tnormalized observable: {normalized_observable}.  Observable threshold is {trailblaze['threshold'] * sMC_observables[_direction][-1]}")
+                    self.protocols[_direction].append(_new_lambda)
+                    sMC_observables[_direction].append(normalized_observable)
+                    _lambdas.update({_direction: np.array([current_lambdas[_direction], _new_lambda])})
+                    #the current lambdas will be updated at the end of the loop
+                else:
+                    start_val, end_val = self.protocols[_direction][iteration_number], self.protocols[_direction][iteration_number + 1]
+                    _logger.debug(f"\tnot trailblazing; annealing lambda from {start_val} to {end_val}")
+                    self.thermodynamic_state.set_alchemical_parameters(start_val, LambdaProtocol(functions = self.lambda_protocol))
+                    current_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+                    #if we are not trailblazing, then the local observable is computed from the resampling observable
+                    normalized_observable, incremental_works = compute_lambda_increment(new_val, sMC_sampler_states[_direction], resample['criterion'], current_rps, sMC_cumulative_works[_direction][-1])
+                    sMC_incremental_works.update({_direction: incremental_works})
+                    sMC_observables[_direction].append(normalized_observable)
+                    _lambdas.update({_direction: np.array(start_val, end_val)})
+                    #the current lambdas will be updated at the end of the loop
+
+            #now we want to execute distributed/local annealing depending on the remote worker
+            _logger.debug(f"\tconducting annealing execution...")
             for _direction in directions:
                 if current_lambdas[_direction] == finish_lines[_direction]:
                     _logger.info(f"\tdirection {_direction} is complete.  omitting annealing")
-                    omit_local_incremental_append[_direction] = True
                     continue
                 worker_retrieval[_direction] = time.time()
-                _logger.info(f"\tentering {_direction} direction to launch annealing jobs.")
+                _logger.info(f"\t\tentering {_direction} direction to launch annealing jobs.")
 
-                if _AIS:
-                    #then we are just doing vanilla AIS, in which case, it is not necessary to perform a single incremental lambda perturbation
-                    #instead, we can run the entire defined protocol
-                    _lambdas.update({_direction: self.protocols[_direction]})
-                else:
-                    _lambdas.update({_direction: np.array([self.protocols[_direction][iteration_number], self.protocols[_direction][iteration_number + 1]])})
+                _logger.info(f"\t\tthe current lambdas for annealing are {_lambdas[_direction]}")
 
-                _logger.info(f"\t\tthe current lambdas for annealing are {_lambdas}")
-
-                if self.protocols[_direction][iteration_number + 1] == finish_lines[_direction]:
-                    last_increment[_direction] = True
-
-                #make iterable lists for anneal deployment
+                #make construct iterable list for distributed annealing
                 iterables = []
                 iterables.append([remote_worker] * num_particles) #remote_worker
                 iterables.append(list(sMC_sampler_states[_direction])) #sampler_state
@@ -487,10 +654,7 @@ class SequentialMonteCarlo():
                 iterables.append([return_timer] * num_particles) #return timer
                 iterables.append([True] * num_particles) #return_sampler_state
                 iterables.append([rethermalize] * num_particles) #rethermalize
-                if _lambdas[_direction][0] == starting_lines[_direction]: #initial_propagation
-                    iterables.append([True] * num_particles) # propagate the starting lambdas
-                else:
-                    iterables.append([False] * num_particles) # do not propagate
+                iterables.append([True] * num_particles) # whether to compute incremental works
 
                 for job in range(num_particles):
                     if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
@@ -498,19 +662,21 @@ class SequentialMonteCarlo():
 
 
                 scattered_futures = [self.parallelism.scatter(iterable) for iterable in iterables]
-                sMC_futures[_direction] = self.parallelism.deploy(func = call_anneal_method,
+                sMC_futures.update({_direction: self.parallelism.deploy(func = call_anneal_method,
                                                                   arguments = tuple(scattered_futures),
-                                                                  workers = workers)
+                                                                  workers = workers)})
 
             #collect futures into one list and see progress
             all_futures = [item for sublist in list(sMC_futures.values()) for item in sublist]
             self.parallelism.progress(futures = all_futures)
 
             #now we collect the finished futures
+            _logger.debug(f"\tretreiving annealing executions...")
             for _direction in directions:
                 if current_lambdas[_direction] == finish_lines[_direction]:
                     _logger.info(f"\tdirection {_direction} is complete.  omitting job collection")
                     continue
+                _logger.debug(f"\t\tcollecting annealing jobs in direction {_direction}...")
                 _futures = self.parallelism.gather_results(futures = sMC_futures[_direction])
 
                 #collect tuple results
@@ -518,12 +684,11 @@ class SequentialMonteCarlo():
                 _sampler_states = [_iter[1] for _iter in _futures]
                 _timers = [_iter[2] for _iter in _futures]
 
-                #append the incremental works
-                if not _AIS:
-                    local_incremental_work_collector[_direction] += np.array(_incremental_works).flatten()
-                else:
-                    local_incremental_work_collector[_direction][:, 1:] = np.array(_incremental_works)
-                    _logger.debug(f"AIS local local_incremental_work_collector: {local_incremental_work_collector}")
+
+                #make sure incremental works are the same on distributed annealing as they are locally with trailblaze/not-trailblaze
+                assert all(abs(i - j) < DISTRIBUTED_ERROR_TOLERANCE for i, j in zip(np.array(_incremental_works).flatten(), sMC_incremental_works[_direction])), f"the incremental works between the local and distributed platforms do not match"
+                #if this is true, we can update the cumulative work dict
+                sMC_cumulative_works[_direction].append(np.add(sMC_cumulative_works[_direction][-1], sMC_incremental_works[_direction]))
 
                 #append the sampler_states
                 sMC_sampler_states[_direction] = np.array(_sampler_states)
@@ -533,59 +698,32 @@ class SequentialMonteCarlo():
 
                 print(f"\t{_direction} retrieval time: {time.time() - worker_retrieval[_direction]}")
 
-            #report the updated logger dicts
+            #report the updated logger dicts and observables
             for _direction in directions:
-                current_lambdas[_direction] = _lambdas[_direction][-1]
-
-            #resample if necessary
-            if _resample:
-                assert not _AIS, f"attempting to resample, but only AIS is being conducted (sequential importance sampling)"
-                for _direction in directions:
-                    if current_lambdas[_direction] == finish_lines[_direction] and not last_increment[_direction]:
-                        continue
-
-                    if last_increment[_direction] == True:
-                        last_increment[_direction] == False
-
-                    normalized_observable_value, resampled_works, resampled_indices = self._resample(incremental_works = local_incremental_work_collector[_direction],
-                                                                                                     cumulative_works = sMC_cumulative_works[_direction][-1],
-                                                                                                     observable = resample['criterion'],
-                                                                                                     resampling_method = resample['method'],
-                                                                                                     resample_observable_threshold = resample['threshold'])
-                    sMC_observables[_direction].append(normalized_observable_value)
-
-                    sMC_cumulative_works[_direction].append(resampled_works)
-
-                    new_sampler_states = np.array([sMC_sampler_states[_direction][i] for i in resampled_indices])
-                    sMC_sampler_states.update({_direction: new_sampler_states})
-
-                    new_particle_ancestries = np.array([sMC_particle_ancestries[_direction][-1][i] for i in resampled_indices])
-                    sMC_particle_ancestries[_direction].append(new_particle_ancestries)
-            else:
-                if _AIS: #we have to make an exception to bookkeeping if we are doing vanilla AIS
-                    sMC_cumulative_works = {}
-                    cumulative_works = {}
-                    for _direction in directions:
-                        sMC_cumulative_works[_direction] = np.cumsum(local_incremental_work_collector[_direction], axis = 1)
-                else:
-                    for _direction in directions:
-                        if not omit_local_incremental_append[_direction]:
-                            sMC_cumulative_works[_direction].append(np.add(sMC_cumulative_works[_direction][-1], local_incremental_work_collector[_direction]))
+                if current_lambdas[_direction] != finish_lines[_direction]:
+                    current_lambdas[_direction] = _lambdas[_direction][-1] #update the lambda with the current lambda
 
             end_timer = time.time() - start_timer
             iteration_number += 1
             _logger.info(f"iteration took {end_timer} seconds.")
+            _logger.debug(f"\n")
 
+        _logger.debug(f"deactivating annealing workers...")
         self._deactivate_annealing_workers()
-        if not _AIS:
-            for _direction in directions:
-                _lst = sMC_cumulative_works[_direction]
-                sMC_cumulative_works.update({_direction: np.array(_lst).T})
+        for _direction in directions:
+            _lst = sMC_cumulative_works[_direction]
+            sMC_cumulative_works.update({_direction: np.array(_lst).T}) #the cumulative work dimensions should be num_particles * num_iterations
         self.compute_sMC_free_energy(sMC_cumulative_works)
         self.sMC_observables = sMC_observables
         if _resample:
+            _logger.debug(f"computing particle ancestries and survival rates...")
             self.survival_rate = compute_survival_rate(sMC_particle_ancestries)
             self.particle_ancestries = {_direction : np.array([q.flatten() for q in sMC_particle_ancestries[_direction]]) for _direction in sMC_particle_ancestries.keys()}
+        else:
+            _logger.debug(f"omitting particles ancestries and survivial rates (no resampling)...")
+            self.survival_rate = None
+            self.particle_ancestries = None
+
 
     def compute_sMC_free_energy(self, cumulative_work_dict):
         """
@@ -596,7 +734,7 @@ class SequentialMonteCarlo():
         Arguments
         ---------
         cumulative_work_dict : dict
-            dictionary of the form {_direction <str>: np.2darray }
+            dictionary of the form {_direction <str>: np.nddarray of shape (num_particles, iterations)}
             where _direction is 'forward' or 'reverse' and np.2darray is of the shape (num_particles, iteration_number + 2)
         """
         _logger.debug(f"computing free energies...")
@@ -605,7 +743,7 @@ class SequentialMonteCarlo():
         for _direction, _lst in cumulative_work_dict.items():
             self.cumulative_work[_direction] = _lst
             self.dg_EXP[_direction] = np.array([pymbar.EXP(_lst[:,i]) for i in range(_lst.shape[1])])
-        _logger.debug(f"cumulative_work for {_direction}: {self.cumulative_work[_direction]}")
+            _logger.debug(f"cumulative_work for {_direction}: {self.cumulative_work[_direction]}")
         if len(list(self.cumulative_work.keys())) == 2:
             self.dg_BAR = pymbar.BAR(self.cumulative_work['forward'][:, -1], self.cumulative_work['reverse'][:, -1])
 
@@ -822,19 +960,22 @@ class SequentialMonteCarlo():
             the resampled total works at iteration t
         resampled_indices : np.array() int
             resampled particle indices
+        resample_bool : boolean
+            whether resampling is actually conducted
 
 
         """
-        _logger.debug(f"\tAttempting to resample...")
         num_particles = incremental_works.shape[0]
 
-        normalized_observable_value = self.supported_observables[observable](cumulative_works, incremental_works) / num_particles
+        normalized_observable_value = self.supported_observables[observable](cumulative_works, incremental_works)
+        _logger.debug(f"\t\tstart resampled normalized observable value: {normalized_observable_value}")
         total_works = np.add(cumulative_works, incremental_works)
 
         #decide whether to resample
-        _logger.debug(f"\tnormalized observable value: {normalized_observable_value}")
+        _logger.debug(f"\t\tnormalized observable value: {normalized_observable_value}")
         if normalized_observable_value <= resample_observable_threshold: #then we resample
-            _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling")
+            resample_bool = True
+            _logger.debug(f"\t\tnormalized observable value ({normalized_observable_value}) <= {resample_observable_threshold}.  Resampling")
 
             #resample
             resampled_works, resampled_indices = self.supported_resampling_methods[resampling_method](total_works = total_works,
@@ -842,13 +983,24 @@ class SequentialMonteCarlo():
 
             normalized_observable_value = 1.0
         else:
-            _logger.debug(f"\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
+            resample_bool = False
+            _logger.debug(f"\t\tnormalized observable value ({normalized_observable_value}) > {resample_observable_threshold}.  Skipping resampling.")
             resampled_works = total_works
             resampled_indices = np.arange(num_particles)
             normalized_observable_value = normalized_observable_value
 
+        _logger.debug(f"\t\tfinal resampled normalized observable_value: {normalized_observable_value}")
+        return normalized_observable_value, resampled_works, resampled_indices, resample_bool
 
-        return normalized_observable_value, resampled_works, resampled_indices
+    def compute_lambda_increment(self, new_val, sampler_states, observable, current_rps, cumulative_works):
+        """
+        internal method to compute observables and incremental works locally
+        """
+        self.thermodynamic_state.set_alchemical_parameters(new_val, LambdaProtocol(functions = self.lambda_protocol))
+        new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
+        _observable = observable(cumulative_works, new_rps - current_rps)
+        incremental_works = new_rps - current_rps
+        return _observable, incremental_works
 
 
     def binary_search(self,
@@ -858,7 +1010,7 @@ class SequentialMonteCarlo():
                   end_val,
                   observable,
                   observable_threshold,
-                  max_iterations=20,
+                  max_iterations=100,
                   initial_guess = None,
                   precision_threshold = 1e-6):
         """
@@ -882,7 +1034,7 @@ class SequentialMonteCarlo():
             maximum number of interations to conduct
         initial_guess: float, default None
             guess where the threshold is achieved
-        precision_threshold: float, default 1e-6
+        precision_threshold: float, default None
             precision threshold below which, the max iteration will break
 
         Returns
@@ -891,38 +1043,44 @@ class SequentialMonteCarlo():
             maximum value that doesn't exceed threshold
         _observable : float
             observed value of observable
+        _incremental_works : np.ndarray of floats
+            the incremental works of the lambda update
         """
         _base_end_val = end_val
-        _logger.debug(f"\t\t\tmin, max values: {start_val}, {end_val}. ")
+        right_bound = end_val
+        left_bound = start_val
+        _logger.debug(f"\t\tmin, max values: {start_val}, {end_val}. ")
         self.thermodynamic_state.set_alchemical_parameters(start_val, LambdaProtocol(functions = self.lambda_protocol))
         current_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
 
         if initial_guess is not None:
             midpoint = initial_guess
         else:
-            midpoint = (start_val + end_val) * 0.5
+            midpoint = (left_bound + right_bound) * 0.5
 
-        for _ in range(max_iterations):
-            self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
-            new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-            _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+        for iteration in range(max_iterations):
+            if iteration != 0:
+                midpoint = (left_bound + right_bound) * 0.5
+
+            _observable, _incremental_works = self.compute_lambda_increment(new_val = midpoint,
+                                             sampler_states = sampler_states,
+                                             observable = observable,
+                                             current_rps = current_rps,
+                                             cumulative_works = cumulative_works)
             if _observable <= observable_threshold:
-                end_val = midpoint
+                right_bound = midpoint
             else:
-                start_val = midpoint
-            midpoint = (start_val + end_val) * 0.5
+                left_bound = midpoint
+
             if precision_threshold is not None:
-                if abs(_base_end_val - midpoint) <= precision_threshold:
-                    midpoint = _base_end_val
-                    self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
-                    new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-                    _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
-                    break
-                elif abs(end_val - start_val) <= precision_threshold:
-                    midpoint = end_val
-                    self.thermodynamic_state.set_alchemical_parameters(midpoint, LambdaProtocol(functions = self.lambda_protocol))
-                    new_rps = np.array([compute_reduced_potential(self.thermodynamic_state, sampler_state) for sampler_state in sampler_states])
-                    _observable = observable(cumulative_works, new_rps - current_rps) / len(current_rps)
+                if abs(right_bound - left_bound) <= precision_threshold:
+                    midpoint = right_bound
+                    _observable, _incremental_works = self.compute_lambda_increment(new_val = midpoint,
+                                                     sampler_states = sampler_states,
+                                                     observable = observable,
+                                                     current_rps = current_rps,
+                                                     cumulative_works = cumulative_works)
                     break
 
-        return midpoint, _observable
+
+        return midpoint, _observable, _incremental_works

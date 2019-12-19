@@ -127,19 +127,18 @@ def getSetupOptions(filename):
 
         if 'trailblaze' not in setup_options:
             assert 'lambdas' in setup_options, f"'lambdas' is not in setup_options, and 'trailblaze' is False. One must be specified.  Aborting!"
-            assert type(setup_options['lambdas']) in [dict, int] ,f"lambdas is not a list or tuple.  Aborting!"
+            assert type(setup_options['lambdas']) == int, f"lambdas is not an int.  Aborting!"
             setup_options['trailblaze'] = None
-            _logger.info(f"\t\tresample is not specified; defaulting to None.")
         else:
-            assert type(setup_options['trailblaze']) == dict
-            
+            assert type(setup_options['trailblaze']) == dict, f"trailblaze is specified, but is not a dict"
+
         if 'resample' in setup_options:
             assert type(setup_options['resample']) == dict, f"'resample' is not a dict"
             assert set(['criterion', 'method', 'threshold']).issubset(set(list(setup_options['resample'].keys()))), f"'resample' does not contain necessary keys"
         else:
             _logger.info(f"\t\tresample is not specified; defaulting to None")
             setup_options['resample'] = None
-            
+
         if 'n_particles' not in setup_options:
             raise Exception(f"for particle annealing, 'n_particles' must be specified")
         if 'direction' not in setup_options:
@@ -405,7 +404,7 @@ def run_setup(setup_options):
             _internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': setup_options['processes']}
         else:
             _internal_parallelism = None
-            
+
 
         ne_fep = dict()
         for phase in phases:
@@ -529,7 +528,7 @@ if __name__ == "__main__":
             lambdas = setup_options['lambdas']
     else:
         lambdas = None
-                
+
     if setup_options['run_type'] == 'anneal':
         _logger.info(f"skipping setup and annealing...")
         trajectory_prefix = setup_options['trajectory_prefix']
@@ -545,14 +544,11 @@ if __name__ == "__main__":
             ne_fep_run.implement_parallelism(external_parallelism = None, internal_parallelism = _internal_parallelism)
             ne_fep_run.neq_integrator = setup_options['neq_integrator']
             ne_fep_run.LSF = setup_options['LSF']
-            ne_fep_run.sMC_anneal(num_particles = setup_options['n_particles'],
-                                  protocols = lambdas,
-                                  directions = setup_options['direction'],
-                                  num_integration_steps = setup_options['ncmc_num_integration_steps'],
-                                  return_timer = True,
-                                  rethermalize = setup_options['ncmc_rethermalize'],
-                                  trailblaze = setup_options['trailblaze'],
-                                  resample = setup_options['resample'])
+            ne_fep_run.AIS(num_particles = setup_options['n_particles'],
+                           protocols = lambdas,
+                           num_integration_steps = setup_options['ncmc_num_integration_steps'],
+                           return_timer = False,
+                           rethermalize = setup_options['ncmc_rethermalize'])
 
             # try to write out the ne_fep object as a pickle
             try:
@@ -642,14 +638,11 @@ if __name__ == "__main__":
                     else:
                         lambdas = None
                     ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
-                    ne_fep_run.sMC_anneal(num_particles = setup_options['n_particles'],
-                                          protocols = lambdas,
-                                          directions = setup_options['direction'],
-                                          num_integration_steps = setup_options['ncmc_num_integration_steps'],
-                                          return_timer = True,
-                                          rethermalize = setup_options['ncmc_rethermalize'],
-                                          trailblaze = setup_options['trailblaze'],
-                                          resample = setup_options['resample'])
+                    ne_fep_run.AIS(num_particles = setup_options['n_particles'],
+                                   protocols = lambdas,
+                                   num_integration_steps = setup_options['ncmc_num_integration_steps'],
+                                   return_timer = False,
+                                   rethermalize = setup_options['ncmc_rethermalize'])
 
 
                     print("calculation complete; deactivating client")
