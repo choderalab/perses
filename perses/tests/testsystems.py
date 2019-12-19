@@ -45,6 +45,7 @@ import tempfile
 import copy
 from openmmtools.constants import kB
 from perses.rjmc.topology_proposal import SystemGenerator
+from unittest import skipIf
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
