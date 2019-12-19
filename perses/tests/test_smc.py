@@ -17,16 +17,14 @@ from simtk import openmm, unit
 from openmmtools.constants import kB
 from perses.dispersed.utils import *
 #######################
-temperature = 300.0 * unit.kelvin
-kT = kB * temperature
-beta = 1.0/kT
-ENERGY_THRESHOLD = 1e-6
-
 istravis = os.environ.get('TRAVIS', None) == 'true'
 
 #default arguments
 lambda_protocol = 'default'
 temperature = 300 * unit.kelvin
+kT = kB * temperature
+beta = 1.0/kT
+ENERGY_THRESHOLD = 1e-6
 trajectory_directory = 'test_smc'
 trajectory_prefix = 'out'
 atom_selection = 'not water'
