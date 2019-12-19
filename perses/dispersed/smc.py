@@ -188,11 +188,6 @@ class SequentialMonteCarlo():
         self.dg_EXP = copy.deepcopy(self.cumulative_work)
         self.dg_BAR = None
 
-
-        # create an empty dict of starting and ending sampler_states
-        self.start_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
-        self.end_sampler_states = {_direction: [] for _direction in ['forward', 'reverse']}
-
         #instantiate thermodynamic state
         lambda_alchemical_state = RelativeAlchemicalState.from_system(self.factory.hybrid_system)
         lambda_alchemical_state.set_alchemical_parameters(0.0, LambdaProtocol(functions = self.lambda_protocol))

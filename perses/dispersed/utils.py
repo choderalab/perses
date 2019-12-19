@@ -217,8 +217,8 @@ def CESS(works_prev, works_incremental):
     prev_weights_normalization = np.exp(logsumexp(-works_prev))
     prev_weights_normalized = np.exp(-works_prev) / prev_weights_normalization
     incremental_weights_unnormalized = np.exp(-works_incremental)
-    N = len(prev_weights_normalized)
-    CESS = N * np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(prev_weights_normalized, np.power(incremental_weights_unnormalized, 2))
+    CESS = np.dot(prev_weights_normalized, incremental_weights_unnormalized)**2 / np.dot(prev_weights_normalized, np.power(incremental_weights_unnormalized, 2))
+    assert CESS >= 0.0 - DISTRIBUTED_ERROR_TOLERANCE and CESS <= 1.0 + DISTRIBUTED_ERROR_TOLERANCE, f"the CESS ({CESS} is not between 0 and 1)"
     return CESS
 
 def compute_timeseries(reduced_potentials):
@@ -232,7 +232,15 @@ def compute_timeseries(reduced_potentials):
 
     Returns
     -------
-    t0 : float
+    t0 : int
+        production region index
+    g : float
+        statistical inefficiency
+    Neff_max : int
+        effective number of samples in production region
+    full_uncorrelated_indices : list of ints
+        uncorrelated indices
+
     """
     from pymbar import timeseries
     t0, g, Neff_max = timeseries.detectEquilibration(reduced_potentials) #computing indices of uncorrelated timeseries
@@ -472,17 +480,17 @@ def activate_LocallyOptimalAnnealing(thermodynamic_state,
         _class = remote_worker
 
     _class.annealing_class = LocallyOptimalAnnealing()
-    _class.annealing_class.initialize(thermodynamic_state = thermodynamic_state,
-                                      lambda_protocol = lambda_protocol,
-                                      timestep = timestep,
-                                      collision_rate = collision_rate,
-                                      temperature = temperature,
-                                      neq_splitting_string = neq_splitting_string,
-                                      ncmc_save_interval = ncmc_save_interval,
-                                      topology = topology,
-                                      subset_atoms = subset_atoms,
-                                      measure_shadow_work = measure_shadow_work,
-                                      integrator = integrator)
+    assert _class.annealing_class.initialize(thermodynamic_state = thermodynamic_state,
+                                             lambda_protocol = lambda_protocol,
+                                             timestep = timestep,
+                                             collision_rate = collision_rate,
+                                             temperature = temperature,
+                                             neq_splitting_string = neq_splitting_string,
+                                             ncmc_save_interval = ncmc_save_interval,
+                                             topology = topology,
+                                             subset_atoms = subset_atoms,
+                                             measure_shadow_work = measure_shadow_work,
+                                             integrator = integrator)
 
 def deactivate_worker_attributes(remote_worker):
     """
@@ -552,50 +560,55 @@ class LocallyOptimalAnnealing():
                    measure_shadow_work = False,
                    integrator = 'langevin'):
 
-        self.context_cache = cache.global_context_cache
+        try:
+            self.context_cache = cache.global_context_cache
 
-        if measure_shadow_work:
-            measure_heat = True
-        else:
-            measure_heat = False
+            if measure_shadow_work:
+                measure_heat = True
+            else:
+                measure_heat = False
 
-        self.thermodynamic_state = thermodynamic_state
-        if integrator == 'langevin':
-            self.integrator = integrators.LangevinIntegrator(temperature = temperature,
-                                                             timestep = timestep,
-                                                             splitting = neq_splitting_string,
-                                                             measure_shadow_work = measure_shadow_work,
-                                                             measure_heat = measure_heat,
-                                                             constraint_tolerance = 1e-6,
-                                                             collision_rate = collision_rate)
-        elif integrator == 'hmc':
-            self.integrator = integrators.HMCIntegrator(temperature = temperature,
-                                                        nsteps = 2,
-                                                        timestep = timestep/2)
-        else:
-            raise Exception(f"integrator {integrator} is not supported. supported integrators include {self.supported_integrators}")
+            self.thermodynamic_state = thermodynamic_state
+            if integrator == 'langevin':
+                self.integrator = integrators.LangevinIntegrator(temperature = temperature,
+                                                                 timestep = timestep,
+                                                                 splitting = neq_splitting_string,
+                                                                 measure_shadow_work = measure_shadow_work,
+                                                                 measure_heat = measure_heat,
+                                                                 constraint_tolerance = 1e-6,
+                                                                 collision_rate = collision_rate)
+            elif integrator == 'hmc':
+                self.integrator = integrators.HMCIntegrator(temperature = temperature,
+                                                            nsteps = 2,
+                                                            timestep = timestep/2)
+            else:
+                raise Exception(f"integrator {integrator} is not supported. supported integrators include {self.supported_integrators}")
 
-        self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
+            self.lambda_protocol_class = LambdaProtocol(functions = lambda_protocol)
 
-        #create temperatures
-        self.beta = 1.0 / (kB*temperature)
-        self.temperature = temperature
+            #create temperatures
+            self.beta = 1.0 / (kB*temperature)
+            self.temperature = temperature
 
-        self.save_interval = ncmc_save_interval
+            self.save_interval = ncmc_save_interval
 
-        self.topology = topology
-        self.subset_atoms = subset_atoms
+            self.topology = topology
+            self.subset_atoms = subset_atoms
 
-        #if we have a trajectory, set up some ancillary variables:
-        if self.topology is not None:
-            n_atoms = self.topology.n_atoms
-            self._trajectory_positions = []
-            self._trajectory_box_lengths = []
-            self._trajectory_box_angles = []
+            #if we have a trajectory, set up some ancillary variables:
+            if self.topology is not None:
+                n_atoms = self.topology.n_atoms
+                self._trajectory_positions = []
+                self._trajectory_box_lengths = []
+                self._trajectory_box_angles = []
 
-        #set a bool variable for pass or failure
-        self.succeed = True
-        return True
+            #set a bool variable for pass or failure
+            self.succeed = True
+            return True
+        except Exception as e:
+            _logger.error(e)
+            self.succeed = False
+            return False
 
     def anneal(self,
                sampler_state,
