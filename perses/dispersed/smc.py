@@ -176,17 +176,16 @@ class SequentialMonteCarlo():
         self._eq_dict = {0: [], 1: [], '0_decorrelated': None, '1_decorrelated': None, '0_reduced_potentials': [], '1_reduced_potentials': []}
         self._eq_files_dict = {0: [], 1: []}
         self._eq_timers = {0: [], 1: []}
-        self._neq_timers = {'forward': [], 'reverse': []}
 
         #instantiate nonequilibrium work dicts: the keys indicate from which equilibrium thermodynamic state the neq_switching is conducted FROM (as opposed to TO)
         self.cumulative_work = {'forward': [], 'reverse': []}
+        self._neq_timers = copy.deepcopy()
         self.incremental_work = copy.deepcopy(self.cumulative_work)
         self.shadow_work = copy.deepcopy(self.cumulative_work)
-        self.nonequilibrium_timers = copy.deepcopy(self.cumulative_work)
-        self.total_jobs = 0
-        #self.failures = copy.deepcopy(self.cumulative_work)
+        self.total_jobs = {'forward': 0, 'reverse': 0} #the total number of jobs that have been run in either direction
+        self.particle_failures = copy.deepcopy(self.cumulative_work) # the particles that failed
         self.dg_EXP = copy.deepcopy(self.cumulative_work)
-        self.dg_BAR = None
+        self.dg_BAR = []
 
         #instantiate thermodynamic state
         lambda_alchemical_state = RelativeAlchemicalState.from_system(self.factory.hybrid_system)
@@ -338,10 +337,10 @@ class SequentialMonteCarlo():
         sMC_futures = {_direction: None for _direction in directions} # initialize futures with None objects (we only collect these once)
         sMC_sampler_states = {_direction: np.array([self.pull_trajectory_snapshot(int(self.protocols[_direction][0])) for _ in range(num_particles)]) for _direction in directions}
         #Note: we can also add functionality to launch jobs on-the-fly, but for now we just randomly pull equilibrium snapshots from a pre-computed equilibrium distribution
-        self.sMC_timers = {_direction: None for _direction in directions} #the timers are collected once per particle
+        sMC_timers = {_direction: None for _direction in directions} #the timers are collected once per particle
         sMC_cumulative_works = {_direction : None for _direction in directions} #again, theses are only collected once
         worker_retrieval = {} #this is an on-the-fly timer for each direction...
-        self.particle_failures = {_direction: None for _direction in directions} #log the particle failures
+        particle_failures = {_direction: None for _direction in directions} #log the particle failures
 
         for _direction in directions:
             worker_retrieval[_direction] = time.time()
@@ -359,7 +358,7 @@ class SequentialMonteCarlo():
             _compute_incremental_works = [True] * num_particles #only compute incremental work remotely if it is AIS
             iterables.append(_compute_incremental_works) # whether to compute incremental works
 
-            for job in range(num_particles):
+            for job in range(self.total_jobs[_direction] + num_particles):
                 if self.ncmc_save_interval is not None: #check if we should make 'trajectory_filename' not None
                     iterables[3][job] = self.neq_traj_filename[_direction] + f".iteration_{job:04}.h5"
 
@@ -390,10 +389,11 @@ class SequentialMonteCarlo():
             _passes = [_iter[3] for _iter in _futures]
             pass_indices = [index for index in range(num_particles) if _passes[index] == True]
             successful_incremental_works = [item for index, item in enumerate(_incremental_works) if _passes[index] == True]
-            failed_annealing_jobs = [index for index, item in enumerate(_incremental_works) if _passes[index] == False]
+            failed_annealing_jobs = [index + self.total_jobs[_direction] for index, item in enumerate(_incremental_works) if _passes[index] == False]
             assert all(q is not None for q in successful_incremental_works), f"all passing annealing jobs have been filtered but are still returning NoneType objects"
             _logger.debug(f"\tfailed annealing jobs: {failed_annealing_jobs}")
-            self.particle_failures[_direction] = failed_annealing_jobs if len(failed_annealing_jobs) > 0 else None
+            particle_failures[_direction] = failed_annealing_jobs if len(failed_annealing_jobs) > 0 else None
+            self.particle_failures[_direction].append(particle_failures[_direction])
 
             #append the incremental works
             _logger.debug(f"\tincremental works for direction {_direction}: {np.array(_incremental_works).shape}")
@@ -404,13 +404,24 @@ class SequentialMonteCarlo():
 
 
             #append the _timers
-            self.sMC_timers[_direction] = _timers if return_timer else None
+            sMC_timers[_direction] = _timers if return_timer else None
+            self._neq_timers[_direction].append(sMC_timers[_direction])
+
+            #update the cumulative_work
+            self.cumulative_work[_direction].append(sMC_cumulative_works[_direction])
+
+            #update total jobs:
+            self.total_jobs[_direction] += num_particles
 
             print(f"\t{_direction} retrieval time: {time.time() - worker_retrieval[_direction]}")
 
         _logger.debug(f"deactivating annealing workers...")
         self._deactivate_annealing_workers()
-        self.compute_sMC_free_energy(sMC_cumulative_works)
+        dg_EXP, dg_BAR = self.compute_sMC_free_energy(sMC_cumulative_works)
+        self.dg_BAR.append(dg_BAR)
+        for _direction in self.dg_EXP.keys():
+            self.dg_EXP[_direction].append(dg_EXP[_direction])
+
         _logger.debug(f"terminating AIS successfully!")
 
 
@@ -728,24 +739,59 @@ class SequentialMonteCarlo():
     def compute_sMC_free_energy(self, cumulative_work_dict):
         """
         Method to compute the free energy of sMC_anneal type cumultaive work dicts, whether the dicts are constructed
-        via AIS or generalized sMC.  The self.cumulative_works, self.dg_EXP, and self.dg_BAR (if applicable) are returned as
-        instance attributes.
+        via AIS or generalized sMC.
 
         Arguments
         ---------
         cumulative_work_dict : dict
             dictionary of the form {_direction <str>: np.nddarray of shape (num_particles, iterations)}
             where _direction is 'forward' or 'reverse' and np.2darray is of the shape (num_particles, iteration_number + 2)
+
+        Returns
+        -------
+        dg_EXP : dict of {_direction <str, 'forward' or 'reverse'> : np.array(1, cumulative_work_dict[_direction].shape[1])}
+            forward and reverse dg_EXP estimates
+        dg_BAR : tuple( dG <float>, ddG <float>)
+            forward and reverse Bennett Acceptance Ratio (MLE) estimate
         """
         _logger.debug(f"computing free energies...")
-        self.cumulative_work = {}
-        self.dg_EXP = {}
-        for _direction, _lst in cumulative_work_dict.items():
-            self.cumulative_work[_direction] = _lst
-            self.dg_EXP[_direction] = np.array([pymbar.EXP(_lst[:,i]) for i in range(_lst.shape[1])])
-            _logger.debug(f"cumulative_work for {_direction}: {self.cumulative_work[_direction]}")
-        if len(list(self.cumulative_work.keys())) == 2:
-            self.dg_BAR = pymbar.BAR(self.cumulative_work['forward'][:, -1], self.cumulative_work['reverse'][:, -1])
+        cumulative_work = {}
+        dg_EXP = {}
+        for _direction in self.dg_EXP.keys():
+            if _direction in list(cumulative_work_dict.keys()):
+                cumulative_work[_direction] = _lst
+                dg_EXP[_direction] = np.array([pymbar.EXP(_lst[:,i]) for i in range(_lst.shape[1])])
+                _logger.debug(f"cumulative_work for {_direction}: {cumulative_work[_direction]}")
+            else:
+                dg_EXP[_direction] = None
+        if len(list(cumulative_work.keys())) == 2:
+            dg_BAR = pymbar.BAR(cumulative_work['forward'][:, -1], cumulative_work['reverse'][:, -1])
+        else:
+            dg_BAR = None
+
+        return dg_EXP, dg_BAR
+
+    def compute_aggregated_sMC_free_energy(self):
+        """
+        Compute the aggregated sMC free energies of all AIS or generalized sMC catalogued in self.cumulative_work
+        """
+        self.total_dg_EXP, self.total_dg_BAR = {_direction: None for _direction in list(self.cumulative_work.keys())}, None
+        final_works_dict = {_direction: None for _direction in list(self.cumulative_work.keys())}
+        for _direction in list(self.cumulative_work.keys()):
+            final_works = np.concatenate(np.array([iter[:,-1] for iter in self.cumulative_work[_direction]]))
+            final_works_dict.update({_direction: final_works})
+            try:
+                self.total_dg_EXP.update({_direction: pymbar.EXP(final_works)})
+            except Exception as e:
+                print(e)
+
+        try:
+            self.total_dg_BAR = pymbar.BAR(final_works_dict['forward'], final_works_dict['reverse'])
+        except Exception as e:
+            print(e)
+
+
+
 
     def minimize_sampler_states(self):
         """
