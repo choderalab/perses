@@ -46,6 +46,8 @@ import copy
 from openmmtools.constants import kB
 from perses.rjmc.topology_proposal import SystemGenerator
 from unittest import skipIf
+from perses.dispersed.utils import minimize #updated minimizer
+from openmmtools.states import ThermodynamicState, SamplerState
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
@@ -979,7 +981,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize(self)
+        minimize_wrapper(self)
 
 class AblAffinityTestSystem(PersesTestSystem):
     """
@@ -1184,7 +1186,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize(self)
+        minimize_wrapper(self)
 
 class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     """
@@ -1399,7 +1401,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize(self)
+        minimize_wrapper(self)
         print('AblImatinibProtonationStateTestSystem initialized.')
 
 class ImidazoleProtonationStateTestSystem(PersesTestSystem):
@@ -1615,7 +1617,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         print('ImidazoleProtonationStateTestSystem initialized.')
 
-def minimize(testsystem):
+def minimize_wrapper(testsystem):
     """
     Minimize all structures in test system.
 
@@ -1631,20 +1633,12 @@ def minimize(testsystem):
     """
     for environment in testsystem.environments:
         print("Minimizing '%s'..." % environment)
-        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context = openmm.Context(testsystem.systems[environment], integrator)
-        context.setPositions(testsystem.positions[environment])
-        print ("Initial energy is %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
-        TOL = 1.0
-        MAX_STEPS = 50
-        openmm.LocalEnergyMinimizer.minimize(context, TOL, MAX_STEPS)
-        print ("Final energy is   %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
-        # Update positions.
-        testsystem.positions[environment] = context.getState(getPositions=True).getPositions(asNumpy=True)
-        # Update sampler states.
-        testsystem.mcmc_samplers[environment].sampler_state.positions = testsystem.positions[environment]
-        # Clean up.
-        del context, integrator
+        thermostate = ThermodynamicState(system = testsystem.systems[environment], temperature = 300.0 * unit.kelvin) #minimizer is temperature-independent
+        sampler_state = SamplerState(positions = testsystem.positions[environment])
+        minimize(thermostate, sampler_state)
+
+        testsystem.positions[environment] = sampler_state.positions
+        testsystem.mcmc_samplers[environment].sampler_state = sampler_state
 
 class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
@@ -2408,8 +2402,7 @@ def test_testsystems():
     """
     Test instantiation of all test systems.
     """
-    #removing 'KinaseInhibitorsTestSystem'
-    testsystem_names = ['T4LysozymeInhibitorsTestSystem','AlkanesTestSystem', 'AlanineDipeptideTestSystem']
+    testsystem_names = [ 'KinaseInhibitorsTestSystem', 'T4LysozymeInhibitorsTestSystem','AlkanesTestSystem', 'AlanineDipeptideTestSystem']
     niterations = 2 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
