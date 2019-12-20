@@ -27,89 +27,7 @@ class HybridCompatibilityMixin(object):
         self._hybrid_factory = hybrid_factory
         super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
 
-    def _compute_replica_energies(self, replica_id):
-        """Compute the energy for the replica in every ThermodynamicState."""
-        # Initialize replica energies for each thermodynamic state.
-        energy_thermodynamic_states = np.zeros(self.n_states)
-        energy_unsampled_states = np.zeros(len(self._unsampled_states))
-
-        # Retrieve sampler state associated to this replica.
-        sampler_state = self._sampler_states[replica_id]
-
-        # Determine neighborhood
-        state_index = self._replica_thermodynamic_states[replica_id]
-        neighborhood = self._neighborhood(state_index)
-        # Only compute energies over neighborhoods
-        energy_neighborhood_states = energy_thermodynamic_states[neighborhood]  # Array, can be indexed like this
-        neighborhood_thermodynamic_states = [self._thermodynamic_states[n] for n in neighborhood]  # List
-
-        # determine if the end states are real or hybrid
-        # if the end states are real, we need to account for the different number of particles
-        real_endstates = False
-        n_atoms_hybrid_system = len(sampler_state.positions)
-
-        for unsampled_state in self._unsampled_states:
-            system = unsampled_state.get_system()
-            if system.getNumParticles() != n_atoms_hybrid_system:
-                logger.debug("Unsampled endstates have different number of atoms than sampler states, therefore assuming they are 'real' systems")
-                real_endstates = True
-
-         # Compute energy for all thermodynamic states.
-        for idx, (energies, states) in enumerate([(energy_neighborhood_states, neighborhood_thermodynamic_states),
-                                                  (energy_unsampled_states, self._unsampled_states)]):
-            # Group thermodynamic states by compatibility.
-            compatible_groups, original_indices = group_by_compatibility(states)
-
-             # Are we treating the unsampled states? if so, idx will be one:
-            if idx == 1:
-                unsampled_state = True
-            else:
-                unsampled_state = False
-
-             # Compute the reduced potentials of all the compatible states.
-            for compatible_group, state_indices in zip(compatible_groups, original_indices):
-                # Get the context, any Integrator works.
-                context, integrator = cache.global_context_cache.get_context(compatible_group[0])
-
-                 # Are we trying to compute a potential at an unsampled (different number of particles) state?
-                if unsampled_state and real_endstates:
-                    if state_indices[0] == 0:
-                        positions = self._hybrid_factory.old_positions(sampler_state.positions)
-                    elif state_indices[0] == 1:
-                        positions = self._hybrid_factory.new_positions(sampler_state.positions)
-                    else:
-                        raise ValueError("This mixin isn't defined for more than two unsampled states")
-
-                    box_vectors = sampler_state.box_vectors
-
-                    context.setPeriodicBoxVectors(*box_vectors)
-                    context.setPositions(positions)
-
-                else:
-                    # Update positions and box vectors. We don't need
-                    # to set Context velocities for the potential.
-                    sampler_state.apply_to_context(context, ignore_velocities=True)
-
-                 # Compute and update the reduced potentials.
-                compatible_energies = ThermodynamicState.reduced_potential_at_states(context, compatible_group)
-                for energy_idx, state_idx in enumerate(state_indices):
-                    energies[state_idx] = compatible_energies[energy_idx]
-
-         # Return the new energies.
-        return energy_neighborhood_states, energy_unsampled_states
-
-
-class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
-    """
-    SAMSSampler that supports unsampled end states with a different number of positions
-    """
-
-    def __init__(self, *args, hybrid_factory=None, **kwargs):
-        super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
-        self._factory = hybrid_factory
-
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
-              lambda_schedule=None,lambda_protocol=LambdaProtocol()):
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schedule=None,lambda_protocol=LambdaProtocol(),endstates=True):
 
         from perses.dispersed import feptasks
 
@@ -135,8 +53,8 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
             difference = np.diff(lambda_schedule)
             assert ( all(i >= 0. for i in difference ) ), 'lambda_schedule must be monotonicly increasing'
 
+        #starting with the initial positions generated py geometry.py
         sampler_state =  SamplerState(positions, box_vectors=hybrid_system.getDefaultPeriodicBoxVectors())
-        sampler_state_list = []
         for lambda_val in lambda_schedule:
             compound_thermodynamic_state_copy = copy.deepcopy(compound_thermodynamic_state)
             compound_thermodynamic_state_copy.set_alchemical_parameters(lambda_val,lambda_protocol)
@@ -147,16 +65,68 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
             feptasks.minimize(compound_thermodynamic_state_copy,sampler_state)
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
-         #nonalchemical_thermodynamic_states = [
-        #    ThermodynamicState(self._factory._old_system, temperature=temperature),
-        #    ThermodynamicState(self._factory._new_system, temperature=temperature)]
+        if endstates:
+            # generating unsampled endstates
+            logger.info('Generating unsampled endstates.')
+            unsampled_endstates = [thermodynamic_state_list[0],thermodynamic_state_list[-1]] # taking the first and last states of the alchemical protocol
 
+            # For the unsampled endstates:
+            # - move all alchemical atom LJ parameters from CustomNonbondedForce back to NonbondedForce
+            # - delete CustomNonbondedForce (since it is no longer needed)
+            # - set PME tolerance to 1e-5 of better
+            # - enable LJPME to handle long-range dispersion correction in physically reasonable manner
+            unsampled_dispersion_endstates = list()
+            for master_lambda, endstate in zip([0.,1.],unsampled_endstates):
+                # Get a copy of the system
+                dispersion_system = endstate.get_system()
+                energy_unit = unit.kilocalories_per_mole
+                # Find the NonbondedForce (there must be only one)
+                forces = { force.__class__.__name__ : force for force in dispersion_system.getForces() }
+                # Set NonbondedForce to use LJPME
+                forces['NonbondedForce'].setNonbondedMethod(openmm.NonbondedForce.LJPME)
+                # Set tight PME tolerance
+                TIGHT_PME_TOLERANCE = 1.0e-5
+                forces['NonbondedForce'].setEwaldErrorTolerance(TIGHT_PME_TOLERANCE)
+                # Move alchemical LJ sites from CustomNonbondedForce back to NonbondedForce
+                for particle_index in range(forces['NonbondedForce'].getNumParticles()):
+                    charge, sigma, epsilon = forces['NonbondedForce'].getParticleParameters(particle_index)
+                    sigmaA, epsilonA, sigmaB, epsilonB, unique_old, unique_new = forces['CustomNonbondedForce'].getParticleParameters(particle_index)
+                    if (epsilon/energy_unit == 0.0) and ((epsilonA > 0.0) or (epsilonB > 0.0)):
+                        sigma = (1-master_lambda)*sigmaA + master_lambda*sigmaB
+                        epsilon = (1-master_lambda)*epsilonA + master_lambda*epsilonB
+                        nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon)
+                # Delete the CustomNonbondedForce since we have moved all alchemical particles out of it
+                for force_index, force in dispersion_system.getForces():
+                    if force.__class__.__name__ == 'CustomNonbondedForce':
+                        custom_nonbonded_force_index = force_index
+                        break
+                system.removeForce(custom_nonbonded_force_index)
+                # Set all parameters to master lambda
+                for force_index, force in system.getForces():
+                    if hasattr(force, 'getNumGlobalParameters'):
+                        for parameter_index in range(force.getNumGlobalParameters()):
+                            if force.getGlobalParameterName(parameter_index)[0:7] == 'lambda_':
+                                force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
+                # Store the unsampled endstate
+                unsampled_dispersion_endstates.append(ThermodynamicState(dispersion_system, temperature=temperature))
 
         reporter = storage_file
 
-        self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
-                    #            storage=reporter, unsampled_thermodynamic_states=nonalchemical_thermodynamic_states)
-                    storage=reporter, unsampled_thermodynamic_states=None)
+        if endstates:
+            self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
+                    storage=reporter, unsampled_thermodynamic_states=unsampled_dispersion_endstates)
+        else:
+            self.create(thermodynamic_states=thermodynamic_state_list, sampler_states=sampler_state_list,
+                        storage=reporter)
+
+class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
+    """
+    SAMSSampler that supports unsampled end states with a different number of positions
+    """
+
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
+        super(HybridSAMSSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
+        self._factory = hybrid_factory
 
 
 class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchangeSampler):
@@ -164,7 +134,7 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
     ReplicaExchangeSampler that supports unsampled end states with a different number of positions
     """
 
-    def __init__(self, *args, hybrid_factory=None, real_endstates=False, **kwargs):
+    def __init__(self, *args, hybrid_factory=None, **kwargs):
         super(HybridRepexSampler, self).__init__(*args, hybrid_factory=hybrid_factory, **kwargs)
         self._factory = hybrid_factory
         self._real_endstates = real_endstates
