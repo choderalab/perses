@@ -77,8 +77,12 @@ class HybridCompatibilityMixin(object):
             logger.info('Generating unsampled endstates.')
             unsampled_endstates = [thermodynamic_state_list[0],thermodynamic_state_list[-1]] # taking the first and last states of the alchemical protocol
 
-             # changing the non-bonded method for the unsampled endstates
-            unsampled_dispersion_endstates = []
+            # For the unsampled endstates:
+            # - move all alchemical atom LJ parameters from CustomNonbondedForce back to NonbondedForce
+            # - delete CustomNonbondedForce (since it is no longer needed)
+            # - set PME tolerance to 1e-5 of better
+            # - enable LJPME to handle long-range dispersion correction in physically reasonable manner
+            unsampled_dispersion_endstates = list()
             for master_lambda, endstate in zip([0.,1.],unsampled_endstates):
                 # Get a copy of the system
                 dispersion_system = endstate.get_system()
