@@ -4,6 +4,7 @@ import pickle
 import os
 import sys
 import simtk.unit as unit
+from simtk import openmm
 import logging
 
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
@@ -11,7 +12,7 @@ from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
-from openmmtools import mcmc
+from openmmtools import mcmc, utils
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
@@ -501,6 +502,18 @@ if __name__ == "__main__":
 
     _logger.info(f"Getting setup options from {yaml_filename}")
     setup_options = getSetupOptions(yaml_filename)
+
+    #### configure platform
+    platform = utils.get_fastest_platform()
+    platform_name = platform.getName()
+    platform = openmm.Platform.getPlatformByName(platform_name) 
+    if platform_name in ['CUDA','CPU']:
+        platform_precision = 'mixed'
+        platform.setPropertyDefaultValue('Precision', platform_precision)
+    else:
+        _logger.warning(f'Platform {platform_name} may not support mixed precision, therefore using default')
+
+
     if setup_options['run_type'] == 'anneal':
         _logger.info(f"skipping setup and annealing...")
         trajectory_prefix = setup_options['trajectory_prefix']

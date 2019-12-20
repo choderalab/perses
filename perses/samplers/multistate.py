@@ -42,15 +42,6 @@ class HybridCompatibilityMixin(object):
 
         context_cache = cache.ContextCache()
 
-        # WARNING: THIS DOES NOT ACTUALLY DO ANYTHING because we can't set the precision after context creation
-        # TODO: FIX THIS BY MOVING IT TO THE INITIAL SETUP
-        # SEE https://github.com/choderalab/yank/blob/3ac34a66883941492825450aeddf2e5be8bc848e/Yank/experiment.py#L2218-L2304
-        context, _ = context_cache.get_context(compound_thermodynamic_state)
-        platform = context.getPlatform()
-        logger.info('Setting the platform precision to mixed')
-        platform.setPropertyDefaultValue('Precision','mixed')
-
-
         if lambda_schedule is None:
             lambda_schedule = np.linspace(0.,1.,n_states)
         else:
