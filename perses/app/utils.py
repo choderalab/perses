@@ -40,3 +40,15 @@ def generate_fully_connected_adjacency_matrix(num_nodes):
     zeros = np.zeros((num_nodes, num_nodes))
     np.fill_diagonal(zeros, -np.inf)
     return np.zeros((num_nodes, num_nodes))
+
+class Simulation(object):
+    """
+    Simulation object: maintains API for sampling strategy.
+    This class wraps the setup and execution functionality of all flavors of free energy sampling (e.g. nonequilibrium, staged equilibrium)
+    simulation methods.
+
+    In the alchemical network, at least one Simulation object will be placed on each phase of each edge of each alchemical transformation.
+    The Simulation object will be subsequently called by the internal/external parallelism to sample the free energy along a protocol
+    specified by lambda
+    """
+    common_parameters = {}

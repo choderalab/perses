@@ -20,7 +20,7 @@ requirements:
     - setuptools
     - numpy >=1.14
     - scipy
-    - pymbar == 3.0.3
+    - pymbar ==3.0.3
     - openmm
     - parmed
     - openmoltools >=0.8.4

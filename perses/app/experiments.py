@@ -153,7 +153,7 @@ class BuildProposalNetwork(object):
                  cost = None,
                  resources = None,
                  proposal_parameters = None,
-                 simulation_parameters = None):
+                 simulation_parameters = ('repex', None)):
 
         """
         Initialize NetworkX graph and build connectivity with a `graph_connectivity` input.
@@ -205,20 +205,14 @@ class BuildProposalNetwork(object):
                     if True, then geometry_engine takes the argument use_14_nonbondeds = False;
                     if False, then geometry_engine takes the argument use_14_nonbondeds = True;
 
-        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or list of np.array, ('repex', None)
+        simulation_parameters : tuple(str, (dict or None)) or dict, default ('repex', None)
             the simulation parameters to put into the appropriate simulation object
             if type(simulation_parameters) == tuple:
                 #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
                 #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
                 #if dict is None, then default 'repex' parameters will be used
-            elif type(simulation_parameters) == np.2darray of dicts, each dict has the keys corresponding to appropriate phases
-                                                                     and each entry is a tuple of (flavor (i.e. 'repex', 'sams', 'neq'), _dict (or None)).
-                                                                     where _dict has the appropriate parameters.
-                                                                     if _dict is None, then default parameters corresponding to the appropriate phase are used.
-
-
-
-
+            elif type(simulation_parameters) == dict, each entry is a {(int, int): {<phase>: (<simulation_flavor>, dict(params))}};
+                if an transformation entry is missing, it is defaulted as above
 
         TODO:
         1. change the name of 'proposal_arguments' to something more appropriate.
@@ -232,13 +226,13 @@ class BuildProposalNetwork(object):
         self.cost = cost
         self.resources = resources
         self._parse_ligand_input()
-        self.adjacency_matrix = self._create_connectivity_matrix(graph_connectivity)
 
         #Now we must create some defaults for thermodynamic states
         _logger.debug(f"kwargs: {proposal_parameters}")
         self._create_proposal_parameters(proposal_parameters)
-        self.beta = 1.0 / (kB * self.proposal_arguments['temperature'])
+        self.adjacency_matrix = self._create_connectivity_matrix(graph_connectivity)
         self._validate_simulation_parameters(simulation_parameters)
+        self.beta = 1.0 / (kB * self.proposal_arguments['temperature'])
 
         #Now we can create a system generator for each phase.
         self._create_system_generator()
@@ -518,9 +512,9 @@ class BuildProposalNetwork(object):
 
                 [self.ligand_oemol_pos_top[i].append(topology) for i, topology in enumerate(ligand_topologies)]
 
-            elif self._ligand_input[-3:] == 'sdf': #
+            elif self.ligand_input[-3:] == 'sdf': #
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
-                oemols = createOEMolFromSDF(self._ligand_input, index = self.ligand_indices)
+                oemols = createOEMolFromSDF(self.ligand_input, index = self.ligand_indices)
                 positions = [extractPositionsFromOEMol(oemol) for oemol in oemols]
                 self.ligand_ffxml = forcefield_generators.generateForceFieldFromMolecules(oemols)
                 [oemol.SetTitle("MOL") for oemol in oemols]
@@ -574,80 +568,66 @@ class BuildProposalNetwork(object):
 
         Arguments
         ---------
-        simulation_parameters : tuple(str, (dict or None)) or np.array, default ('repex', None), or list of np.array
+        simulation_parameters : tuple(str, (dict or None)) or dict, default ('repex', None)
             the simulation parameters to put into the appropriate simulation object
             if type(simulation_parameters) == tuple:
                 #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
                 #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
                 #if dict is None, then default 'repex' parameters will be used
-            elif type(simulation_parameters) == np.2darray of dicts, each dict has the keys corresponding to appropriate phases
-                                                                     and each entry is a tuple of (flavor (i.e. 'repex', 'sams', 'neq'), _dict (or None)).
-                                                                     where _dict has the appropriate parameters.
-                                                                     if _dict is None, then default parameters corresponding to the appropriate phase are used.
+            elif type(simulation_parameters) == dict, each entry is a {(int, int): {<phase>: (<simulation_flavor>, dict(params))}};
+                if an transformation entry is missing, it is defaulted as above
 
 
         """
         if type(simulation_parameters) == tuple:
             assert len(simulation_parameters) == 2, f"simulation_parameters is not a tuple with 2 entries"
             assert simulation_parameters[0] in list(self.simulation_arguments.keys()), f"{simulation_parameters[0]} is not a supported "
-            assert type(simulation_parameters[1]) in [dict, None], f"the second argument of 'simulation_parameters' must be a dict or None"
+            assert type(simulation_parameters[1]) in [dict, type(None)], f"the second argument of 'simulation_parameters' must be a dict or None; it is {type(simulation_parameters[1])}"
             if simulation_parameters[1] is None or simulation_parameters[1] == {}:
-                _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with default parameters")
-                simulation_parameters[1] = {}
-                self.simulation_parameters = self.simulation_arguments[simulation_parameters[0]]
+                _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with default parameters ({simulation_parameters[1]})")
+                pass #we do not have to update the simulation_arguments
             else:
                 _logger.info(f"'simulation_parameters' detected sampler as type '{simulation_parameters[0]}' with non-default parameters")
                 assert set(simulation_parameters[1].keys()).issubset(set(self.simulation_arguments[simulation_parameters[0]].keys())), f"there are extra arguments in 'simulation_parameters': {set(simulation_parameters[1].keys()).difference(set(self.simulation_arguments[simulation_parameters[0]].keys()))}"
                 args_left_as_default = set(self.simulation_arguments[simulation_parameters[0]].keys()).difference(set(simulation_parameters[1].keys()))
-
                 for arg in args_left_as_default:
-                    _logger.info(f"{arg} was left as default of {self.simulation_arguments[arg]}")
+                    _logger.info(f"{arg} was left as default of {self.simulation_arguments[simulation_parameters[0]][arg]}")
                 for keyword in simulation_parameters[1].keys():
                     #assert keyword in proposal_arguments.keys(), f"kwarg keyword {keyword} is not in default argument keys: {proposal_arguments.keys()}"
-                    assert type(simulation_parameters[keyword]) == type(self.simulation_arguments[simulation_parameters[0]][keyword]), f"{keyword} type ({type(simulation_parameters[keyword])}) is not supported"
+                    assert type(simulation_parameters[1][keyword]) == type(self.simulation_arguments[simulation_parameters[0]][keyword]), f"{keyword} type ({type(simulation_parameters[keyword])}) is not supported"
 
-                #for the args left as default, make them arguments of self.simulation_parameters
-                for arg in args_left_as_default:
-                    simulation_parameters.update({arg: self.simulation_arguments[simulation_parameters[0]][arg]})
-                self.simulation_parameters = simulation_parameters
+                #update the simulation_arguments:
+                self.simulation_arguments[simulation_parameters[0]].update(simulation_parameters[1])
 
-        elif type(simulation_parameters) == np.ndarray:
-            _logger.info(f"'simulation_parameters' detected np.ndarray as argument")
-            assert all(type(entry) == dict for entry in np.nditer(simulation_parameters)), f"each entry of an np.ndarray argument passed to 'simulation_parameters' must be a dict."
-            assert all(set(entry.keys()).issubset(set(proposal_parameters['phases'])) for entry in np.nditer(simulation_parameters)), f"the phases in 'simulation_parameters' do not agree with 'proposal_parameters'"
+        elif type(simulation_parameters) == dict:
+            _logger.info(f"'simulation_parameters' detected dict as argument")
+            assert max(np.array(list(simulation_parameters.keys())).flatten()) < self.adjacency_matrix.shape[0], f"the maximal simulation_parameters entry does not live in the adjacency matrix shape"
+            assert all(type(entry) == dict for entry in simulation_parameters.values()), f"each value of 'simulation_parameters' must be a dict"
             self.simulation_parameter_assertions(simulation_parameters)
-            for entry in np.nditer(simulation_parameters):
+            self.simulation_parameters = copy.deepcopy(simulation_parameters)
+            for index, entry in simulation_parameters.items():
                 for phase, tup in entry.items():
                     sim_flavor, args = tup[0], tup[1]
-                    args_left_as_default = set(self.simulation_arguments[sim_flavor][1]).difference(set(args.keys()))
+                    args_left_as_default = set(self.simulation_arguments[sim_flavor].keys()).difference(set(args.keys()))
+                    interim_dict = {arg: self.simulation_arguments[sim_flavor][arg] for arg in args_left_as_default}
                     for _arg in args_left_as_default:
-                        simulation_parameters[]
+                        self.simulation_parameters[index][phase][1].update(interim_dict)
+                        #note we only make simulation parameters attribute if the argument simulation parameters is a np.ndarray
+        else:
+            raise Exception(f"simulation_parameters type {type(simulation_parameters)} is not currently supported.  Aborting")
 
-
-        elif type(simulation_parameters) == list:
-            _logger.info(f"'simulation_parameters' detected np.ndarray as argument")
-            assert all(type(entry) == np.ndarray for entry in simulation_parameters), f"each entry in 'simulation_parameters' must be a np.ndarray"
-            for _array in simulation_parameters:
-                self.simulation_parameter_assertions(_array)
-        elif simulation_parameters is None:
-            _logger.info(f"'simulation parameters' detected as None; running 'repex' with default arguments")
-
-        self.simulation_parameters = simulation_parameters
-
-
-
-    def simulation_parameter_assertions(self, _array):
+    def simulation_parameter_assertions(self, _dict):
         """
-        validates the input of the np.ndarray
+        validates the input of the simulation_parameters as a dict
 
         Arguments
         ---------
-        _array : np.ndarray
-            the ndarray that will be validated
+        _dict : dict
+            the dict that will be validated
         """
-        for entry in np.nditer(_array):
-            assert set(entry.keys()).issubset(set(proposal_parameters['phases'])), f"the phases in 'simulation_parameters' do not agree with 'proposal_parameters'"
-            assert all(type(val) == tuple and len(val) == 2 for val in entry.values()), f"the values of the 'simulation_parameters' np.ndarray dictionaries must be tuples of length 2"
+        for entry in _dict.values():
+            assert set(entry.keys()).issubset(set(self.proposal_arguments['phases'])), f"the phases in 'simulation_parameters' do not agree with 'proposal_arguments'"
+            assert all(type(val) == tuple and len(val) == 2 for val in entry.values()), f"the values of the 'simulation_parameters' value values must be tuples of length 2"
             for tup in entry.values():
                 assert tup[0] in list(self.simulation_arguments.keys()), f"the simulation flavor is not supported"
                 assert set(tup[1].keys()).issubset(set(self.simulation_arguments[tup[0]].keys())), f"the simulation parameters are not a subset of the allowable simulation parameters for simulation type {tup[0]}"
@@ -717,8 +697,8 @@ class BuildProposalNetwork(object):
             receptor_mdtraj_topology = md.Topology.from_openmm(receptor_topology)
 
         complex_md_topology = receptor_mdtraj_topology.join(ligand_topology)
-        complex_topology = self.complex_md_topology.to_openmm()
-        n_atoms_complex = self.complex_topology.getNumAtoms()
+        complex_topology = complex_md_topology.to_openmm()
+        n_atoms_complex = complex_topology.getNumAtoms()
         n_atoms_receptor = receptor_topology.getNumAtoms()
 
         complex_positions = unit.Quantity(np.zeros([n_atoms_complex, 3]), unit=unit.nanometers)
@@ -766,17 +746,6 @@ class BuildProposalNetwork(object):
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
 
-        # #now we have to fix the bond atoms
-        # new_bonds = []
-        # atom_dict = {atom.index : atom for atom in solvated_topology.atoms()}
-        #
-        # for bond in solvated_topology.bonds():
-        #     idx1, idx2 = bond[0].index, bond[1].index
-        #     new_bond = app.topology.Bond(atom1=atom_dict[idx1], atom2=atom_dict[idx2])
-        #     new_bonds.append(new_bond)
-        #
-        # solvated_topology._bonds = new_bonds
-
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
         solvated_system = self.system_generator.build_system(solvated_topology)
         return solvated_topology, solvated_positions, solvated_system
@@ -818,8 +787,7 @@ class BuildProposalNetwork(object):
         new_ligand_topology = new_complex.subset(new_complex.select("resname == 'MOL' "))
 
         # solvate the old ligand topology:
-        old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate_system(
-            old_ligand_topology.to_openmm(), old_ligand_positions)
+        old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate(old_ligand_topology.to_openmm(), old_ligand_positions)
 
         old_solvated_md_topology = md.Topology.from_openmm(old_solvated_topology)
 
@@ -933,7 +901,7 @@ class BuildProposalNetwork(object):
         """
         if not topology_proposal.unique_new_atoms:
             assert self.geometry_engine.forward_final_context_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's final context reduced potential is not None (i.e. {self.geometry_engine.forward_final_context_reduced_potential})"
-            assert self.geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self._geometry_engine.forward_atoms_with_positions_reduced_potential})"
+            assert self.geometry_engine.forward_atoms_with_positions_reduced_potential == None, f"There are no unique new atoms but the geometry_engine's forward atoms-with-positions-reduced-potential in not None (i.e. { self.geometry_engine.forward_atoms_with_positions_reduced_potential})"
             added_valence_energy = 0.0
         else:
             added_valence_energy = self.geometry_engine.forward_final_context_reduced_potential - self.geometry_engine.forward_atoms_with_positions_reduced_potential
@@ -962,7 +930,10 @@ class BuildProposalNetwork(object):
         if 'complex' in self.proposal_arguments['phases']:
             _logger.debug(f"\t\tcomplex:")
             assert self.nonbonded_method == app.PME, f"Complex phase is specified, but the nonbonded method is not {app.PME} (is currently {self.nonbonded_method})."
-            complex_md_topology, complex_topology, complex_positions = self._setup_complex_phase(current_oemol, current_positions, current_topology)
+            complex_md_topology, complex_topology, complex_positions = self._setup_complex_phase(ligand_oemol = current_oemol,
+                                                                                                 ligand_positions = current_positions,
+                                                                                                 ligand_topology = md.Topology.from_openmm(current_topology))
+
             solvated_complex_topology, solvated_complex_positions, solvated_complex_system = self._solvate(complex_topology,
                                                                                                            complex_positions,
                                                                                                            model = self.proposal_arguments['water_model'],
@@ -982,7 +953,7 @@ class BuildProposalNetwork(object):
 
             complex_added_valence_energy, complex_subtracted_valence_energy = self._handle_valence_energies(complex_topology_proposal)
             complex_forward_neglected_angles = self.geometry_engine.forward_neglected_angle_terms
-            complex_reverse_neglected_angles = self._geometry_engine.reverse_neglected_angle_terms
+            complex_reverse_neglected_angles = self.geometry_engine.reverse_neglected_angle_terms
 
             #now to add it to phases
             proposals.update({'complex': {'topology_proposal': complex_topology_proposal,
@@ -1002,7 +973,7 @@ class BuildProposalNetwork(object):
                 assert 'complex' in proposals.keys(), f"'complex' is a phase that should have been handled, but it is not in proposals."
                 assert self.nonbonded_method == app.PME, f"solvent phase is specified, but the nonbonded method is not {app.PME} (is currently {self.nonbonded_method})."
                 solvated_ligand_topology_proposal, solvated_ligand_positions = self._generate_solvent_topologies(topology_proposal = complex_topology_proposal,
-                                                                                                        old_positions = solvated_complex_positions)
+                                                                                                                 old_positions = solvated_complex_positions)
             else:
                 solvated_ligand_topology, solvated_ligand_positions, solvated_ligand_system = self._solvate(current_topology,
                                                                                                             current_positions,

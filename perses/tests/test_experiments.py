@@ -44,4 +44,20 @@ def test_BuildProposalNetwork():
     """
     test BuildProposalNetwork with default arguments
     """
-    return
+    _simulation_parameters = {(0,1): {'complex': ('smc', {'timestep': 1 * unit.femtoseconds}), 'solvent': ('repex', {'timestep': 1*unit.femtoseconds})},
+                              (1,0): {'solvent': ('sams', {'timestep': 2 * unit.femtoseconds, 'splitting': "V R O R V"})}
+                             }
+    network = BuildProposalNetwork(ligand_input = os.path.join(os.getcwd(), '../../examples/mcl1-example/MCL1_ligands.sdf'),
+                                   ligand_indices = [4,6],
+                                   receptor_filename = os.path.join(os.getcwd(), '../../examples/mcl1-example/MCL1_protein_fixed.pdb'),
+                                   graph_connectivity = 'fully_connected',
+                                   cost = None,
+                                   resources = None,
+                                   proposal_parameters = None,
+                                   simulation_parameters = _simulation_parameters)
+    network.create_network()
+    print(vars(network))
+    return network
+
+if __name__ == "__main__":
+    test_BuildProposalNetwork()
