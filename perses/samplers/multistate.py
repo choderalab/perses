@@ -90,8 +90,8 @@ class HybridCompatibilityMixin(object):
                     charge, sigma, epsilon = forces['NonbondedForce'].getParticleParameters(particle_index)
                     sigmaA, epsilonA, sigmaB, epsilonB, unique_old, unique_new = forces['CustomNonbondedForce'].getParticleParameters(particle_index)
                     if (epsilon/energy_unit == 0.0) and ((epsilonA > 0.0) or (epsilonB > 0.0)):
-                        sigma = (1-lambda_value)*sigmaA + lambda_value*sigmaB
-                        epsilon = (1-lambda_value)*epsilonA + lambda_value*epsilonB
+                        sigma = (1-master_lambda)*sigmaA + master_lambda*sigmaB
+                        epsilon = (1-master_lambda)*epsilonA + master_lambda*epsilonB
                         nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon)
                 # Delete the CustomNonbondedForce since we have moved all alchemical particles out of it
                 for force_index, force in dispersion_system.getForces():
