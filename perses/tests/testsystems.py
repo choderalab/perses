@@ -1823,7 +1823,7 @@ class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
 
 class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
     """
-    Library of clinical kinase inhibitors in various solvent environments.
+    Library of clinical kinase inhibitors in various solvent environments.  This is often problematic.
     """
     def __init__(self, **kwargs):
         # Read SMILES from CSV file of clinical kinase inhibitors.
