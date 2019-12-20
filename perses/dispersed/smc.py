@@ -3,7 +3,6 @@ import openmmtools.cache as cache
 from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
-import openmmtools.cache as cache
 from perses.dispersed.utils import *
 
 import openmmtools.mcmc as mcmc
@@ -34,12 +33,13 @@ import dask.distributed as distributed
 from perses.dispersed.parallel import Parallelism
 import tqdm
 import time
+from openmmtools import mcmc, utils
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
-cache.global_context_cache.platform = configure_platform('CUDA')
+cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 DISTRIBUTED_ERROR_TOLERANCE = 1e-4
 

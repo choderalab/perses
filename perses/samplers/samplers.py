@@ -24,7 +24,9 @@ import copy
 import time
 from openmmtools.states import SamplerState, ThermodynamicState, CompoundThermodynamicState, group_by_compatibility
 from openmmtools.multistate import sams, replicaexchange
-from openmmtools import cache
+from openmmtools import
+from perses.dispersed.utils import configure_platform
+cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
 
 from perses.annihilation.ncmc_switching import NCMCEngine
 from perses.dispersed import feptasks
@@ -1038,4 +1040,3 @@ class ProtonationStateSampler(object):
         # Update all samplers.
         for iteration in range(niterations):
             self.update()
-

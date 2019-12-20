@@ -1,9 +1,7 @@
 import simtk.openmm as openmm
-import openmmtools.cache as cache
 from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
-import openmmtools.cache as cache
 
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
