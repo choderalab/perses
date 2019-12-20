@@ -5,7 +5,9 @@
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 
 from openmmtools.multistate import sams, replicaexchange
-from openmmtools import cache
+from openmmtools import cache, utils
+from perses.dispersed.utils import configure_platform
+cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
 from openmmtools.states import *
 
 import numpy as np
@@ -142,7 +144,7 @@ class HybridSAMSSampler(HybridCompatibilityMixin, sams.SAMSSampler):
 
              # now generating a sampler_state for each thermodyanmic state, with relaxed positions
             context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy)
-            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state) 
+            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state)
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
          #nonalchemical_thermodynamic_states = [
@@ -208,7 +210,7 @@ class HybridRepexSampler(HybridCompatibilityMixin, replicaexchange.ReplicaExchan
 
              # now generating a sampler_state for each thermodyanmic state, with relaxed positions
             context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy)
-            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state) 
+            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state)
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
          # adding unsampled endstates, wether these are real systems, with a different number of atoms to the hybrid, or hybrid systems with larger cutoffs
