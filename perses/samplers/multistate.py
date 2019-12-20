@@ -25,7 +25,7 @@ class HybridCompatibilityMixin(object):
         self._hybrid_factory = hybrid_factory
         super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
 
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schedule=None,lambda_protocol=LambdaProtocol(),endstates=True,expanded_cutoff=None):
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schedule=None,lambda_protocol=LambdaProtocol(),endstates=True):
 
         from perses.dispersed import feptasks
 
@@ -42,6 +42,9 @@ class HybridCompatibilityMixin(object):
 
         context_cache = cache.ContextCache()
 
+        # WARNING: THIS DOES NOT ACTUALLY DO ANYTHING because we can't set the precision after context creation
+        # TODO: FIX THIS BY MOVING IT TO THE INITIAL SETUP
+        # SEE https://github.com/choderalab/yank/blob/3ac34a66883941492825450aeddf2e5be8bc848e/Yank/experiment.py#L2218-L2304
         context, _ = context_cache.get_context(compound_thermodynamic_state)
         platform = context.getPlatform()
         logger.info('Setting the platform precision to mixed')
@@ -66,39 +69,48 @@ class HybridCompatibilityMixin(object):
 
              # now generating a sampler_state for each thermodyanmic state, with relaxed positions
             context, context_integrator = context_cache.get_context(compound_thermodynamic_state_copy)
-            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state) 
+            feptasks.minimize(compound_thermodynamic_state_copy,sampler_state)
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
         if endstates:
             # generating unsampled endstates
             logger.info('Generating unsampled endstates.')
             unsampled_endstates = [thermodynamic_state_list[0],thermodynamic_state_list[-1]] # taking the first and last states of the alchemical protocol
-            if expanded_cutoff is None:
-                logger.warning('expanded_cutoff MUST be defined to use unsampled endstates, proceeding WITHOUT endstates.')
-                endstates=False
-            
+
              # changing the non-bonded method for the unsampled endstates
             unsampled_dispersion_endstates = []
-            for master_lambda,endstate in zip([0.,1.],unsampled_endstates):
-                context, context_integrator = context_cache.get_context(endstate)
-                dispersion_system = context.getSystem()
-                box_vectors = hybrid_system.getDefaultPeriodicBoxVectors()
-                dimensions = [x[i] for i,x in enumerate(box_vectors)]
-                minimum_length = min(dimensions)
-                assert ( expanded_cutoff < minimum_length ), "Expanded cutoff of the unsampled endstates cannot be larger than the shortest dimension of the system"
-                for force in dispersion_system.getForces():
-                    # expanding the cutoff for both the NonbondedForce and CustomNonbondedForce
-                    if 'CustomNonbondedForce' in force.__class__.__name__:
-                        force.setCutoffDistance(expanded_cutoff)
-                    # use long range correction for the customnonbonded force
+            for master_lambda, endstate in zip([0.,1.],unsampled_endstates):
+                # Get a copy of the system
+                dispersion_system = endstate.get_system()
+                energy_unit = unit.kilocalories_per_mole
+                # Find the NonbondedForce (there must be only one)
+                forces = { force.__class__.__name__ : force for force in dispersion_system.getForces() }
+                # Set NonbondedForce to use LJPME
+                forces['NonbondedForce'].setNonbondedMethod(openmm.NonbondedForce.LJPME)
+                # Set tight PME tolerance
+                TIGHT_PME_TOLERANCE = 1.0e-5
+                forces['NonbondedForce'].setEwaldErrorTolerance(TIGHT_PME_TOLERANCE)
+                # Move alchemical LJ sites from CustomNonbondedForce back to NonbondedForce
+                for particle_index in range(forces['NonbondedForce'].getNumParticles()):
+                    charge, sigma, epsilon = forces['NonbondedForce'].getParticleParameters(particle_index)
+                    sigmaA, epsilonA, sigmaB, epsilonB, unique_old, unique_new = forces['CustomNonbondedForce'].getParticleParameters(particle_index)
+                    if (epsilon/energy_unit == 0.0) and ((epsilonA > 0.0) or (epsilonB > 0.0)):
+                        sigma = (1-lambda_value)*sigmaA + lambda_value*sigmaB
+                        epsilon = (1-lambda_value)*epsilonA + lambda_value*epsilonB
+                        nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon)
+                # Delete the CustomNonbondedForce since we have moved all alchemical particles out of it
+                for force_index, force in dispersion_system.getForces():
                     if force.__class__.__name__ == 'CustomNonbondedForce':
-                        force.setUseLongRangeCorrection(True)
-                    # setting the default GlobalParameters for both end states, so that the long-range dispersion correction is correctly computed
-                    if force.__class__.__name__ in ['NonbondedForce','CustomNonbondedForce','CustomBondForce','CustomAngleForce','CustomTorsionForce']:
+                        custom_nonbonded_force_index = force_index
+                        break
+                system.removeForce(custom_nonbonded_force_index)
+                # Set all parameters to master lambda
+                for force_index, force in system.getForces():
+                    if hasattr(force, 'getNumGlobalParameters'):
                         for parameter_index in range(force.getNumGlobalParameters()):
-                            # finding alchemical global parameters
                             if force.getGlobalParameterName(parameter_index)[0:7] == 'lambda_':
                                 force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
+                # Store the unsampled endstate
                 unsampled_dispersion_endstates.append(ThermodynamicState(dispersion_system, temperature=temperature))
 
         reporter = storage_file
