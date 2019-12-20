@@ -354,7 +354,7 @@ class SequentialMonteCarlo():
             iterables.append([None]*num_particles) #noneq_trajectory_filename
             iterables.append([num_integration_steps] * num_particles) #num_integration_steps
             iterables.append([return_timer] * num_particles) #return timer
-            iterables.append([False] * num_particles) #return_sampler_state
+            iterables.append([True] * num_particles) #return_sampler_state in case we wish to make endstate corrections
             iterables.append([rethermalize] * num_particles) #rethermalize
             _compute_incremental_works = [True] * num_particles #only compute incremental work remotely if it is AIS
             iterables.append(_compute_incremental_works) # whether to compute incremental works

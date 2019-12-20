@@ -452,6 +452,62 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 
+def create_endstates(first_thermostate, last_thermostate):
+    """
+    utility function to generate unsampled endstates
+    1. move all alchemical atom LJ parameters from CustomNonbondedForce to NonbondedForce
+    2. delete the CustomNonbondedForce
+    3. set PME tolerance to 1e-5
+    4. enable LJPME to handle long range dispersion corrections in a physically reasonable manner
+
+    Arguments
+    ---------
+    first_thermostate : openmmtools.states.CompoundThermodynamicState
+        the first thermodynamic state for which an unsampled endstate will be created
+    last_thermostate : openmmtools.states.CompoundThermodynamicState
+        the last thermodynamic state for which an unsampled endstate will be created
+
+    Returns
+    -------
+    unsampled_endstates : list of openmmtools.states.CompoundThermodynamicState
+        the corrected unsampled endstates
+    """
+    unsampled_endstates = ()
+    for master_lambda, endstate in zip([0., 1.], list(first_thermostate, last_thermostate)):
+        dispersion_system = endstate.get_system()
+        energy_unit = unit.kilocalories_per_mole
+        # Find the NonbondedForce (there must be only one)
+        forces = { force.__class__.__name__ : force for force in dispersion_system.getForces() }
+        # Set NonbondedForce to use LJPME
+        forces['NonbondedForce'].setNonbondedMethod(openmm.NonbondedForce.LJPME)
+        # Set tight PME tolerance
+        TIGHT_PME_TOLERANCE = 1.0e-5
+        forces['NonbondedForce'].setEwaldErrorTolerance(TIGHT_PME_TOLERANCE)
+        # Move alchemical LJ sites from CustomNonbondedForce back to NonbondedForce
+        for particle_index in range(forces['NonbondedForce'].getNumParticles()):
+            charge, sigma, epsilon = forces['NonbondedForce'].getParticleParameters(particle_index)
+            sigmaA, epsilonA, sigmaB, epsilonB, unique_old, unique_new = forces['CustomNonbondedForce'].getParticleParameters(particle_index)
+            if (epsilon/energy_unit == 0.0) and ((epsilonA > 0.0) or (epsilonB > 0.0)):
+                sigma = (1-master_lambda)*sigmaA + master_lambda*sigmaB
+                epsilon = (1-master_lambda)*epsilonA + master_lambda*epsilonB
+                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon)
+        # Delete the CustomNonbondedForce since we have moved all alchemical particles out of it
+        for force_index, force in dispersion_system.getForces():
+            if force.__class__.__name__ == 'CustomNonbondedForce':
+                custom_nonbonded_force_index = force_index
+                break
+        system.removeForce(custom_nonbonded_force_index)
+        # Set all parameters to master lambda
+        for force_index, force in system.getForces():
+            if hasattr(force, 'getNumGlobalParameters'):
+                for parameter_index in range(force.getNumGlobalParameters()):
+                    if force.getGlobalParameterName(parameter_index)[0:7] == 'lambda_':
+                        force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
+        # Store the unsampled endstate
+        unsampled_endstates.append(ThermodynamicState(dispersion_system, temperature = endstate.temperature))
+
+    return unsampled_endstates
+
 ################################################################
 ##################Distributed Tasks#############################
 ################################################################
