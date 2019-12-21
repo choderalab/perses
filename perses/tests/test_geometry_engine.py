@@ -1984,7 +1984,7 @@ def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterati
         assert (work_reverse_stddev <= WORK_STDDEV_THRESHOLD), "reverse work stddev {} exceeds threshold {}".format(work_reverse_stddev, WORK_STDDEV_THRESHOLD)
         assert np.all(abs(work_sum) <= WORK_SUM_THRESHOLD), "sum of works {} exceeds threshold {}".format(work_sum, WORK_SUM_THRESHOLD)
 
-def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'propane', proposed_mol_name = 'octane', num_iterations = 10, neglect_angles = True):
+def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'propane', proposed_mol_name = 'butane', num_iterations = 10, neglect_angles = True):
     """
     Generate a test vacuum topology proposal, current positions, and new positions triplet
     from two IUPAC molecule names.  Assert that the logp_forward < 1e3.

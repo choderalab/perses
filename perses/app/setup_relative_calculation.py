@@ -4,6 +4,7 @@ import pickle
 import os
 import sys
 import simtk.unit as unit
+from simtk import openmm
 import logging
 
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
@@ -11,7 +12,7 @@ from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
-from openmmtools import mcmc
+from openmmtools import mcmc, utils
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
@@ -52,6 +53,9 @@ def getSetupOptions(filename):
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
+    if 'run_type' not in setup_options:
+        _logger.info(f"\t\t\trun_type is not specified; default to None")
+        setup_options['run_type'] = None
     _logger.info(f"\tDetecting fe_type...")
     if setup_options['fe_type'] == 'sams':
         _logger.info(f"\t\tfe_type: sams")
@@ -443,6 +447,7 @@ def run_setup(setup_options):
         htf = dict()
         hss = dict()
         _logger.info(f"\tcataloging HybridTopologyFactories...")
+
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}:")
             #TODO write a SAMSFEP class that mirrors NonequilibriumSwitchingFEP
@@ -455,6 +460,7 @@ def run_setup(setup_options):
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
 
+        for phase in phases:
            # Define necessary vars to check energy bookkeeping
             _top_prop = top_prop['%s_topology_proposal' % phase]
             _htf = htf[phase]
@@ -481,9 +487,12 @@ def run_setup(setup_options):
             reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
                                           checkpoint_interval=checkpoint_interval)
 
+            if phase == 'vacuum':
+                endstates = False
+            else:
+                endstates = True
             #TODO expose more of these options in input
             if setup_options['fe_type'] == 'sams':
-                _logger.warning(f'Relative free energies do not currently work with unsampled endstates')
                 hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
                                                                                              n_steps=n_steps_per_move_application,
@@ -494,7 +503,7 @@ def run_setup(setup_options):
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
@@ -504,7 +513,7 @@ def run_setup(setup_options):
                                                                                              splitting="V R R R O R R R V",
                                                                                              constraint_tolerance=1e-06),
                                                                                              hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
@@ -673,10 +682,6 @@ if __name__ == "__main__":
                 _logger.info(f'\tRunning {phase} phase...')
                 hss_run = hss[phase]
 
-                _logger.info(f"\t\tminimizing...\n\n")
-                hss_run.minimize()
-                _logger.info(f"\n\n")
-
                 _logger.info(f"\t\tequilibrating...\n\n")
                 hss_run.equilibrate(n_equilibration_iterations)
                 _logger.info(f"\n\n")
@@ -704,10 +709,6 @@ if __name__ == "__main__":
             for phase in setup_options['phases']:
                 print(f'Running {phase} phase')
                 hss_run = hss[phase]
-
-                _logger.info(f"\t\tminimizing...\n\n")
-                hss_run.minimize()
-                _logger.info(f"\n\n")
 
                 _logger.info(f"\t\tequilibrating...\n\n")
                 hss_run.equilibrate(n_equilibration_iterations)
