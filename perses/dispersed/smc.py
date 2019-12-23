@@ -3,7 +3,6 @@ import openmmtools.cache as cache
 from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
-import openmmtools.cache as cache
 from perses.dispersed.utils import *
 
 import openmmtools.mcmc as mcmc
@@ -34,12 +33,13 @@ import dask.distributed as distributed
 from perses.dispersed.parallel import Parallelism
 import tqdm
 import time
+from openmmtools import mcmc, utils
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.INFO)
 
-cache.global_context_cache.platform = configure_platform('CUDA')
+cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 DISTRIBUTED_ERROR_TOLERANCE = 1e-4
 
@@ -68,6 +68,7 @@ class SequentialMonteCarlo():
                  ncmc_save_interval = None,
                  measure_shadow_work = False,
                  neq_integrator = 'langevin',
+                 compute_endstate_correction = True,
                  external_parallelism = None,
                  internal_parallelism = {'library': ('dask', 'LSF'),
                                          'num_processes': 2}
@@ -103,6 +104,8 @@ class SequentialMonteCarlo():
             WARNING : this is not currently supported
         neq_integrator : str, default 'langevin'
             which integrator to use
+        compute_endstate_correction : bool, default True
+            whether to compute the importance weight to the alchemical endstates
         external_parallelism : dict('parallelism': perses.dispersed.parallel.Parallelism, 'available_workers': list(str)), default None
             an external parallelism dictionary;
             external_parallelism is used if the entire SequentialMonteCarlo class is allocated workers by an external client (i.e.
@@ -197,6 +200,8 @@ class SequentialMonteCarlo():
                                           box_vectors=self.factory.hybrid_system.getDefaultPeriodicBoxVectors())
         self.sampler_states = {0: copy.deepcopy(sampler_state), 1: copy.deepcopy(sampler_state)}
 
+        #endstate corrections?
+        self.compute_endstate_correction = compute_endstate_correction
 
         #implement the appropriate parallelism
         self.implement_parallelism(external_parallelism = external_parallelism,
@@ -271,7 +276,8 @@ class SequentialMonteCarlo():
                                                           self.topology, #arg: topology
                                                           self.atom_selection_indices, #arg: subset atoms
                                                           self.measure_shadow_work, #arg: measure_shadow_work
-                                                          self.neq_integrator, #arg: integrator
+                                                          self.neq_integrator, #arg: integrator,
+                                                          self.compute_endstate_correction #arg: compute_endstate_correction
                                                          ),
                                              workers = workers) #workers
     def _deactivate_annealing_workers(self):
@@ -303,7 +309,7 @@ class SequentialMonteCarlo():
             rethermalize = False):
         """
         Conduct vanilla AIS (i.e. nonequilibrium switching FEP) with a given protocol (for each direction), specified annealing time per lambda, and support for rethermalization (i.e. velocity resampling)
-        NOTE: AIS is nan-safe?
+        NOTE: AIS is NaN-safe
 
         Arguments
         ----------
@@ -341,6 +347,7 @@ class SequentialMonteCarlo():
         sMC_cumulative_works = {_direction : None for _direction in directions} #again, theses are only collected once
         worker_retrieval = {} #this is an on-the-fly timer for each direction...
         particle_failures = {_direction: None for _direction in directions} #log the particle failures
+        endstate_corrections = {_direction: None for _direction in directions} # log the endstate corrections
 
         for _direction in directions:
             worker_retrieval[_direction] = time.time()
@@ -353,7 +360,7 @@ class SequentialMonteCarlo():
             iterables.append([None]*num_particles) #noneq_trajectory_filename
             iterables.append([num_integration_steps] * num_particles) #num_integration_steps
             iterables.append([return_timer] * num_particles) #return timer
-            iterables.append([False] * num_particles) #return_sampler_state
+            iterables.append([False] * num_particles)
             iterables.append([rethermalize] * num_particles) #rethermalize
             _compute_incremental_works = [True] * num_particles #only compute incremental work remotely if it is AIS
             iterables.append(_compute_incremental_works) # whether to compute incremental works
@@ -387,13 +394,15 @@ class SequentialMonteCarlo():
             _sampler_states = [_iter[1] for _iter in _futures]
             _timers = [_iter[2] for _iter in _futures]
             _passes = [_iter[3] for _iter in _futures]
+            return_endstate_corrections = [_iter[4] for _iter in _futures]
             pass_indices = [index for index in range(num_particles) if _passes[index] == True]
             successful_incremental_works = [item for index, item in enumerate(_incremental_works) if _passes[index] == True]
             failed_annealing_jobs = [index + self.total_jobs[_direction] for index, item in enumerate(_incremental_works) if _passes[index] == False]
             assert all(q is not None for q in successful_incremental_works), f"all passing annealing jobs have been filtered but are still returning NoneType objects"
             _logger.debug(f"\tfailed annealing jobs: {failed_annealing_jobs}")
+
             particle_failures[_direction] = failed_annealing_jobs if len(failed_annealing_jobs) > 0 else None
-            self.particle_failures[_direction].append(particle_failures[_direction])
+            endstate_corrections[_direction] = [item for index, item in enumerate(return_endstate_corrections) if _passes[index] == True]
 
             #append the incremental works
             _logger.debug(f"\tincremental works for direction {_direction}: {np.array(_incremental_works).shape}")

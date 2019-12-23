@@ -82,6 +82,7 @@ class RelativeFEPSetup(object):
         self._pressure = pressure
         self._temperature = temperature
         self._barostat_period = 50
+        self._pme_tol = 1e-04
         self._padding = solvent_padding
         self._hmass = hmass
         _logger.info(f"\t\t\t_hmass: {hmass}.\n")
@@ -205,9 +206,9 @@ class RelativeFEPSetup(object):
                 barostat = None
                 _logger.info(f"omitted MonteCarloBarostat.")
             self._system_generator = SystemGenerator(forcefield_files, barostat=barostat,
-                                                     forcefield_kwargs={'removeCMMotion': False, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass})
+                                                     forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass})
         else:
-            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass})
+            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass})
 
         _logger.info("successfully called TopologyProposal.SystemGenerator to create ligand systems.")
         self._system_generator._forcefield.loadFile(StringIO(ffxml))
@@ -311,7 +312,7 @@ class RelativeFEPSetup(object):
             _logger.info(f"assgning noCutoff to nonbonded_method")
             self._nonbonded_method = app.NoCutoff
             _logger.info(f"calling TopologyProposal.SystemGenerator to create ligand systems.")
-            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False,
+            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol,
                                                     'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
             self._system_generator._forcefield.loadFile(StringIO(ffxml))
             if self._proposal_phase is None:

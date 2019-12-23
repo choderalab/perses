@@ -1,0 +1,622 @@
+<?xml version="1.0" ?>
+<System openmmVersion="7.4" type="System" version="1">
+	<PeriodicBoxVectors>
+		<A x="2" y="0" z="0"/>
+		<B x="0" y="2" z="0"/>
+		<C x="0" y="0" z="2"/>
+	</PeriodicBoxVectors>
+	<Particles>
+		<Particle mass="12.01"/>
+		<Particle mass="12.01"/>
+		<Particle mass="12.01"/>
+		<Particle mass="1.008"/>
+		<Particle mass="1.008"/>
+		<Particle mass="1.008"/>
+		<Particle mass="1.008"/>
+		<Particle mass="1.008"/>
+		<Particle mass="1.008"/>
+		<Particle mass="1.008"/>
+		<Particle mass="1.008"/>
+		<Particle mass="4"/>
+		<Particle mass="3.0340000000000007"/>
+		<Particle mass="4"/>
+		<Particle mass="4"/>
+	</Particles>
+	<Constraints>
+		<Constraint d=".10969000000000001" p1="0" p2="3"/>
+		<Constraint d=".10969000000000001" p1="0" p2="4"/>
+		<Constraint d=".10969000000000001" p1="0" p2="5"/>
+		<Constraint d=".10969000000000001" p1="1" p2="6"/>
+		<Constraint d=".10969000000000001" p1="1" p2="7"/>
+		<Constraint d=".10969000000000001" p1="1" p2="8"/>
+		<Constraint d=".10969000000000001" p1="2" p2="9"/>
+		<Constraint d=".10969000000000001" p1="2" p2="10"/>
+		<Constraint d=".10969000000000001" p1="12" p2="14"/>
+		<Constraint d=".10969000000000001" p1="11" p2="12"/>
+		<Constraint d=".10969000000000001" p1="12" p2="13"/>
+	</Constraints>
+	<Forces>
+		<Force energy="(K/2)*(r-length)^2;K = (1-lambda_bonds)*K1 + lambda_bonds*K2;length = (1-lambda_bonds)*length1 + lambda_bonds*length2;" forceGroup="0" type="CustomBondForce" usesPeriodic="0" version="3">
+			<PerBondParameters>
+				<Parameter name="length1"/>
+				<Parameter name="K1"/>
+				<Parameter name="length2"/>
+				<Parameter name="K2"/>
+			</PerBondParameters>
+			<GlobalParameters>
+				<Parameter default="0" name="lambda_bonds"/>
+			</GlobalParameters>
+			<EnergyParameterDerivatives/>
+			<Bonds>
+				<Bond p1="0" p2="2" param1=".15375000000000003" param2="251793.11999999994" param3=".15375000000000003" param4="251793.11999999994"/>
+				<Bond p1="1" p2="2" param1=".15375000000000003" param2="251793.11999999994" param3=".15375000000000003" param4="251793.11999999994"/>
+			</Bonds>
+		</Force>
+		<Force forceGroup="0" type="HarmonicBondForce" usesPeriodic="0" version="2">
+			<Bonds>
+				<Bond d=".15375000000000003" k="251793.11999999994" p1="12" p2="1"/>
+			</Bonds>
+		</Force>
+		<Force energy="(K/2)*(theta-theta0)^2;K = (1.0-lambda_angles)*K_1 + lambda_angles*K_2;theta0 = (1.0-lambda_angles)*theta0_1 + lambda_angles*theta0_2;" forceGroup="0" type="CustomAngleForce" usesPeriodic="0" version="3">
+			<PerAngleParameters>
+				<Parameter name="theta0_1"/>
+				<Parameter name="K_1"/>
+				<Parameter name="theta0_2"/>
+				<Parameter name="K_2"/>
+			</PerAngleParameters>
+			<GlobalParameters>
+				<Parameter default="0" name="lambda_angles"/>
+			</GlobalParameters>
+			<EnergyParameterDerivatives/>
+			<Angles>
+				<Angle p1="0" p2="2" p3="1" param1="1.946216648898877" param2="526.3472" param3="1.946216648898877" param4="526.3472"/>
+				<Angle p1="0" p2="2" p3="9" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="0" p2="2" p3="10" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="1" p2="2" p3="9" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="1" p2="2" p3="10" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="2" p2="0" p3="3" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="2" p2="0" p3="4" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="2" p2="0" p3="5" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="2" p2="1" p3="7" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="2" p2="1" p3="8" param1="1.9163715186897738" param2="387.4384" param3="1.9163715186897738" param4="387.4384"/>
+				<Angle p1="3" p2="0" p3="4" param1="1.8776252092954997" param2="329.6992" param3="1.8776252092954997" param4="329.6992"/>
+				<Angle p1="3" p2="0" p3="5" param1="1.8776252092954997" param2="329.6992" param3="1.8776252092954997" param4="329.6992"/>
+				<Angle p1="4" p2="0" p3="5" param1="1.8776252092954997" param2="329.6992" param3="1.8776252092954997" param4="329.6992"/>
+				<Angle p1="7" p2="1" p3="8" param1="1.8776252092954997" param2="329.6992" param3="1.8776252092954997" param4="329.6992"/>
+				<Angle p1="9" p2="2" p3="10" param1="1.8776252092954997" param2="329.6992" param3="1.8776252092954997" param4="329.6992"/>
+			</Angles>
+		</Force>
+		<Force forceGroup="0" type="HarmonicAngleForce" usesPeriodic="0" version="2">
+			<Angles>
+				<Angle a="1.9163715186897738" k="387.4384" p1="2" p2="1" p3="6"/>
+				<Angle a="1.8776252092954997" k="329.6992" p1="6" p2="1" p3="7"/>
+				<Angle a="1.8776252092954997" k="329.6992" p1="6" p2="1" p3="8"/>
+				<Angle a="1.946216648898877" k="526.3472" p1="12" p2="1" p3="2"/>
+				<Angle a="1.9163715186897738" k="387.4384" p1="12" p2="1" p3="8"/>
+				<Angle a="1.9163715186897738" k="387.4384" p1="12" p2="1" p3="7"/>
+				<Angle a="1.9163715186897738" k="387.4384" p1="1" p2="12" p3="14"/>
+				<Angle a="1.9163715186897738" k="387.4384" p1="1" p2="12" p3="11"/>
+				<Angle a="1.9163715186897738" k="387.4384" p1="1" p2="12" p3="13"/>
+				<Angle a="1.8776252092954997" k="329.6992" p1="14" p2="12" p3="11"/>
+				<Angle a="1.8776252092954997" k="329.6992" p1="14" p2="12" p3="13"/>
+				<Angle a="1.8776252092954997" k="329.6992" p1="11" p2="12" p3="13"/>
+			</Angles>
+		</Force>
+		<Force energy="(1-lambda_torsions)*U1 + lambda_torsions*U2;U1 = K1*(1+cos(periodicity1*theta-phase1));U2 = K2*(1+cos(periodicity2*theta-phase2));" forceGroup="0" type="CustomTorsionForce" usesPeriodic="0" version="3">
+			<PerTorsionParameters>
+				<Parameter name="periodicity1"/>
+				<Parameter name="phase1"/>
+				<Parameter name="K1"/>
+				<Parameter name="periodicity2"/>
+				<Parameter name="phase2"/>
+				<Parameter name="K2"/>
+			</PerTorsionParameters>
+			<GlobalParameters>
+				<Parameter default="0" name="lambda_torsions"/>
+			</GlobalParameters>
+			<EnergyParameterDerivatives/>
+			<Torsions>
+				<Torsion p1="0" p2="2" p3="1" p4="7" param1="3" param2="0" param3=".66944" param4="0" param5="0" param6="0"/>
+				<Torsion p1="0" p2="2" p3="1" p4="7" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".66944"/>
+				<Torsion p1="0" p2="2" p3="1" p4="8" param1="3" param2="0" param3=".66944" param4="0" param5="0" param6="0"/>
+				<Torsion p1="0" p2="2" p3="1" p4="8" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".66944"/>
+				<Torsion p1="1" p2="2" p3="0" p4="3" param1="3" param2="0" param3=".66944" param4="0" param5="0" param6="0"/>
+				<Torsion p1="1" p2="2" p3="0" p4="3" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".66944"/>
+				<Torsion p1="1" p2="2" p3="0" p4="4" param1="3" param2="0" param3=".66944" param4="0" param5="0" param6="0"/>
+				<Torsion p1="1" p2="2" p3="0" p4="4" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".66944"/>
+				<Torsion p1="1" p2="2" p3="0" p4="5" param1="3" param2="0" param3=".66944" param4="0" param5="0" param6="0"/>
+				<Torsion p1="1" p2="2" p3="0" p4="5" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".66944"/>
+				<Torsion p1="3" p2="0" p3="2" p4="9" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="3" p2="0" p3="2" p4="9" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="3" p2="0" p3="2" p4="10" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="3" p2="0" p3="2" p4="10" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="4" p2="0" p3="2" p4="9" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="4" p2="0" p3="2" p4="9" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="4" p2="0" p3="2" p4="10" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="4" p2="0" p3="2" p4="10" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="5" p2="0" p3="2" p4="9" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="5" p2="0" p3="2" p4="9" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="5" p2="0" p3="2" p4="10" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="5" p2="0" p3="2" p4="10" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="7" p2="1" p3="2" p4="9" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="7" p2="1" p3="2" p4="9" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="7" p2="1" p3="2" p4="10" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="7" p2="1" p3="2" p4="10" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="8" p2="1" p3="2" p4="9" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="8" p2="1" p3="2" p4="9" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+				<Torsion p1="8" p2="1" p3="2" p4="10" param1="3" param2="0" param3=".6276" param4="0" param5="0" param6="0"/>
+				<Torsion p1="8" p2="1" p3="2" p4="10" param1="0" param2="0" param3="0" param4="3" param5="0" param6=".6276"/>
+			</Torsions>
+		</Force>
+		<Force forceGroup="0" type="PeriodicTorsionForce" usesPeriodic="0" version="2">
+			<Torsions>
+				<Torsion k=".66944" p1="0" p2="2" p3="1" p4="6" periodicity="3" phase="0"/>
+				<Torsion k=".6276" p1="6" p2="1" p3="2" p4="9" periodicity="3" phase="0"/>
+				<Torsion k=".6276" p1="6" p2="1" p3="2" p4="10" periodicity="3" phase="0"/>
+				<Torsion k=".75312" p1="0" p2="2" p3="1" p4="12" periodicity="3" phase="0"/>
+				<Torsion k="1.046" p1="0" p2="2" p3="1" p4="12" periodicity="2" phase="3.141592653589793"/>
+				<Torsion k=".8368000000000001" p1="0" p2="2" p3="1" p4="12" periodicity="1" phase="3.141592653589793"/>
+				<Torsion k=".66944" p1="12" p2="1" p3="2" p4="10" periodicity="3" phase="0"/>
+				<Torsion k=".66944" p1="12" p2="1" p3="2" p4="9" periodicity="3" phase="0"/>
+				<Torsion k=".66944" p1="2" p2="1" p3="12" p4="14" periodicity="3" phase="0"/>
+				<Torsion k=".66944" p1="2" p2="1" p3="12" p4="11" periodicity="3" phase="0"/>
+				<Torsion k=".66944" p1="2" p2="1" p3="12" p4="13" periodicity="3" phase="0"/>
+				<Torsion k=".6276" p1="14" p2="12" p3="1" p4="8" periodicity="3" phase="0"/>
+				<Torsion k=".6276" p1="14" p2="12" p3="1" p4="7" periodicity="3" phase="0"/>
+				<Torsion k=".6276" p1="11" p2="12" p3="1" p4="8" periodicity="3" phase="0"/>
+				<Torsion k=".6276" p1="11" p2="12" p3="1" p4="7" periodicity="3" phase="0"/>
+				<Torsion k=".6276" p1="13" p2="12" p3="1" p4="8" periodicity="3" phase="0"/>
+				<Torsion k=".6276" p1="13" p2="12" p3="1" p4="7" periodicity="3" phase="0"/>
+			</Torsions>
+		</Force>
+		<Force alpha="0" cutoff="1" dispersionCorrection="0" ewaldTolerance=".0005" forceGroup="0" ljAlpha="0" ljnx="0" ljny="0" ljnz="0" method="0" nx="0" ny="0" nz="0" recipForceGroup="-1" rfDielectric="78.3" switchingDistance="-1" type="NonbondedForce" useSwitchingFunction="0" version="3">
+			<GlobalParameters>
+				<Parameter default="0" name="lambda_electrostatics_core"/>
+				<Parameter default="0" name="lambda_sterics_core"/>
+				<Parameter default="0" name="lambda_electrostatics_delete"/>
+				<Parameter default="0" name="lambda_electrostatics_insert"/>
+			</GlobalParameters>
+			<ParticleOffsets>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="0" q=".00028262287378311157" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="1" q=".0123826265335083" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="2" q=".0009847655892372131" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="3" q=".00019396841526031494" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="4" q=".00019396841526031494" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="5" q=".00019396841526031494" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_delete" particle="6" q="-.032106030732393265" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="7" q=".005593970417976379" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="8" q=".005593970417976379" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="9" q=".0008930861949920654" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_core" particle="10" q=".0008930861949920654" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_insert" particle="11" q=".03229999914765358" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_insert" particle="12" q="-.09220000356435776" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_insert" particle="13" q=".03229999914765358" sig="0"/>
+				<Offset eps="0" parameter="lambda_electrostatics_insert" particle="14" q=".03229999914765358" sig="0"/>
+			</ParticleOffsets>
+			<ExceptionOffsets>
+				<Offset eps="0" exception="10" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="10" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="11" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="11" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="12" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="12" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="13" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="13" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="14" parameter="lambda_electrostatics_core" q=".0003183500983239278" sig="0"/>
+				<Offset eps="0" exception="14" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="15" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="15" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="16" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="16" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="17" parameter="lambda_electrostatics_core" q=".0003183500983239278" sig="0"/>
+				<Offset eps="0" exception="17" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="18" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="18" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="19" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="19" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="20" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="20" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="21" parameter="lambda_electrostatics_core" q=".0003183500983239278" sig="0"/>
+				<Offset eps="0" exception="21" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="22" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="22" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="23" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="23" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="24" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="24" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="28" parameter="lambda_electrostatics_core" q="-.000422241828170813" sig="0"/>
+				<Offset eps="0" exception="28" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="29" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="29" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="30" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="30" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="32" parameter="lambda_electrostatics_core" q="-.000422241828170813" sig="0"/>
+				<Offset eps="0" exception="32" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="33" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="33" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="34" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="34" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="36" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="36" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="37" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="37" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="38" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="38" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="39" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="39" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="40" parameter="lambda_electrostatics_core" q="2.998838525128389e-05" sig="0"/>
+				<Offset eps="0" exception="40" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="41" parameter="lambda_electrostatics_core" q="2.998838525128389e-05" sig="0"/>
+				<Offset eps="0" exception="41" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="42" parameter="lambda_electrostatics_core" q="2.998838525128389e-05" sig="0"/>
+				<Offset eps="0" exception="42" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="44" parameter="lambda_electrostatics_core" q=".00019963845334661223" sig="0"/>
+				<Offset eps="0" exception="44" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="45" parameter="lambda_electrostatics_core" q=".00019963845334661223" sig="0"/>
+				<Offset eps="0" exception="45" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="46" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="46" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="47" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="47" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="48" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="48" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="49" parameter="lambda_electrostatics_core" q="2.998838525128389e-05" sig="0"/>
+				<Offset eps="0" exception="49" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="50" parameter="lambda_electrostatics_core" q="2.998838525128389e-05" sig="0"/>
+				<Offset eps="0" exception="50" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="51" parameter="lambda_electrostatics_core" q="2.998838525128389e-05" sig="0"/>
+				<Offset eps="0" exception="51" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="53" parameter="lambda_electrostatics_core" q=".00019963845334661223" sig="0"/>
+				<Offset eps="0" exception="53" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="54" parameter="lambda_electrostatics_core" q=".00019963845334661223" sig="0"/>
+				<Offset eps="0" exception="54" parameter="lambda_sterics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="55" parameter="lambda_electrostatics_core" q="0" sig="0"/>
+				<Offset eps="0" exception="55" parameter="lambda_sterics_core" q="0" sig="0"/>
+			</ExceptionOffsets>
+			<Particles>
+				<Particle eps="0" q="-.09248262643814087" sig=".3399669508423535"/>
+				<Particle eps="0" q="-.09248262643814087" sig=".3399669508423535"/>
+				<Particle eps="0" q="-.08108476549386978" sig=".3399669508423535"/>
+				<Particle eps="0" q=".032106030732393265" sig=".2649532787749369"/>
+				<Particle eps="0" q=".032106030732393265" sig=".2649532787749369"/>
+				<Particle eps="0" q=".032106030732393265" sig=".2649532787749369"/>
+				<Particle eps="0" q=".032106030732393265" sig=".2649532787749369"/>
+				<Particle eps="0" q=".032106030732393265" sig=".2649532787749369"/>
+				<Particle eps="0" q=".032106030732393265" sig=".2649532787749369"/>
+				<Particle eps="0" q=".03680691495537758" sig=".2649532787749369"/>
+				<Particle eps="0" q=".03680691495537758" sig=".2649532787749369"/>
+				<Particle eps="0" q="0" sig=".2649532787749369"/>
+				<Particle eps="0" q="0" sig=".3399669508423535"/>
+				<Particle eps="0" q="0" sig=".2649532787749369"/>
+				<Particle eps="0" q="0" sig=".2649532787749369"/>
+			</Particles>
+			<Exceptions>
+				<Exception eps="0" p1="6" p2="11" q="0" sig="1"/>
+				<Exception eps="0" p1="6" p2="12" q="0" sig="1"/>
+				<Exception eps="0" p1="6" p2="13" q="0" sig="1"/>
+				<Exception eps="0" p1="6" p2="14" q="0" sig="1"/>
+				<Exception eps="0" p1="11" p2="12" q="0" sig="1"/>
+				<Exception eps="0" p1="11" p2="13" q="0" sig="1"/>
+				<Exception eps="0" p1="11" p2="14" q="0" sig="1"/>
+				<Exception eps="0" p1="12" p2="13" q="0" sig="1"/>
+				<Exception eps="0" p1="12" p2="14" q="0" sig="1"/>
+				<Exception eps="0" p1="13" p2="14" q="0" sig="1"/>
+				<Exception eps="0" p1="0" p2="1" q="0" sig="1"/>
+				<Exception eps="0" p1="0" p2="2" q="0" sig="1"/>
+				<Exception eps="0" p1="1" p2="2" q="0" sig="1"/>
+				<Exception eps="0" p1="0" p2="3" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="1" p2="3" q="-.002474375038862831" sig=".3024601148086452"/>
+				<Exception eps="0" p1="2" p2="3" q="0" sig="1"/>
+				<Exception eps="0" p1="0" p2="4" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="1" p2="4" q="-.002474375038862831" sig=".3024601148086452"/>
+				<Exception eps="0" p1="2" p2="4" q="0" sig="1"/>
+				<Exception eps="0" p1="3" p2="4" q="0" sig="1"/>
+				<Exception eps="0" p1="0" p2="5" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="1" p2="5" q="-.002474375038862831" sig=".3024601148086452"/>
+				<Exception eps="0" p1="2" p2="5" q="0" sig="1"/>
+				<Exception eps="0" p1="3" p2="5" q="0" sig="1"/>
+				<Exception eps="0" p1="4" p2="5" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="0" p2="6" q="-.002474375038862831" sig=".3024601148086452"/>
+				<Exception eps="0" p1="1" p2="6" q="0" sig="1"/>
+				<Exception eps="0" p1="2" p2="6" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="0" p2="7" q="-.002474375038862831" sig=".3024601148086452"/>
+				<Exception eps="0" p1="1" p2="7" q="0" sig="1"/>
+				<Exception eps="0" p1="2" p2="7" q="0" sig="1"/>
+				<Exception eps="0" p1="6" p2="7" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="0" p2="8" q="-.002474375038862831" sig=".3024601148086452"/>
+				<Exception eps="0" p1="1" p2="8" q="0" sig="1"/>
+				<Exception eps="0" p1="2" p2="8" q="0" sig="1"/>
+				<Exception eps="0" p1="6" p2="8" q="0" sig="1"/>
+				<Exception eps="0" p1="7" p2="8" q="0" sig="1"/>
+				<Exception eps="0" p1="0" p2="9" q="0" sig="1"/>
+				<Exception eps="0" p1="1" p2="9" q="0" sig="1"/>
+				<Exception eps="0" p1="2" p2="9" q="0" sig="1"/>
+				<Exception eps=".032844399999999996" p1="3" p2="9" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="4" p2="9" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="5" p2="9" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="6" p2="9" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="7" p2="9" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="8" p2="9" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps="0" p1="0" p2="10" q="0" sig="1"/>
+				<Exception eps="0" p1="1" p2="10" q="0" sig="1"/>
+				<Exception eps="0" p1="2" p2="10" q="0" sig="1"/>
+				<Exception eps=".032844399999999996" p1="3" p2="10" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="4" p2="10" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="5" p2="10" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="6" p2="10" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="7" p2="10" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="8" p2="10" q=".0009847699522682815" sig=".2649532787749369"/>
+				<Exception eps="0" p1="9" p2="10" q="0" sig="1"/>
+				<Exception eps=".2288648" p1="0" p2="12" q=".00708403388105632" sig=".3399669508423535"/>
+				<Exception eps="0" p1="12" p2="2" q="0" sig="1"/>
+				<Exception eps="0" p1="12" p2="1" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="2" p2="14" q="-.002156024940538903" sig=".3024601148086452"/>
+				<Exception eps="0" p1="1" p2="14" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="2" p2="11" q="-.002156024940538903" sig=".3024601148086452"/>
+				<Exception eps="0" p1="1" p2="11" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="2" p2="13" q="-.002156024940538903" sig=".3024601148086452"/>
+				<Exception eps="0" p1="1" p2="13" q="0" sig="1"/>
+				<Exception eps=".08670021359327784" p1="12" p2="10" q="-.002896616867033644" sig=".3024601148086452"/>
+				<Exception eps=".08670021359327784" p1="12" p2="9" q="-.002896616867033644" sig=".3024601148086452"/>
+				<Exception eps="0" p1="12" p2="8" q="0" sig="1"/>
+				<Exception eps=".032844399999999996" p1="14" p2="8" q=".0010147583375195654" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="11" p2="8" q=".0010147583375195654" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="13" p2="8" q=".0010147583375195654" sig=".2649532787749369"/>
+				<Exception eps="0" p1="12" p2="7" q="0" sig="1"/>
+				<Exception eps=".032844399999999996" p1="14" p2="7" q=".0010147583375195654" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="11" p2="7" q=".0010147583375195654" sig=".2649532787749369"/>
+				<Exception eps=".032844399999999996" p1="13" p2="7" q=".0010147583375195654" sig=".2649532787749369"/>
+			</Exceptions>
+		</Force>
+		<Force cutoff="1" energy="U_sterics;U_sterics = select(step(r - r_LJ), 4*epsilon*x*(x-1.0), U_sterics_quad);U_sterics_quad = Force*(((r - r_LJ)^2)/2 - (r - r_LJ)) + U_sterics_cut;U_sterics_cut = 4*epsilon*((sigma/r_LJ)^6)*(((sigma/r_LJ)^6) - 1.0);Force = -4*epsilon*((-12*sigma^12)/(r_LJ^13) + (6*sigma^6)/(r_LJ^7));x = (sigma/r)^6;r_LJ = softcore_alpha*((26/7)*(sigma^6)*lambda_sterics_deprecated)^(1/6);lambda_sterics_deprecated = new_interaction*(1.0 - lambda_sterics_insert) + old_interaction*lambda_sterics_delete;epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;reff_sterics = sigma*((softcore_alpha*lambda_alpha + (r/sigma)^6))^(1/6);sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;lambda_alpha = new_interaction*(1-lambda_sterics_insert) + old_interaction*lambda_sterics_delete;lambda_sterics = core_interaction*lambda_sterics_core + new_interaction*lambda_sterics_insert + old_interaction*lambda_sterics_delete;core_interaction = delta(unique_old1+unique_old2+unique_new1+unique_new2);new_interaction = max(unique_new1, unique_new2);old_interaction = max(unique_old1, unique_old2);epsilonA = sqrt(epsilonA1*epsilonA2);epsilonB = sqrt(epsilonB1*epsilonB2);sigmaA = 0.5*(sigmaA1 + sigmaA2);sigmaB = 0.5*(sigmaB1 + sigmaB2);" forceGroup="0" method="0" switchingDistance="-1" type="CustomNonbondedForce" useLongRangeCorrection="0" useSwitchingFunction="0" version="2">
+			<PerParticleParameters>
+				<Parameter name="sigmaA"/>
+				<Parameter name="epsilonA"/>
+				<Parameter name="sigmaB"/>
+				<Parameter name="epsilonB"/>
+				<Parameter name="unique_old"/>
+				<Parameter name="unique_new"/>
+			</PerParticleParameters>
+			<GlobalParameters>
+				<Parameter default=".85" name="softcore_alpha"/>
+				<Parameter default="0" name="lambda_sterics_core"/>
+				<Parameter default="0" name="lambda_electrostatics_core"/>
+				<Parameter default="0" name="lambda_sterics_insert"/>
+				<Parameter default="0" name="lambda_sterics_delete"/>
+			</GlobalParameters>
+			<EnergyParameterDerivatives/>
+			<Particles>
+				<Particle param1=".3399669508423535" param2=".4577296" param3=".3399669508423535" param4=".4577296" param5="0" param6="0"/>
+				<Particle param1=".3399669508423535" param2=".4577296" param3=".3399669508423535" param4=".4577296" param5="0" param6="0"/>
+				<Particle param1=".3399669508423535" param2=".4577296" param3=".3399669508423535" param4=".4577296" param5="0" param6="0"/>
+				<Particle param1=".2649532787749369" param2=".06568879999999999" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="0"/>
+				<Particle param1=".2649532787749369" param2=".06568879999999999" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="0"/>
+				<Particle param1=".2649532787749369" param2=".06568879999999999" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="0"/>
+				<Particle param1=".2649532787749369" param2=".06568879999999999" param3=".2649532787749369" param4="0" param5="1" param6="0"/>
+				<Particle param1=".2649532787749369" param2=".06568879999999999" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="0"/>
+				<Particle param1=".2649532787749369" param2=".06568879999999999" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="0"/>
+				<Particle param1=".2649532787749369" param2=".06568879999999999" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="0"/>
+				<Particle param1=".2649532787749369" param2=".06568879999999999" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="0"/>
+				<Particle param1=".2649532787749369" param2="0" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="1"/>
+				<Particle param1=".3399669508423535" param2="0" param3=".3399669508423535" param4=".4577296" param5="0" param6="1"/>
+				<Particle param1=".2649532787749369" param2="0" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="1"/>
+				<Particle param1=".2649532787749369" param2="0" param3=".2649532787749369" param4=".06568879999999999" param5="0" param6="1"/>
+			</Particles>
+			<Exclusions>
+				<Exclusion p1="6" p2="11"/>
+				<Exclusion p1="6" p2="12"/>
+				<Exclusion p1="6" p2="13"/>
+				<Exclusion p1="6" p2="14"/>
+				<Exclusion p1="11" p2="12"/>
+				<Exclusion p1="11" p2="13"/>
+				<Exclusion p1="11" p2="14"/>
+				<Exclusion p1="12" p2="13"/>
+				<Exclusion p1="12" p2="14"/>
+				<Exclusion p1="13" p2="14"/>
+				<Exclusion p1="0" p2="1"/>
+				<Exclusion p1="0" p2="2"/>
+				<Exclusion p1="1" p2="2"/>
+				<Exclusion p1="0" p2="3"/>
+				<Exclusion p1="1" p2="3"/>
+				<Exclusion p1="2" p2="3"/>
+				<Exclusion p1="0" p2="4"/>
+				<Exclusion p1="1" p2="4"/>
+				<Exclusion p1="2" p2="4"/>
+				<Exclusion p1="3" p2="4"/>
+				<Exclusion p1="0" p2="5"/>
+				<Exclusion p1="1" p2="5"/>
+				<Exclusion p1="2" p2="5"/>
+				<Exclusion p1="3" p2="5"/>
+				<Exclusion p1="4" p2="5"/>
+				<Exclusion p1="0" p2="6"/>
+				<Exclusion p1="1" p2="6"/>
+				<Exclusion p1="2" p2="6"/>
+				<Exclusion p1="0" p2="7"/>
+				<Exclusion p1="1" p2="7"/>
+				<Exclusion p1="2" p2="7"/>
+				<Exclusion p1="6" p2="7"/>
+				<Exclusion p1="0" p2="8"/>
+				<Exclusion p1="1" p2="8"/>
+				<Exclusion p1="2" p2="8"/>
+				<Exclusion p1="6" p2="8"/>
+				<Exclusion p1="7" p2="8"/>
+				<Exclusion p1="0" p2="9"/>
+				<Exclusion p1="1" p2="9"/>
+				<Exclusion p1="2" p2="9"/>
+				<Exclusion p1="3" p2="9"/>
+				<Exclusion p1="4" p2="9"/>
+				<Exclusion p1="5" p2="9"/>
+				<Exclusion p1="6" p2="9"/>
+				<Exclusion p1="7" p2="9"/>
+				<Exclusion p1="8" p2="9"/>
+				<Exclusion p1="0" p2="10"/>
+				<Exclusion p1="1" p2="10"/>
+				<Exclusion p1="2" p2="10"/>
+				<Exclusion p1="3" p2="10"/>
+				<Exclusion p1="4" p2="10"/>
+				<Exclusion p1="5" p2="10"/>
+				<Exclusion p1="6" p2="10"/>
+				<Exclusion p1="7" p2="10"/>
+				<Exclusion p1="8" p2="10"/>
+				<Exclusion p1="9" p2="10"/>
+				<Exclusion p1="0" p2="12"/>
+				<Exclusion p1="12" p2="2"/>
+				<Exclusion p1="12" p2="1"/>
+				<Exclusion p1="2" p2="14"/>
+				<Exclusion p1="1" p2="14"/>
+				<Exclusion p1="2" p2="11"/>
+				<Exclusion p1="1" p2="11"/>
+				<Exclusion p1="2" p2="13"/>
+				<Exclusion p1="1" p2="13"/>
+				<Exclusion p1="12" p2="10"/>
+				<Exclusion p1="12" p2="9"/>
+				<Exclusion p1="12" p2="8"/>
+				<Exclusion p1="14" p2="8"/>
+				<Exclusion p1="11" p2="8"/>
+				<Exclusion p1="13" p2="8"/>
+				<Exclusion p1="12" p2="7"/>
+				<Exclusion p1="14" p2="7"/>
+				<Exclusion p1="11" p2="7"/>
+				<Exclusion p1="13" p2="7"/>
+			</Exclusions>
+			<Functions/>
+			<InteractionGroups>
+				<InteractionGroup>
+					<Set1>
+						<Particle index="6"/>
+					</Set1>
+					<Set2>
+						<Particle index="0"/>
+						<Particle index="1"/>
+						<Particle index="2"/>
+						<Particle index="3"/>
+						<Particle index="4"/>
+						<Particle index="5"/>
+						<Particle index="7"/>
+						<Particle index="8"/>
+						<Particle index="9"/>
+						<Particle index="10"/>
+					</Set2>
+				</InteractionGroup>
+				<InteractionGroup>
+					<Set1>
+						<Particle index="6"/>
+					</Set1>
+					<Set2/>
+				</InteractionGroup>
+				<InteractionGroup>
+					<Set1>
+						<Particle index="11"/>
+						<Particle index="12"/>
+						<Particle index="13"/>
+						<Particle index="14"/>
+					</Set1>
+					<Set2>
+						<Particle index="0"/>
+						<Particle index="1"/>
+						<Particle index="2"/>
+						<Particle index="3"/>
+						<Particle index="4"/>
+						<Particle index="5"/>
+						<Particle index="7"/>
+						<Particle index="8"/>
+						<Particle index="9"/>
+						<Particle index="10"/>
+					</Set2>
+				</InteractionGroup>
+				<InteractionGroup>
+					<Set1>
+						<Particle index="11"/>
+						<Particle index="12"/>
+						<Particle index="13"/>
+						<Particle index="14"/>
+					</Set1>
+					<Set2/>
+				</InteractionGroup>
+				<InteractionGroup>
+					<Set1>
+						<Particle index="0"/>
+						<Particle index="1"/>
+						<Particle index="2"/>
+						<Particle index="3"/>
+						<Particle index="4"/>
+						<Particle index="5"/>
+						<Particle index="7"/>
+						<Particle index="8"/>
+						<Particle index="9"/>
+						<Particle index="10"/>
+					</Set1>
+					<Set2/>
+				</InteractionGroup>
+				<InteractionGroup>
+					<Set1>
+						<Particle index="0"/>
+						<Particle index="1"/>
+						<Particle index="2"/>
+						<Particle index="3"/>
+						<Particle index="4"/>
+						<Particle index="5"/>
+						<Particle index="7"/>
+						<Particle index="8"/>
+						<Particle index="9"/>
+						<Particle index="10"/>
+					</Set1>
+					<Set2>
+						<Particle index="0"/>
+						<Particle index="1"/>
+						<Particle index="2"/>
+						<Particle index="3"/>
+						<Particle index="4"/>
+						<Particle index="5"/>
+						<Particle index="7"/>
+						<Particle index="8"/>
+						<Particle index="9"/>
+						<Particle index="10"/>
+					</Set2>
+				</InteractionGroup>
+				<InteractionGroup>
+					<Set1>
+						<Particle index="11"/>
+						<Particle index="12"/>
+						<Particle index="13"/>
+						<Particle index="14"/>
+					</Set1>
+					<Set2>
+						<Particle index="11"/>
+						<Particle index="12"/>
+						<Particle index="13"/>
+						<Particle index="14"/>
+					</Set2>
+				</InteractionGroup>
+				<InteractionGroup>
+					<Set1>
+						<Particle index="6"/>
+					</Set1>
+					<Set2>
+						<Particle index="6"/>
+					</Set2>
+				</InteractionGroup>
+			</InteractionGroups>
+		</Force>
+		<Force energy="U_electrostatics + U_sterics;U_sterics = select(step(r - r_LJ), 4*epsilon*x*(x-1.0), U_sterics_quad);U_sterics_quad = Force*(((r - r_LJ)^2)/2 - (r - r_LJ)) + U_sterics_cut;U_sterics_cut = 4*epsilon*((sigma/r_LJ)^6)*(((sigma/r_LJ)^6) - 1.0);Force = -4*epsilon*((-12*sigma^12)/(r_LJ^13) + (6*sigma^6)/(r_LJ^7));x = (sigma/r)^6;r_LJ = softcore_alpha*((26/7)*(sigma^6)*lambda_sterics_deprecated)^(1/6);lambda_sterics_deprecated = new_interaction*(1.0 - lambda_sterics_insert) + old_interaction*lambda_sterics_delete;U_electrostatics = (lambda_electrostatics_insert * unique_new + unique_old * (1 - lambda_electrostatics_delete)) * ONE_4PI_EPS0*chargeProd/r;ONE_4PI_EPS0 = 138.935456;epsilon = (1-lambda_sterics)*epsilonA + lambda_sterics*epsilonB;sigma = (1-lambda_sterics)*sigmaA + lambda_sterics*sigmaB;lambda_sterics = new_interaction*lambda_sterics_insert + old_interaction*lambda_sterics_delete;new_interaction = delta(1-unique_new); old_interaction = delta(1-unique_old);" forceGroup="0" type="CustomBondForce" usesPeriodic="0" version="3">
+			<PerBondParameters>
+				<Parameter name="chargeProd"/>
+				<Parameter name="sigmaA"/>
+				<Parameter name="epsilonA"/>
+				<Parameter name="sigmaB"/>
+				<Parameter name="epsilonB"/>
+				<Parameter name="unique_old"/>
+				<Parameter name="unique_new"/>
+			</PerBondParameters>
+			<GlobalParameters>
+				<Parameter default=".85" name="softcore_alpha"/>
+				<Parameter default="0" name="lambda_electrostatics_insert"/>
+				<Parameter default="0" name="lambda_electrostatics_delete"/>
+				<Parameter default="0" name="lambda_sterics_insert"/>
+				<Parameter default="0" name="lambda_sterics_delete"/>
+			</GlobalParameters>
+			<EnergyParameterDerivatives/>
+			<Bonds/>
+		</Force>
+	</Forces>
+</System>

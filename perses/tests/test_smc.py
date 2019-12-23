@@ -16,6 +16,8 @@ from perses.dispersed.smc import SequentialMonteCarlo
 from simtk import openmm, unit
 from openmmtools.constants import kB
 from perses.dispersed.utils import *
+from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
+from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 #######################
 istravis = os.environ.get('TRAVIS', None) == 'true'
 
@@ -128,7 +130,7 @@ def test_local_AIS():
     #forego the self.parallelism.deploy() and just make sure that
     #call_anneal_method() properly calls self.annealing_class.anneal
     #where annealing_class is LocallyOptimalAnnealing
-    incremental_work, sampler_state, timer, _pass = call_anneal_method(remote_worker = ne_fep,
+    incremental_work, sampler_state, timer, _pass, endstates = call_anneal_method(remote_worker = ne_fep,
                                                                        sampler_state = copy.deepcopy(ne_fep.sampler_states[0]),
                                                                        lambdas = np.array([0.0, 1e-6]),
                                                                        noneq_trajectory_filename = None,
@@ -222,3 +224,40 @@ def test_compute_timeseries():
     reduced_potentials = np.random.rand(100)
     data = compute_timeseries(reduced_potentials)
     assert len(data[3]) <= len(reduced_potentials), f"the length of uncorrelated data is at most the length of the raw data"
+
+def test_create_endstates():
+    """
+    test the creation of unsampled endstates
+    """
+    fe_setup = RelativeFEPSetup(ligand_input = f"{os.getcwd()}/test.smi",
+                                old_ligand_index = 0,
+                                new_ligand_index = 1,
+                                forcefield_files = ['gaff.xml'],
+                                phases = ['vacuum'])
+
+    hybrid_factory = HybridTopologyFactory(topology_proposal = fe_setup._vacuum_topology_proposal,
+                                           current_positions = fe_setup._vacuum_positions_old,
+                                           new_positions = fe_setup._vacuum_positions_new,
+                                           neglected_new_angle_terms = fe_setup._vacuum_forward_neglected_angles,
+                                           neglected_old_angle_terms = fe_setup._vacuum_reverse_neglected_angles,
+                                           softcore_LJ_v2 = True,
+                                           interpolate_old_and_new_14s = False)
+
+    zero_state_error, one_state_error = validate_endstate_energies(fe_setup._vacuum_topology_proposal,
+                                                                   hybrid_factory,
+                                                                   added_energy = fe_setup._vacuum_added_valence_energy,
+                                                                   subtracted_energy = fe_setup._vacuum_subtracted_valence_energy,
+                                                                   beta = beta,
+                                                                   ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+
+    lambda_alchemical_state = RelativeAlchemicalState.from_system(hybrid_factory.hybrid_system)
+    lambda_protocol = LambdaProtocol(functions = 'default')
+    lambda_alchemical_state.set_alchemical_parameters(0.0, lambda_protocol)
+    thermodynamic_state = CompoundThermodynamicState(ThermodynamicState(hybrid_factory.hybrid_system, temperature = temperature),composable_states = [lambda_alchemical_state])
+    zero_endstate = copy.deepcopy(thermodynamic_state)
+    one_endstate = copy.deepcopy(thermodynamic_state)
+    one_endstate.set_alchemical_parameters(1.0, lambda_protocol)
+    new_endstates = create_endstates(zero_endstate, one_endstate)
+
+if __name__ == '__main__':
+    test_local_AIS()

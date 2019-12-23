@@ -1,9 +1,7 @@
 import simtk.openmm as openmm
-import openmmtools.cache as cache
 from typing import List, Tuple, Union, NamedTuple
 import os
 import copy
-import openmmtools.cache as cache
 
 import openmmtools.mcmc as mcmc
 import openmmtools.integrators as integrators
@@ -32,14 +30,14 @@ import dask.distributed as distributed
 import tqdm
 import time
 from scipy.special import logsumexp
+import openmmtools.cache as cache
+from openmmtools import utils
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("sMC_utils")
 _logger.setLevel(logging.DEBUG)
 DISTRIBUTED_ERROR_TOLERANCE = 1e-6
-
-#cache.global_context_cache.platform = configure_platform(platform_name = 'CUDA')
 EquilibriumFEPTask = namedtuple('EquilibriumInput', ['sampler_state', 'inputs', 'outputs'])
 
 def check_platform(platform):
@@ -95,6 +93,10 @@ def configure_platform(platform_name='Reference', fallback_platform_name='CPU'):
         platform = fallback_platform
 
     return platform
+
+#########
+cache.global_context_cache.platform = configure_platform(utils.get_fastest_platform().getName())
+#########
 
 #smc functions
 def compute_survival_rate(sMC_particle_ancestries):
@@ -454,6 +456,62 @@ def compute_reduced_potential(thermodynamic_state: states.ThermodynamicState, sa
     sampler_state.apply_to_context(context, ignore_velocities=True)
     return thermodynamic_state.reduced_potential(context)
 
+def create_endstates(first_thermostate, last_thermostate):
+    """
+    utility function to generate unsampled endstates
+    1. move all alchemical atom LJ parameters from CustomNonbondedForce to NonbondedForce
+    2. delete the CustomNonbondedForce
+    3. set PME tolerance to 1e-5
+    4. enable LJPME to handle long range dispersion corrections in a physically reasonable manner
+
+    Arguments
+    ---------
+    first_thermostate : openmmtools.states.CompoundThermodynamicState
+        the first thermodynamic state for which an unsampled endstate will be created
+    last_thermostate : openmmtools.states.CompoundThermodynamicState
+        the last thermodynamic state for which an unsampled endstate will be created
+
+    Returns
+    -------
+    unsampled_endstates : list of openmmtools.states.CompoundThermodynamicState
+        the corrected unsampled endstates
+    """
+    unsampled_endstates = []
+    for master_lambda, endstate in zip([0., 1.], [first_thermostate, last_thermostate]):
+        dispersion_system = endstate.get_system()
+        energy_unit = unit.kilocalories_per_mole
+        # Find the NonbondedForce (there must be only one)
+        forces = { force.__class__.__name__ : force for force in dispersion_system.getForces() }
+        # Set NonbondedForce to use LJPME
+        forces['NonbondedForce'].setNonbondedMethod(openmm.NonbondedForce.LJPME)
+        # Set tight PME tolerance
+        TIGHT_PME_TOLERANCE = 1.0e-5
+        forces['NonbondedForce'].setEwaldErrorTolerance(TIGHT_PME_TOLERANCE)
+        # Move alchemical LJ sites from CustomNonbondedForce back to NonbondedForce
+        for particle_index in range(forces['NonbondedForce'].getNumParticles()):
+            charge, sigma, epsilon = forces['NonbondedForce'].getParticleParameters(particle_index)
+            sigmaA, epsilonA, sigmaB, epsilonB, unique_old, unique_new = forces['CustomNonbondedForce'].getParticleParameters(particle_index)
+            if (epsilon/energy_unit == 0.0) and ((epsilonA > 0.0) or (epsilonB > 0.0)):
+                sigma = (1-master_lambda)*sigmaA + master_lambda*sigmaB
+                epsilon = (1-master_lambda)*epsilonA + master_lambda*epsilonB
+                forces['NonbondedForce'].setParticleParameters(particle_index, charge, sigma, epsilon)
+        # Delete the CustomNonbondedForce since we have moved all alchemical particles out of it
+        for force_index, force in enumerate(list(dispersion_system.getForces())):
+            if force.__class__.__name__ == 'CustomNonbondedForce':
+                custom_nonbonded_force_index = force_index
+                break
+        dispersion_system.removeForce(custom_nonbonded_force_index)
+        # Set all parameters to master lambda
+        for force_index, force in enumerate(list(dispersion_system.getForces())):
+            if hasattr(force, 'getNumGlobalParameters'):
+                for parameter_index in range(force.getNumGlobalParameters()):
+                    if force.getGlobalParameterName(parameter_index)[0:7] == 'lambda_':
+                        force.setGlobalParameterDefaultValue(parameter_index, master_lambda)
+        # Store the unsampled endstate
+        unsampled_endstates.append(ThermodynamicState(dispersion_system, temperature = endstate.temperature))
+
+    return unsampled_endstates
+
 ################################################################
 ##################Distributed Tasks#############################
 ################################################################
@@ -468,7 +526,8 @@ def activate_LocallyOptimalAnnealing(thermodynamic_state,
                                      topology = None,
                                      subset_atoms = None,
                                      measure_shadow_work = False,
-                                     integrator = 'langevin'):
+                                     integrator = 'langevin',
+                                     compute_endstate_correction = True):
     """
     Function to set worker attributes for annealing.
     """
@@ -490,7 +549,8 @@ def activate_LocallyOptimalAnnealing(thermodynamic_state,
                                              topology = topology,
                                              subset_atoms = subset_atoms,
                                              measure_shadow_work = measure_shadow_work,
-                                             integrator = integrator)
+                                             integrator = integrator,
+                                             compute_endstate_correction = compute_endstate_correction)
 
 def deactivate_worker_attributes(remote_worker):
     """
@@ -527,15 +587,15 @@ def call_anneal_method(remote_worker,
     else:
         _class = remote_worker
 
-    incremental_work, new_sampler_state, timer, _pass = _class.annealing_class.anneal(sampler_state = sampler_state,
-                                                                               lambdas = lambdas,
-                                                                               noneq_trajectory_filename = noneq_trajectory_filename,
-                                                                               num_integration_steps = num_integration_steps,
-                                                                               return_timer = return_timer,
-                                                                               return_sampler_state = return_sampler_state,
-                                                                               rethermalize = rethermalize,
-                                                                               compute_incremental_work = compute_incremental_work)
-    return incremental_work, new_sampler_state, timer, _pass
+    incremental_work, new_sampler_state, timer, _pass, endstate_corrections = _class.annealing_class.anneal(sampler_state = sampler_state,
+                                                                                      lambdas = lambdas,
+                                                                                      noneq_trajectory_filename = noneq_trajectory_filename,
+                                                                                      num_integration_steps = num_integration_steps,
+                                                                                      return_timer = return_timer,
+                                                                                      return_sampler_state = return_sampler_state,
+                                                                                      rethermalize = rethermalize,
+                                                                                      compute_incremental_work = compute_incremental_work)
+    return incremental_work, new_sampler_state, timer, _pass, endstate_corrections
 
 
 
@@ -558,7 +618,8 @@ class LocallyOptimalAnnealing():
                    topology = None,
                    subset_atoms = None,
                    measure_shadow_work = False,
-                   integrator = 'langevin'):
+                   integrator = 'langevin',
+                   compute_endstate_correction = True):
 
         try:
             self.context_cache = cache.global_context_cache
@@ -602,6 +663,17 @@ class LocallyOptimalAnnealing():
                 self._trajectory_box_lengths = []
                 self._trajectory_box_angles = []
 
+            self.compute_endstate_correction = compute_endstate_correction
+            if self.compute_endstate_correction:
+                self.thermodynamic_state.set_alchemical_parameters(0.0, lambda_protocol = self.lambda_protocol_class)
+                first_endstate = copy.deepcopy(self.thermodynamic_state)
+                self.thermodynamic_state.set_alchemical_parameters(1.0, lambda_protocol = self.lambda_protocol_class)
+                last_endstate = copy.deepcopy(self.thermodynamic_state)
+                endstates = create_endstates(first_endstate, last_endstate)
+                self.endstates = {0.0: endstates[0], 1.0: endstates[1]}
+            else:
+                self.endstates = None
+
             #set a bool variable for pass or failure
             self.succeed = True
             return True
@@ -641,6 +713,7 @@ class LocallyOptimalAnnealing():
         compute_incremental_work : bool, default True
             whether to compute the incremental work or simply anneal
 
+
         Returns
         -------
         incremental_work : np.array of shape (1, len(lambdas) - 1)
@@ -651,6 +724,9 @@ class LocallyOptimalAnnealing():
             timers
         _pass : bool
             whether the annealing protocol passed
+        compute_endstate_corrections : tuple of floats or None
+            the endstate correction
+            Convention:
         """
         #check if we can save the trajectory
         if noneq_trajectory_filename is not None:
@@ -666,6 +742,22 @@ class LocallyOptimalAnnealing():
             incremental_work = np.zeros(len(lambdas) - 1)
         #first set the thermodynamic state to the proper alchemical state and pull context, integrator
         self.sampler_state = sampler_state
+        if self.compute_endstate_correction:
+            endstate_rps = {_endstate: None for _endstate in self.endstates.keys()}
+            self.thermodynamic_state.set_alchemical_parameters(lambdas[0], lambda_protocol = self.lambda_protocol_class)
+            if lambdas[0] == 0.:
+                try:
+                    endstate_rps[0.] = self.endstates[0.].reduced_potential(self.sampler_state) - self.thermodynamic_state.reduced_potential(self.sampler_state)
+                except:
+                    pass
+            elif lambdas[0] == 1.:
+                try:
+                    endstate_rps[1.] = self.endstates[1.].reduced_potential(self.sampler_state) - self.thermodynamic_state.reduced_potential(self.sampler_state)
+                except:
+                    pass
+        else:
+            endstate_rps = None
+
         if compute_incremental_work:
             self.dummy_sampler_state = copy.deepcopy(sampler_state) #use dummy to not update velocities and save bandwidth
         self.thermodynamic_state.set_alchemical_parameters(lambdas[0], lambda_protocol = self.lambda_protocol_class)
@@ -694,23 +786,45 @@ class LocallyOptimalAnnealing():
             except Exception as e:
                 print(f"failure: {e}")
                 self.reset_dimensions()
-                return None, None, None, False
+                return None, None, None, False, None
 
         self.attempt_termination(noneq_trajectory_filename)
+
+        #determine corrected endstates
+        if self.compute_endstate_correction:
+            self.thermodynamic_state.set_alchemical_parameters(lambdas[-1], lambda_protocol = self.lambda_protocol_class)
+            if lambdas[-1] == 0.:
+                try:
+                    endstate_rps[0.] = self.endstates[0.].reduced_potential(self.sampler_state.update_from_context(self.context)) - self.thermodynamic_state.reduced_potential(self.sampler_state)
+                except:
+                    pass
+            elif lambdas[-1] == 1.:
+                try:
+                    endstate_rps[1.] = self.endstates[1.].reduced_potential(self.sampler_state.update_from_context(self.context)) - self.thermodynamic_state.reduced_potential(self.sampler_state)
+                except:
+                    pass
+            #now we can compute the corrections
+            if all(type(i) == np.float64 for i in  np.array(list(endstate_rps.values()))) and all(not q for q in np.isinf(np.array(list(endstate_rps.values())))): #then we can perform a calculation
+                return_endstate_corrections = endstate_rps
+            else:
+                return_endstate_corrections = None
+        else:
+            return_endstate_corrections = None
+
 
         #pull the last sampler state and return
         if return_sampler_state:
             if rethermalize:
-                sampler_state.update_from_context(self.context, ignore_velocities=True)
+                self.sampler_state.update_from_context(self.context, ignore_velocities=True)
             else:
-                sampler_state.update_from_context(self.context, ignore_velocities=False)
-                assert not sampler_state.has_nan()
+                self.sampler_state.update_from_context(self.context, ignore_velocities=False)
+                assert not self.sampler_state.has_nan()
             if not compute_incremental_work:
                 incremental_work = None
 
-            return (incremental_work, sampler_state, timer, True)
+            return (incremental_work, sampler_state, timer, True, return_endstate_corrections)
         else:
-            return (incremental_work, None, timer, True)
+            return (incremental_work, None, timer, True, return_endstate_corrections)
 
 
 
