@@ -1,15 +1,266 @@
-'''
-
-
-'''
 import logging
 import yaml
 import numpy as np
 import simtk.unit as unit
 import os
+from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
+from perses.dispersed.smc import SequentialMonteCarlo
+from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 
-_logger = logging.getLogger("simulation")
+_logger = logging.getLogger("Simulation")
 _logger.setLevel(logging.INFO)
+
+
+class Simulation(object):
+    """
+    Create a Simulation object to handle staged equilibrium and nonequilibrium free energy sampling methods
+    within a consistent API.
+    """
+    supported_sampler_parameters = {
+                             'repex':{
+                                      ##Hybrid Sampler##
+                                      'timestep': 4 * unit.femtoseconds,
+                                      'collision_rate': 5. / unit.picoseconds,
+                                      'n_steps_per_move_application': 1,
+                                      'reassign_velocities': False,
+                                      'n_restart_attempts': 20,
+                                      'splitting': "V R R R O R R R V",
+                                      'constraint_tolerance' : 1e-6,
+                                      'offline_freq': 10,
+
+                                      ##Setup##
+                                      'n_states': 13,
+                                      #temperature is handled by proposal arguments/proposal_parameters
+                                      'atom_selection': "not water",
+                                      'checkpoint_interval': 100,
+                                      'lambda_protocol': 'default',
+                                      'trajectory_directory': 'repex_{index0}_to_{index1}',
+                                      'trajectory_prefix': '{phase}',
+
+                                      ##Equilibrate##
+                                      "n_equilibration_iterations": 1,
+
+                                      ##Extend##
+                                      'n_cycles': 1000
+                                      },
+
+                             'sams': {'flatness_criteria': 'minimum-visits',
+                                      'gamma0': 1.
+                                      #the rest of the arguments are held by 'repex', which will be updated momentarily
+                                     },
+
+                             'smc': {
+                                     ##__init__##
+                                     'lambda_protocol': 'default',
+                                     #temperature is handled by proposal arguments/proposal_parameters
+                                     'trajectory_directory': 'neq_{index0}_to_{index1}',
+                                     'trajectory_prefix': '{phase}',
+                                     'atom_selection': "not water",
+                                     'timestep': 4 * unit.femtoseconds,
+                                     'collision_rate': 1. / unit.picoseconds,
+                                     'eq_splitting_string': 'V R O R V',
+                                     'neq_splitting_string': 'V R O R V',
+                                     'ncmc_save_interval': None,
+                                     'measure_shadow_work': False,
+                                     'neq_integrator': 'langevin',
+                                     'compute_endstate_correction': True,
+                                     'external_parallelism': None,
+                                     'internal_parallelism': {'library': ('dask', 'LSF'),
+                                                              'num_processes': 1},
+
+                                     ##sMC_anneal##
+                                     'num_particles': 100,
+                                     'protocols': {'forward': np.linspace(0,1, 1000),
+                                                   'reverse': np.linspace(1,0,1000)},
+                                     'directions': ['forward', 'reverse'],
+                                     'num_integration_steps' : 1,
+                                     'return_timer': False,
+                                     'rethermalize': False,
+                                     'trailblaze': None,
+                                     'resample': None,
+
+                                     ##equilibrate##
+                                     'n_equilibration_iterations': 1,
+                                     'n_steps_per_equilibration': 5000,
+                                     'endstates': [0,1],
+                                     'max_size': 1024*1e3,
+                                     'decorrelate': True,
+                                     'timer': False,
+                                     'minimize': False
+                                     }
+                             }
+
+
+    def __init__(self, hybrid_factory, sampler_type = 'repex', sampler_arguments = None):
+        """
+        Initialization method to create simulation arguments and instantiate the samplers
+
+        Arguments
+        ---------
+        hybrid_factory : perses.annihilation.relative.HybridTopologyFactory
+            the hybrid topology factory containing the hybrid system to be sampled
+        sampler_type : str
+            the type of sampler to use
+        sampler_arguments : dict or None, default None
+            the non-default arguments of the sampler_type
+        """
+        #parse some arguments
+        self.parse_arguments(sampler_type = sampler_type, sampler_arguments = sampler_arguments)
+        self.hybrid_factory = hybrid_factory
+
+        #instantiate the sampler (simulation object)
+        self.create_sampler()
+
+    def execute_sampler():
+        """
+        Execution method to conduct sampling (given some parameters, or default)
+        """
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def parse_arguments(sampler_type, sampler_arguments):
+        """
+        parse and validate init arguments
+
+        Arguments
+        ---------
+        sampler_type : str
+            the type of sampler to use
+        sampler_arguments : dict or None, default None
+            the non-default arguments of the sampler_type
+
+        Instance Variables
+        ------------------
+        sampler_type : str
+            the type of sampler to use
+        sampler_parameters : dict
+            updated arguments of the sampler type
+        """
+
+        #make some assertions
+        assert sampler_type in list(self.supported_sampler_parameters.keys()), f"sampler type {sampler_type} is not supported.  Supported samplers are {list(self.supported_sampler_parameters.keys())}"
+        if type(sampler_arguments) == dict:
+            assert set(sampler_arguments.keys()).issubset(set(self.supported_sampler_parameters[sampler_type].keys())), f"There is at least one sampler argument that is not supported in {sampler_type} arguments"
+            for keyword, _arg in sampler_arguments.items():
+                assert type(_arg) == type(self.supported_sampler_parameters[sampler_type][keyword]), f"keyword '{keyword}' type '{type(_arg)}' is not the supported type '{type(self.supported_sampler_parameters[sampler_type][keyword])}'"
+        elif sampler_arguments is None or sampler_arguments == {}:
+            sampler_arguments = {}
+            #there are no non-default arguments
+            pass
+        else:
+            raise Exception(f"sampler_arguments must be of type 'dict' or 'NoneType'.")
+
+        #now we can update the sampler_arguments
+        self.sampler_type = sampler_type
+        self.sampler_parameters = self.supported_sampler_parameters[self.sampler_type]
+        self.sampler_parameters.update(sampler_arguments)
+
+
+
+    def create_sampler():
+        """
+        wrapper method to instantiate the base sampler class to be used
+
+        Instance Variables
+        ------------------
+        sampler : object
+            the base sampler that is to be used
+        """
+        supported_samplers = list(self.supported_sampler_parameters.keys())
+
+        if self.sampler_type in ['repex', 'sams']:
+            mcmc_move = mcmc.LangevinSplittingDynamicsMove(timestep = self.sampler_parameters['timestep'],
+                                                           collision_rate = self.sampler_parameters['collision_rate'],
+                                                           n_steps = self.sampler_parameters['n_steps_per_move_application'],
+                                                           reassign_velocities = self.sampler_parameters['reassign_velocities'],
+                                                           n_restart_attempts = self.sampler_parameters['n_restart_attempts'],
+                                                           splitting = self.sampler_parameters['splitting'],
+                                                           constraint_tolerance = self.sampler_parameters['constraint_tolerance'])
+
+            #create a multistate reporter
+            storage_name = self.sampler_parameters['trajectory_directory'] + '/' + self.sampler_parameters['trajectory_prefix'] + '.nc'
+            reporter = MultiStateReporter(storage_name,
+                                          analysis_particle_indices = self.hybrid_factory.hybrid_topology.select(self.sampler_parameters['atom_selection']),
+                                          checkpoint_interval = self.sampler_parameters['checkpoint_interval'])
+
+            if self.sampler_type == 'repex':
+                self.sampler = HybridRepexSampler(mcmc_moves = mcmc_move,
+                                                  hybrid_factory = self.hybrid_factory,
+                                                  online_analysis_interval = self.supported_sampler_parameters['offline_freq'])
+            elif self.sampler_type == 'sams':
+                self.sampler = HybridSAMSSampler(mcmc_moves = mcmc_move,
+                                                 hybrid_factory = self.hybrid_factory,
+                                                 online_analysis_interval = self.supported_sampler_parameters['offline_freq'],
+                                                 online_analysis_minimum_iterations = 10, #perhaps this should be exposed?
+                                                 flatness_criteria = self.supported_sampler_parameters['flatness_criteria'],
+                                                 gamma0 = self.supported_sampler_parameters['gamma0'])
+            else:
+                raise Exception(f"sampler type {self.sampler_type} is not supported; this error should have been handled previously")
+
+            #run the setup; with a check for which phase the simulation is being conducted in
+            endstate_bool = False if self.sampler_parameters['trajectory_prefix'] == 'vacuum' else True
+            self.sampler.setup(n_states = self.supported_sampler_parameters['n_states'],
+                               temperature = temperature,
+                               storage_file = reporter,
+                               lambda_protocol = LambdaProtocol(functions = self.sampler_parameters['lambda_protocol']),
+                               endstates = endstate_bool)
+
+            #the self.sampler is primed for equilibrate and extend methods
+
+        elif self.sampler_type == 'smc':
+            self.sampler = SequentialMonteCarlo(factory = self.hybrid_factory,
+                                                lambda_protocol = self.sampler_parameters['lambda_protocol'],
+                                                temperature = self.sampler_parameters['temperature'],
+                                                trajectory_directory = self.sampler_parameters['trajectory_directory'],
+                                                trajectory_prefix = self.sampler_parameters['trajectory_prefix'],
+                                                atom_selection = self.sampler_parameters['atom_selection'],
+                                                timestep = self.sampler_parameters['timestep'],
+                                                collision_rate = self.sampler_parameters['collision_rate'],
+                                                eq_splitting_string = self.sampler_parameters['eq_splitting_string'],
+                                                neq_splitting_string = self.sampler_parameters['neq_splitting_string'],
+                                                ncmc_save_interval = self.sampler_parameters['ncmc_save_interval'],
+                                                measure_shadow_work = self.sampler_parameters['measure_shadow_work'],
+                                                neq_integrator = self.sampler_parameters['neq_integrator'],
+                                                compute_endstate_correction = self.sampler_parameters['compute_endstate_correction'],
+                                                external_parallelism = self.sampler_parameters['external_parallelism'],
+                                                internal_parallelism = self.sampler_parameters['internal_parallelism'])
+
+            self.sampler.minimize_sampler_states()
+
+        else:
+            if self.sampler_type not in supported_samplers:
+                raise Exception(f"sampler type {self.sampler_type} is not a supported sampler (supported methods include {supported_samplers})")
+            else:
+                raise Exception(f"sampler type {self.sampler_type} is supported, but has not sampler creation method!")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def simulation_from_yaml(filename: str):

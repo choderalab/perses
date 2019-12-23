@@ -112,6 +112,7 @@ class BuildProposalNetwork(object):
                                      'ncmc_save_interval': None,
                                      'measure_shadow_work': False,
                                      'neq_integrator': 'langevin',
+                                     'compute_endstate_correction': True,
                                      'external_parallelism': None,
                                      'internal_parallelism': {'library': ('dask', 'LSF'),
                                                               'num_processes': 1},
@@ -217,7 +218,7 @@ class BuildProposalNetwork(object):
         TODO:
         1. change the name of 'proposal_arguments' to something more appropriate.
         2. allow custom atom mapping for all edges in graph.  currently, we can only specify one of three mapping schemes for all molecules
-        3.
+        3. if 'receptor_filename' is None, remove complex phase from the proposal arguments; otherwise, the 'phases' will have to be specified explicitly
         """
         _logger.info(f"Parsing ligand input file...")
         self.ligand_input = ligand_input
@@ -225,6 +226,21 @@ class BuildProposalNetwork(object):
         self.receptor_filename = receptor_filename
         self.cost = cost
         self.resources = resources
+        _logger.info(f"Initialization complete.")
+
+    def setup_engines():
+        """
+        This is a simple startup method that calls the following internal methods:
+            1. _parse_ligand_input
+            2. _create_proposal_parameters
+            3. _create_connectivity_matrix
+            4. _validate_simulation_parameters
+            5. _create_system_generator
+            6. SmallMoleculeSetProposalEngine
+            7. FFAllAngleGeometryEngine
+
+        This is part of the setup before the `create_network` method can be called
+        """
         self._parse_ligand_input()
 
         #Now we must create some defaults for thermodynamic states
