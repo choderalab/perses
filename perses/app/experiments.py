@@ -144,6 +144,7 @@ class BuildProposalNetwork(object):
 
 
     known_phases = ['vacuum', 'solvent', 'complex'] # we omit complex phase in the known_phases if a receptor_filename is None
+    assert set(proposal_arguments['phases']).issubset(set(known_phases)), f"the default proposal_arguments['phases'] is not a subset of the known_phases"
     supported_connectivities = {'fully_connected': generate_fully_connected_adjacency_matrix} #we can add other options later, but this is a good vanilla one to start with
 
     def __init__(self,
@@ -151,15 +152,14 @@ class BuildProposalNetwork(object):
                  ligand_indices = None,
                  receptor_filename = None,
                  graph_connectivity = 'fully_connected',
-                 cost = None,
-                 resources = None,
+                 client = None,
                  proposal_parameters = None,
                  simulation_parameters = ('repex', None)):
 
         """
         Initialize NetworkX graph and build connectivity with a `graph_connectivity` input.
 
-        Parameters
+        Arguments
         ----------
         ligand_input : str
             the name of the ligand file (any openeye supported format)
@@ -179,11 +179,8 @@ class BuildProposalNetwork(object):
             If the graph_connectivity is input as a 2d numpy array, values represent the weights of the transform.  0 weights entail no connectivity.
             The self.adjacency_matrix argument produced as a result contains the log(weights) of the transform as entries.
 
-        cost : str, default None
-            this is currently a placeholder variable for the specification of the sampling method to be used on the graph.
-
-        resources : dict?, default None
-            this is yet another placeholder variable for the allocation of resources
+        client : generalized client object, default None
+            generalized client object from which workers can be called to perform edge computations
 
         proposal_parameters: dict, default None
             The following dict is parseable from a setup yaml, but have defaults given if no setup yaml is given.
@@ -219,13 +216,13 @@ class BuildProposalNetwork(object):
         1. change the name of 'proposal_arguments' to something more appropriate.
         2. allow custom atom mapping for all edges in graph.  currently, we can only specify one of three mapping schemes for all molecules
         3. if 'receptor_filename' is None, remove complex phase from the proposal arguments; otherwise, the 'phases' will have to be specified explicitly
+        4. parallelize setup by defining `resources`
         """
         _logger.info(f"Parsing ligand input file...")
         self.ligand_input = ligand_input
         self.ligand_indices = ligand_indices
         self.receptor_filename = receptor_filename
-        self.cost = cost
-        self.resources = resources
+        self.client = client
         _logger.info(f"Initialization complete.")
 
     def setup_engines():
@@ -334,7 +331,8 @@ class BuildProposalNetwork(object):
     def add_network_edge(self,
                          start,
                          end,
-                         weight):
+                         weight,
+                         edge_simulation_parameters):
         """
         This is a function to add network edges
 
@@ -346,6 +344,14 @@ class BuildProposalNetwork(object):
             int index of the ligand that the edge points to (from start_index)
         weight : float, default 1.0
             weight of the edge
+        edge_simulation_parameters : dict or None
+            the simulation parameters to put into the appropriate simulation object;
+            NOTE: in this case, the edge_simulation_parameters may only have one key specific to the phase being generated;
+            this is so that we may use the `simulation_parameter_assertions` method to avoid code duplication.
+            if type(edge_simulation_parameters) == dict, each entry is a {<phase>: (<simulation_flavor>, dict(params))};
+                if an transformation entry is missing, it is defaulted as above
+            elif edge_simulation_parameters is None:
+                default parameters or self.simulation_parameters will be used to create the edge simulation object
 
         Returns
         -------
@@ -403,6 +409,24 @@ class BuildProposalNetwork(object):
 
                     validated = True
                     _logger.info(f"\t\tendstate energies validated to within {ENERGY_THRESHOLD}!")
+
+                    #now we have to add the simulation object on the edge's appropriate phase
+                    if edge_simulation_parameters is None:
+                        _edge_simulation_parameters = None
+                        #then we have to try to pull self.simulation_parameters
+                        if self.simulation_parameters is not None:
+                            if (start_index, end_index) in list(self.simulation_parameters.keys()):
+                                if _phase in list(self.simulation_parameters[(start_index, end_index)]):
+                                    _edge_simulation_parameters = {_phase: self.simulation_parameters[(start_index, end_index)][_phase]}
+                    else:
+                        _edge_simulation_parameters = edge_simulation_parameters
+
+
+                    simulation_object = self._create_simulation_object(hybrid_factory = hybrid_factory,
+                                                                       edge_simulation_parameters = _edge_simulation_parameters)
+
+
+
                 except Exception as e:
                     _logger.warning(f"\t\t{e}")
                     _logger.warning(f"\t\tdetected failure to validate system.  omitting this edge.")
@@ -413,6 +437,7 @@ class BuildProposalNetwork(object):
 
                 self.network.edges[start, end]['proposals'][_phase]['hybrid_factory'] = hybrid_factory
                 self.network.edges[start, end]['proposals'][_phase]['endstate_energy_errors'] = endstate_energy_errors
+                self.network.edges[start, end]['proposals'][_phase]['simulation'] = simulation_object
                 self.network.edges[start, end]['proposals'][_phase]['validated'] = validated
 
             #check if all of the phases in the edge are validated
@@ -424,51 +449,49 @@ class BuildProposalNetwork(object):
                 self.adjacency_matrix[start, end] = -np.inf
                 return False
 
-    def _create_hybrid_topology_factory(self, start, end):
+    def _create_simulation_object(self, hybrid_factory, edge_simulation_parameters = None):
         """
-        add hybrid topology factories to the self.network
 
+        Arguments
+        ---------
+        hybrid_factory : perses.annihilation.relative.HybridTopologyFactory
+            hybrid factory with which a simulation object will be created
+        edge_simulation_parameters : dict or None
+            the simulation parameters to put into the appropriate simulation object;
+            NOTE: in this case, the edge_simulation_parameters may only have one key specific to the phase being generated;
+            this is so that we may use the `simulation_parameter_assertions` method to avoid code duplication.
+            if type(edge_simulation_parameters) == dict, each entry is a {<phase>: (<simulation_flavor>, dict(params))};
+                if an transformation entry is missing, it is defaulted as above
+            elif edge_simulation_parameters is None:
+                default parameters or self.simulation_parameters will be used to create the edge simulation object
 
+        Returns
+        -------
+        simulation_object : perses.app.simulation.Simulation
+            Simulation object appropriate to the input
         """
-        _logger.info(f"entering edge {edge} to build and validate HybridTopologyFactory")
-        for _phase, property_dict in self.network.edges[start, end]['proposals'].items():
-            _logger.info(f"\tcreating hybrid_factory for phase {_phase}")
-            hybrid_factory = HybridTopologyFactory(topology_proposal = property_dict['topology_proposal'],
-                                                   current_positions = property_dict['current_positions'],
-                                                   new_positions = property_dict['proposed_positions'],
-                                                   use_dispersion_correction = self.proposal_arguments['use_dispersion_correction'],
-                                                   functions=None,
-                                                   softcore_alpha = self.proposal_arguments['softcore_alpha'],
-                                                   bond_softening_constant = self.proposal_arguments['bond_softening_constant'],
-                                                   angle_softening_constant = self.proposal_arguments['angle_softening_constant'],
-                                                   soften_only_new = self.proposal_arguments['soften_only_new'],
-                                                   neglected_new_angle_terms = property_dict['forward_neglected_angles'],
-                                                   neglected_old_angle_terms = property_dict['reverse_neglected_angles'],
-                                                   softcore_LJ_v2 = self.proposal_arguments['softcore_LJ_v2'],
-                                                   softcore_electrostatics = self.proposal_arguments['softcore_electrostatics'],
-                                                   softcore_LJ_v2_alpha = self.proposal_arguments['softcore_LJ_v2_alpha'],
-                                                   softcore_electrostatics_alpha = self.proposal_arguments['softcore_electrostatics_alpha'],
-                                                   softcore_sigma_Q = self.proposal_arguments['softcore_sigma_Q'],
-                                                   interpolate_old_and_new_14s = self.proposal_arguments['anneal_14s'])
-            try:
-                endstate_energy_errors = validate_endstate_energies(topology_proposal = property_dict['topology_proposal'],
-                                                                    htf = hybrid_factory,
-                                                                    added_energy = property_dict['added_valence_energy'],
-                                                                    subtracted_energy = property_dict['subtracted_valence_energy'],
-                                                                    beta = self.beta,
-                                                                    ENERGY_THRESHOLD = ENERGY_THRESHOLD)
-                self.network.edges[start, end]['validated'] = True
-                _logger.info(f"\t\tendstate energies validated to within {ENERGY_THRESHOLD}!")
-            except Exception as e:
-                _logger.warning(f"\t\t{e}")
-                _logger.warning(f"\t\tdetected failure to validate system.  omitting this edge.")
-                self.network.edges[start, end]['validated'] = False
-                self.network.edges[start, end]['log_weight'] = -np.inf
-                self.adjacency_matrix[start, end] = -np.inf
+        #assert/create the simulation parameter arguments
+        if edge_simulation_parameters is not None:
+            assert len(list(edge_simulation_parameters.keys())) == 1, f"the edge_simulation_parameters can only have one phase-specific key"
+            self.simulation_parameter_assertions(edge_simulation_parameters)
+            _phase = list(edge_simulation_parameters.keys())[0]
+            _simulation_flavor = edge_simulation_parameters[_phase][0]
+            _simulation_parameters = edge_simulation_parameters[_phase][1]
+        else:
+            #check if we have a global_simulation_flavor
+            if type(self.global_simulation_flavor) == str:
+                assert self.simulation_parameters == None, f"if the global_simulation_flavor is set, then the self.simulation_parameters must be None"
+                #then we have a default
+                _simulation_flavor = self.global_simulation_flavor
+                _simulation_parameters = self.simulation_arguments[_simulation_flavor]
+            else:
+                raise Exception(f"if the global simulation flavor is not set, then there are no appropriate defaults")
 
-
-            self.network.edges[start, end]['proposals'][_phase]['hybrid_factory'] = hybrid_factory
-            self.network.edges[start, end]['proposals'][_phase]['endstate_energy_errors'] = endstate_energy_errors
+        #now create a simulation object
+        simulation_object = Simulation(hybrid_factory = hybrid_factory,
+                                       sampler_type = _simulation_flavor,
+                                       sampler_arguments = _simulation_parameters)
+        return simulation_object
 
 
     def _create_connectivity_matrix(self, graph_connectivity):
@@ -590,8 +613,11 @@ class BuildProposalNetwork(object):
                 #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
                 #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
                 #if dict is None, then default 'repex' parameters will be used
+                in this case, the self.simulation_arguments will be updated appropriately, self.simulation_parameters = None, and self.global_simulation_flavor = simulation_parameters[0]
             elif type(simulation_parameters) == dict, each entry is a {(int, int): {<phase>: (<simulation_flavor>, dict(params))}};
-                if an transformation entry is missing, it is defaulted as above
+                if an transformation entry is missing, it is defaulted as above.
+                in this case, the self.simulation_parameters is set appropriately
+                whilst the self.global_simulation_flavor = None
 
 
         """
@@ -614,6 +640,8 @@ class BuildProposalNetwork(object):
 
                 #update the simulation_arguments:
                 self.simulation_arguments[simulation_parameters[0]].update(simulation_parameters[1])
+                self.global_simulation_flavor = simulation_parameters[0]
+                self.simulation_parameters = None
 
         elif type(simulation_parameters) == dict:
             _logger.info(f"'simulation_parameters' detected dict as argument")
@@ -621,6 +649,7 @@ class BuildProposalNetwork(object):
             assert all(type(entry) == dict for entry in simulation_parameters.values()), f"each value of 'simulation_parameters' must be a dict"
             self.simulation_parameter_assertions(simulation_parameters)
             self.simulation_parameters = copy.deepcopy(simulation_parameters)
+            self.global_simulation_flavor = None
             for index, entry in simulation_parameters.items():
                 for phase, tup in entry.items():
                     sim_flavor, args = tup[0], tup[1]
@@ -1080,27 +1109,82 @@ class BuildProposalNetwork(object):
 class Experiment():
     """
     Main class with which to conduct computation on a network of ligands/protein mutations in different phases.
-    The following class will hold 3 main methods:
     """
-    default_setup_arguments = {'pressure': 1.0 * unit.atmosphere,
-                             'temperature': 300.0 * unit.kelvin,
-                             'solvent_padding': 9.0 * unit.angstroms,
-                             'hmass': 4 * unit.amus,
-                             'map_strength': 'default',
-                             'phases': ['vacuum', 'solvent', 'complex'],
-                             'forcefield_files': ['gaff.xml', 'amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
-                             'neglect_angles': False,
-                             'anneal_14s': False,
-                             'water_model': 'tip3p',
-                             'use_dispersion_correction': False,
-                             'softcore_alpha': None,
-                             'bond_softening_constant': 1.0,
-                             'angle_softening_constant': 1.0,
-                             'soften_only_new': False,
-                             'softcore_LJ_v2': True,
-                             'softcore_electrostatics': True,
-                             'softcore_LJ_v2_alpha': 0.85,
-                             'softcore_electrostatics_alpha': 0.3,
-                             'softcore_sigma_Q': 1.0}
 
-    default_simulation_arguments = {}
+    def __init__(self,
+                 #BuildProposalNetwork params
+                 ligand_input,
+                 ligand_indices = None,
+                 receptor_filename = None,
+                 graph_connectivity = 'fully_connected',
+                 proposal_parameters = None,
+                 simulation_parameters = ('repex', None),
+
+                 #setup resources
+                 resources = None):
+        """
+        Initialization method will construct a network on which to run a computation.
+
+        Arguments
+        ----------
+        ligand_input : str
+            the name of the ligand file (any openeye supported format)
+            this can either be an .sdf or list of .sdf files, or a list of SMILES strings
+
+        ligand_indices : list of int
+            indices in the ligand input to parse
+
+        receptor_filename : str, default None
+            Receptor mol2 or pdb filename. If None, complex leg will be omitted.
+
+        graph_connectivity : str or np.matrix or list of tuples, default 'fully_connected'
+            The graph connectivity information for the experiment.  This accepts one of several allowable
+            strings (corresponding to connectivity defaults), a 2d np.array specifying the explicit connectivity
+            matrix for indexed ligands, or a list of tuples corresponding to pairwise ligand index connections.
+            The default is 'fully_connected', which specified a fully connected (i.e. complete or single-clique) graph.
+            If the graph_connectivity is input as a 2d numpy array, values represent the weights of the transform.  0 weights entail no connectivity.
+            The self.adjacency_matrix argument produced as a result contains the log(weights) of the transform as entries.
+
+        client : generalized client object, default None
+            generalized client object from which workers can be called to perform edge computations
+
+        proposal_parameters: dict, default None
+            The following dict is parseable from a setup yaml, but have defaults given if no setup yaml is given.
+            They mostly consist of the thermodynamic state of the graph, several potential modifications to the
+            hybrid factory (i.e. the alchemical system), the single-topology mapping criteria, and the sampler-specific
+            parameters (i.e. parameters specific to Replica Exchange, SAMS, and sMC.)
+
+            forcefield_files : list of str
+                The list of ffxml files that contain the forcefields that will be used
+            pressure : Quantity, units of pressure
+                Pressure to use in the barostat
+            temperature : Quantity, units of temperature
+                Temperature to use for the Langevin integrator
+            solvent_padding : Quantity, units of length
+                The amount of padding to use when adding solvent
+            neglect_angles : bool
+                Whether to neglect certain angle terms for the purpose of minimizing work variance in the RJMC protocol.
+            anneal_14s : bool, default False
+                Whether to anneal 1,4 interactions over the protocol;
+                    if True, then geometry_engine takes the argument use_14_nonbondeds = False;
+                    if False, then geometry_engine takes the argument use_14_nonbondeds = True;
+
+        simulation_parameters : tuple(str, (dict or None)) or dict, default ('repex', None)
+            the simulation parameters to put into the appropriate simulation object
+            if type(simulation_parameters) == tuple:
+                #then the 0th entry is a string given by 'repex', 'sams', or 'smc', the flavor of simulation
+                #and the 1st entry is a dict of parameters that are appropriate to the flavor of simulation
+                #if dict is None, then default 'repex' parameters will be used
+            elif type(simulation_parameters) == dict, each entry is a {(int, int): {<phase>: (<simulation_flavor>, dict(params))}};
+                if an transformation entry is missing, it is defaulted as above
+
+        resources : dict, default None
+            dictionary specifying the following attributes
+                1. number of gpus, cpus
+                2. RAM per gpu/cpu
+                3. total run_time of gpus/cpus
+            format: {
+                    'gpus': {'number': int, 'RAM': int, 'runtime': float},
+                    'cpus': {'number': int, 'RAM': int, 'runtime': float}
+                    }
+        """

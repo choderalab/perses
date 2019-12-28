@@ -91,7 +91,10 @@ class Simulation(object):
                              }
 
 
-    def __init__(self, hybrid_factory, sampler_type = 'repex', sampler_arguments = None):
+    def __init__(self,
+                 hybrid_factory,
+                 sampler_type = 'repex',
+                 sampler_arguments = None):
         """
         Initialization method to create simulation arguments and instantiate the samplers
 
