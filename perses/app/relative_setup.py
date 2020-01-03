@@ -549,9 +549,9 @@ class RelativeFEPSetup(object):
             The parameterized system, containing a barostat if one was specified.
         """
         modeller = app.Modeller(topology, positions)
-        hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
-        modeller.delete(hs)
-        modeller.addHydrogens(forcefield=self._system_generator._forcefield)
+        #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
+        #modeller.delete(hs)
+        #modeller.addHydrogens(forcefield=self._system_generator._forcefield)
         if not vacuum:
             _logger.info(f"\tpreparing to add solvent")
             modeller.addSolvent(self._system_generator._forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
