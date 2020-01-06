@@ -1,6 +1,11 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    # nightly tests
+    - cron: '0 0 * * *'
 
 jobs:
   test:
@@ -9,8 +14,13 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest] #, macOS-latest]
-        python-version: [3.6] #, 3.7]
-        openmm: [latest] #, beta, nightly, conda-forge]
+        cfg:
+          - {python-version: 3.6, openmm: "latest"}
+          - {python-version: 3.7, openmm: "latest"}
+          - {python-version: 3.7, openmm: "beta"}
+          - {python-version: 3.7, openmm: "nightly"}
+          - {python-version: 3.7, openmm: "conda-forge"}
+
     env:
       ORGNAME: omnia
       PACKAGENAME: perses
@@ -39,22 +49,16 @@ jobs:
         conda list
     - name: Decrypt OpenEye license
       shell: bash
-      if: false
       env:
-        OE_KEY: ${{ secrets.OE_KEY }}
-        OE_IV: ${{ secrets.OE_IV }}
+        ENC_OE_LICENSE: ${{ secrets.TEST_SECRET }}
       run: |
-        openssl aes-256-cbc \
-                -K ${OE_KEY} \
-                -iv ${OE_IV} \
-                -in devtools/travis-ci/oe_license.txt.enc \
-                -out ${OE_LICENSE} -d
+        cat ${ENC_OE_LICENSE} > ${OE_LICENSE}
     - name: Build recipe
       shell: bash
       run: |
         . devtools/scripts/initialize_conda.sh
         conda activate
-        conda build --python=${{ matrix.python-version }} devtools/conda-recipe
+        conda build --python=${{ matrix.cfg.python-version }} devtools/conda-recipe
     - name: Prepare test environment
       shell: bash
       run: |
@@ -62,7 +66,7 @@ jobs:
         conda activate
         conda create -n test -c local ${PACKAGENAME}-dev nose nose-timer
         conda activate test
-        case ${{ matrix.openmm }} in
+        case ${{ matrix.cfg.openmm }} in
           latest)
             echo "Using latest release OpenMM."
             conda install -c omnia openmm;;
