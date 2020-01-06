@@ -38,7 +38,8 @@ jobs:
     - name: Configure conda
       shell: bash
       run: |
-        eval ${CONDA_INITIALIZER} && conda activate
+        eval ${CONDA_INITIALIZER}
+        conda activate
         conda config --set always_yes True
         conda config --add channels omnia --add channels conda-forge --add channels openeye
         conda update --quiet --all
@@ -60,12 +61,14 @@ jobs:
     - name: Build recipe
       shell: bash
       run: |
-        eval ${CONDA_INITIALIZER} && conda activate
+        eval ${CONDA_INITIALIZER}
+        conda activate
         conda build --python=${{ matrix.python-version }} devtools/conda-recipe
     - name: Prepare test environment
       shell: bash
       run: |
-        eval ${CONDA_INITIALIZER} && conda activate
+        eval ${CONDA_INITIALIZER}
+        conda activate
         conda create -n test -c local perses-dev nose nose-timer
         conda activate test
         case ${{ matrix.openmm }} in
@@ -85,7 +88,8 @@ jobs:
     - name: Test the package
       shell: bash
       run: |
-        eval ${CONDA_INITIALIZER} && conda activate test
+        eval ${CONDA_INITIALIZER}
+        conda activate test
         pushd .
         nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced'
         popd
