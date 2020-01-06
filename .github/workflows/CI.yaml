@@ -53,6 +53,7 @@ jobs:
         ENC_OE_LICENSE: ${{ secrets.ENC_OE_LICENSE }}
       run: |
         echo "${ENC_OE_LICENSE}" > $HOME/oe_license.txt
+
     - name: Build recipe
       shell: bash
       run: |
@@ -85,6 +86,7 @@ jobs:
       run: |
         . devtools/scripts/initialize_conda.sh
         conda activate test
+        export OE_LICENSE="$HOME/oe_license.txt"
         pushd .
         nosetests ${PACKAGENAME} --nocapture --verbosity=3 --with-timer -a '!advanced'
         popd
