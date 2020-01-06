@@ -12,14 +12,15 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest] #, macOS-latest]
         cfg:
-          # - {python-version: 3.6, openmm: "latest"}
+          - {python-version: 3.6, openmm: "latest"}
           - {python-version: 3.7, openmm: "latest"}
-          # - {python-version: 3.7, openmm: "beta"}
-          # - {python-version: 3.7, openmm: "nightly"}
-          # - {python-version: 3.7, openmm: "conda-forge"}
+          - {python-version: 3.7, openmm: "beta"}
+          - {python-version: 3.7, openmm: "nightly"}
+          - {python-version: 3.7, openmm: "conda-forge"}
 
     env:
       ORGNAME: omnia
