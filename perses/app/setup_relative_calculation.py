@@ -53,6 +53,19 @@ def getSetupOptions(filename):
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
+    if 'small_molecule_forcefield' not in setup_options:
+        setup_options['small_molecule_forcefield'] = 'gaff-2.11'
+
+    if 'small_molecule_parameters_cache' not in setup_options:
+        setup_options['small_molecule_parameters_cache'] = None
+
+    # Not sure why these are needed
+    # TODO: Revisit these?
+    if 'neglect_angles' not in setup_options:
+        setup_options['neglect_angles'] = False
+    if 'anneal_1,4s' not in setup_options:
+        setup_options['anneal_1,4s'] = False
+
     if 'run_type' not in setup_options:
         _logger.info(f"\t\t\trun_type is not specified; default to None")
         setup_options['run_type'] = None
@@ -318,7 +331,8 @@ def run_setup(setup_options):
                                           protein_pdb_filename=protein_pdb_filename,
                                           receptor_mol2_filename=receptor_mol2, pressure=pressure,
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms,
-                                          atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'])
+                                          atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
+                                          small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'])
         _logger.info(f"\n\n\n")
 
         _logger.info(f"\twriting pickle output...")

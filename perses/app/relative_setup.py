@@ -5,7 +5,7 @@ from perses.utils.openeye import *
 from perses.utils.data import load_smi
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
-from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SystemGenerator,SmallMoleculeSetProposalEngine
+from perses.rjmc.topology_proposal import TopologyProposal, TwoMoleculeSetProposalEngine, SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
@@ -49,7 +49,8 @@ class RelativeFEPSetup(object):
     def __init__(self, ligand_input, old_ligand_index, new_ligand_index, forcefield_files, phases,
                  protein_pdb_filename=None,receptor_mol2_filename=None, pressure=1.0 * unit.atmosphere,
                  temperature=300.0 * unit.kelvin, solvent_padding=9.0 * unit.angstroms, atom_map=None,
-                 hmass=4*unit.amus, neglect_angles=False, map_strength='default', anneal_14s = False):
+                 hmass=4*unit.amus, neglect_angles=False, map_strength='default', anneal_14s = False,
+                 small_molecule_forcefield='gaff-2.11', small_molecule_parameters_cache=None):
         """
         Initialize a NonequilibriumFEPSetup object
 
@@ -78,6 +79,12 @@ class RelativeFEPSetup(object):
             Whether to anneal 1,4 interactions over the protocol;
                 if True, then geometry_engine takes the argument use_14_nonbondeds = False;
                 if False, then geometry_engine takes the argument use_14_nonbondeds = True;
+        small_molecule_forcefield : str, optional, default='gaff-2.11'
+            Small molecule force field name.
+            Anything supported by SystemGenerator is supported, but we recommend one of
+            ['gaff-1.81', 'gaff-2.11', 'smirnoff99Frosst-1.1.0', 'openff-1.0.0']
+        small_molecule_parameters_cache : str, optional, default=None
+            If specified, this filename will be used for a small molecule parameter cache by the SystemGenerator.
         """
         self._pressure = pressure
         self._temperature = temperature
@@ -198,20 +205,31 @@ class RelativeFEPSetup(object):
             self._nonbonded_method = app.NoCutoff
             _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
 
+        # Select barostat
+        # TODO: Does this need to omit this barostat for the vacuum phase?
+        from simtk.openmm.app import NoCutoff, CutoffNonPeriodic
+        NONPERIODIC_NONBONDED_METHODS = [NoCutoff, CutoffNonPeriodic]
         if pressure is not None:
-            if self._nonbonded_method == app.PME:
+            if self._nonbonded_method not in NONPERIODIC_NONBONDED_METHODS:
                 barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature, self._barostat_period)
-                _logger.info(f"set MonteCarloBarostat.")
+                _logger.info(f"set MonteCarloBarostat because pressure was specified as {pressure} atmospheres")
             else:
                 barostat = None
-                _logger.info(f"omitted MonteCarloBarostat.")
-            self._system_generator = SystemGenerator(forcefield_files, barostat=barostat,
-                                                     forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass})
+                _logger.info(f"omitted MonteCarloBarostat because pressure was specified but system was not periodic")
         else:
-            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass})
+            barostat = None
+            _logger.info(f"omitted MonteCarloBarostat because pressure was not specified")
 
-        _logger.info("successfully called TopologyProposal.SystemGenerator to create ligand systems.")
-        self._system_generator._forcefield.loadFile(StringIO(ffxml))
+        # Create openforcefield Molecule objects for old and new molecules
+        from openforcefield.topology import Molecule
+        molecules = [ Molecule.from_openeye(oemol) for oemol in [self._ligand_oemol_old, self._ligand_oemol_new] ]
+
+        # Create SystemGenerator
+        from openmmforcefields.generators import SystemGenerator
+        forcefield_kwargs = {'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol, 'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds, 'hydrogenMass' : self._hmass}
+        self._system_generator = SystemGenerator(forcefields=forcefield_files, barostat=barostat, forcefield_kwargs=forcefield_kwargs,
+                                                 small_molecule_forcefield=small_molecule_forcefield, molecules=molecules, cache=cache)
+        _logger.info("successfully created SystemGenerator to create ligand systems")
 
         _logger.info(f"executing SmallMoleculeSetProposalEngine...")
         self._proposal_engine = SmallMoleculeSetProposalEngine([self._ligand_smiles_old, self._ligand_smiles_new], self._system_generator,map_strength=self._map_strength, residue_name='MOL')
@@ -311,10 +329,8 @@ class RelativeFEPSetup(object):
             # need to change nonbonded cutoff and remove barostat for vacuum leg
             _logger.info(f"assgning noCutoff to nonbonded_method")
             self._nonbonded_method = app.NoCutoff
-            _logger.info(f"calling TopologyProposal.SystemGenerator to create ligand systems.")
-            self._system_generator = SystemGenerator(forcefield_files, forcefield_kwargs={'removeCMMotion': False, 'ewaldErrorTolerance': self._pme_tol,
-                                                    'nonbondedMethod': self._nonbonded_method,'constraints' : app.HBonds})
-            self._system_generator._forcefield.loadFile(StringIO(ffxml))
+            _logger.info(f"calling SystemGenerator to create ligand systems.")
+
             if self._proposal_phase is None:
                 _logger.info('No complex or solvent leg, so performing topology proposal for vacuum leg')
                 self._vacuum_topology_old, self._vacuum_positions_old, self._vacuum_system_old = self._solvate_system(self._ligand_topology_old,
@@ -448,7 +464,7 @@ class RelativeFEPSetup(object):
         new_solvated_ligand_omm_topology.setPeriodicBoxVectors(old_solvated_topology.getPeriodicBoxVectors())
 
         # create the new ligand system:
-        new_solvated_system = self._system_generator.build_system(new_solvated_ligand_omm_topology)
+        new_solvated_system = self._system_generator.create_system(new_solvated_ligand_omm_topology)
 
         new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
@@ -507,8 +523,8 @@ class RelativeFEPSetup(object):
         new_ligand_topology = new_ligand_topology.to_openmm()
 
         # create the new ligand system:
-        old_ligand_system = self._system_generator.build_system(old_ligand_topology)
-        new_ligand_system = self._system_generator.build_system(new_ligand_topology)
+        old_ligand_system = self._system_generator.create_system(old_ligand_topology)
+        new_ligand_system = self._system_generator.create_system(new_ligand_topology)
 
         new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
@@ -551,10 +567,10 @@ class RelativeFEPSetup(object):
         modeller = app.Modeller(topology, positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         modeller.delete(hs)
-        modeller.addHydrogens(forcefield=self._system_generator._forcefield)
+        modeller.addHydrogens(forcefield=self._system_generator.forcefield)
         if not vacuum:
             _logger.info(f"\tpreparing to add solvent")
-            modeller.addSolvent(self._system_generator._forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
+            modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
         else:
             _logger.info(f"\tSkipping solvation of vacuum perturbation")
         solvated_topology = modeller.getTopology()
@@ -563,7 +579,7 @@ class RelativeFEPSetup(object):
         # canonicalize the solvated positions: turn tuples into np.array
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
         _logger.info(f"\tparameterizing...")
-        solvated_system = self._system_generator.build_system(solvated_topology)
+        solvated_system = self._system_generator.create_system(solvated_topology)
         _logger.info(f"\tSystem parameterized")
         return solvated_topology, solvated_positions, solvated_system
 
