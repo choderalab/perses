@@ -12,10 +12,10 @@ jobs:
         python-version: [3.6, 3.7]
         openmm: [latest, beta, nightly, conda-forge]
     env:
-      - ORGNAME="omnia"
-      - PACKAGENAME="perses"
-      - OE_LICENSE="$HOME/oe_license.txt"
-      - OPENEYE_CHANNEL="-i https://pypi.anaconda.org/OpenEye/simple"
+      ORGNAME: omnia
+      PACKAGENAME: perses
+      OE_LICENSE: $HOME/oe_license.txt
+      OPENEYE_CHANNEL: -i https://pypi.anaconda.org/OpenEye/simple
 
     steps:
     - uses: actions/checkout@v1
