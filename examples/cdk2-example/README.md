@@ -16,21 +16,12 @@ The input files in this directory are from the Schrodinger JACS dataset, with th
 
 * cdk2_sams.yaml: Example configuration file for running CDK2 relative free energy calculations with SAMS.
 
-* cdk2_repex.yaml: Example configuration file for running CDK2 relative free energy calculations with SAMS.
-
-* run.py: Helper script to run a range of pairs in the same job submission script
-
-* submit_ligpairs.sh: LSF job submission script for running a range of ligand pairs simultaneously
-
 ## Running example
 
 The example can be run by calling `python ../../scripts/setup_relative_calculation.py cdk2_sams.yaml`. By default, the included yaml file directs the code to set up and run the solvent phase. 
 
 The options for the run are contained in the `yaml` file passed to the `setup_relative_calculation.py` script. There are two examples provided,
 `cdk2_sams.yaml` and `cdk2_nonequilibrium.yaml`, which allow the user to run either a SAMS or nonequilibrium switching-based free energy calculation, respectively.
-
-To run a range of ligands, change the ligand indexed in `run.py` to those of interest. In `submit-ligpairs.sh`, change the jobarray so that it is the same length of the list of ligand pairs.
-To run the job on lilac, or a similar cluster, use `bsub < submit-ligpairs.sh`.
 ## References
 
 Accurate and Reliable Prediction of Relative Ligand Binding Potency in Prospective Drug Discovery by Way of a Modern Free-Energy Calculation Protocol and Force Field

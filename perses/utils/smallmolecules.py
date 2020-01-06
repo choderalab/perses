@@ -135,7 +135,7 @@ def show_topology(topology):
         output += '\n'
     print(output)
 
-def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=600):
+def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=1200):
     """
     Render the atom mapping to a PDF file.
 
@@ -155,7 +155,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         Height in pixels
 
     """
-    from openeye import oechem, oedepict
+    from openeye import oechem
 
     # Make copies of the input molecules
     molecule1, molecule2 = oechem.OEGraphMol(molecule1), oechem.OEGraphMol(molecule2)
@@ -187,27 +187,15 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         atom.SetRxnRole(oechem.OERxnRole_Reactant)
     for atom in new_atoms_2:
         atom.SetRxnRole(oechem.OERxnRole_Product)
-    
-    core1 = oechem.OEAtomBondSet()
-    core2 = oechem.OEAtomBondSet()
-    # add all atoms to the set
-    core1.AddAtoms(new_atoms_1)
-    core2.AddAtoms(new_atoms_2)
+
     # Label mapped atoms
-    core_change = oechem.OEAtomBondSet()
     index =1
     for (index2, index1) in new_to_old_atom_map.items():
         new_atoms_1[index1].SetMapIdx(index)
         new_atoms_2[index2].SetMapIdx(index)
-        # now remove the atoms that are core, so only uniques are highlighted
-        core1.RemoveAtom(new_atoms_1[index1])
-        core2.RemoveAtom(new_atoms_2[index2])
-        if new_atoms_1[index1].GetAtomicNum() != new_atoms_2[index2].GetAtomicNum():
-            # this means the element type is changing   
-            core_change.AddAtom(new_atoms_1[index1])
-            core_change.AddAtom(new_atoms_2[index2])            
         index += 1
     # Set up image options
+    from openeye import oedepict
     itf = oechem.OEInterface()
     oedepict.OEConfigureImageOptions(itf)
     ext = oechem.OEGetFileExtension(filename)
@@ -228,10 +216,10 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     # Depict reaction with component highlights
     oechem.OEGenerate2DCoordinates(rmol)
     rdisp = oedepict.OE2DMolDisplay(rmol, opts)
-    
-    oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
-    oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPurple),oedepict.OEHighlightStyle_Stick, core2)
-    oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEGreen),oedepict.OEHighlightStyle_Stick, core_change)
+
+    colors = [c for c in oechem.OEGetLightColors()]
+    highlightstyle = oedepict.OEHighlightStyle_BallAndStick
+    #common_atoms_and_bonds = oechem.OEAtomBondSet(common_atoms)
     oedepict.OERenderMolecule(ofs, ext, rdisp)
     ofs.close()
 

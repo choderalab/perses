@@ -1,98 +1,56 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import itertools
 import sys
+from perses.analysis import utils
 from openeye import oechem, oegraphsim
+#from perses.utils import openeye
+from openmoltools.openeye import smiles_to_oemol, generate_conformers
 import logging
 
+
+from pymbar import timeseries
+from pymbar import MBAR
 
 _logger = logging.getLogger("analysis")
 
 
-class Molecule(object):
+class molecule(object):
     def __init__(self, i, string):
-        from perses.utils.openeye import smiles_to_oemol
         self.line = string
         details = string.split(';')
         self.index = i
         self.smiles, self.name, self.exp, self.experr, self.calc, self.calcerr = details[1:7]
-        self.mol = smiles_to_oemol(self.smiles)
+        self.mol = openeye.smiles_to_oemol(self.smiles)
+        self.mol = generate_conformers(self.mol,max_confs=1)
         self.exp = kcal_to_kt(float(self.exp))
         self.experr = kcal_to_kt(float(self.experr))
         self.calc = kcal_to_kt(float(self.calc))
         self.calcerr = kcal_to_kt(float(self.calcerr))
-        self.mw = self.calculate_molecular_weight()
+        self.mw = self.calc_mw()
         self.ha = self.heavy_atom_count()
-        self.simtype = None
 
-    def calculate_molecular_weight(self):
-        """ Calculates the molecular weight of an oemol
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-        float, molecular weight of molecule
-
-        """
+    def calc_mw(self):
         return oechem.OECalculateMolecularWeight(self.mol)
 
     def heavy_atom_count(self):
-        """ Counts the number of heavy atoms in an oemol
-
-        Parameters
-        ----------
-
-
-        Returns
-        -------
-        int, number of heavy atoms in molecule
-        """
         return oechem.OECount(self.mol, oechem.OEIsHeavy())
 
-class Simulation(object):
+
+class simulation(object):
     def __init__(self,A,B):
         self.ligA = A
         self.ligB = B
         self.directory = f'lig{self.ligA}to{self.ligB}'
-        self.vacdg = None
-        self.vacddg = None
-        self.soldg = None
-        self.solddg = None
-        self.comdg = None
-        self.comddg = None
-
-        self.vacdg_history = []
-        self.soldg_history = []
-        self.comdg_history = []
-        self.vacddg_history = []
-        self.solddg_history = []
-        self.comddg_history = []
-
-        self.vacdg_history_es = []
-        self.soldg_history_es = []
-        self.comdg_history_es = []
-        self.vacddg_history_es = []
-        self.solddg_history_es = []
-        self.comddg_history_es = []
-
-        self.count = 0
         self.load_data()
 
-        if self.vacdg is not None and self.soldg is not None:
-            self.hydrationdg = self.vacdg - self.soldg
-            self.hydrationddg = (self.vacddg + self.solddg)**0.5
-            self.hydrationdg_es = self.vacf_ij[0,-1] - self.solf_ij[0,-1]
-            self.hydrationddg_es = (self.vacdf_ij[0,-1] + self.soldf_ij[0,-1])**0.5
+        if self.sdg is not None and self.vdg is not None:
+            self.dg = self.vdg - self.sdg
+            self.dg_err = (self.vvariance + self.svariance)**0.5
         else:
-            print('Both vacuum and solvent legs need to be run for hydration free energies')
-        if self.comdg is not None and self.soldg is not None:
-            self.bindingdg = self.soldg - self.comdg
-            self.bindingddg = (self.comddg + self.solddg)**0.5
-            self.bindingdg_es = self.solf_ij[0,-1] - self.comf_ij[0,-1]
-            self.bindingddg_es = (self.soldf_ij[0,-1] + self.comdf_ij[0,-1])**0.5
-        else:
-            print('Both solvent and complex legs need to be run for binding free energies')
+            self.dg = None
+            self.dg_err = None
 
     def load_data(self):
         """ Calculate relative free energy details from the simulation by performing MBAR on the vacuum and solvent legs of the simualtion.
@@ -105,111 +63,148 @@ class Simulation(object):
         None
 
         """
-        from pymbar import timeseries
-        from pymbar import MBAR
-        from perses.analysis import utils
-        import os
-        from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
-
+        # TODO need to adapt for either complex/solvent or solvent/vacuum or both
         # find the output files
         output = [x for x in os.listdir(self.directory) if x[-3:] == '.nc' and 'checkpoint' not in x]
 
-
-        for out in output:
-            if 'vacuum' in out:
-                vacuum_reporter = MultiStateReporter(f'{self.directory}/{out}')
-                vacuum_analyzer = MultiStateSamplerAnalyzer(vacuum_reporter)
-                f_ij, df_ij = vacuum_analyzer.get_free_energy()
-                self.vacdg = f_ij[1, -2]
-                self.vacddg = df_ij[1, -2] ** 2
-                self.vacf_ij = f_ij
-                self.vacdf_ij = df_ij
-            elif'solvent' in out:
-                solvent_reporter = MultiStateReporter(f'{self.directory}/{out}')
-                solvent_analyzer = MultiStateSamplerAnalyzer(solvent_reporter)
-                f_ij, df_ij = solvent_analyzer.get_free_energy()
-                self.soldg = f_ij[1, -2]
-                self.solddg = df_ij[1, -2] ** 2
-                self.solf_ij = f_ij
-                self.soldf_ij = df_ij
-            elif 'complex' in out:
-                complex_reporter = MultiStateReporter(f'{self.directory}/{out}')
-                complex_analyzer = MultiStateSamplerAnalyzer(complex_reporter)
-                f_ij, df_ij = complex_analyzer.get_free_energy()
-                self.comdg = f_ij[1, -2]
-                self.comddg = df_ij[1, -2] ** 2
-                self.comf_ij = f_ij
-                self.comdf_ij = df_ij
-        return
-
-
-    def historic_fes(self,stepsize=100):
-        from pymbar import timeseries
-        from pymbar import MBAR
-        from perses.analysis import utils
-        import os
-        from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
-
-        # find the output files
-        output = [x for x in os.listdir(self.directory) if x[-3:] == '.nc' and 'checkpoint' not in x]
-
-        for out in output:
-            if 'vacuum' in out:
-                vacuum_reporter = MultiStateReporter(f'{self.directory}/{out}')
-                ncfile = utils.open_netcdf(f'{self.directory}/{out}')
-                n_iterations = ncfile.variables['last_iteration'][0]
-                for step in range(stepsize, n_iterations, stepsize):
-                    vacuum_analyzer = MultiStateSamplerAnalyzer(vacuum_reporter,max_n_iterations=step)
-                    f_ij, df_ij = vacuum_analyzer.get_free_energy()
-                    self.vacdg_history.append(f_ij[1, -2])
-                    self.vacddg_history.append(df_ij[1,-2])
-                    self.vacdg_history_es.append(f_ij[0, -1])
-                    self.vacddg_history_es.append(df_ij[0,-1])
-            if 'solvent' in out:
-                solvent_reporter = MultiStateReporter(f'{self.directory}/{out}')
-                ncfile = utils.open_netcdf(f'{self.directory}/{out}')
-                n_iterations = ncfile.variables['last_iteration'][0]
-                for step in range(stepsize, n_iterations, stepsize):
-                    solvent_analyzer = MultiStateSamplerAnalyzer(solvent_reporter,max_n_iterations=step)
-                    f_ij, df_ij = solvent_analyzer.get_free_energy()
-                    self.soldg_history.append(f_ij[1, -2])
-                    self.solddg_history.append(df_ij[1,-2])
-                    self.soldg_history_es.append(f_ij[0, -1])
-                    self.solddg_history_es.append(df_ij[0,-1])
-            if 'complex' in out:
-                complex_reporter = MultiStateReporter(f'{self.directory}/{out}')
-                ncfile = utils.open_netcdf(f'{self.directory}/{out}')
-                n_iterations = ncfile.variables['last_iteration'][0]
-                for step in range(stepsize, n_iterations, stepsize):
-                    complex_analyzer = MultiStateSamplerAnalyzer(complex_reporter,max_n_iterations=step)
-                    f_ij, df_ij = complex_analyzer.get_free_energy()
-                    self.comdg_history.append(f_ij[1, -2])
-                    self.comddg_history.append(df_ij[1,-2])
-                    self.comdg_history_es.append(f_ij[0, -1])
-                    self.comddg_history_es.append(df_ij[0,-1])
-        return
-
-
-    def sample_history(self,method='binding'):
-        vac = self.vacdg_history[self.count]
-        sol = self.soldg_history[self.count]
-        com = self.comdg_history[self.count]
-        vacvar = self.vacddg_history[self.count]
-        solvar = self.solddg_history[self.count]
-        comvar = self.comddg_history[self.count]
-
-        self.count += 1
-
-        if method == 'binding':
-            return sol - com , (solvar**2 + comvar**2)**0.5
-        elif method == 'hydration':
-            return  vac - sol , (solvar**2 + vacvar**2)**0.5
+        if len(output) != 2:
+            print('not both legs done')
+            self.sdg = None
+            self.vdg = None
         else:
-            print('method not recognised, choose binding or hydration')
+            for out in output:
+                if 'vacuum' in out:
+                    ncfile = utils.open_netcdf(self.directory+'/'+out)
+                    energies = np.array(ncfile.variables['energies'])
+                    states = np.array(ncfile.variables['states'])
+                    mbar, Neff, t0 = self.compute_mbar(energies, states)
+                    f_ij, df_ij, theta = mbar.getFreeEnergyDifferences()
+                    self.vdg = f_ij[0, -1]
+                    self.vvariance = df_ij[0, -1] ** 2
+                    self.vefficiencies = df_ij[0, -1] ** -2
+                    self.vnsample = Neff
+                    self.vf_k = f_ij[0, :]
+                    self.vdf_k = df_ij[0, :]
+                    self.vt0 = t0
+                if 'solvent' in out:
+                    ncfile = utils.open_netcdf(self.directory+'/'+out)
+                    energies = np.array(ncfile.variables['energies'])
+                    states = np.array(ncfile.variables['states'])
+                    mbar, Neff, t0 = self.compute_mbar(energies, states)
+                    f_ij, df_ij, theta = mbar.getFreeEnergyDifferences()
+                    self.sdg = f_ij[0, -1]
+                    self.svariance = df_ij[0, -1] ** 2
+                    self.sefficiencies = df_ij[0, -1] ** -2
+                    self.snsample = Neff
+                    self.sf_k = f_ij[0, :]
+                    self.sdf_k = df_ij[0, :]
+                    self.st0 = t0
+        return
 
-    def reset_history(self):
-        self.count = 0
+    def compute_mbar(self, energies, states):
+        """ Compute MBAR free energy, number of effective states and t0 for a simulation leg
 
+        Parameters
+        ----------
+        energies : np.array
+            array of energies for each state and iteration of the simulation
+        states : np.array
+            array of states visited during simulation
+
+        Returns
+        -------
+        mbar : pymbar.MBAR
+
+        Neff_max : int
+            number of effective states
+
+        t0 : int
+            identified iteration of equilibration
+
+        """
+        [niterations, nreplicas, nstates] = energies.shape
+        if niterations == 1:
+            print(f'Simulation {self.directory} has only one iteration step')
+            return
+
+        # Form u_n
+        u_n = np.zeros([niterations])
+        for iteration in range(niterations):
+            for replica in range(nreplicas):
+                state = states[iteration, replica]
+                u_n[iteration] += energies[iteration, replica, state]
+
+        # Detect equilibration
+        [t0, g, Neff_max] = timeseries.detectEquilibration(u_n)
+        series = timeseries.subsampleCorrelatedData(np.arange(t0, niterations), g=g)
+        indices = t0 + series
+
+        # Extract arrays
+        u_kn = np.zeros([nstates, nreplicas * len(indices)])
+        N_k = np.zeros([nstates], np.int32)
+        for replica in range(nreplicas):
+            u_kn[:, (replica * len(indices)):(replica + 1) * len(indices)] = energies[indices, replica, :].transpose()
+            replica_N_k, edges = np.histogram(states[indices, replica], bins=np.arange(nstates + 1))
+            N_k += replica_N_k
+
+        mbar = MBAR(u_kn, N_k)
+        return mbar, Neff_max, t0
+
+
+    def historic_fes(self,stepsize=10):
+        """ Calculate free energies with incremental sections of the simulation, to generate free energy samples that can be post-proccessed in adaptive sampling schemes
+
+        Parameters
+        ----------
+        stepsize : int, default = 10
+            Number of simulation steps between each energy evaluation
+
+        Returns
+        -------
+        list, list
+            list of the relative free energies, and the variances, of length (# steps in simulations)/(stepsize)
+
+        """
+        vhistory = []
+        shistory = []
+        dvhistory = []
+        dshistory = []
+        output = [x for x in os.listdir(self.directory) if x[-3:] == '.nc' and 'checkpoint' not in x]
+
+        if len(output) != 2:
+            print('not both legs done')
+        else:
+            for out in output:
+                if 'vacuum' in out:
+                    ncfile = utils.open_netcdf(self.directory+'/'+out)
+                    energies = np.array(ncfile.variables['energies'])
+                    states = np.array(ncfile.variables['states'])
+                    niterations, _, _ = energies.shape
+                    for x in range(stepsize, niterations, stepsize):
+                        energies_slice = energies[:x][:][:]
+                        states_slice = states[:x][:][:]
+                        mbar, Neff, t0 = self.compute_mbar(energies_slice, states_slice)
+                        f_ij, df_ij, theta = mbar.getFreeEnergyDifferences()
+                        vhistory.append(f_ij[0, -1])
+                        dvhistory.append(df_ij[0, -1] ** 2)
+                if 'solvent' in out:
+                    ncfile = utils.open_netcdf(self.directory+'/'+out)
+                    energies = np.array(ncfile.variables['energies'])
+                    states = np.array(ncfile.variables['states'])
+                    for x in range(stepsize, niterations, stepsize):
+                        energies_slice = energies[:x][:][:]
+                        states_slice = states[:x][:][:]
+                        mbar, Neff, t0 = self.compute_mbar(energies_slice, states_slice)
+                        f_ij, df_ij, theta = mbar.getFreeEnergyDifferences()
+                        shistory.append(f_ij[0, -1])
+                        dshistory.append(df_ij[0, -1] ** 2)
+
+        history = []
+        variance = []
+        for i in range(len(vhistory)):
+            history.append(vhistory[i] - shistory[i])
+            variance.append((dvhistory[i]**2 + dshistory[i]**2)**0.5)
+        return history, variance
 
 def kcal_to_kt(x):
     """
@@ -283,8 +278,6 @@ def run(molecules,simtype='sams',offline_freq=10):
         Description of returned object.
 
     """
-    import itertools
-    import os
 
     n_ligands = len(molecules)
     all_simulations = []
