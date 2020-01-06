@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macOS-latest] #, ubuntu-latest]
+        os: [ubuntu-latest] #, macOS-latest]
         python-version: [3.6] #, 3.7]
         openmm: [latest] #, beta, nightly, conda-forge]
     env:
@@ -16,6 +16,7 @@ jobs:
       PACKAGENAME: perses
       OE_LICENSE: $HOME/oe_license.txt
       OPENEYE_CHANNEL: -i https://pypi.anaconda.org/OpenEye/simple
+      CI_OS: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v1
@@ -25,20 +26,10 @@ jobs:
         uname -a
         df -h
         ulimit -a
-    - name: Setup conda initializers
-      shell: bash
-      run: |
-        case ${{ matrix.os }} in
-            windows*)
-                INITIALIZER="$(${CONDA}/condabin/conda.bat shell.bash hook)";;
-            *)
-                INITIALIZER="$(${CONDA}/condabin/conda shell.bash hook)";;
-        esac
-        echo ::set-env name=CONDA_INITIALIZER::"$INITIALIZER"
     - name: Configure conda
       shell: bash
       run: |
-        eval ${CONDA_INITIALIZER}
+        . devtools/scripts/initialize_conda.sh
         conda activate
         conda config --set always_yes True
         conda config --add channels omnia --add channels conda-forge --add channels openeye
@@ -61,15 +52,15 @@ jobs:
     - name: Build recipe
       shell: bash
       run: |
-        eval ${CONDA_INITIALIZER}
+        . devtools/scripts/initialize_conda.sh
         conda activate
         conda build --python=${{ matrix.python-version }} devtools/conda-recipe
     - name: Prepare test environment
       shell: bash
       run: |
-        eval ${CONDA_INITIALIZER}
+        . devtools/scripts/initialize_conda.sh
         conda activate
-        conda create -n test -c local perses-dev nose nose-timer
+        conda create -n test -c local ${PACKAGENAME}-dev nose nose-timer
         conda activate test
         case ${{ matrix.openmm }} in
           latest)
@@ -88,10 +79,10 @@ jobs:
     - name: Test the package
       shell: bash
       run: |
-        eval ${CONDA_INITIALIZER}
+        . devtools/scripts/initialize_conda.sh
         conda activate test
         pushd .
-        nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced'
+        nosetests ${PACKAGENAME} --nocapture --verbosity=3 --with-timer -a '!advanced'
         popd
     - name: Deploy
       shell: bash
