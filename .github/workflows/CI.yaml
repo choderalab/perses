@@ -8,9 +8,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macOS-latest, ubuntu-latest]
-        python-version: [3.6, 3.7]
-        openmm: [latest, beta, nightly, conda-forge]
+        os: [macOS-latest] #, ubuntu-latest]
+        python-version: [3.6] #, 3.7]
+        openmm: [latest] #, beta, nightly, conda-forge]
     env:
       ORGNAME: omnia
       PACKAGENAME: perses
