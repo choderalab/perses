@@ -21,6 +21,7 @@ from perses.tests.utils import validate_endstate_energies
 from openmoltools import forcefield_generators
 from perses.utils.openeye import *
 from perses.app.utils import *
+from perses.dispersed.utils import generalized_worker_class_instantiation, generalized_worker_class_instantiation, call_worker_class_method
 import mdtraj as md
 import simtk.openmm.app as app
 import simtk.openmm as openmm
@@ -149,10 +150,10 @@ class BuildProposalNetwork(object):
 
     def __init__(self,
                  ligand_input,
+                 parallelism,
                  ligand_indices = None,
                  receptor_filename = None,
                  graph_connectivity = 'fully_connected',
-                 client = None,
                  proposal_parameters = None,
                  simulation_parameters = ('repex', None)):
 
@@ -168,6 +169,9 @@ class BuildProposalNetwork(object):
         ligand_indices : list of int
             indices in the ligand input to parse
 
+        parallelism : perses.dispersed.Parallelism object (activated)
+            parallelism to perform edge calculations
+
         receptor_filename : str, default None
             Receptor mol2 or pdb filename. If None, complex leg will be omitted.
 
@@ -178,9 +182,6 @@ class BuildProposalNetwork(object):
             The default is 'fully_connected', which specified a fully connected (i.e. complete or single-clique) graph.
             If the graph_connectivity is input as a 2d numpy array, values represent the weights of the transform.  0 weights entail no connectivity.
             The self.adjacency_matrix argument produced as a result contains the log(weights) of the transform as entries.
-
-        client : generalized client object, default None
-            generalized client object from which workers can be called to perform edge computations
 
         proposal_parameters: dict, default None
             The following dict is parseable from a setup yaml, but have defaults given if no setup yaml is given.
@@ -217,12 +218,14 @@ class BuildProposalNetwork(object):
         2. allow custom atom mapping for all edges in graph.  currently, we can only specify one of three mapping schemes for all molecules
         3. if 'receptor_filename' is None, remove complex phase from the proposal arguments; otherwise, the 'phases' will have to be specified explicitly
         4. parallelize setup by defining `resources`
+        5. update `manipulate_edge_post_hoc`
         """
         _logger.info(f"Parsing ligand input file...")
         self.ligand_input = ligand_input
         self.ligand_indices = ligand_indices
         self.receptor_filename = receptor_filename
-        self.client = client
+        self.parallelism = parallelism
+        assert hasattr(self.parallelism, 'client'), f"the parallelism object must be activated (i.e. have a client)"
         _logger.info(f"Initialization complete.")
 
     def setup_engines():
@@ -280,29 +283,78 @@ class BuildProposalNetwork(object):
             node_attribs = {'smiles': smiles}
             self.network.add_node(index, **node_attribs)
 
-        #then, let's add the edges
+        #then, let's add the edge creation arguments
+        _kwargs = []
         for index, log_weight in np.ndenumerate(self.adjacency_matrix):
             i, j = index[0], index[1]
-            _logger.info(f"creating edge between ligand {i} and {j}.")
-            success = self.add_network_edge(start = i,
-                                            end = j,
-                                            weight = np.exp(log_weight))
-            if success:
-                _logger.info(f"edge between ligand {i} and {j} is validated!")
+            if log_weight != -np.inf:
+                _kwarg_dict = {'start': i, 'end': j, 'weight': np.exp(log_weight), 'edge_simulation_parameters': None}
+                _kwargs.append(_kwarg_dict)
+        num_runs = len(_kwargs)
+
+        #scatter iterables
+        scattered_futures = [self.parallelism.scatter(iterable) for iterable in iterables]
+
+        #create BuildProposalNetwork objects on the workers
+        remote_worker = True if self.parallelism.client is not None else self
+        _class = None if remote_worker == True else self
+        creation_validations = scattered_build_network_instantiation_futures = self.parallelism.run_all(func = generalized_worker_class_instantiation,
+                                                                                                        arguments = (remote_worker, 'build_network_object', _class),
+                                                                                                        workers = list(self.parallelism.workers.values()))
+        assert all(entry == True for entry in creation_validations), f"scattered_build_network_instantiation_futures failed"
+
+        #now we have to deploy the jobs
+        run_futures = self.parallelism.deploy(func = call_worker_class_method,
+                                              arguments = tuple([remote_worker] * num_runs,
+                                                                ['build_network_object'] * num_runs,
+                                                                ['create_network_edge'] * num_runs,
+                                                                _kwargs),
+                                              workers = list(self.parallelism.workers.values()))
+        self.parallelism.progress(run_futures)
+        run_results = self.parallelism.gather_results(futures = run_futures,
+                                                      omit_errors = False)
+
+        #now we simply iterate through the entire run_results and add to the local network
+        for _kwarg_input_dict, return_dict in zip(_kwargs, run_results):
+            i, j = _kwarg_input_dict['start'], _kwarg_input_dict['end']
+            adjacency_matrix_log_weight = return_dict['adjacency_matrix_log_weight']
+            proposals = return_dict['proposals']
+            hybrid_factory_dict = return_dict['hybrid_factory_dict']
+            endstate_energy_errors_dict = return_dict['endstate_energy_errors_dict']
+            simulation_dict = return_dict['simulation_dict']
+            validation_dict = return_dict['validation_dict']
+
+            return_phases = list(proposals.keys())
+
+            #now add to the digraph
+            self.network.add_edge(i, j)
+            self.network.edges[i, j]['proposals'] = proposals
+            for _phase in return_phases:
+                self.network.edges[i, j]['proposals'][_phase]['hybrid_factory'] = hybrid_factory_dict[_phase]
+                self.network.edges[i, j]['proposals'][_phase]['endstate_energy_errors'] = endstate_energy_errors_dict[_phase]
+                self.network.edges[i, j]['proposals'][_phase]['simulation'] = simulation_dict[_phase]
+                self.network.edges[i, j]['proposals'][_phase]['validated'] = validation_dict[_phase]
+
+            #check if we can validate all of the phases in the edge
+            #this is True if the adjacency_matrix_log_weight is not -np.inf
+            if return_dict['adjacency_matrix_log_weight'] != -np.inf:
+                #then we can give the adjacency matrix the go-ahead for this edge
+                self.network.edges[i,j]['validated'] = True
+                self.adjacency_matrix[i,j] = return_dict['adjacency_matrix_log_weight']
             else:
-                _logger.info(f"edge between ligand {i} and {j} failed")
+                self.network.edges[i,j]['validated'] = False
+                self.adjacency_matrix[i,j] = -np.inf
 
 
         #make the adjacency_matrix a graph attribute
         self.network.graph['adjacency_matrix'] = self.adjacency_matrix
 
-        #the last thing we have to do is add simulation objects to each phase of each edge.
-        #like before, these can be added post_hoc if any edges fail miserably.
 
     def manipulate_edge_post_hoc(self,
                                  start,
                                  end,
-                                 weight = 1.):
+                                 weight = 1.,
+                                 edge_simulation_parameters = None):
         """
         This is a function to add network edges post hoc if the practitioner decides another edge is necessary
 
@@ -314,27 +366,35 @@ class BuildProposalNetwork(object):
             int index of the ligand that the edge points to (from start_index)
         weight : float, default 1.0
             weight of the edge
+        edge_simulation_parameters : dict or None
+            the simulation parameters to put into the appropriate simulation object;
+            if type(edge_simulation_parameters) == dict, then the object is a {<phase>: (<simulation_flavor>, dict(params))};
+                if an transformation entry is missing, it is defaulted as above
+            elif edge_simulation_parameters is None:
+                default parameters or self.simulation_parameters will be used to create the edge simulation object
 
         Returns
         -------
         success : bool
             whether the intended edge was added and validated
         """
-        success = self.add_network_edge(start = start,
+        success = self.create_network_edge(start = start,
                                         end = end,
-                                        weight = np.exp(log_weight))
+                                        weight = np.exp(log_weight),
+                                        edge_simulation_parameters = edge_simulation_parameters)
 
         self.network.graph['adjacency_matrix'][start, end] = self.adjacency_matrix[start,end]
 
         return success
 
-    def add_network_edge(self,
+    def create_network_edge(self,
                          start,
                          end,
                          weight,
                          edge_simulation_parameters):
         """
-        This is a function to add network edges
+        This is a function to create the necessary parameters for a network edge;
+        this method can be called on a remote worker directly
 
         Arguments
         ---------
@@ -346,27 +406,46 @@ class BuildProposalNetwork(object):
             weight of the edge
         edge_simulation_parameters : dict or None
             the simulation parameters to put into the appropriate simulation object;
-            NOTE: in this case, the edge_simulation_parameters may only have one key specific to the phase being generated;
-            this is so that we may use the `simulation_parameter_assertions` method to avoid code duplication.
-            if type(edge_simulation_parameters) == dict, each entry is a {<phase>: (<simulation_flavor>, dict(params))};
+            if type(edge_simulation_parameters) == dict, then the object is a {<phase>: (<simulation_flavor>, dict(params))};
                 if an transformation entry is missing, it is defaulted as above
             elif edge_simulation_parameters is None:
                 default parameters or self.simulation_parameters will be used to create the edge simulation object
 
         Returns
         -------
-        success : bool
-            whether the intended edge was added and validated
+        returnables : dict
+            adjacency_matrix_log_weight : float
+                the log weight of the adjacency matrix entry i,j
+            proposals : dict
+                dictionary of phase geometry and topology proposals
+            hybrid_factory_dict : dict
+                dictionary of {_phase : HybridTopologyFactory}
+            endstate_energy_errors_dict : dict
+                dictionary of {_phase : endstate_energy_errors <tuple>}
+            simulation_dict : dict
+                dictionary of {_phase : Simulation <object>}
+            validation_dict : dict
+                dictionary of {_phase : validated <bool>}
         """
         i, j = start, end
         log_weight = np.log(weight)
         _logger.info(f"creating proposals for edge {(i,j)}")
 
+        #initialize returnables
+        returnables = {'adjacency_matrix_log_weight' : None,
+                       'proposals' : {},
+                       'hybrid_factory_dict': {},
+                       'endstate_energy_errors_dict' : {},
+                       'simulation_dict' : {},
+                       'validation_dict' : {}
+                      }
+
+
         if i == j:
             if not np.isinf(log_weight):
                 _logger.warning(f"\tthe log weight of the self-transition for ligand {i} is not -np.inf; treating as such...")
-                self.adjacency_matrix[i,j] = -np.inf
-            return False
+                returnables.update({'adjacency_matrix_log_weight' : -np.inf})
+            return returnables
 
         if not np.isinf(log_weight):
             current_oemol, current_positions, current_topology = self.ligand_oemol_pos_top[i]
@@ -376,30 +455,32 @@ class BuildProposalNetwork(object):
                                                   proposed_oemol = proposed_oemol,
                                                   current_positions = current_positions,
                                                   current_topology = current_topology)
-            self.network.add_edge(i,j)
-            self.network.edges[i,j]['proposals'] = proposals
+            returnables.update({'proposals': proposals})
+            #self.network.edges[i,j]['proposals'] = proposals
 
             _logger.info(f"\tcreating hybrid factories.  iterating through proposal phases...")
-            for _phase, property_dict in self.network.edges[i, j]['proposals'].items():
+            for _phase, property_dict in proposals.items():
                 _logger.info(f"\t\tcreating hybrid_factory for phase {_phase}")
-                hybrid_factory = HybridTopologyFactory(topology_proposal = property_dict['topology_proposal'],
-                                                       current_positions = property_dict['current_positions'],
-                                                       new_positions = property_dict['proposed_positions'],
-                                                       use_dispersion_correction = self.proposal_arguments['use_dispersion_correction'],
-                                                       functions=None,
-                                                       softcore_alpha = self.proposal_arguments['softcore_alpha'],
-                                                       bond_softening_constant = self.proposal_arguments['bond_softening_constant'],
-                                                       angle_softening_constant = self.proposal_arguments['angle_softening_constant'],
-                                                       soften_only_new = self.proposal_arguments['soften_only_new'],
-                                                       neglected_new_angle_terms = property_dict['forward_neglected_angles'],
-                                                       neglected_old_angle_terms = property_dict['reverse_neglected_angles'],
-                                                       softcore_LJ_v2 = self.proposal_arguments['softcore_LJ_v2'],
-                                                       softcore_electrostatics = self.proposal_arguments['softcore_electrostatics'],
-                                                       softcore_LJ_v2_alpha = self.proposal_arguments['softcore_LJ_v2_alpha'],
-                                                       softcore_electrostatics_alpha = self.proposal_arguments['softcore_electrostatics_alpha'],
-                                                       softcore_sigma_Q = self.proposal_arguments['softcore_sigma_Q'],
-                                                       interpolate_old_and_new_14s = self.proposal_arguments['anneal_14s'])
+
                 try:
+                    hybrid_factory = HybridTopologyFactory(topology_proposal = property_dict['topology_proposal'],
+                                                           current_positions = property_dict['current_positions'],
+                                                           new_positions = property_dict['proposed_positions'],
+                                                           use_dispersion_correction = self.proposal_arguments['use_dispersion_correction'],
+                                                           functions=None,
+                                                           softcore_alpha = self.proposal_arguments['softcore_alpha'],
+                                                           bond_softening_constant = self.proposal_arguments['bond_softening_constant'],
+                                                           angle_softening_constant = self.proposal_arguments['angle_softening_constant'],
+                                                           soften_only_new = self.proposal_arguments['soften_only_new'],
+                                                           neglected_new_angle_terms = property_dict['forward_neglected_angles'],
+                                                           neglected_old_angle_terms = property_dict['reverse_neglected_angles'],
+                                                           softcore_LJ_v2 = self.proposal_arguments['softcore_LJ_v2'],
+                                                           softcore_electrostatics = self.proposal_arguments['softcore_electrostatics'],
+                                                           softcore_LJ_v2_alpha = self.proposal_arguments['softcore_LJ_v2_alpha'],
+                                                           softcore_electrostatics_alpha = self.proposal_arguments['softcore_electrostatics_alpha'],
+                                                           softcore_sigma_Q = self.proposal_arguments['softcore_sigma_Q'],
+                                                           interpolate_old_and_new_14s = self.proposal_arguments['anneal_14s'])
+
                     endstate_energy_errors = validate_endstate_energies(topology_proposal = property_dict['topology_proposal'],
                                                                         htf = hybrid_factory,
                                                                         added_energy = property_dict['added_valence_energy'],
@@ -407,47 +488,45 @@ class BuildProposalNetwork(object):
                                                                         beta = self.beta,
                                                                         ENERGY_THRESHOLD = ENERGY_THRESHOLD)
 
-                    validated = True
                     _logger.info(f"\t\tendstate energies validated to within {ENERGY_THRESHOLD}!")
 
                     #now we have to add the simulation object on the edge's appropriate phase
                     if edge_simulation_parameters is None:
-                        _edge_simulation_parameters = None
+                        phase_edge_simulation_parameters = None
                         #then we have to try to pull self.simulation_parameters
                         if self.simulation_parameters is not None:
                             if (start_index, end_index) in list(self.simulation_parameters.keys()):
                                 if _phase in list(self.simulation_parameters[(start_index, end_index)]):
-                                    _edge_simulation_parameters = {_phase: self.simulation_parameters[(start_index, end_index)][_phase]}
+                                    phase_edge_simulation_parameters = {_phase: self.simulation_parameters[(start_index, end_index)][_phase]}
                     else:
-                        _edge_simulation_parameters = edge_simulation_parameters
+                        phase_edge_simulation_parameters = {_phase: edge_simulation_parameters[_phase]}
 
 
                     simulation_object = self._create_simulation_object(hybrid_factory = hybrid_factory,
-                                                                       edge_simulation_parameters = _edge_simulation_parameters)
+                                                                       edge_simulation_parameters = phase_edge_simulation_parameters)
 
-
+                    #now to append to returnables
+                    returnables['hybrid_factory_dict'].update({_phase : hybrid_factory})
+                    returnables['endstate_energy_errors_dict'].update({_phase : endstate_energy_errors})
+                    returnables['simulation_dict'].update({_phase : simulation_object})
+                    returnables['validation_dict'].update({_phase : True})
 
                 except Exception as e:
                     _logger.warning(f"\t\t{e}")
                     _logger.warning(f"\t\tdetected failure to validate system.  omitting this edge.")
-                    validated = False
-                    self.network.edges[start, end]['log_weight'] = -np.inf
-                    self.adjacency_matrix[start, end] = -np.inf
 
+                    #now to append to returnables
+                    returnables['hybrid_factory_dict'].update({_phase : None})
+                    returnables['endstate_energy_errors_dict'].update({_phase : None})
+                    returnables['simulation_dict'].update({_phase : None})
+                    returnables['validation_dict'].update({_phase : False})
 
-                self.network.edges[start, end]['proposals'][_phase]['hybrid_factory'] = hybrid_factory
-                self.network.edges[start, end]['proposals'][_phase]['endstate_energy_errors'] = endstate_energy_errors
-                self.network.edges[start, end]['proposals'][_phase]['simulation'] = simulation_object
-                self.network.edges[start, end]['proposals'][_phase]['validated'] = validated
+                if all(returnables['validation_dict'].values()):
+                    returnables.update({'adjacency_matrix_log_weight' : log_weight})
+                else:
+                    returnables.update({'adjacency_matrix_log_weight' : -np.inf})
 
-            #check if all of the phases in the edge are validated
-            if all(self.network.edges[i, j]['proposals'][_phase]['validated'] for _phase in self.network.edges[i, j]['proposals'].keys()):
-                self.network.edges[start, end]['log_weight'] = log_weight
-                return True
-            else:
-                self.network.edges[start, end]['log_weight'] = -np.inf
-                self.adjacency_matrix[start, end] = -np.inf
-                return False
+            return returnables
 
     def _create_simulation_object(self, hybrid_factory, edge_simulation_parameters = None):
         """
@@ -1121,6 +1200,7 @@ class Experiment():
                  simulation_parameters = ('repex', None),
 
                  #setup resources
+                 setup_client_num_workers = 10,
                  resources = None):
         """
         Initialization method will construct a network on which to run a computation.
@@ -1178,13 +1258,24 @@ class Experiment():
             elif type(simulation_parameters) == dict, each entry is a {(int, int): {<phase>: (<simulation_flavor>, dict(params))}};
                 if an transformation entry is missing, it is defaulted as above
 
+        setup_client_num_workers : int
+            the number of workers that will be used to build the network; this computational cost is separate
+            from `resources`
+
         resources : dict, default None
             dictionary specifying the following attributes
                 1. number of gpus, cpus
                 2. RAM per gpu/cpu
-                3. total run_time of gpus/cpus
+                3. total run_time (hours) of gpus/cpus
             format: {
-                    'gpus': {'number': int, 'RAM': int, 'runtime': float},
-                    'cpus': {'number': int, 'RAM': int, 'runtime': float}
+                    'gpus': {'number': int or None, 'RAM': int, 'runtime': float},
+                    'cpus': {'number': int or None, 'RAM': int, 'runtime': float}
                     }
         """
+        #the first thing we need to do is to build the parallelism/scheduler
+        #the setup client will be built only from cpus
+        setup_parallelism = Parallelism()
+        setup_parallelism.activate_client(library = ('dask', 'LSF'),
+                                          num_processes = setup_client_num_workers,
+                                          timeout = 1800,
+                                          processor = 'cpu')

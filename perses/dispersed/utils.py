@@ -515,6 +515,119 @@ def create_endstates(first_thermostate, last_thermostate):
 ################################################################
 ##################Distributed Tasks#############################
 ################################################################
+def generalized_worker_class_instantiation(remote_worker,
+                                           remote_worker_class_name,
+                                           class):
+    """
+    Function to call on a remote worker that makes the specified class a worker variable.
+
+    Arguments
+    ---------
+    remote_worker : bool or object
+        whether the remote worker is actually on the remote;
+        if it is, the worker class will be returned;
+        otherwise, get_remote_worker will return None.  in this case, the remote_worker should be
+        set to `self` or some other class to which the `class` variable will be tethered
+    remote_worker_class_name : str
+        what to name the tethering class as a class instance variable
+    class : object
+        which class to attempt to tether
+
+    Return
+    ------
+    True
+    """
+    _class = Parallelism.get_remote_worker(remote_worker = remote_worker,
+                                           library = ('dask', 'LSF'))
+
+    #set the attribute to the worker
+    if _class is None:
+        assert remote_worker is not None, f"the remote worker returned None and the remote_worker argument was not set!"
+        #then we just use the local worker
+        _class = remote_worker
+
+    setattr(_class, remote_worker_class_name, class)
+    return True
+
+def generalized_worker_class_termination(remote_worker,
+                                         remote_worker_class_name):
+    """
+    Function to call on a remote worker that deletes the specific class from the worker.
+
+    Arguments
+    ---------
+    remote_worker : bool or object
+        whether the remote worker is actually on the remote;
+        if it is, the worker class will be returned;
+        otherwise, get_remote_worker will return None.  in this case, the remote_worker should be
+        set to `self` or some other class to which the `class` variable can be deleted
+    remote_worker_class_name : str
+        name of the instance variable
+    """
+    _class = Parallelism.get_remote_worker(remote_worker = remote_worker,
+                                           library = ('dask', 'LSF'))
+
+    #set the attribute to the worker
+    if _class is None:
+        assert remote_worker is not None, f"the remote worker returned None and the remote_worker argument was not set!"
+        #then we just use the local worker
+        _class = remote_worker
+
+    assert hasattr(_class, remote_worker_class_name), f" remote_worker_class_name ({remote_worker_class_name}) does not exist on the _class {_class}"
+    delattr(_class, remote_worker_class_name)
+
+def call_worker_class_method(remote_worker,
+                             remote_worker_class_name,
+                             remote_worker_method_name,
+                             remote_worker_method_kwargs):
+    """
+    Function to call a method on a remote worker (assuming generalized worker class is instantiated)
+
+    Arguments
+    ---------
+    remote_worker : bool or object
+        whether the remote worker is actually on the remote;
+        if it is, the worker class will be returned;
+        otherwise, get_remote_worker will return None.
+        in this case, the remote_worker should be
+        set to `self` or some other class to which the `class` variable can be called
+    remote_worker_class_name : str
+        name of the class of interest that is an instance variable of the worker
+    remote_worker_method_name : str
+        name of the method of interest of the class that is an instance variable of the worker
+    remote_worker_method_kwargs : dict
+        keyword arguments of the remote worker method
+
+    Returns
+    -------
+    method_returnable : object
+        object that is returned by the remote worker class method
+    """
+    #check that the remote_worker_class_name is an attribute of the remote worker
+    worker = Parallelism.get_remote_worker(remote_worker, library = ('dask', 'LSF'))
+    if worker is None:
+        assert remote_worker is not None, f"the remote worker returned None and the remote_worker argument was not set!"
+        #then we just use the local worker
+        worker = remote_worker
+
+    #check to make sure the remote_worker_class_name exists
+    assert hasattr(worker, remote_worker_class_name), f"the worker {worker} has no attribute {remote_worker_class_name}"
+    _class = getattr(worker, remote_worker_class_name)
+
+    #check that the worker's class has a callable method by the name of remote_worker_method_name
+    assert hasattr(_class, remote_worker_method_name), f"the tethered class {_class} has no attribute {remote_worker_method_name}"
+    _method = getattr(_class, remote_worker_method_name)
+    assert callable(_method), f"{_method} is not a callable method"
+
+    #now run
+    method_returnable = _method(**remote_worker_method_kwargs)
+
+    return method_returnable
+
+
+
+
+
 def activate_LocallyOptimalAnnealing(thermodynamic_state,
                                      remote_worker,
                                      lambda_protocol = 'default',

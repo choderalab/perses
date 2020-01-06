@@ -14,6 +14,8 @@ import dask.distributed as distributed
 import tqdm
 import time
 from scipy.special import logsumexp
+from dask_jobqueue import LSFCluster
+from dask_jobqueue.lsf import lsf_detect_units, lsf_format_bytes_ceil
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
@@ -37,7 +39,8 @@ class Parallelism(object):
     def activate_client(self,
                         library = ('dask', 'LSF'),
                         num_processes = 2,
-                        timeout = 1800):
+                        timeout = 1800,
+                        processor = 'gpu'):
         """
         Parameters
         ----------
@@ -48,6 +51,8 @@ class Parallelism(object):
             if None, num_processes will be adaptive
         timeout : int
             number of seconds to wait to fulfill the workers order
+        processor : str
+            current support is 'gpu' or 'cpu'
         """
         self.library = library
         if library is not None:
@@ -66,9 +71,9 @@ class Parallelism(object):
             _logger.debug(f"detected dask parallelism...")
             if library[1] == 'LSF':
                 _logger.debug(f"detected LSF scheduler")
-                from dask_jobqueue import LSFCluster
+                backend = LSFDaskBackend()
                 _logger.debug(f"creating cluster...")
-                cluster = LSFCluster()
+                cluster = backend.create_cluster(processor = processor)
                 if num_processes is None:
                     _logger.debug(f"adaptive cluster")
                     self._adapt = True
@@ -311,3 +316,108 @@ class Parallelism(object):
             pass
         else:
             distributed.wait(futures)
+
+    @staticmethod
+    def get_remote_worker(remote_worker, library = ('dask', 'LSF')):
+        """
+        Staticmethod to attempt to gather the worker from a remote given a library on the remote.
+
+        Arguments
+        ---------
+        remote_worker : bool
+            whether we are attempting to pull a worker from a remote or otherwise
+        library : tup('str', 'str'), default ('dask', 'LSF')
+            specification of the parallelism and scheduler, respectively
+
+        Returns
+        -------
+        _worker : generalized worker or None
+            if remote_worker is True, then the parallelism/scheduler will attempt to pull the worker class;
+            otherwise, None is returned
+        """
+        parallelism, scheduler = library[0], library[1]
+        if remote_worker == True:
+            try:
+                if parallelism = 'dask':
+                    if scheduler = 'LSF':
+                        _worker = distributed.get_worker()
+                    else:
+                        raise Exception(f"the scheduler {scheduler} is not supported")
+                else:
+                    raise Exception(f"the parallelism {parallelism} is not supported")
+            except Exception as e:
+                _logger.warning(e)
+                _worker = None
+        else:
+            _worker = None
+
+        return _worker
+
+
+class LSFDaskBackend(object):
+    """
+    dask-specific LSF backend for building a Parallelism
+    """
+    from dask_jobqueue.lsf import lsf_detect_units, lsf_format_bytes_ceil
+    supported_processors = {
+                            'gpu':
+                                   {'queue_name': 'gpuqueue',
+                                    'cores': 1,
+                                    'walltime': '04:00',
+                                    'memory': f"{lsf_format_bytes_ceil(6e9 * unit.byte, lsf_units=lsf_detect_units())}{lsf_detect_units().upper()}",
+                                    'mem': 6e9 * unit.byte,
+                                    'job_extra': ['-gpu num=1:j_exclusive=yes:mode=shared:mps=no:', '-m "ls-gpu lt-gpu"'],
+                                    'env_extra': ['module load cuda/9.2'],
+                                    'extra': ['--no-nanny'],
+                                    'local_directory': 'dask-worker-space'},
+                            'cpu':
+                                   {'queue_name': 'cpuqueue',
+                                    'cores': 2,
+                                    'walltime': '04:00',
+                                    'memory': f"{lsf_format_bytes_ceil(3e9 * unit.byte, lsf_units=lsf_detect_units())}{lsf_detect_units().upper()}",
+                                    'mem': 6e9 * unit.byte,
+                                    'job_extra': None,
+                                    'env_extra': ['module load cuda/9.2'],
+                                    'extra': ['--no-nanny'],
+                                    'local_directory': 'dask-worker-space'}
+                                    }
+    def modify_lsf_cluster(processor, attribute):
+        """
+        give a processor and an attribute to modify
+
+        Arguments
+        ---------
+        processor : str
+            one of the supported processors
+        attrbute : dict
+            dict of the attribute to change in self.supported_processors[processor].keys()
+        """
+        assert processor in list(self.supported_processors.keys()), f"processor {processor} is not supported"
+        assert set(attribute.keys()).issubset(set(self.supported_processors[processor].keys())), f"the attributes {attribute.keys()} is not supported."
+        self.supported_processors[processor].update(attribute)
+
+    def create_cluster(processor):
+        """
+        return an LSF cluster given the self.supported_processors and the number of workers
+
+        Arguments
+        ---------
+        processor : str
+            one of the supported processors
+
+        Returns
+        -------
+        cluster : LSFCluster
+            a cluster given a processor
+        """
+        attributes = self.supported_processors[processor]
+        cluster = LSFCluster(queue = attributes['queue_name'],
+                             cores = attributes['cores'],
+                             walltime = attributes['walltime'],
+                             memory = attributes['memory'],
+                             mem = attributes['mem'],
+                             job_extra = attributes['job_extra'],
+                             env_extra = attributes['env_extra'],
+                             extra = attributes['extra'],
+                             local_directory = attributes['local_directory'])
+        return cluster
