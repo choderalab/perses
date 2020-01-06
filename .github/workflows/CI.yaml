@@ -52,7 +52,7 @@ jobs:
       env:
         ENC_OE_LICENSE: ${{ secrets.TEST_SECRET }}
       run: |
-        echo "${ENC_OE_LICENSE}" > ${OE_LICENSE}
+        echo "${ENC_OE_LICENSE}" > $OE_LICENSE
     - name: Build recipe
       shell: bash
       run: |
