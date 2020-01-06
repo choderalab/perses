@@ -1,0 +1,96 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macOS-latest, ubuntu-latest]
+        python-version: [3.6, 3.7]
+        openmm: [latest, beta, nightly, conda-forge]
+    env:
+      - ORGNAME="omnia"
+      - PACKAGENAME="perses"
+      - OE_LICENSE="$HOME/oe_license.txt"
+      - OPENEYE_CHANNEL="-i https://pypi.anaconda.org/OpenEye/simple"
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Additional info about the build
+      shell: bash
+      run: |
+        uname -a
+        df -h
+        ulimit -a
+    - name: Setup conda initializers
+      shell: bash
+      run: |
+        case ${{ matrix.os }} in
+            windows*)
+                INITIALIZER="$(${CONDA}/condabin/conda.bat shell.bash hook)";;
+            *)
+                INITIALIZER="$(${CONDA}/condabin/conda shell.bash hook)";;
+        esac
+        echo ::set-env name=CONDA_INITIALIZER::"$INITIALIZER"
+    - name: Configure conda
+      shell: bash
+      run: |
+        eval ${CONDA_INITIALIZER} && conda activate
+        conda config --set always_yes True
+        conda config --add channels omnia --add channels conda-forge --add channels openeye
+        conda update --quiet --all
+        conda install conda conda-build jinja2 anaconda-client
+        conda info
+        conda list
+    - name: Decrypt OpenEye license
+      shell: bash
+      if: false
+      env:
+        OE_KEY: ${{ secrets.OE_KEY }}
+        OE_IV: ${{ secrets.OE_IV }}
+      run: |
+        openssl aes-256-cbc \
+                -K ${OE_KEY} \
+                -iv ${OE_IV} \
+                -in devtools/travis-ci/oe_license.txt.enc \
+                -out ${OE_LICENSE} -d
+    - name: Build recipe
+      shell: bash
+      run: |
+        eval ${CONDA_INITIALIZER} && conda activate
+        conda build --python=${{ matrix.python-version }} devtools/conda-recipe
+    - name: Prepare test environment
+      shell: bash
+      run: |
+        eval ${CONDA_INITIALIZER} && conda activate
+        conda create -n test -c local perses-dev nose nose-timer
+        conda activate test
+        case ${{ matrix.openmm }} in
+          latest)
+            echo "Using latest release OpenMM."
+            conda install -c omnia openmm;;
+          beta)
+            echo "Using OpenMM beta"
+            conda install -c omnia/label/beta openmm;;
+          nightly)
+            echo "Using OpenMM nightly dev build."
+            conda install -c omnia-dev openmm;;
+          conda-forge)
+            echo "Using OpenMM conda-forge testing build."
+            conda install -c conda-forge/label/testing openmm;;
+        esac
+    - name: Test the package
+      shell: bash
+      run: |
+        eval ${CONDA_INITIALIZER} && conda activate test
+        pushd .
+        nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced'
+        popd
+    - name: Deploy
+      shell: bash
+      if: false
+      run: |
+        echo "Deployment has not been implemented yet"
