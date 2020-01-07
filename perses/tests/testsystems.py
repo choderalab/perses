@@ -45,9 +45,6 @@ import tempfile
 import copy
 from openmmtools.constants import kB
 from perses.rjmc.topology_proposal import SystemGenerator
-from unittest import skipIf
-from perses.dispersed.utils import minimize #updated minimizer
-from openmmtools.states import ThermodynamicState, SamplerState
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
@@ -56,8 +53,6 @@ from openmmtools.states import ThermodynamicState, SamplerState
 ################################################################################
 # TEST SYSTEMS
 ################################################################################
-
-istravis = os.environ.get('TRAVIS', None) == 'true'
 
 class PersesTestSystem(object):
     """
@@ -981,7 +976,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize_wrapper(self)
+        minimize(self)
 
 class AblAffinityTestSystem(PersesTestSystem):
     """
@@ -1186,7 +1181,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize_wrapper(self)
+        minimize(self)
 
 class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     """
@@ -1401,7 +1396,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize_wrapper(self)
+        minimize(self)
         print('AblImatinibProtonationStateTestSystem initialized.')
 
 class ImidazoleProtonationStateTestSystem(PersesTestSystem):
@@ -1617,7 +1612,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         print('ImidazoleProtonationStateTestSystem initialized.')
 
-def minimize_wrapper(testsystem):
+def minimize(testsystem):
     """
     Minimize all structures in test system.
 
@@ -1633,12 +1628,20 @@ def minimize_wrapper(testsystem):
     """
     for environment in testsystem.environments:
         print("Minimizing '%s'..." % environment)
-        thermostate = ThermodynamicState(system = testsystem.systems[environment], temperature = 300.0 * unit.kelvin) #minimizer is temperature-independent
-        sampler_state = SamplerState(positions = testsystem.positions[environment])
-        minimize(thermostate, sampler_state)
-
-        testsystem.positions[environment] = sampler_state.positions
-        testsystem.mcmc_samplers[environment].sampler_state = sampler_state
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context = openmm.Context(testsystem.systems[environment], integrator)
+        context.setPositions(testsystem.positions[environment])
+        print ("Initial energy is %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
+        TOL = 1.0
+        MAX_STEPS = 50
+        openmm.LocalEnergyMinimizer.minimize(context, TOL, MAX_STEPS)
+        print ("Final energy is   %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
+        # Update positions.
+        testsystem.positions[environment] = context.getState(getPositions=True).getPositions(asNumpy=True)
+        # Update sampler states.
+        testsystem.mcmc_samplers[environment].sampler_state.positions = testsystem.positions[environment]
+        # Clean up.
+        del context, integrator
 
 class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
@@ -1823,7 +1826,7 @@ class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
 
 class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
     """
-    Library of clinical kinase inhibitors in various solvent environments.  This is often problematic.
+    Library of clinical kinase inhibitors in various solvent environments.
     """
     def __init__(self, **kwargs):
         # Read SMILES from CSV file of clinical kinase inhibitors.
@@ -2402,7 +2405,7 @@ def test_testsystems():
     """
     Test instantiation of all test systems.
     """
-    testsystem_names = [ 'KinaseInhibitorsTestSystem', 'T4LysozymeInhibitorsTestSystem','AlkanesTestSystem', 'AlanineDipeptideTestSystem']
+    testsystem_names = ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
     niterations = 2 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
