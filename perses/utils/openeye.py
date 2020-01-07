@@ -15,6 +15,7 @@ import numpy as np
 def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     """
     Generate an oemol from a SMILES string
+
     Parameters
     ----------
     smiles : str
@@ -50,6 +51,9 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     omega.SetMaxConfs(max_confs)
     omega.SetIncludeInput(False)
     omega.SetStrictStereo(True)
+
+    #perceive chirality
+    oechem.OEPerceiveChiral(molecule)
     omega(molecule)
 
     return molecule

@@ -3613,6 +3613,22 @@ class NetworkXMolecule(object):
         oemol_atom_dict = {atom.GetIdx() : atom for atom in self.mol_oemol.GetAtoms()}
         reverse_oemol_atom_dict = {val : key for key, val in oemol_atom_dict.items()}
 
+        #try to perceive chirality
+        for atom in self.mol_oemol.GetAtoms():
+            nbrs = [] #we have to get the neighbors first
+            for bond in atom.GetBonds():
+                nbor = bond.GetNbr(atom)
+                nbrs.append(nbor)
+
+            match_found = False
+
+            if atom.IsChiral() and len(nbrs) >= 4:
+                stereo = oechem.OEPerceiveCIPStereo(self.mol_oemol, atom)
+                oechem.OESetCIPStereo(self.mol_oemol, atom, stereo)
+                match_found = True
+                if not match_found:
+                    raise Exception("Error: Stereochemistry was not assigned to all chiral atoms from the smiles string. (i.e. stereochemistry is undefined)")
+
         #add atoms
         for atom in mol_residue.atoms():
             atom_index = atom.index

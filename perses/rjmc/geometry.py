@@ -11,6 +11,7 @@ import networkx as nx
 from simtk import unit
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
+from openeye import oechem, oeomega
 
 ################################################################################
 # Initialize logging
@@ -154,6 +155,8 @@ class FFAllAngleGeometryEngine(GeometryEngine):
     use_14_nonbondeds : bool, default True
         whether to consider 1,4 exception interactions in the geometry proposal
         NOTE: if this is set to true, then in the HybridTopologyFactory, the argument 'interpolate_old_and_new_14s' must be set to False; visa versa
+
+    TODO : remove Context objects and checks since they are clunky and no longer used for troubleshooting
 
     """
     def __init__(self,
@@ -694,7 +697,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
             an oemol representation of the residue with topology indices
         """
         # TODO: Deprecate this
-        from openeye import oechem
         from simtk.openmm import app
 
         # TODO: This seems to be broken. Can we fix it?
@@ -2173,11 +2175,12 @@ class GeometrySystemGenerator(object):
             The torsion force with extra torsions added appropriately.
 
         """
-        from openeye import oechem
 
         # Do nothing if there are no atoms to grow.
         if len(growth_indices) == 0:
             return torsion_force
+
+        #set ring restraints
 
         #get the list of torsions in the molecule that are not about a rotatable bond
         # Note that only torsions involving heavy atoms are enumerated here.
@@ -2233,6 +2236,20 @@ class GeometrySystemGenerator(object):
                 pass
                 #we omit terms wherein the growth index only pertains to the
 
+            #set chirality restraints (adapted from https://github.com/choderalab/perses/blob/protein_mutations_ivy/perses/rjmc/geometry.py)
+
+            #set stereochemistry
+            #the chirality of the atoms is supposed to be pre-specified by NetworkXMolecule
+
+            #render a 3d structure: note that this fucks up the rjmc proposal (since we cannot enumerate the number of possible conformers)
+
+            #add the improper torsions associated with the chiral center
+            coords = oemol.GetCoords()
+            
+
+
+
+
 
         return torsion_force
 
@@ -2279,7 +2296,6 @@ class GeometrySystemGenerator(object):
         angle_force : simtk.openmm.CustomAngleForce
             The modified angle force
         """
-        from openeye import oechem, oeomega
         from simtk import openmm
         import itertools
         if len(growth_indices)==0:

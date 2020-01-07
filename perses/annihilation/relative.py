@@ -71,7 +71,8 @@ class HybridTopologyFactory(object):
                  softcore_LJ_v2_alpha = 0.85,
                  softcore_electrostatics_alpha = 0.3,
                  softcore_sigma_Q = 1.0,
-                 interpolate_old_and_new_14s = False):
+                 interpolate_old_and_new_14s = False,
+                 omitted_terms = None):
         """
         Initialize the Hybrid topology factory.
 
@@ -118,8 +119,11 @@ class HybridTopologyFactory(object):
             softcore sigma parameter for softcore electrostatics.
         interpolate_old_and_new_14s : bool, default False
             whether to turn on new 1,4 interactions and turn off old 1,4 interactions; if False, they are present in the nonbonded force
+        omitted_terms : dict
+            dictionary of terms (by new topology index) that must be annealed in over a lambda protocol
 
-        .. todo :: Document how positions for hybrid system are constructed
+        TODO: Document how positions for hybrid system are constructed
+        TODO: allow support for annealing in omitted terms
 
         """
         _logger.info("Beginning nonbonded method, total particle, barostat, and exceptions retrieval...")
@@ -133,6 +137,10 @@ class HybridTopologyFactory(object):
         self._new_positions = new_positions
         self._soften_only_new = soften_only_new
         self._interpolate_14s = interpolate_old_and_new_14s
+        self.omitted_terms = omitted_terms
+
+        if omitted_terms is not None:
+            raise Exception(f"annealing of omitted terms is not currently supported.  Aborting!")
 
         #new attributes from the modified geometry engine
         if neglected_old_angle_terms:
@@ -376,7 +384,7 @@ class HybridTopologyFactory(object):
         #as a side effect, we can now compute the environment atom indices too, by subtracting the core indices
         #from the mapped atom set (since any atom that is mapped but not core is environment)
         environment_atoms = mapped_hybrid_atoms_set.difference(total_core_atoms)
-        
+
         return total_core_atoms, environment_atoms
 
     def _determine_core_atoms_in_topology(self, topology, unique_atoms, mapped_atoms, hybrid_map, residue_to_switch):
@@ -417,7 +425,7 @@ class HybridTopologyFactory(object):
                         hybrid_index = hybrid_map[atom_index]
                         core_atoms.add(hybrid_index)
 
-        assert len(core_atoms) >= 3, 'Cannot run a simulation with fewer than 3 core atoms. System has {len(core_atoms)}'        
+        assert len(core_atoms) >= 3, 'Cannot run a simulation with fewer than 3 core atoms. System has {len(core_atoms)}'
 
         return core_atoms
 
