@@ -787,6 +787,10 @@ class TopologyProposal(object):
         Name of the old residue
     new_residue_name : str
         Name of the new residue
+    _old_networkx_residue : NetworkXMolecule
+        networkx molecule of old residue
+    _new_networkx_residue : NetworkXMolecule
+        networkx molecule of new residue
     metadata : dict
         additional information of interest about the state
     """
@@ -798,6 +802,8 @@ class TopologyProposal(object):
                  new_to_old_atom_map=None, old_alchemical_atoms=None,
                  old_chemical_state_key=None, new_chemical_state_key=None,
                  old_residue_name='MOL', new_residue_name='MOL',
+                 old_networkx_residue = None,
+                 new_networkx_residue = None,
                  metadata=None):
 
         if new_chemical_state_key is None or old_chemical_state_key is None:
@@ -820,6 +826,8 @@ class TopologyProposal(object):
         self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
         self._new_environment_atoms = set(range(new_system.getNumParticles())) - self._new_alchemical_atoms
         self._metadata = metadata
+        self._old_networkx_residue = old_networkx_residue
+        self._new_networkx_residue = new_networkx_residue
 
     @property
     def new_topology(self):
@@ -2472,13 +2480,19 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         min_keys, min_values = min(non_offset_new_to_old_atom_map.keys()), min(non_offset_new_to_old_atom_map.values())
         self.non_offset_new_to_old_atom_map = mol_atom_map
 
+        #create NetworkXMolecule for each molecule
+        old_networkx_molecule = NetworkXMolecule(mol_oemol = current_mol, mol_residue = current_topology, residue_to_oemol_map = {i: j for i, j in zip(range(old_mol_start_index, len_old_mol), range(len_old_mol - old_mol_start_index))})
+        new_networkx_molecule = NetworkXMolecule(mol_oemol = proposed_mol, mol_residue = new_topology, residue_to_oemol_map = {i: j for i, j in zip(range(new_mol_start_index, len_new_mol), range(len_new_mol - new_mol_start_index))})
+
         # Create the TopologyProposal onbject
         proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_atom_map,
             old_topology=current_topology, new_topology=new_topology,
             old_system=current_system, new_system=new_system,
             old_alchemical_atoms=old_alchemical_atoms,
             old_chemical_state_key=current_mol_smiles, new_chemical_state_key=proposed_mol_smiles,
-            old_residue_name=self._residue_name, new_residue_name=self._residue_name)
+            old_residue_name=self._residue_name, new_residue_name=self._residue_name,
+            old_networkx_residue = old_networkx_molecule,
+            new_networkx_residue = new_networkx_molecule)
 
         ndelete = proposal.old_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
         ncreate = proposal.new_system.getNumParticles() - len(proposal.old_to_new_atom_map.keys())
@@ -3575,3 +3589,48 @@ class PropaneProposalEngine(NullProposalEngine):
                 atom_map[bond[0].index] = bond[0].index
                 atom_map[bond[1].index] = bond[1].index
         return atom_map
+
+class NetworkXMolecule(object):
+    """
+    Creates a networkx representation of an atom set to allow for easy querying
+    """
+    def __init__(self, mol_oemol, mol_residue, residue_to_oemol_map):
+        """
+        mol_oemol : oechem.OEMol
+            oemol object to interpret atom topologies in terms of oemol characteristics
+        mol_residue : simtk.openmm.app.topology.Residue
+            base from which to interpret a molecule
+        residue_to_oemol_map : dict
+            map of the residue indices to the oemol indices
+        """
+        #the first thing to do is to create a simple undirected graph based on covalency
+        self.mol_oemol = mol_oemol
+        self.mol_residue = mol_residue
+        self.residue_to_oemol_map = residue_to_oemol_map
+        self.graph = nx.Graph()
+
+        reverse_residue_to_oemol_map = {val : key for key, val in residue_to_oemol_map.items()}
+        oemol_atom_dict = {atom.GetIdx() : atom for atom in self.mol_oemol.GetAtoms()}
+        reverse_oemol_atom_dict = {val : key for key, val in oemol_atom_dict.items()}
+
+        #add atoms
+        for atom in mol_residue.atoms():
+            atom_index = atom.index
+            self.graph.add_node(atom_index)
+            self.graph.nodes[atom_index]['openmm_atom'] = atom
+            self.graph.nodes[atom_index]['oechem_atom'] = oemol_atom_dict[residue_to_oemol_map[atom_index]]
+
+        for bond in mol_residue.bonds():
+            self.graph.add_edge(bond[0].index, bond[1].index)
+            self.graph.edges[bond[0].index, bond[1].index]['openmm_bond'] = bond
+
+        for bond in self.mol_oemol.GetBonds():
+            index_a, index_b = bond.GetBgnIdx(), bond.GetEndIdx()
+            try:
+                index_rev_a = reverse_residue_to_oemol_map[index_a]
+                index_rev_b = reverse_residue_to_oemol_map[index_b]
+
+                if (index_rev_a, index_rev_b) in list(self.graph.edges()) or (index_rev_b, index_rev_a) in list(self.graph.edges()):
+                    self.graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
+            except Exception as e:
+                pass
