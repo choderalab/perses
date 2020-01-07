@@ -3609,7 +3609,7 @@ class NetworkXMolecule(object):
         self.residue_to_oemol_map = residue_to_oemol_map
         self.graph = nx.Graph()
 
-        reverse_residue_to_oemol_map = {val : key for key, val in residue_to_oemol_map.items()}
+        self.reverse_residue_to_oemol_map = {val : key for key, val in residue_to_oemol_map.items()}
         oemol_atom_dict = {atom.GetIdx() : atom for atom in self.mol_oemol.GetAtoms()}
         reverse_oemol_atom_dict = {val : key for key, val in oemol_atom_dict.items()}
 
@@ -3627,8 +3627,8 @@ class NetworkXMolecule(object):
         for bond in self.mol_oemol.GetBonds():
             index_a, index_b = bond.GetBgnIdx(), bond.GetEndIdx()
             try:
-                index_rev_a = reverse_residue_to_oemol_map[index_a]
-                index_rev_b = reverse_residue_to_oemol_map[index_b]
+                index_rev_a = self.reverse_residue_to_oemol_map[index_a]
+                index_rev_b = self.reverse_residue_to_oemol_map[index_b]
 
                 if (index_rev_a, index_rev_b) in list(self.graph.edges()) or (index_rev_b, index_rev_a) in list(self.graph.edges()):
                     self.graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
