@@ -58,7 +58,7 @@ class RelativeFEPSetup(object):
             the name of the ligand file (any openeye supported format)
             this can either be an .sdf or list of .sdf files, or a list of SMILES strings
         forcefield_files : list of str
-            The list of ffxml files that contain the forcefields that will be used
+            The list of ffxml files that contain the forcefields that will be used (excepting for small molecules)
         phases : list of str
             The phases to simulate
         protein_pdb_filename : str, default None
@@ -122,9 +122,6 @@ class RelativeFEPSetup(object):
                 mol_list.append(self._ligand_oemol_old)
                 mol_list.append(self._ligand_oemol_new)
 
-                ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
-                _logger.info(f"\tsuccessfully generated ffxml from molecules.")
-
                 # forcefield_generators needs to be able to distinguish between the two ligands
                 # while topology_proposal needs them to have the same residue name
                 self._ligand_oemol_old.SetTitle("MOL")
@@ -145,9 +142,6 @@ class RelativeFEPSetup(object):
 
                 self._ligand_positions_old = extractPositionsFromOEMol(self._ligand_oemol_old)
                 _logger.info(f"\tsuccessfully extracted positions from OEMOL.")
-
-                ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
-                _logger.info(f"\tsuccessfully generated ffxml from molecules.")
 
                 self._ligand_oemol_old.SetTitle("MOL")
                 self._ligand_oemol_new.SetTitle("MOL")
@@ -184,13 +178,6 @@ class RelativeFEPSetup(object):
 
             mol_list.append(self._ligand_oemol_old)
             mol_list.append(self._ligand_oemol_new)
-
-            old_ligand_parameter_set = pm.openmm.OpenMMParameterSet.from_structure(old_ligand)
-            new_ligand_parameter_set = pm.openmm.OpenMMParameterSet.from_structure(new_ligand)
-            ffxml = StringIO()
-            old_ligand_parameter_set.write(ffxml)
-            new_ligand_parameter_set.write(ffxml)
-            ffxml = ffxml.getvalue()
 
         self._ligand_md_topology_old = md.Topology.from_openmm(self._ligand_topology_old)
         self._ligand_md_topology_new = md.Topology.from_openmm(self._ligand_topology_new)
@@ -562,6 +549,11 @@ class RelativeFEPSetup(object):
         solvated_system : openmm.System
             The parameterized system, containing a barostat if one was specified.
         """
+        # DEBUG: Write PDB file being fed into Modeller to check why MOL isn't being matched
+        from simtk.openmm.app import PDBFile
+        with open('/Users/choderaj/github/choderalab/perses/modeller.pdb', 'w') as outfile:
+            PDBFile.writeFile(topology, positions, outfile)
+
         modeller = app.Modeller(topology, positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         modeller.delete(hs)

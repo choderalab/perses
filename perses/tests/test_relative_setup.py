@@ -134,6 +134,16 @@ def test_run_cdk2_iterations_repex():
         yaml_filename = os.path.join(setup_directory, "cdk2_setup_repex.yaml")
         setup_options = getSetupOptions(yaml_filename)
 
+        # DEBUG: Print traceback for any UserWarnings
+        import traceback
+        import warnings
+        _old_warn = warnings.warn
+        def warn(*args, **kwargs):
+            tb = traceback.extract_stack()
+            _old_warn(*args, **kwargs)
+            print("".join(traceback.format_list(tb)[:-1]))
+        warnings.warn = warn
+
         # Update options
         #setup_options['solvate'] = False
         #setup_options['n_cycles'] = 2
@@ -142,7 +152,6 @@ def test_run_cdk2_iterations_repex():
             setup_options[parameter] = os.path.join(setup_directory, setup_options[parameter])
         for parameter in ['trajectory_directory', 'trajectory_prefix', 'save_setup_pickle_as']:
             setup_options[parameter] = os.path.join(tmpdirname, setup_options[parameter])
-        print(setup_options)
 
         #length_of_protocol = setup_options['n_steps_ncmc_protocol']
         #write_interval = setup_options['n_steps_per_move_application']
