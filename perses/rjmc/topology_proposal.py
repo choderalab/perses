@@ -1078,7 +1078,11 @@ class PolymerProposalEngine(ProposalEngine):
         new_topology.setPeriodicBoxVectors(current_topology.getPeriodicBoxVectors())
 
         # Build system
-        new_system = self._system_generator.build_system(new_topology)
+        # TODO: Remove build_system() branch once we convert entirely to new openmm-forcefields SystemBuilder
+        if hasattr(self._system_generator, 'create_system'):
+            new_system = self._system_generator.create_system(new_topology)
+        else:
+            new_system = self._system_generator.build_system(new_topology)
 
         # Adjust logp_propose based on HIS presence
         his_residues = ['HID', 'HIE']
@@ -2439,7 +2443,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Generate an OpenMM System from the proposed Topology
         _logger.info(f"proceeding to build the new system from the new topology...")
-        new_system = self._system_generator.build_system(new_topology)
+        # TODO: Remove build_system() branch once we convert entirely to new openmm-forcefields SystemBuilder
+        if hasattr(self._system_generator, 'create_system'):
+            new_system = self._system_generator.create_system(new_topology)
+        else:
+            new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
         _logger.info(f"determining atom map between old and new molecules...")
@@ -3130,7 +3138,11 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
 
         # Generate an OpenMM System from the proposed Topology
-        new_system = self._system_generator.build_system(new_topology)
+        # TODO: Remove build_system() branch once we convert entirely to new openmm-forcefields SystemBuilder
+        if hasattr(self._system_generator, 'create_system'):
+            new_system = self._system_generator.create_system(new_topology)
+        else:
+            new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
         mol_atom_maps = self._atom_mapper.get_atom_maps(current_mol_smiles, proposed_mol_smiles)
