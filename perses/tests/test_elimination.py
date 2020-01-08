@@ -524,44 +524,44 @@ def check_hybrid_null_elimination(topology_proposal, positions, new_positions, n
 
 # TODO: Re-enable this test once PointMutationEngine can return size of chemical space
 #@nottest #removing peptide mutations for the itme-being
-@skipIf(istravis, "Skip mutations")
-def test_alchemical_elimination_mutation():
-    """
-    Test alchemical elimination for mutations.
-    """
-
-    ff_filename = "amber99sbildn.xml"
-    proposal_metadata = {'ffxmls':[ff_filename]}
-
-    # Create peptide.
-    from openmmtools import testsystems
-    testsystem = testsystems.AlanineDipeptideVacuum()
-    [topology, system, positions] = [testsystem.topology, testsystem.system, testsystem.positions]
-
-    # Create forcefield.
-    ff = app.ForceField(ff_filename)
-    chain_id = '1'
-    allowed_mutations = [[('2','GLY')]]
-
-    from perses.rjmc.topology_proposal import SystemGenerator
-    system_generator = SystemGenerator([ff_filename])
-
-    # Create a topology proposal fro mutating ALA -> GLY
-    from perses.rjmc.topology_proposal import PointMutationEngine
-    proposal_engine = PointMutationEngine(topology, system_generator, chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
-    topology_proposal = proposal_engine.propose(system, topology)
-
-    # Modify atom mapping to get a null transformation.
-    from perses.rjmc.topology_proposal import TopologyProposal
-    new_to_old_atom_map = { atom1 : atom1 for atom1 in topology_proposal.new_to_old_atom_map }
-    topology_proposal = TopologyProposal(
-                new_topology=topology_proposal.old_topology, new_system=topology_proposal.old_system, old_topology=topology_proposal.old_topology, old_system=topology_proposal.old_system,
-                old_chemical_state_key='AA', new_chemical_state_key='AG', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=topology_proposal.metadata)
-
-    for ncmc_nsteps in [0, 1, 2, 50]:
-        f = partial(check_alchemical_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
-        f.description = "Testing alchemical null transformation of ALA sidechain in alanine dipeptide with %d NCMC steps" % ncmc_nsteps
-        yield f
+#@skipIf(istravis, "Skip mutations")
+#def test_alchemical_elimination_mutation():
+#    """
+#    Test alchemical elimination for mutations.
+#    """
+#
+#    ff_filename = "amber99sbildn.xml"
+#    proposal_metadata = {'ffxmls':[ff_filename]}
+#
+#    # Create peptide.
+#    from openmmtools import testsystems
+#    testsystem = testsystems.AlanineDipeptideVacuum()
+#    [topology, system, positions] = [testsystem.topology, testsystem.system, testsystem.positions]
+#
+#    # Create forcefield.
+#    ff = app.ForceField(ff_filename)
+#    chain_id = '1'
+#    allowed_mutations = [[('2','GLY')]]
+#
+#    from perses.rjmc.topology_proposal import SystemGenerator
+#    system_generator = SystemGenerator([ff_filename])
+#
+#    # Create a topology proposal fro mutating ALA -> GLY
+#    from perses.rjmc.topology_proposal import PointMutationEngine
+#    proposal_engine = PointMutationEngine(topology, system_generator, chain_id, proposal_metadata=proposal_metadata, allowed_mutations=allowed_mutations)
+#    topology_proposal = proposal_engine.propose(system, topology)
+#
+#    # Modify atom mapping to get a null transformation.
+#    from perses.rjmc.topology_proposal import TopologyProposal
+#    new_to_old_atom_map = { atom1 : atom1 for atom1 in topology_proposal.new_to_old_atom_map }
+#    topology_proposal = TopologyProposal(
+#                new_topology=topology_proposal.old_topology, new_system=topology_proposal.old_system, old_topology=topology_proposal.old_topology, old_system=topology_proposal.old_system,
+#                old_chemical_state_key='AA', new_chemical_state_key='AG', logp_proposal=0.0, new_to_old_atom_map=new_to_old_atom_map, metadata=topology_proposal.metadata)
+#
+#    for ncmc_nsteps in [0, 1, 2, 50]:
+#        f = partial(check_alchemical_null_elimination, topology_proposal, positions, ncmc_nsteps=ncmc_nsteps)
+#        f.description = "Testing alchemical null transformation of ALA sidechain in alanine dipeptide with %d NCMC steps" % ncmc_nsteps
+#        yield f
 
 @skipIf(istravis, "Skip neq switching")
 def test_ncmc_alchemical_integrator_stability_molecules():
