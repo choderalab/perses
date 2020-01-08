@@ -53,6 +53,11 @@ def getSetupOptions(filename):
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
+    if 'neglect_angles' not in setup_options:
+        setup_options['neglect_angles'] = False
+    if 'anneal_1,4s' not in setup_options:
+        setup_options['anneal_1,4s'] = False
+
     if 'run_type' not in setup_options:
         _logger.info(f"\t\t\trun_type is not specified; default to None")
         setup_options['run_type'] = None
