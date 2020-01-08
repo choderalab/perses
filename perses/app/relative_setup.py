@@ -114,9 +114,11 @@ class RelativeFEPSetup(object):
 
                 all_old_mol = createSystemFromSMILES(self._ligand_smiles_old, title='MOL') # should be stereospecific
                 self._ligand_oemol_old, self._ligand_system_old, self._ligand_positions_old, self._ligand_topology_old = all_old_mol
+                self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
 
                 all_new_mol = createSystemFromSMILES(self._ligand_smiles_new, title='NEW')
                 self._ligand_oemol_new, self._ligand_system_new, self._ligand_positions_new, self._ligand_topology_new = all_new_mol
+                self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
                 _logger.info(f"\tsuccessfully created old and new systems from smiles")
 
                 mol_list.append(self._ligand_oemol_old)
@@ -136,6 +138,8 @@ class RelativeFEPSetup(object):
                 _logger.info(f"Detected .sdf format.  Proceeding...") #TODO: write checkpoints for sdf format
                 self._ligand_oemol_old = createOEMolFromSDF(self._ligand_input, index=self._old_ligand_index)
                 self._ligand_oemol_new = createOEMolFromSDF(self._ligand_input, index=self._new_ligand_index)
+                self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
+                self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
 
                 mol_list.append(self._ligand_oemol_old)
                 mol_list.append(self._ligand_oemol_new)
@@ -166,6 +170,7 @@ class RelativeFEPSetup(object):
             self._ligand_topology_old = old_ligand.topology
             self._ligand_positions_old = old_ligand.positions
             self._ligand_oemol_old = createOEMolFromSDF('%s.mol2' % self._ligand_input[0])
+            self._ligand_oemol_old = generate_unique_atom_names(self._ligand_oemol_old)
             self._ligand_smiles_old = oechem.OECreateSmiString(self._ligand_oemol_old,
                                                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
 
@@ -173,6 +178,7 @@ class RelativeFEPSetup(object):
             self._ligand_topology_new = new_ligand.topology
             self._ligand_positions_new = new_ligand.positions
             self._ligand_oemol_new = createOEMolFromSDF('%s.mol2' % self._ligand_input[1])
+            self._ligand_oemol_new = generate_unique_atom_names(self._ligand_oemol_new)
             self._ligand_smiles_new = oechem.OECreateSmiString(self._ligand_oemol_new,
                                                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
 

@@ -269,3 +269,40 @@ def createSMILESfromOEMol(molecule):
     smiles = oechem.OECreateSmiString(molecule,
                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
     return smiles
+
+
+def generate_unique_atom_names(molecule):
+    """
+    Check if an oemol has unique atom names, and if not, then assigns them 
+
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol object
+        oemol object to check 
+
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol object
+        oemol, either unchanged if atom names are already unique, or newly generated atom names 
+    """
+    atom_names = []
+
+    atom_count = 0
+    for atom in molecule.GetAtoms():
+        atom_names.append(atom.GetName())
+        atom_count += 1
+
+    if len(set(atom_names)) == atom_count:
+        # one name per atom therefore unique
+        return molecule 
+    else:
+        # generating new atom names
+        from collections import defaultdict
+        from simtk.openmm.app.element import Element
+        element_counts = defaultdict(int)
+        for atom in molecule.GetAtoms():
+            element = Element.getByAtomicNumber(atom.GetAtomicNum())
+            element_counts[element._symbol] += 1
+            name = element._symbol + str(element_counts[element._symbol])
+            atom.SetName(name)
+        return molecule
