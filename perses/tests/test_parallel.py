@@ -37,18 +37,21 @@ def test_Parallelism_local():
 
     run_parallelism(_parallel, data)
 
-@skipIf(istravis, "Skip helper function on travis")
-def test_Parallelism_distributed():
-    """
-    following function will create a distributed Parallelism instance and run all of the used methods.
-    Note : this can only be run on a nosetest since travis cannot access dask_jobqueue or any python distributed libraries.
-    """
-    _parallel = parallel.Parallelism()
 
-    #test client activation
-    _parallel.activate_client(library = ('dask', 'LSF'), num_processes = 2)
-    data = np.arange(10)
-    run_parallelism(_parallel, data)
+# Run this test on a cluster to test parallelism
+# skipping for GH and travis
+#@skipIf(istravis, "Skip helper function on travis")
+#def test_Parallelism_distributed():
+#    """
+#    following function will create a distributed Parallelism instance and run all of the used methods.
+#    Note : this can only be run on a nosetest since travis cannot access dask_jobqueue or any python distributed libraries.
+#    """
+#    _parallel = parallel.Parallelism()
+#
+#    #test client activation
+#    _parallel.activate_client(library = ('dask', 'LSF'), num_processes = 2)
+#    data = np.arange(10)
+#    run_parallelism(_parallel, data)
 
 
 @nottest
