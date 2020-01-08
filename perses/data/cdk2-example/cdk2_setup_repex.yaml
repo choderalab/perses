@@ -34,11 +34,8 @@ solvent_padding: 9.0 # angstroms
 # Pickle file to be generated to save the setup object
 save_setup_pickle_as: fesetup_hbonds.pkl
 
-#number of equilibrium steps per move application
+# Number of equilibrium steps per move application
 n_steps_per_move_application: 250
-
-#The name of the pickle file where we will save the setup object
-save_setup_pickle_as: fesetup_hbonds.pkl
 
 #the type of free energy calculation.
 #currently, this could be either nonequilibrium or sams
@@ -58,7 +55,6 @@ n_equilibration_iterations: 0
 
 # Destination for trajectories
 trajectory_directory: output
-overwrite_output: true
 
 #how to prefix the trajectory files (project-specific name)
 trajectory_prefix: out

@@ -119,30 +119,40 @@ def test_run_cdk2_iterations_repex():
     """
     Ensure that we can instantiate and run a repex relative free energy calculation the cdk2 ligands in vacuum
     """
-    setup_directory = resource_filename("perses", "data/cdk2-example")
-    os.chdir(setup_directory)
-    n_iterations = 2
+    # Enter a temporary directory
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Move to temporary directory
+        os.chdir(tmpdirname)
+        print(f'Running example in temporary directory: {tmpdirname}')
 
-    yaml_filename = "cdk2_setup_repex.yaml"
-    from perses.app.setup_relative_calculation import getSetupOptions
-    setup_options = getSetupOptions(yaml_filename)
+        # Setup directory
+        setup_directory = resource_filename("perses", "data/cdk2-example")
 
-    if not os.path.exists(setup_options['trajectory_directory']):
-        os.makedirs(setup_options['trajectory_directory'])
+        # Get options
+        from perses.app.setup_relative_calculation import getSetupOptions
+        yaml_filename = os.path.join(setup_directory, "cdk2_setup_repex.yaml")
+        setup_options = getSetupOptions(yaml_filename)
 
-    #setup_options['solvate'] = False
-    setup_options['scheduler_address'] = None
+        # Update options
+        #setup_options['solvate'] = False
+        #setup_options['n_cycles'] = 2
+        setup_options['scheduler_address'] = None
+        for parameter in ['protein_pdb', 'ligand_file', 'small_molecule_parameters_cache']:
+            setup_options[parameter] = os.path.join(setup_directory, setup_options[parameter])
+        for parameter in ['trajectory_directory', 'trajectory_prefix', 'save_setup_pickle_as']:
+            setup_options[parameter] = os.path.join(tmpdirname, setup_options[parameter])
+        print(setup_options)
 
-    #length_of_protocol = setup_options['n_steps_ncmc_protocol']
-    #write_interval = setup_options['n_steps_per_move_application']
+        #length_of_protocol = setup_options['n_steps_ncmc_protocol']
+        #write_interval = setup_options['n_steps_per_move_application']
+        #n_work_values_per_iteration = length_of_protocol // write_interval
 
-    #n_work_values_per_iteration = length_of_protocol // write_interval
+        # Run setup
+        setup_dict = setup_relative_calculation.run_setup(setup_options)
+        setup_dict['hybrid_samplers']['solvent'].run(n_iterations=n_iterations)
 
-    setup_dict = setup_relative_calculation.run_setup(setup_options)
-    print(setup_dict) # DEBUG
-    setup_dict['hybrid_samplers']['solvent'].run(n_iterations=n_iterations)
-
-    # TODO: Check output
+        # TODO: Check output
 
 
 if __name__=="__main__":

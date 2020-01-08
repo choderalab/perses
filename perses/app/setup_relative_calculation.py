@@ -152,8 +152,9 @@ def getSetupOptions(filename):
         setup_options['softcore_v2'] = False
         _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
 
-    _logger.info(f"\ttrajectory_directory detected: {trajectory_directory}.  making dir...")
-    assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
+    _logger.info(f"\tCreating '{trajectory_directory}'...")
+    print(os.getcwd())
+    assert (not os.path.exists(trajectory_directory)), f'Output trajectory directory "{trajectory_directory}" already exists. Refusing to overwrite'
     os.makedirs(trajectory_directory)
 
     return setup_options
