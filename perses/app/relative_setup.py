@@ -551,7 +551,9 @@ class RelativeFEPSetup(object):
         """
         # DEBUG: Write PDB file being fed into Modeller to check why MOL isn't being matched
         from simtk.openmm.app import PDBFile
-        with open('/Users/choderaj/github/choderalab/perses/modeller.pdb', 'w') as outfile:
+        import os
+        pdb_filename = os.path.join(os.environ['PWD'], 'modeller.pdb')
+        with open(pdb_filename, 'w') as outfile:
             PDBFile.writeFile(topology, positions, outfile)
 
         modeller = app.Modeller(topology, positions)
