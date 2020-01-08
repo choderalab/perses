@@ -582,7 +582,7 @@ def test_ncmc_alchemical_integrator_stability_molecules():
         alchemical_atoms = [ index for index in range(int(system.getNumParticles()/2)) ]
 
         # Create an alchemically-modified system.
-        from alchemy import AbsoluteAlchemicalFactory
+        from openmmtools.alchemy import AbsoluteAlchemicalFactory
         alchemical_factory = AbsoluteAlchemicalFactory(system, ligand_atoms=alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=True)
 
         # Return the alchemically-modified system in fully-interacting form.
