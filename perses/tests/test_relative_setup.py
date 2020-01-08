@@ -135,14 +135,16 @@ def test_run_cdk2_iterations_repex():
         setup_options = getSetupOptions(yaml_filename)
 
         # DEBUG: Print traceback for any UserWarnings
-        import traceback
-        import warnings
-        _old_warn = warnings.warn
-        def warn(*args, **kwargs):
-            tb = traceback.extract_stack()
-            _old_warn(*args, **kwargs)
-            print("".join(traceback.format_list(tb)[:-1]))
-        warnings.warn = warn
+        show_warning_stacktraces = False
+        if show_warning_stacktraces:
+            import traceback
+            import warnings
+            _old_warn = warnings.warn
+            def warn(*args, **kwargs):
+                tb = traceback.extract_stack()
+                _old_warn(*args, **kwargs)
+                print("".join(traceback.format_list(tb)[:-1]))
+            warnings.warn = warn
 
         # Update options
         #setup_options['solvate'] = False
