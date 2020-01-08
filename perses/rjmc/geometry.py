@@ -9,6 +9,7 @@ import collections
 import functools
 import networkx as nx
 from simtk import unit
+import operator
 
 from perses.storage import NetCDFStorage, NetCDFStorageView
 from openeye import oechem, oeomega
@@ -2100,6 +2101,7 @@ class GeometrySystemGenerator(object):
 
         # Add extra ring-closing torsions, if requested.
         if add_extra_torsions:
+            _logger.debug(f"\t\tattempting to add extra torsions...")
             if reference_topology == None:
                 raise ValueError("Need to specify topology in order to add extra torsions.")
             self._determine_extra_torsions(modified_torsion_force, reference_topology, growth_indices)
@@ -2175,12 +2177,13 @@ class GeometrySystemGenerator(object):
             The torsion force with extra torsions added appropriately.
 
         """
-
+        from perses.rjmc import coordinate_numba
         # Do nothing if there are no atoms to grow.
         if len(growth_indices) == 0:
             return torsion_force
 
         #set ring restraints
+        _logger.debug(f"\t\t\tattempting to add ring restraints")
 
         #get the list of torsions in the molecule that are not about a rotatable bond
         # Note that only torsions involving heavy atoms are enumerated here.
@@ -2193,6 +2196,7 @@ class GeometrySystemGenerator(object):
         periodicity = 1
         k = 120.0*unit.kilocalories_per_mole # stddev of 12 degrees
         #print([atom.name for atom in growth_indices])
+        _logger.debug(f"\t\t\trelevant torsions for ring restraints being added...")
         for torsion in relevant_torsion_list:
             #make sure to get the atom index that corresponds to the topology
             #atom_indices = [torsion.a.GetData("topology_index"), torsion.b.GetData("topology_index"), torsion.c.GetData("topology_index"), torsion.d.GetData("topology_index")]
@@ -2209,12 +2213,7 @@ class GeometrySystemGenerator(object):
             # Determine phase in [-pi,+pi) interval
             #phase = (np.pi)*units.radians+angle
 
-            phase = torsion.radians + np.pi # TODO: Check that this is the correct convention?
-            while (phase >= np.pi):
-                phase -= 2*np.pi
-            while (phase < -np.pi):
-                phase += 2*np.pi
-            phase *= unit.radian
+            adjusted_phase = self.adjust_phase(phase = torsion.radians)
             #print('PHASE>>>> ' + str(phase)) # DEBUG
             if topology_index_map is not None:
                 growth_idx = self._calculate_growth_idx(topology_index_map, growth_indices)
@@ -2230,28 +2229,144 @@ class GeometrySystemGenerator(object):
                 if any(torsion_pair in self.omitted_bonds for torsion_pair in possible_omissions):
                     pass
                 else:
-                    _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, phase, k, growth_idx])
-                    self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, phase, k, growth_idx])
+                    _torsion_index = torsion_force.addTorsion(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                    self.extra_torsion_terms[_torsion_index] = (topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3], [periodicity, adjusted_phase, k, growth_idx])
+                    _logger.debug(f"\t\t\t\t{(topology_index_map[0], topology_index_map[1], topology_index_map[2], topology_index_map[3])}")
             else:
                 pass
                 #we omit terms wherein the growth index only pertains to the
 
-            #set chirality restraints (adapted from https://github.com/choderalab/perses/blob/protein_mutations_ivy/perses/rjmc/geometry.py)
+        _logger.debug(f"\t\t\trelevant torsions for chirality restraints being added...")
+        #set chirality restraints (adapted from https://github.com/choderalab/perses/blob/protein_mutations_ivy/perses/rjmc/geometry.py)
 
-            #set stereochemistry
-            #the chirality of the atoms is supposed to be pre-specified by NetworkXMolecule
+        #set stereochemistry
+        #the chirality of the atoms is supposed to be pre-specified by NetworkXMolecule
 
-            #render a 3d structure: note that this fucks up the rjmc proposal (since we cannot enumerate the number of possible conformers)
+        #render a 3d structure: note that this fucks up the rjmc proposal (since we cannot enumerate the number of possible conformers)
 
-            #add the improper torsions associated with the chiral center
-            coords = oemol.GetCoords()
-            
+        #add the improper torsions associated with the chiral center
+        coords = self.networkx_structure.mol_oemol.GetCoords()
+        #CIP_perceptions = {0: 'R', 1: 'S'}
+        #iterate over all of the atoms with chiral centers
+        for _node in self.networkx_structure.graph.nodes(data = True):
+            _logger.debug(f"\t\t\t\tquerying node {_node[0]}")
+            if _node[1]['oechem_atom'].IsChiral():
+                _stereo = stereo = oechem.OEPerceiveCIPStereo(self.networkx_structure.mol_oemol, _node[1]['oechem_atom'])
+                #_logger.debug(f"\t\t\t\t\tis chiral with CIP: {CIP_perceptions[_stereo]}")
+                #get the neighbors
+                #nbrs_top : list(int) of topology indices
+                #nbrs_oemol : list(int) of oemol indices of neighbor
+                #nbrs : list(OEAtomBase) of the oemol atoms of neighbors
+
+                #get the neighbors of the chiral atom of interest
+                nbrs_top, nbrs_oemol, nbrs = [], [], []
+                for nbr in self.networkx_structure.graph[_node[0]]:
+                    nbrs_top.append(nbr)
+                    nbrs_oemol.append(self.networkx_structure.residue_to_oemol_map[nbr])
+                    nbrs.append(self.networkx_structure.graph.nodes[nbr]['oechem_atom'])
+                _logger.debug(f"\t\t\t\t\tquerying neighbors: {nbrs_top}")
+                if len(list(self.networkx_structure.graph[_node[0]])) == 4:
+                    _logger.debug(f"\t\t\t\t\tthe number of neighbors is 4; proceeding")
+                    # TODO: handle chiral centers where the valency of the chiral center > 4
+
+                    # #specify the atom order for calculating the angle
+                    # contains_H = False
+                    # for i, nbr in enumerate(nbrs): #replace H (if exists) with the chiral center
+                    #     if nbr.GetAtomicNum() == 1:
+                    #         nbrs_top[i] = self.networkx_structure.reverse_residue_to_oemol_map[nbr.GetIdx()]
+                    #         nbrs_oemol[i] = nbr.GetIdx()
+                    #         contains_H = True
+                    #         break
+                    # if not contains_H: #replace the first neighbor with a chiral center if H does not exst
+                    #     nbrs_top[0] = _node
+                    #     nbrs_oemol[0] = _node['oechem_atom'].GetIdx()
+                    #
+                    # #calculate the improper torsion
+                    # # coords is dict of {idx: (x_0, y_0, z_0)}
+                    # phase = coordinate_numba.cartesian_to_internal(np.array(coords[nbrs_oemol[0]], dtype = 'float64'),
+                    #                                                np.array(coords[nbrs_oemol[1]], dtype = 'float64'),
+                    #                                                np.array(coords[nbrs_oemol[2]], dtype = 'float64'),
+                    #                                                np.array(coords[nbrs_oemol[3]], dtype = 'float64'))[2]
+                    # adjusted_phase = self.adjust_phase(phase = phase)
+                    # growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
+
+                    #specify the atom order for calculating the angle
+
+                    #the order of the improper torsion will be as follows (p1, p2, p3, p4):
+                    #p1: the neighbor of the chiral atom whose growth index is minimally greater than the growth index of the chiral center
+                    #p2: the chiral center
+                    #p3: the neighbor of the chiral center whose growth index is maximally less than (or equal to) the growth index of the chiral center
+                    #p4: the neighbor of the chiral atom whose growth index is minimally greater than the growth index of p1
+
+                    _node_growth_index = self._calculate_growth_idx([_node[0]], growth_indices)
+                    nbr_growth_indices = [self._calculate_growth_idx([q], growth_indices) for q in nbrs_top]
+                    _nbr_to_growth_index_tuple = [(_nbr, _idx) for _nbr, _idx in zip(nbrs_top, nbr_growth_indices)]
+                    _logger.debug(f"\t\t\t\t\tgrowth index of node: {_node_growth_index}")
+                    _logger.debug(f"\t\t\t\t\tgrowth indices of neighbors: {_nbr_to_growth_index_tuple}")
+
+                    #find p1:
+                    p1_target_growth_index = min(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] > _node_growth_index)
+                    p1 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p1_target_growth_index][0] #take the first hit
+
+                    #find p2:
+                    p2 = _node[0]
+
+                    #find p3:
+                    p3_target_growth_index = max(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] <= _node_growth_index)
+                    p3 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p3_target_growth_index][0] #take the first hit
+
+                    #find p4:
+                    p4_target_growth_index = min(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] > p1_target_growth_index)
+                    p4 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p4_target_growth_index][0] #take the first hit
+                    _logger.debug(f"\t\t\t\t\tgrowth index carrying this improper: {p4_target_growth_index}")
+
+                    #now convert p1-p4 to oemol indices
+                    oemol_indices = [self.networkx_structure.residue_to_oemol_map[q] for q in [p1, p2, p3, p4]]
+
+                    #calculate the improper torsion
+                    # coords is dict of {idx: (x_0, y_0, z_0)}
+                    phase = coordinate_numba.cartesian_to_internal(np.array(coords[oemol_indices[0]], dtype = 'float64'),
+                                                                   np.array(coords[oemol_indices[1]], dtype = 'float64'),
+                                                                   np.array(coords[oemol_indices[2]], dtype = 'float64'),
+                                                                   np.array(coords[oemol_indices[3]], dtype = 'float64'))[2]
+                    adjusted_phase = self.adjust_phase(phase = phase)
+                    growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
 
 
-
-
+                    if growth_idx > 0:
+                        _torsion_index = torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, adjusted_phase, k, p4_target_growth_index])
+                        self.extra_torsion_terms[_torsion_index] = (p1, p2, p3, p4, [periodicity, adjusted_phase, k, p4_target_growth_index])
+                        _logger.debug(f"\t\t\t\t\t{(p1, p2, p3, p4)}, phase : {adjusted_phase}")
+                    else:
+                        pass
 
         return torsion_force
+
+    def adjust_phase(self, phase):
+        """
+        Utility function to adjust the phase properly
+
+        Arguments
+        ---------
+        phase : float
+            phase angle
+
+        Return
+        ------
+        adjusted_phase : float * unit.radians
+            adjusted phase with convention
+        """
+        phase = phase + np.pi # TODO: Check that this is the correct convention?
+        while (phase >= np.pi):
+            phase -= 2*np.pi
+        while (phase < -np.pi):
+            phase += 2*np.pi
+        phase *= unit.radian
+
+        adjusted_phase = phase
+        return adjusted_phase
+
+
 
     def _select_torsions_without_h(self, torsion_list):
         """
