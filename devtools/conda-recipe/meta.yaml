@@ -40,6 +40,7 @@ requirements:
     - progressbar2
     - parmed
     - tqdm
+    - dask-jobqueue
 
 about:
   home: https://github.com/choderalab/perses
