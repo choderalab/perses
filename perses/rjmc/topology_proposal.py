@@ -987,7 +987,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         This base class is not meant to be invoked directly.
         """
-        _logger.info(f"Instantiating PolymerProposalEngine")
+        _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
         self._aminos = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
@@ -1014,8 +1014,7 @@ class PolymerProposalEngine(ProposalEngine):
             probabilities, as well as old and new topologies and atom
             mapping
         """
-
-        # old_topology : simtk.openmm.app.Topology
+        _logger.info(f"\tConducting polymer point mutation proposal...")
         old_topology = app.Topology()
         append_topology(old_topology, current_topology)
 
@@ -1037,8 +1036,10 @@ class PolymerProposalEngine(ProposalEngine):
             metadata = dict()
         # old_chemical_state_key : str
         old_chemical_state_key = self.compute_state_key(old_topology)
+        _logger.debug(f"\told chemical state key for chain {self._chain_id}: {old_chemical_state_key}")
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
+        _logger.debug(f"\tchoosing mutant...")
         index_to_new_residues, metadata = self._choose_mutant(old_topology, metadata)
 
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter name of proposed residue))
@@ -1131,6 +1132,23 @@ class PolymerProposalEngine(ProposalEngine):
         return topology_proposal
 
     def _choose_mutant(self, topology, metadata):
+        """
+        Dummy function in parent (PolymerProposalEngine) class to choose a mutant
+
+        Arguments
+        ---------
+        topology : simtk.openmm.app.Topology
+            topology of the protein
+        metadata : dict
+            metadata associated with mutant choice
+
+        Returns
+        -------
+        index_to_new_residues : dict
+            dict of {index: new_residue}
+        metadata : dict
+            input metadata
+        """
         index_to_new_residues = dict()
         return index_to_new_residues, metadata
 
@@ -1556,6 +1574,10 @@ class PolymerProposalEngine(ProposalEngine):
         return new_to_old_atom_map
 
     def compute_state_key(self, topology):
+        """
+        utility method to define a state key;
+        state key takes the following form:
+        """
         for chain in topology.chains():
             if chain.id == self._chain_id:
                 break
@@ -1586,7 +1608,17 @@ class PointMutationEngine(PolymerProposalEngine):
     """
 
     # TODO: Overhaul API to make it easier to specify mutations
-    def __init__(self, wildtype_topology, system_generator, chain_id, proposal_metadata=None, max_point_mutants=1, residues_allowed_to_mutate=None, allowed_mutations=None, verbose=False, always_change=True, aggregate=False):
+    def __init__(self,
+                 wildtype_topology,
+                 system_generator,
+                 chain_id,
+                 proposal_metadata=None,
+                 max_point_mutants=1,
+                 residues_allowed_to_mutate=None,
+                 allowed_mutations=None,
+                 verbose=False,
+                 always_change=True,
+                 aggregate=False):
         """
         Create a PointMutationEngine for proposing point mutations of a biopolymer component of a system.
 
@@ -1638,7 +1670,7 @@ class PointMutationEngine(PolymerProposalEngine):
         # Check that provided topology has specified chain.
         chain_ids_in_topology = [chain.id for chain in wildtype_topology.chains()]
         if chain_id not in chain_ids_in_topology:
-            raise Exception("Specified chain_id '%s' not found in provided wildtype_topology. Choices are: %s" % (chain_id, str(chain_ids_in_topology)))
+            raise Exception(f"Specified chain id {chain_id} not found in the wildtype topology. choices are {chain_ids_in_topology}")
 
         if max_point_mutants != 1:
             raise ValueError('max_point_mutants != 1 not yet supported')
@@ -1654,6 +1686,9 @@ class PointMutationEngine(PolymerProposalEngine):
         self._metadata = proposal_metadata
 
     def _choose_mutant(self, topology, metadata):
+        """
+        Method to
+        """
         chain_id = self._chain_id
         old_key = self._compute_mutant_key(topology, chain_id)
         index_to_new_residues = self._undo_old_mutants(topology, chain_id, old_key)
@@ -1672,6 +1707,23 @@ class PointMutationEngine(PolymerProposalEngine):
         return index_to_new_residues, metadata
 
     def _undo_old_mutants(self, topology, chain_id, old_key):
+        """
+        Function to find the residue indices in the chain_id with residues that are different from WT.  This is a dict of form {idx : res.name}
+
+        Arguments
+        ---------
+        topology : simtk.openmm.app.Topology
+            topology of the protein
+        chain_id : str
+            id of the chain of interest (this is a PointMutationEngine attribute)
+        old_key : str
+            str of the form generated by self._compute_mutant_key
+
+        Returns
+        -------
+        index_to_new_residues : dict
+            dict of {index: new_residue}
+        """
         index_to_new_residues = dict()
         if old_key == 'WT':
             return index_to_new_residues
@@ -1905,29 +1957,39 @@ class PointMutationEngine(PolymerProposalEngine):
         return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in topology.residues() if r.index in index_to_new_residues]
 
     def _compute_mutant_key(self, topology, chain_id):
+        """
+
+        """
         mutant_key = ''
-        chain = ''
+        chain = None
         wildtype = self._wildtype
         anychains = []
         anywt_chains = []
+
+        #pull the appropriate chain from the (potentially) modified `topology`
         for anychain in topology.chains():
             anychains.append(anychain.id)
             if anychain.id == chain_id:
                 chain = anychain
                 break
-        if not chain:
-            raise Exception("Chain %s not found. Available chains: %s" %(chain_id, anychains))
+
+        if chain is None:
+            raise Exception(f"Chain {chain_id} not found.  Available chains are {anychains}")
+
         for anywt_chain in wildtype.chains():
             anywt_chains.append(anywt_chain)
             if anywt_chain.id == chain_id:
                 wt_chain = anywt_chain
                 break
+
         if not wt_chain:
-            raise Exception("Chain %s not found. Available chains: %s" %(chain_id, anywt_chains))
+            raise Exception(f"Chain {chain_id} not found.  Available chains are {anywt_chains}")
+
+        assert len(wt_chain.residues()) == len(chain.residues()), f"the wt chain and the topology chain do not have the same number of residues."
         for wt_res, res in zip(wt_chain.residues(), chain.residues()):
             if wt_res.name != res.name:
                 if mutant_key:
-                    mutant_key+='-'
+                    mutant_key+='-' # add a hyphen space for every residue that is different between the wt chain and the topology chain
                 mutant_key += str(wt_res.name)+str(res.id)+str(res.name)
         if not mutant_key:
             mutant_key = 'WT'

@@ -704,47 +704,79 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
         external_bonds = list(res.external_bonds())
         for bond in external_bonds:
-            if verbose: print(bond)
+            _logger.debug(f"\t\t\texternal_bonds : {[(atom1.name, atom2.name) for (atom1, atom2) in external_bonds]}")
         new_atoms = {}
         highest_index = 0
         if external_bonds:
+            _logger.debug(f"\t\t\tthere exist external bonds; creating topology copy")
             new_topology = app.Topology()
             new_chain = new_topology.addChain(0)
             new_res = new_topology.addResidue("new_res", new_chain)
             for atom in res.atoms():
+                _logger.debug(f"\t\t\t\tplacing atom {atom.name} with id {atom.id} and index {atom.index}")
                 new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
                 new_atom.index = atom.index
                 new_atoms[atom] = new_atom
                 highest_index = max(highest_index, atom.index)
+
             for bond in res.internal_bonds():
                 new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
+
+            #we will assert that there are only 2 external bonds (one on either side of the C or N backbone),
+            #   which will be added to the new topology since they are anchor atoms
+            _logger.debug(f"\t\t\titerating over external bonds...")
+            assert len(list(res.external_bonds())) == 2, f"there are more than 2 external bonds on the residue.  This is not allowed for protein mutations"
             for bond in res.external_bonds():
+                _logger.debug(f"\t\t\t\texternal bond atoms are {bond[0].name} and {bond[1].name} with indices {bond[0].index} and {bond[1].index}, respectively")
                 internal_atom = [atom for atom in bond if atom.residue==res][0]
-                if verbose:
-                    print('internal atom')
-                    print(internal_atom)
-                highest_index += 1
-                if internal_atom.name=='N':
-                    if verbose: print('Adding H to N')
-                    new_atom = new_topology.addAtom("H2", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_atom.index = -1
-                    new_topology.addBond(new_atoms[internal_atom], new_atom)
-                if internal_atom.name=='C':
-                    if verbose: print('Adding OH to C')
-                    new_atom = new_topology.addAtom("O2", app.Element.getByAtomicNumber(8), new_res, -1)
-                    new_atom.index = -1
-                    new_topology.addBond(new_atoms[internal_atom], new_atom)
-                    highest_index += 1
-                    new_hydrogen = new_topology.addAtom("HO", app.Element.getByAtomicNumber(1), new_res, -1)
-                    new_hydrogen.index = -1
-                    new_topology.addBond(new_hydrogen, new_atom)
+                external_atom = [atom for atom in bond if atom.residue != res][0]
+                _logger.debug(f"\t\t\tthe internal atom is {internal_atom.name} with index {internal_atom.index}")
+                _logger.debug(f"\t\t\tthe external atom is {external_atom.name} with index {external_atom.index}")
+                assert external_atom.name in ['N', 'C'], f"the external atom name {external_atom.name} is not either N or C.  Is it a backbone atom?"
+
+                new_external_atom = new_topology.addAtom(external_atom.name + "_anchor", external_atom.element, new_res)
+
+                new_external_atom.index = external_atom.index
+                new_atoms[external_atom] = new_external_atom
+                highest_index = max(highest_index, new_external_atom.index)
+
+                #then just add the bond
+                new_topology.addBond(new_external_atom, new_atoms[internal_atom])
+
+            #now we can cap the external atoms with hydrogens, which should be N and C
+            for atom in new_atoms.values():
+                if atom.name == 'N_anchor':
+                    #it has a valency of 3, so add cap hydrogens
+                    for idx in range(2):
+                        highest_index += 1
+                        new_hydrogen = new_topology.addAtom('H_anchor', app.Element.getByAtomicNumber(1))
+                        new_hydrogen.index = highest_index
+
+                        #add the bond
+                        new_topology.addBond(new_hydrogen, atom)
+
+                elif atom.name == 'C_anchor':
+                    #it has a valency of 4, so add the cap hydrogens
+                    for idx in range(3):
+                        highest_index += 1
+                        new_hydrogen = new_topology.addAtom('H_anchor', app.Element.getByAtomicNumber(1), new_res)
+                        new_hydrogen.index = highest_index
+
+                        #add the bond
+                        new_topology.addBond(new_hydrogen, atom)
+                else:
+                    pass
+
             res_to_use = new_res
-            external_bonds = list(res_to_use.external_bonds())
+            oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
+            oechem.OEAddExplicitHydrogens(oemol)
         else:
             res_to_use = res
+
         oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
         oechem.OEAddExplicitHydrogens(oemol)
         return oemol
+
 
     def _define_no_nb_system(self,
                              system,
