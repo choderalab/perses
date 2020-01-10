@@ -4,6 +4,7 @@ import pickle
 import os
 import sys
 import simtk.unit as unit
+from simtk import openmm
 import logging
 
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
@@ -11,10 +12,11 @@ from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
 
-from openmmtools import mcmc
+from openmmtools import mcmc, utils
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
 from perses.utils.smallmolecules import render_atom_mapping
 from perses.tests.utils import validate_endstate_energies
+from perses.dispersed.smc import SequentialMonteCarlo
 
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("setup_relative_calculation")
@@ -51,6 +53,9 @@ def getSetupOptions(filename):
     if 'protocol-type' not in setup_options:
         setup_options['protocol-type'] = 'default'
 
+    if 'run_type' not in setup_options:
+        _logger.info(f"\t\t\trun_type is not specified; default to None")
+        setup_options['run_type'] = None
     _logger.info(f"\tDetecting fe_type...")
     if setup_options['fe_type'] == 'sams':
         _logger.info(f"\t\tfe_type: sams")
@@ -77,41 +82,108 @@ def getSetupOptions(filename):
         if 'n_equilibrium_steps_per_iteration' not in setup_options:
             _logger.info(f"\t\t\tn_equilibrium_steps_per_iteration not specified: default to 1000.")
             setup_options['n_equilibrium_steps_per_iteration'] = 1000
-        if 'n_steps_ncmc_protocol' not in setup_options:
-            _logger.info(f"\t\t\tn_steps_ncmc_protocol not specified: default to 25000.")
-            setup_options['n_steps_ncmc_protocol'] = 25000
-        if 'ncmc_save_interval' not in setup_options:
-            _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
-            setup_options['ncmc_save_interval'] = None
         if 'measure_shadow_work' not in setup_options:
             _logger.info(f"\t\t\tmeasure_shadow_work not specified: default to False")
             setup_options['measure_shadow_work'] = False
         if 'write_ncmc_configuration' not in setup_options:
             _logger.info(f"\t\t\twrite_ncmc_configuration not specified: default to False")
             setup_options['write_ncmc_configuration'] = False
+        if 'neq_integrator' not in setup_options:
+            _logger.info(f"\t\t\tneq_integrator not specified; default to 'langevin'")
+            setup_options['neq_integrator'] = 'langevin'
+
+        #for dask implementation
         if 'processes' not in setup_options:
-            _logger.info(f"\t\t\tprocesses is not specified; default to 100")
-            setup_options['processes'] = 100
+            _logger.info(f"\t\t\tprocesses is not specified; default to 0")
+            setup_options['processes'] = 0
         if 'adapt' not in setup_options:
             _logger.info(f"\t\t\tadapt is not specified; default to True")
             setup_options['adapt'] = True
         if 'max_file_size' not in setup_options:
             _logger.info(f"\t\t\tmax_file_size is not specified; default to 10MB")
             setup_options['max_file_size'] = 10*1024e3
-        if 'n_cycles' not in setup_options:
-            _logger.info(f"\t\t\tn_cycles is not specified; default to 100")
-            setup_options['n_cycles'] = 100
         if 'lambda_protocol' not in setup_options:
-            _logger.info(f"\t\t\tlambda_protocol is not specified; default to None")
-            setup_options['lambda_protocol'] = None
+            _logger.info(f"\t\t\tlambda_protocol is not specified; default to 'default'")
+            setup_options['lambda_protocol'] = 'default'
         if 'LSF' not in setup_options:
-            _logger.info(f"\t\t\tLSF is not specified; default to True")
-            setup_options['LSF'] = True
+            _logger.info(f"\t\t\tLSF is not specified; default to False")
+            setup_options['LSF'] = False
+
         if 'run_type' not in setup_options:
             _logger.info(f"\t\t\trun_type is not specified; default to None")
             setup_options['run_type'] = None
-        if setup_options['run_type'] not in [None, 'anneal', 'equilibrate']:
-            raise Exception(f"'run_type' must be None, 'anneal', or 'equilibrate'; input was specified as {setup_options['run_type']}")
+        elif setup_options['run_type'] == 'anneal':
+            if 'out_trajectory_prefix' not in setup_options:
+                raise Exception(f"'out_trajectory_prefix' must be defined if 'anneal' is called.  Aborting!")
+            _logger.info(f"'run_type' was called as {setup_options['run_type']} attempting to detect file")
+            for phase in setup_options['phases']:
+                path = os.path.join(setup_options['trajectory_directory'], f"{setup_options['trajectory_prefix']}_{phase}_fep.eq.pkl")
+                if os.path.exists(path):
+                    _logger.info(f"\t\t\tfound {path}; loading and proceeding to anneal")
+                else:
+                    raise Exception(f"{path} could not be found.  Aborting!")
+        elif setup_options['run_type'] == 'None':
+            setup_options['run_type'] = None
+        elif setup_options['run_type'] not in ['None', 'anneal', 'equilibrate']:
+            raise Exception(f"'run_type' must be None, 'anneal', or 'equilibrate'; input was specified as {setup_options['run_type']} with type {type(setup_options['run_type'])}")
+
+        #to instantiate the particles:
+
+        if 'trailblaze' not in setup_options:
+            assert 'lambdas' in setup_options, f"'lambdas' is not in setup_options, and 'trailblaze' is False. One must be specified.  Aborting!"
+            assert type(setup_options['lambdas']) == int, f"lambdas is not an int.  Aborting!"
+            setup_options['trailblaze'] = None
+        else:
+            assert type(setup_options['trailblaze']) == dict, f"trailblaze is specified, but is not a dict"
+
+        if 'resample' in setup_options:
+            assert type(setup_options['resample']) == dict, f"'resample' is not a dict"
+            assert set(['criterion', 'method', 'threshold']).issubset(set(list(setup_options['resample'].keys()))), f"'resample' does not contain necessary keys"
+        else:
+            _logger.info(f"\t\tresample is not specified; defaulting to None")
+            setup_options['resample'] = None
+
+        if 'n_particles' not in setup_options:
+            raise Exception(f"for particle annealing, 'n_particles' must be specified")
+        if 'direction' not in setup_options:
+            _logger.info(f"\t\t\tdirection is not specified; default to (running both forward and reverse)")
+            setup_options['direction'] = ['forward', 'reverse']
+        else:
+            _logger.info(f"\t\t\tthe directions are as follows: {setup_options['direction']}")
+
+        if 'ncmc_save_interval' not in setup_options:
+            _logger.info(f"\t\t\tncmc_save_interval not specified: default to None.")
+            setup_options['ncmc_save_interval'] = None
+        if 'ncmc_collision_rate_ps' not in setup_options:
+            _logger.info(f"\t\t\tcollision_rate not specified: default to np.inf.")
+            setup_options['ncmc_collision_rate_ps'] = np.inf/unit.picoseconds
+        else:
+            setup_options['ncmc_collision_rate_ps'] /= unit.picoseconds
+        if 'ncmc_rethermalize' not in setup_options:
+            _logger.info(f"\t\t\tncmc_rethermalize not specified; default to False.")
+            setup_options['ncmc_rethermalize'] = False
+
+        #now lastly, for the algorithm_4 options:
+        if 'observable' not in setup_options:
+            _logger.info(f"\t\t\tobservable is not specified; default to ESS")
+            setup_options['observable'] = 'ESS'
+        if 'trailblaze_observable_threshold' not in setup_options:
+            _logger.info(f"\t\t\ttrailblaze_observable_threshold is not specified; default to 0.0")
+            setup_options['trailblaze_observable_threshold'] = None
+        if 'resample_observable_threshold' not in setup_options:
+            _logger.info(f"\t\t\tresample_observable_threshold is not specified; default to 0.0")
+            setup_options['resample_observable_threshold'] = None
+        if 'ncmc_num_integration_steps' not in setup_options:
+            _logger.info(f"\t\t\tncmc_num_integration_steps is not specified; default to 1")
+            setup_options['ncmc_num_integration_steps'] = 1
+        if 'resampling_method' not in setup_options:
+            _logger.info(f"\t\t\tresampling_method is not specified; default to 'multinomial'")
+            setup_options['resampling_method'] = 'multinomial'
+        if 'online_protocol' not in setup_options:
+            _logger.info(f"\t\t\tonline_protocol is not specified; default to None")
+            setup_options['online_protocol'] = None
+
+
 
         setup_options['n_steps_per_move_application'] = 1 #setting the writeout to 1 for now
 
@@ -137,8 +209,9 @@ def getSetupOptions(filename):
         _logger.info(f"\t'softcore_v2' not specified: default to 'False'")
 
     _logger.info(f"\ttrajectory_directory detected: {trajectory_directory}.  making dir...")
-    assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
-    os.makedirs(trajectory_directory)
+    if setup_options['run_type'] != 'anneal':
+        assert (os.path.exists(trajectory_directory) == False), 'Output trajectory directory already exists. Refusing to overwrite'
+        os.makedirs(trajectory_directory)
 
     return setup_options
 
@@ -156,10 +229,6 @@ def run_setup(setup_options):
         - 'topology_proposals':
     """
     phases = setup_options['phases']
-    if len(phases) > 2:
-        _logger.info(f"\tnumber of phases is greater than 2...complex and solvent will be provided...")
-        phases = ['complex', 'solvent']
-
     known_phases = ['complex','solvent','vacuum']
     for phase in phases:
         assert (phase in known_phases), f"Unknown phase, {phase} provided. run_setup() can be used with {known_phases}"
@@ -327,15 +396,19 @@ def run_setup(setup_options):
         atom_selection = setup_options['atom_selection']
         _logger.info(f"\tatom selection detected: {atom_selection}")
     else:
-        _logger.info(f"\tno atom selection detected: default to None.")
-        atom_selection = None
+        _logger.info(f"\tno atom selection detected: default to all.")
+        atom_selection = 'all'
 
     if setup_options['fe_type'] == 'neq':
         _logger.info(f"\tInstantiating nonequilibrium switching FEP")
         n_equilibrium_steps_per_iteration = setup_options['n_equilibrium_steps_per_iteration']
         ncmc_save_interval = setup_options['ncmc_save_interval']
         write_ncmc_configuration = setup_options['write_ncmc_configuration']
-        n_steps_ncmc_protocol = setup_options['n_steps_ncmc_protocol']
+        if setup_options['LSF']:
+            _internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': setup_options['processes']}
+        else:
+            _internal_parallelism = None
+
 
         ne_fep = dict()
         for phase in phases:
@@ -348,22 +421,18 @@ def run_setup(setup_options):
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
 
-            ne_fep[phase] = NonequilibriumSwitchingFEP(hybrid_factory = hybrid_factory,
-                                                       geometry_engine = top_prop['%s_geometry_engine' % phase],
-                                                       use_dispersion_correction = False,
-                                                       forward_functions = setup_options['lambda_protocol'],
-                                                       ncmc_nsteps=n_steps_ncmc_protocol,
-                                                       n_equilibrium_steps_per_iteration = n_equilibrium_steps_per_iteration,
-                                                       temperature = temperature,
-                                                       trajectory_directory=trajectory_directory,
-                                                       trajectory_prefix=f"{trajectory_prefix}_{phase}",
-                                                       atom_selection=atom_selection,
-                                                       eq_splitting_string = eq_splitting,
-                                                       neq_splitting_string = neq_splitting,
-                                                       measure_shadow_work=measure_shadow_work,
-                                                       timestep=timestep,
-                                                       ncmc_save_interval = ncmc_save_interval,
-                                                       write_ncmc_configuration = write_ncmc_configuration)
+            ne_fep[phase] = SequentialMonteCarlo(factory = hybrid_factory,
+                                                 lambda_protocol = setup_options['lambda_protocol'],
+                                                 temperature = temperature,
+                                                 trajectory_directory = trajectory_directory,
+                                                 trajectory_prefix = f"{trajectory_prefix}_{phase}",
+                                                 atom_selection = atom_selection,
+                                                 timestep = timestep,
+                                                 eq_splitting_string = eq_splitting,
+                                                 neq_splitting_string = neq_splitting,
+                                                 collision_rate = setup_options['ncmc_collision_rate_ps'],
+                                                 ncmc_save_interval = ncmc_save_interval,
+                                                 internal_parallelism = _internal_parallelism)
 
         print("Nonequilibrium switching driver class constructed")
 
@@ -378,6 +447,7 @@ def run_setup(setup_options):
         htf = dict()
         hss = dict()
         _logger.info(f"\tcataloging HybridTopologyFactories...")
+
         for phase in phases:
             _logger.info(f"\t\tphase: {phase}:")
             #TODO write a SAMSFEP class that mirrors NonequilibriumSwitchingFEP
@@ -390,6 +460,7 @@ def run_setup(setup_options):
                                                softcore_LJ_v2 = setup_options['softcore_v2'],
                                                interpolate_old_and_new_14s = setup_options['anneal_1,4s'])
 
+        for phase in phases:
            # Define necessary vars to check energy bookkeeping
             _top_prop = top_prop['%s_topology_proposal' % phase]
             _htf = htf[phase]
@@ -416,9 +487,12 @@ def run_setup(setup_options):
             reporter = MultiStateReporter(storage_name, analysis_particle_indices=selection_indices,
                                           checkpoint_interval=checkpoint_interval)
 
+            if phase == 'vacuum':
+                endstates = False
+            else:
+                endstates = True
             #TODO expose more of these options in input
             if setup_options['fe_type'] == 'sams':
-                _logger.warning(f'Relative free energies do not currently work with unsampled endstates')
                 hss[phase] = HybridSAMSSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
                                                                                              n_steps=n_steps_per_move_application,
@@ -429,7 +503,7 @@ def run_setup(setup_options):
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
@@ -439,7 +513,7 @@ def run_setup(setup_options):
                                                                                              splitting="V R R R O R R R V",
                                                                                              constraint_tolerance=1e-06),
                                                                                              hybrid_factory=htf[phase],online_analysis_interval=setup_options['offline-freq'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol)
+                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
 
         return {'topology_proposals': top_prop, 'hybrid_topology_factories': htf, 'hybrid_samplers': hss}
 
@@ -453,133 +527,195 @@ if __name__ == "__main__":
 
     _logger.info(f"Getting setup options from {yaml_filename}")
     setup_options = getSetupOptions(yaml_filename)
+    if 'lambdas' in setup_options:
+        if type(setup_options['lambdas']) == int:
+            lambdas = {}
+            for _direction in setup_options['direction']:
+                lims = (0,1) if _direction == 'forward' else (1,0)
+                lambdas[_direction] = np.linspace(lims[0], lims[1], setup_options['lambdas'])
+        else:
+            lambdas = setup_options['lambdas']
+    else:
+        lambdas = None
 
-    _logger.info(f"Running setup...")
-    setup_dict = run_setup(setup_options)
-
-    trajectory_prefix = setup_options['trajectory_prefix']
-    trajectory_directory = setup_options['trajectory_directory']
-
-    #write out topology proposals
-    try:
-        _logger.info(f"Writing topology proposal {trajectory_prefix}_topology_proposals.pkl to {trajectory_directory}...")
-        with open(os.path.join(trajectory_directory, "%s_topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
-            pickle.dump(setup_dict['topology_proposals'], f)
-    except Exception as e:
-        print(e)
-        _logger.info("Unable to save run object as a pickle; saving as npy")
-        np.save(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
-
-    n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
-    _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
-
-    if setup_options['fe_type'] == 'neq':
-        temperature = setup_options['temperature'] * unit.kelvin
-        max_file_size = setup_options['max_file_size']
-        n_cycles = setup_options['n_cycles']
-
-        ne_fep = setup_dict['ne_fep']
+    if setup_options['run_type'] == 'anneal':
+        _logger.info(f"skipping setup and annealing...")
+        trajectory_prefix = setup_options['trajectory_prefix']
+        trajectory_directory = setup_options['trajectory_directory']
+        out_trajectory_prefix = setup_options['out_trajectory_prefix']
         for phase in setup_options['phases']:
-            ne_fep_run = ne_fep[phase]
-            hybrid_factory = ne_fep_run._factory
+            ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
+            #implement the appropriate parallelism, otherwise the default from the previous incarnation of the ne_fep_run will be used.
+            if setup_options['LSF']:
+                _internal_parallelism = {'library': ('dask', 'LSF'), 'num_processes': setup_options['processes']}
+            else:
+                _internal_parallelism = None
+            ne_fep_run.implement_parallelism(external_parallelism = None, internal_parallelism = _internal_parallelism)
+            ne_fep_run.neq_integrator = setup_options['neq_integrator']
+            ne_fep_run.LSF = setup_options['LSF']
+            ne_fep_run.AIS(num_particles = setup_options['n_particles'],
+                           protocols = lambdas,
+                           num_integration_steps = setup_options['ncmc_num_integration_steps'],
+                           return_timer = False,
+                           rethermalize = setup_options['ncmc_rethermalize'])
 
-            top_proposal = setup_dict['topology_proposals'][f"{phase}_topology_proposal"]
-            _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
-            _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
-
-            zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
-            _logger.info(f"\t\terror in zero state: {zero_state_error}")
-            _logger.info(f"\t\terror in one state: {one_state_error}")
-
-            print("activating client...")
-            processes = setup_options['processes']
-            adapt = setup_options['adapt']
-            LSF = setup_options['LSF']
-
-            if setup_options['run_type'] == None or setup_options['run_type'] == 'equilibrate':
-                print("equilibrating...")
-                ne_fep_run.activate_client(LSF = LSF, processes = 2, adapt = adapt) #we only need 2 processes for equilibration
-                ne_fep_run.equilibrate(n_equilibration_iterations, max_size = max_file_size, decorrelate = True, timer = True, minimize = True)
-                ne_fep_run.deactivate_client()
-                with open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+            # try to write out the ne_fep object as a pickle
+            try:
+                with open(os.path.join(trajectory_directory, "%s_%s_fep.neq.pkl" % (out_trajectory_prefix, phase)), 'wb') as f:
                     pickle.dump(ne_fep_run, f)
+                    print("pickle save successful; terminating.")
 
+            except Exception as e:
+                print(e)
+                print("Unable to save run object as a pickle; saving as npy")
+                np.save(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (out_trajectory_prefix, phase)), ne_fep_run)
 
-            if setup_options['run_type'] == None or setup_options['run_type'] == 'anneal':
-                print("annealing...")
-                ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
-                ne_fep_run.activate_client(LSF = LSF, processes = processes, adapt = adapt) #now call n processes
-                ne_fep_run.run(n_iterations = n_cycles, full_protocol = False, timer = True)
-                print("calculation complete; deactivating client")
-                ne_fep_run.deactivate_client()
+    else:
+        _logger.info(f"Running setup...")
+        setup_dict = run_setup(setup_options)
 
-                # try to write out the ne_fep object as a pickle
-                try:
-                    with open(os.path.join(trajectory_directory, "%s_%s_fep.neq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+        trajectory_prefix = setup_options['trajectory_prefix']
+        trajectory_directory = setup_options['trajectory_directory']
+
+        #write out topology proposals
+        try:
+            _logger.info(f"Writing topology proposal {trajectory_prefix}_topology_proposals.pkl to {trajectory_directory}...")
+            with open(os.path.join(trajectory_directory, "%s_topology_proposals.pkl" % (trajectory_prefix)), 'wb') as f:
+                pickle.dump(setup_dict['topology_proposals'], f)
+        except Exception as e:
+            print(e)
+            _logger.info("Unable to save run object as a pickle; saving as npy")
+            np.save(os.path.join(trajectory_directory, "%s_topology_proposals.npy" % (trajectory_prefix)), setup_dict['topology_proposals'])
+
+        n_equilibration_iterations = setup_options['n_equilibration_iterations'] #set this to 1 for neq_fep
+        _logger.info(f"Equilibration iterations: {n_equilibration_iterations}.")
+
+        if setup_options['fe_type'] == 'neq':
+            temperature = setup_options['temperature'] * unit.kelvin
+            max_file_size = setup_options['max_file_size']
+
+            ne_fep = setup_dict['ne_fep']
+            for phase in setup_options['phases']:
+                ne_fep_run = ne_fep[phase]
+                hybrid_factory = ne_fep_run.factory
+
+                top_proposal = setup_dict['topology_proposals'][f"{phase}_topology_proposal"]
+                _forward_added_valence_energy = setup_dict['topology_proposals'][f"{phase}_added_valence_energy"]
+                _reverse_subtracted_valence_energy = setup_dict['topology_proposals'][f"{phase}_subtracted_valence_energy"]
+
+                zero_state_error, one_state_error = validate_endstate_energies(hybrid_factory._topology_proposal, hybrid_factory, _forward_added_valence_energy, _reverse_subtracted_valence_energy, beta = 1.0/(kB*temperature), ENERGY_THRESHOLD = ENERGY_THRESHOLD)
+                _logger.info(f"\t\terror in zero state: {zero_state_error}")
+                _logger.info(f"\t\terror in one state: {one_state_error}")
+
+                print("activating client...")
+                processes = setup_options['processes']
+                adapt = setup_options['adapt']
+                LSF = setup_options['LSF']
+
+                if setup_options['run_type'] == None or setup_options['run_type'] == 'equilibrate':
+                    print("equilibrating...")
+                    # Now we have to pull the files
+                    if setup_options['direction'] == None:
+                        endstates = [0,1]
+                    else:
+                        endstates = [0] if setup_options['direction'] == 'forward' else [1]
+                    #ne_fep_run.activate_client(LSF = LSF, processes = 2, adapt = adapt) #we only need 2 processes for equilibration
+                    ne_fep_run.minimize_sampler_states()
+                    ne_fep_run.equilibrate(n_equilibration_iterations = setup_options['n_equilibration_iterations'],
+                                           n_steps_per_equilibration = setup_options['n_equilibrium_steps_per_iteration'],
+                                           endstates = [0,1],
+                                           max_size = setup_options['max_file_size'],
+                                           decorrelate = True,
+                                           timer = True,
+                                           minimize = False)
+                    #ne_fep_run.deactivate_client()
+                    with open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
                         pickle.dump(ne_fep_run, f)
-                        print("pickle save successful; terminating.")
 
-                except Exception as e:
-                    print(e)
-                    print("Unable to save run object as a pickle; saving as npy")
-                    np.save(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase)), ne_fep_run)
 
-    elif setup_options['fe_type'] == 'sams':
-        _logger.info(f"Detecting sams as fe_type...")
-        _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-        np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
-                setup_dict['hybrid_topology_factories'])
 
-        hss = setup_dict['hybrid_samplers']
-        logZ = dict()
-        free_energies = dict()
-        _logger.info(f"Iterating through phases for sams...")
-        for phase in setup_options['phases']:
-            _logger.info(f'\tRunning {phase} phase...')
-            hss_run = hss[phase]
+                if setup_options['run_type'] == None:
+                    print("annealing...")
+                    if 'lambdas' in setup_options:
+                        if type(setup_options['lambdas']) == int:
+                            lambdas = {}
+                            for _direction in setup_options['direction']:
+                                lims = (0,1) if _direction == 'forward' else (1,0)
+                                lambdas[_direction] = np.linspace(lims[0], lims[1], setup_options['lambdas'])
+                        else:
+                            lambdas = setup_options['lambdas']
+                    else:
+                        lambdas = None
+                    ne_fep_run = pickle.load(open(os.path.join(trajectory_directory, "%s_%s_fep.eq.pkl" % (trajectory_prefix, phase)), 'rb'))
+                    ne_fep_run.AIS(num_particles = setup_options['n_particles'],
+                                   protocols = lambdas,
+                                   num_integration_steps = setup_options['ncmc_num_integration_steps'],
+                                   return_timer = False,
+                                   rethermalize = setup_options['ncmc_rethermalize'])
 
-            _logger.info(f"\t\tminimizing...\n\n")
-            hss_run.minimize()
-            _logger.info(f"\n\n")
 
-            _logger.info(f"\t\tequilibrating...\n\n")
-            hss_run.equilibrate(n_equilibration_iterations)
-            _logger.info(f"\n\n")
+                    print("calculation complete; deactivating client")
+                    #ne_fep_run.deactivate_client()
 
-            _logger.info(f"\t\textending simulation...\n\n")
-            hss_run.extend(setup_options['n_cycles'])
-            _logger.info(f"\n\n")
+                    # try to write out the ne_fep object as a pickle
+                    try:
+                        with open(os.path.join(trajectory_directory, "%s_%s_fep.neq.pkl" % (trajectory_prefix, phase)), 'wb') as f:
+                            pickle.dump(ne_fep_run, f)
+                            print("pickle save successful; terminating.")
 
-            logZ[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
-            free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
-            _logger.info(f"\t\tFinished phase {phase}")
+                    except Exception as e:
+                        print(e)
+                        print("Unable to save run object as a pickle; saving as npy")
+                        np.save(os.path.join(trajectory_directory, "%s_%s_fep.neq.npy" % (trajectory_prefix, phase)), ne_fep_run)
 
-        for phase in free_energies:
-            print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
-            print(f"{phase} phase has a free energy of {free_energies[phase]}")
+        elif setup_options['fe_type'] == 'sams':
+            _logger.info(f"Detecting sams as fe_type...")
+            _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
+            np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+                    setup_dict['hybrid_topology_factories'])
 
-    elif setup_options['fe_type'] == 'repex':
-        _logger.info(f"Detecting repex as fe_type...")
-        _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
-        np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
-                setup_dict['hybrid_topology_factories'])
+            hss = setup_dict['hybrid_samplers']
+            logZ = dict()
+            free_energies = dict()
+            _logger.info(f"Iterating through phases for sams...")
+            for phase in setup_options['phases']:
+                _logger.info(f'\tRunning {phase} phase...')
+                hss_run = hss[phase]
 
-        hss = setup_dict['hybrid_samplers']
-        _logger.info(f"Iterating through phases for repex...")
-        for phase in setup_options['phases']:
-            print(f'Running {phase} phase')
-            hss_run = hss[phase]
+                _logger.info(f"\t\tequilibrating...\n\n")
+                hss_run.equilibrate(n_equilibration_iterations)
+                _logger.info(f"\n\n")
 
-            _logger.info(f"\t\tminimizing...\n\n")
-            hss_run.minimize()
-            _logger.info(f"\n\n")
+                _logger.info(f"\t\textending simulation...\n\n")
+                hss_run.extend(setup_options['n_cycles'])
+                _logger.info(f"\n\n")
 
-            _logger.info(f"\t\tequilibrating...\n\n")
-            hss_run.equilibrate(n_equilibration_iterations)
-            _logger.info(f"\n\n")
+                logZ[phase] = hss_run._logZ[-1] - hss_run._logZ[0]
+                free_energies[phase] = hss_run._last_mbar_f_k[-1] - hss_run._last_mbar_f_k[0]
+                _logger.info(f"\t\tFinished phase {phase}")
 
-            _logger.info(f"\t\textending simulation...\n\n")
-            hss_run.extend(setup_options['n_cycles'])
-            _logger.info(f"\n\n")
+            for phase in free_energies:
+                print(f"Comparing ligand {setup_options['old_ligand_index']} to {setup_options['new_ligand_index']}")
+                print(f"{phase} phase has a free energy of {free_energies[phase]}")
 
-            _logger.info(f"\t\tFinished phase {phase}")
+        elif setup_options['fe_type'] == 'repex':
+            _logger.info(f"Detecting repex as fe_type...")
+            _logger.info(f"Writing hybrid factory {trajectory_prefix}hybrid_factory.npy to {trajectory_directory}...")
+            np.save(os.path.join(trajectory_directory, trajectory_prefix + "hybrid_factory.npy"),
+                    setup_dict['hybrid_topology_factories'])
+
+            hss = setup_dict['hybrid_samplers']
+            _logger.info(f"Iterating through phases for repex...")
+            for phase in setup_options['phases']:
+                print(f'Running {phase} phase')
+                hss_run = hss[phase]
+
+                _logger.info(f"\t\tequilibrating...\n\n")
+                hss_run.equilibrate(n_equilibration_iterations)
+                _logger.info(f"\n\n")
+
+                _logger.info(f"\t\textending simulation...\n\n")
+                hss_run.extend(setup_options['n_cycles'])
+                _logger.info(f"\n\n")
+
+                _logger.info(f"\t\tFinished phase {phase}")
