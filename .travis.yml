@@ -21,9 +21,11 @@ matrix:
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="latest"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
+    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="conda-forge"
   allow_failures:
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="beta"
     - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="nightly"
+    - env: python=3.7 CONDA_PY=37 TESTSYSTEMS="ValenceSmallMoleculeLibraryTestSystem" OPENMM="conda-forge"
 
 install:
   #add random sleep from 1-10s to try to prevent overloading the anaconda servers
@@ -63,9 +65,10 @@ script:
   - echo "Overwriting OpenMM forcefield.py with fix from https://github.com/openmm/openmm/pull/2511"
   - wget -q https://raw.githubusercontent.com/openmm/openmm/4f48402f1be3e0f049ae0e8595db638d297b0d75/wrappers/python/simtk/openmm/app/forcefield.py -O `python -c "from simtk.openmm.app import forcefield; print(forcefield.__file__)"`
   # Install desired OpenMM version
-  - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes -c omnia openmm; fi
-  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c omnia/label/beta openmm; fi
-  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda remove --yes --force openmm; conda clean -tipsy; conda install --yes --override-channels -c omnia-dev openmm; fi
+  - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda install --yes -c omnia openmm; fi
+  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda install --yes -c omnia/label/beta openmm; fi
+  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda install --yes -c omnia-dev openmm; fi
+  - if [ "$OPENMM" == "conda-forge" ]; then echo "Using OpenMM conda-forge testing build."; conda install --yes -c conda-forge/label/testing openmm; fi
   # Test the package
   - cd devtools && nosetests perses --nocapture --verbosity=3 --with-timer -a '!advanced' && cd ..
 
