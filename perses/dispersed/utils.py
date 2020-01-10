@@ -32,6 +32,7 @@ import time
 from scipy.special import logsumexp
 import openmmtools.cache as cache
 from openmmtools import utils
+from perses.dispersed.parallel import *
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
@@ -517,7 +518,7 @@ def create_endstates(first_thermostate, last_thermostate):
 ################################################################
 def generalized_worker_class_instantiation(remote_worker,
                                            remote_worker_class_name,
-                                           class):
+                                           tethering_class):
     """
     Function to call on a remote worker that makes the specified class a worker variable.
 
@@ -530,7 +531,7 @@ def generalized_worker_class_instantiation(remote_worker,
         set to `self` or some other class to which the `class` variable will be tethered
     remote_worker_class_name : str
         what to name the tethering class as a class instance variable
-    class : object
+    tethering_class : object
         which class to attempt to tether
 
     Return
@@ -546,7 +547,7 @@ def generalized_worker_class_instantiation(remote_worker,
         #then we just use the local worker
         _class = remote_worker
 
-    setattr(_class, remote_worker_class_name, class)
+    setattr(_class, remote_worker_class_name, tethering_class)
     return True
 
 def generalized_worker_class_termination(remote_worker,

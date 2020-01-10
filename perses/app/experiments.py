@@ -13,6 +13,7 @@ from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSet
 from perses.annihilation.lambda_protocol import LambdaProtocol
 from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator,SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
+from perses.app.simulation import Simulation
 
 from openmmtools import mcmc
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
@@ -80,7 +81,7 @@ class BuildProposalNetwork(object):
 
                                       ##Setup##
                                       'n_states': 13,
-                                      #temperature is handled by proposal arguments/proposal_parameters
+                                      'temperature': 300.0 * unit.kelvin,
                                       'atom_selection': "not water",
                                       'checkpoint_interval': 100,
                                       'lambda_protocol': 'default',
@@ -95,14 +96,14 @@ class BuildProposalNetwork(object):
                                       },
 
                              'sams': {'flatness_criteria': 'minimum-visits',
-                                      'gamma0': 1.
+                                      'gamma0': 1.,
                                       #the rest of the arguments are held by 'repex', which will be updated momentarily
                                      },
 
                              'smc': {
                                      ##__init__##
                                      'lambda_protocol': 'default',
-                                     #temperature is handled by proposal arguments/proposal_parameters
+                                     'temperature': 300.0 * unit.kelvin,
                                      'trajectory_directory': 'neq_{index0}_to_{index1}',
                                      'trajectory_prefix': '{phase}',
                                      'atom_selection': "not water",
@@ -141,7 +142,7 @@ class BuildProposalNetwork(object):
                              }
     #update common simulation arguments
     simulation_arguments['sams'].update(simulation_arguments['repex'])
-    simulation_arguments['sams']['trajectory_directory'] = 'repex_{index0}_to_{index1}'
+    simulation_arguments['sams'].update({'trajectory_directory': 'sams_{index0}_to_{index1}'})
 
 
     known_phases = ['vacuum', 'solvent', 'complex'] # we omit complex phase in the known_phases if a receptor_filename is None
@@ -149,16 +150,45 @@ class BuildProposalNetwork(object):
     supported_connectivities = {'fully_connected': generate_fully_connected_adjacency_matrix} #we can add other options later, but this is a good vanilla one to start with
 
     def __init__(self,
-                 ligand_input,
-                 parallelism,
-                 ligand_indices = None,
-                 receptor_filename = None,
-                 graph_connectivity = 'fully_connected',
-                 proposal_parameters = None,
-                 simulation_parameters = ('repex', None)):
+                 parallelism):
 
         """
         Initialize NetworkX graph and build connectivity with a `graph_connectivity` input.
+
+        Arguments
+        ----------
+        parallelism : perses.dispersed.Parallelism object (activated)
+            parallelism to perform edge calculations
+
+        TODO:
+        1. change the name of 'proposal_arguments' to something more appropriate.
+        2. allow custom atom mapping for all edges in graph.  currently, we can only specify one of three mapping schemes for all molecules
+        3. if 'receptor_filename' is None, remove complex phase from the proposal arguments; otherwise, the 'phases' will have to be specified explicitly
+        4. parallelize setup by defining `resources`
+        5. update `manipulate_edge_post_hoc`
+        """
+        self.parallelism = parallelism
+        assert hasattr(self.parallelism, 'client'), f"the parallelism object must be activated (i.e. have a client)"
+        _logger.info(f"Initialization complete.")
+
+    def setup_engines(self,
+                      ligand_input,
+                      ligand_indices = None,
+                      receptor_filename = None,
+                      graph_connectivity = 'fully_connected',
+                      proposal_parameters = None,
+                      simulation_parameters = ('repex', None)):
+        """
+        This is a simple startup method that calls the following internal methods:
+            1. _parse_ligand_input
+            2. _create_proposal_parameters
+            3. _create_connectivity_matrix
+            4. _validate_simulation_parameters
+            5. _create_system_generator
+            6. SmallMoleculeSetProposalEngine
+            7. FFAllAngleGeometryEngine
+
+        This is part of the setup before the `create_network` method can be called
 
         Arguments
         ----------
@@ -168,9 +198,6 @@ class BuildProposalNetwork(object):
 
         ligand_indices : list of int
             indices in the ligand input to parse
-
-        parallelism : perses.dispersed.Parallelism object (activated)
-            parallelism to perform edge calculations
 
         receptor_filename : str, default None
             Receptor mol2 or pdb filename. If None, complex leg will be omitted.
@@ -212,35 +239,10 @@ class BuildProposalNetwork(object):
                 #if dict is None, then default 'repex' parameters will be used
             elif type(simulation_parameters) == dict, each entry is a {(int, int): {<phase>: (<simulation_flavor>, dict(params))}};
                 if an transformation entry is missing, it is defaulted as above
-
-        TODO:
-        1. change the name of 'proposal_arguments' to something more appropriate.
-        2. allow custom atom mapping for all edges in graph.  currently, we can only specify one of three mapping schemes for all molecules
-        3. if 'receptor_filename' is None, remove complex phase from the proposal arguments; otherwise, the 'phases' will have to be specified explicitly
-        4. parallelize setup by defining `resources`
-        5. update `manipulate_edge_post_hoc`
         """
-        _logger.info(f"Parsing ligand input file...")
         self.ligand_input = ligand_input
         self.ligand_indices = ligand_indices
         self.receptor_filename = receptor_filename
-        self.parallelism = parallelism
-        assert hasattr(self.parallelism, 'client'), f"the parallelism object must be activated (i.e. have a client)"
-        _logger.info(f"Initialization complete.")
-
-    def setup_engines():
-        """
-        This is a simple startup method that calls the following internal methods:
-            1. _parse_ligand_input
-            2. _create_proposal_parameters
-            3. _create_connectivity_matrix
-            4. _validate_simulation_parameters
-            5. _create_system_generator
-            6. SmallMoleculeSetProposalEngine
-            7. FFAllAngleGeometryEngine
-
-        This is part of the setup before the `create_network` method can be called
-        """
         self._parse_ligand_input()
 
         #Now we must create some defaults for thermodynamic states
@@ -288,27 +290,29 @@ class BuildProposalNetwork(object):
         for index, log_weight in np.ndenumerate(self.adjacency_matrix):
             i, j = index[0], index[1]
             if log_weight != -np.inf:
-                _kwarg_dict = {'start': i, 'end': j, 'weight': np.exp(log_weight), 'edge_simulation_parameters': None}
+                _kwarg_dict = {'start_index': i, 'end_index': j, 'weight': np.exp(log_weight), 'edge_simulation_parameters': None}
                 _kwargs.append(_kwarg_dict)
         num_runs = len(_kwargs)
-
-        #scatter iterables
-        scattered_futures = [self.parallelism.scatter(iterable) for iterable in iterables]
 
         #create BuildProposalNetwork objects on the workers
         remote_worker = True if self.parallelism.client is not None else self
         _class = None if remote_worker == True else self
-        creation_validations = scattered_build_network_instantiation_futures = self.parallelism.run_all(func = generalized_worker_class_instantiation,
-                                                                                                        arguments = (remote_worker, 'build_network_object', _class),
-                                                                                                        workers = list(self.parallelism.workers.values()))
-        assert all(entry == True for entry in creation_validations), f"scattered_build_network_instantiation_futures failed"
+        creation_validations = self.parallelism.run_all(func = generalized_worker_class_instantiation,
+                                                        arguments = (remote_worker, 'build_network_object', _class),
+                                                        workers = list(self.parallelism.workers.values()))
+
+        #creation_validations might be a bool if we are running locally
+        if self.parallelism.client is None:
+            assert creation_validations, f"scattered_build_network_instantiation_futures failed"
+        else:
+            assert all(entry == True for entry in creation_validations), f"scattered_build_network_instantiation_futures failed"
 
         #now we have to deploy the jobs
         run_futures = self.parallelism.deploy(func = call_worker_class_method,
-                                              arguments = tuple([remote_worker] * num_runs,
+                                              arguments = tuple([[remote_worker] * num_runs,
                                                                 ['build_network_object'] * num_runs,
                                                                 ['create_network_edge'] * num_runs,
-                                                                _kwargs),
+                                                                _kwargs]),
                                               workers = list(self.parallelism.workers.values()))
         self.parallelism.progress(run_futures)
         run_results = self.parallelism.gather_results(futures = run_futures,
@@ -316,7 +320,7 @@ class BuildProposalNetwork(object):
 
         #now we simply iterate through the entire run_results and add to the local network
         for _kwarg_input_dict, return_dict in zip(_kwargs, run_results):
-            i, j = _kwarg_input_dict['start'], _kwarg_input_dict['end']
+            i, j = _kwarg_input_dict['start_index'], _kwarg_input_dict['end_index']
             adjacency_matrix_log_weight = return_dict['adjacency_matrix_log_weight']
             proposals = return_dict['proposals']
             hybrid_factory_dict = return_dict['hybrid_factory_dict']
@@ -351,8 +355,8 @@ class BuildProposalNetwork(object):
 
 
     def manipulate_edge_post_hoc(self,
-                                 start,
-                                 end,
+                                 start_index,
+                                 end_index,
                                  weight = 1.,
                                  edge_simulation_parameters = None):
         """
@@ -378,20 +382,20 @@ class BuildProposalNetwork(object):
         success : bool
             whether the intended edge was added and validated
         """
-        success = self.create_network_edge(start = start,
-                                        end = end,
+        success = self.create_network_edge(start_index = start_index,
+                                        end_index = end_index,
                                         weight = np.exp(log_weight),
                                         edge_simulation_parameters = edge_simulation_parameters)
 
-        self.network.graph['adjacency_matrix'][start, end] = self.adjacency_matrix[start,end]
+        self.network.graph['adjacency_matrix'][start_index, end_index] = self.adjacency_matrix[start_index, end_index]
 
         return success
 
     def create_network_edge(self,
-                         start,
-                         end,
-                         weight,
-                         edge_simulation_parameters):
+                            start_index,
+                            end_index,
+                            weight,
+                            edge_simulation_parameters):
         """
         This is a function to create the necessary parameters for a network edge;
         this method can be called on a remote worker directly
@@ -427,7 +431,7 @@ class BuildProposalNetwork(object):
             validation_dict : dict
                 dictionary of {_phase : validated <bool>}
         """
-        i, j = start, end
+        i, j = start_index, end_index
         log_weight = np.log(weight)
         _logger.info(f"creating proposals for edge {(i,j)}")
 
@@ -503,6 +507,8 @@ class BuildProposalNetwork(object):
 
 
                     simulation_object = self._create_simulation_object(hybrid_factory = hybrid_factory,
+                                                                       forward_index_map = (i,j),
+                                                                       phase = _phase,
                                                                        edge_simulation_parameters = phase_edge_simulation_parameters)
 
                     #now to append to returnables
@@ -528,13 +534,21 @@ class BuildProposalNetwork(object):
 
             return returnables
 
-    def _create_simulation_object(self, hybrid_factory, edge_simulation_parameters = None):
+    def _create_simulation_object(self,
+                                  hybrid_factory,
+                                  forward_index_map,
+                                  phase,
+                                  edge_simulation_parameters = None):
         """
 
         Arguments
         ---------
         hybrid_factory : perses.annihilation.relative.HybridTopologyFactory
             hybrid factory with which a simulation object will be created
+        forward_index_map : tuple(index0, index1)
+            indices of edge transform
+        phase : str
+            the phase of the transformation
         edge_simulation_parameters : dict or None
             the simulation parameters to put into the appropriate simulation object;
             NOTE: in this case, the edge_simulation_parameters may only have one key specific to the phase being generated;
@@ -555,16 +569,20 @@ class BuildProposalNetwork(object):
             self.simulation_parameter_assertions(edge_simulation_parameters)
             _phase = list(edge_simulation_parameters.keys())[0]
             _simulation_flavor = edge_simulation_parameters[_phase][0]
-            _simulation_parameters = edge_simulation_parameters[_phase][1]
+            _simulation_parameters = copy.deepcopy(edge_simulation_parameters[_phase][1])
         else:
             #check if we have a global_simulation_flavor
             if type(self.global_simulation_flavor) == str:
                 assert self.simulation_parameters == None, f"if the global_simulation_flavor is set, then the self.simulation_parameters must be None"
                 #then we have a default
                 _simulation_flavor = self.global_simulation_flavor
-                _simulation_parameters = self.simulation_arguments[_simulation_flavor]
+                _simulation_parameters = copy.deepcopy(self.simulation_arguments[_simulation_flavor])
             else:
                 raise Exception(f"if the global simulation flavor is not set, then there are no appropriate defaults")
+
+        #modify the trajectory directory and trajectory_prefix
+        _simulation_parameters.update({'trajectory_directory': _simulation_parameters['trajectory_directory'].format(index0 = str(forward_index_map[0]), index1 = str(forward_index_map[1]))})
+        _simulation_parameters.update({'trajectory_prefix': _simulation_parameters['trajectory_prefix'].format(phase = phase)})
 
         #now create a simulation object
         simulation_object = Simulation(hybrid_factory = hybrid_factory,
@@ -719,8 +737,10 @@ class BuildProposalNetwork(object):
 
                 #update the simulation_arguments:
                 self.simulation_arguments[simulation_parameters[0]].update(simulation_parameters[1])
-                self.global_simulation_flavor = simulation_parameters[0]
-                self.simulation_parameters = None
+
+            #now we can set a global simulation flavor and set the simulation parameters to None
+            self.global_simulation_flavor = simulation_parameters[0]
+            self.simulation_parameters = None
 
         elif type(simulation_parameters) == dict:
             _logger.info(f"'simulation_parameters' detected dict as argument")

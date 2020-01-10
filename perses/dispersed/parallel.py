@@ -16,6 +16,7 @@ import time
 from scipy.special import logsumexp
 from dask_jobqueue import LSFCluster
 from dask_jobqueue.lsf import lsf_detect_units, lsf_format_bytes_ceil
+from simtk import unit
 
 # Instantiate logger
 logging.basicConfig(level = logging.NOTSET)
@@ -338,8 +339,8 @@ class Parallelism(object):
         parallelism, scheduler = library[0], library[1]
         if remote_worker == True:
             try:
-                if parallelism = 'dask':
-                    if scheduler = 'LSF':
+                if parallelism == 'dask':
+                    if scheduler == 'LSF':
                         _worker = distributed.get_worker()
                     else:
                         raise Exception(f"the scheduler {scheduler} is not supported")
@@ -364,8 +365,8 @@ class LSFDaskBackend(object):
                                    {'queue_name': 'gpuqueue',
                                     'cores': 1,
                                     'walltime': '04:00',
-                                    'memory': f"{lsf_format_bytes_ceil(6e9 * unit.byte, lsf_units=lsf_detect_units())}{lsf_detect_units().upper()}",
-                                    'mem': 6e9 * unit.byte,
+                                    'memory': f"{lsf_format_bytes_ceil(6e9, lsf_units=lsf_detect_units())}{lsf_detect_units().upper()}",
+                                    'mem': 6e9,
                                     'job_extra': ['-gpu num=1:j_exclusive=yes:mode=shared:mps=no:', '-m "ls-gpu lt-gpu"'],
                                     'env_extra': ['module load cuda/9.2'],
                                     'extra': ['--no-nanny'],
@@ -374,8 +375,8 @@ class LSFDaskBackend(object):
                                    {'queue_name': 'cpuqueue',
                                     'cores': 2,
                                     'walltime': '04:00',
-                                    'memory': f"{lsf_format_bytes_ceil(3e9 * unit.byte, lsf_units=lsf_detect_units())}{lsf_detect_units().upper()}",
-                                    'mem': 6e9 * unit.byte,
+                                    'memory': f"{lsf_format_bytes_ceil(3e9, lsf_units=lsf_detect_units())}{lsf_detect_units().upper()}",
+                                    'mem': 6e9,
                                     'job_extra': None,
                                     'env_extra': ['module load cuda/9.2'],
                                     'extra': ['--no-nanny'],

@@ -29,8 +29,9 @@ import copy
 from perses.app.experiments import *
 #import perses dask Client
 from perses.app.relative_setup import DaskClient
+from perses.dispersed.parallel import *
 
-from unittest import skipIfnet
+#from unittest import skipIfnet
 from nose.tools import raises
 import os
 
@@ -44,9 +45,10 @@ def test_BuildProposalNetwork():
     """
     test BuildProposalNetwork with default arguments
     """
-    _simulation_parameters = {(0,1): {'solvent': ('smc', {'timestep': 1 * unit.femtoseconds}), 'solvent': ('repex', {'timestep': 1*unit.femtoseconds})},
-                              (1,0): {'solvent': ('sams', {'timestep': 2 * unit.femtoseconds, 'splitting': "V R O R V"})}
-                             }
+    # _simulation_parameters = {(0,1): {'solvent': ('smc', {'timestep': 1 * unit.femtoseconds}), 'solvent': ('repex', {'timestep': 1*unit.femtoseconds})},
+    #                           (1,0): {'solvent': ('sams', {'timestep': 2 * unit.femtoseconds, 'splitting': "V R O R V"})}
+    #                          }
+    _simulation_parameters = ('repex', None)
     # network = BuildProposalNetwork(ligand_input = os.path.join(os.getcwd(), '../../examples/mcl1-example/MCL1_ligands.sdf'),
     #                                ligand_indices = [4,6],
     #                                receptor_filename = os.path.join(os.getcwd(), '../../examples/mcl1-example/MCL1_protein_fixed.pdb'),
@@ -55,14 +57,18 @@ def test_BuildProposalNetwork():
     #                                resources = None,
     #                                proposal_parameters = None,
     #                                simulation_parameters = _simulation_parameters)
-    network = BuildProposalNetwork(ligand_input = os.path.join(os.getcwd(), 'test.smi'),
-                                   ligand_indices = [0,1],
-                                   receptor_filename = None,
-                                   graph_connectivity = 'fully_connected',
-                                   cost = None,
-                                   resources = None,
-                                   proposal_parameters = {'phases': ['vacuum', 'solvent']},
-                                   simulation_parameters = _simulation_parameters)
+    _parallelism = Parallelism()
+    _parallelism.activate_client(library = None,
+                                 num_processes = 1,
+                                 timeout = 1800,
+                                 processor = 'cpu')
+    network = BuildProposalNetwork(parallelism = _parallelism)
+    network.setup_engines(ligand_input = os.path.join(os.getcwd(), 'test.smi'),
+                          ligand_indices = [0,1],
+                          receptor_filename = None,
+                          graph_connectivity = 'fully_connected',
+                          proposal_parameters = {'phases': ['vacuum', 'solvent']},
+                          simulation_parameters = _simulation_parameters)
     network.create_network()
     print(vars(network))
     return network

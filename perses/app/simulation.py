@@ -6,9 +6,11 @@ import os
 from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.dispersed.smc import SequentialMonteCarlo
 from openmmtools.multistate import MultiStateReporter, sams, replicaexchange
+from openmmtools import mcmc
+from perses.annihilation.lambda_protocol import LambdaProtocol
 
 _logger = logging.getLogger("Simulation")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.DEBUG)
 
 
 class Simulation(object):
@@ -30,7 +32,7 @@ class Simulation(object):
 
                                       ##Setup##
                                       'n_states': 13,
-                                      #temperature is handled by proposal arguments/proposal_parameters
+                                      'temperature': 300.0 * unit.kelvin,
                                       'atom_selection': "not water",
                                       'checkpoint_interval': 100,
                                       'lambda_protocol': 'default',
@@ -45,14 +47,15 @@ class Simulation(object):
                                       },
 
                              'sams': {'flatness_criteria': 'minimum-visits',
-                                      'gamma0': 1.
+                                      'gamma0': 1.,
+                                      'trajectory_directory': 'sams_{index0}_to_{index1}'
                                       #the rest of the arguments are held by 'repex', which will be updated momentarily
                                      },
 
                              'smc': {
                                      ##__init__##
                                      'lambda_protocol': 'default',
-                                     #temperature is handled by proposal arguments/proposal_parameters
+                                     'temperature': 300 * unit.kelvin,
                                      'trajectory_directory': 'neq_{index0}_to_{index1}',
                                      'trajectory_prefix': '{phase}',
                                      'atom_selection': "not water",
@@ -89,12 +92,16 @@ class Simulation(object):
                                      'minimize': False
                                      }
                              }
-
+    #update common simulation arguments
+    supported_sampler_parameters['sams'].update(supported_sampler_parameters['repex'])
+    supported_sampler_parameters['sams'].update({'trajectory_directory': 'sams_{index0}_to_{index1}'})
 
     def __init__(self,
                  hybrid_factory,
                  sampler_type = 'repex',
-                 sampler_arguments = None):
+                 sampler_arguments = None,
+                 trajectory_directory_entries = (0,1),
+                 trajectory_prefix_entry = 'unknown_phase'):
         """
         Initialization method to create simulation arguments and instantiate the samplers
 
@@ -108,6 +115,8 @@ class Simulation(object):
             the non-default arguments of the sampler_type
         """
         #parse some arguments
+        # _logger.debug(f"creating simulation object...")
+        # _logger.debug(f"parsing arguments with sampler type {sampler_type} and arguments {sampler_arguments} ")
         self.parse_arguments(sampler_type = sampler_type, sampler_arguments = sampler_arguments)
         self.hybrid_factory = hybrid_factory
 
@@ -118,24 +127,11 @@ class Simulation(object):
         """
         Execution method to conduct sampling (given some parameters, or default)
         """
+        pass
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def parse_arguments(sampler_type, sampler_arguments):
+    def parse_arguments(self,
+                        sampler_type,
+                        sampler_arguments):
         """
         parse and validate init arguments
 
@@ -174,7 +170,7 @@ class Simulation(object):
 
 
 
-    def create_sampler():
+    def create_sampler(self):
         """
         wrapper method to instantiate the base sampler class to be used
 
@@ -203,21 +199,21 @@ class Simulation(object):
             if self.sampler_type == 'repex':
                 self.sampler = HybridRepexSampler(mcmc_moves = mcmc_move,
                                                   hybrid_factory = self.hybrid_factory,
-                                                  online_analysis_interval = self.supported_sampler_parameters['offline_freq'])
+                                                  online_analysis_interval = self.sampler_parameters['offline_freq'])
             elif self.sampler_type == 'sams':
                 self.sampler = HybridSAMSSampler(mcmc_moves = mcmc_move,
                                                  hybrid_factory = self.hybrid_factory,
-                                                 online_analysis_interval = self.supported_sampler_parameters['offline_freq'],
+                                                 online_analysis_interval = self.sampler_parameters['offline_freq'],
                                                  online_analysis_minimum_iterations = 10, #perhaps this should be exposed?
-                                                 flatness_criteria = self.supported_sampler_parameters['flatness_criteria'],
-                                                 gamma0 = self.supported_sampler_parameters['gamma0'])
+                                                 flatness_criteria = self.sampler_parameters['flatness_criteria'],
+                                                 gamma0 = self.sampler_parameters['gamma0'])
             else:
                 raise Exception(f"sampler type {self.sampler_type} is not supported; this error should have been handled previously")
 
             #run the setup; with a check for which phase the simulation is being conducted in
             endstate_bool = False if self.sampler_parameters['trajectory_prefix'] == 'vacuum' else True
-            self.sampler.setup(n_states = self.supported_sampler_parameters['n_states'],
-                               temperature = temperature,
+            self.sampler.setup(n_states = self.sampler_parameters['n_states'],
+                               temperature = self.sampler_parameters['temperature'],
                                storage_file = reporter,
                                lambda_protocol = LambdaProtocol(functions = self.sampler_parameters['lambda_protocol']),
                                endstates = endstate_bool)
@@ -303,7 +299,7 @@ def simulation_from_yaml(filename: str):
     return simulation
 
 
-class Simulation(object):
+class Simulation_adapt(object):
     """ Simulation object, holding parameters of basic simulations
 
     Parameters
@@ -502,6 +498,7 @@ class AlchemicalSimulation(Simulation):
         topology proposal object
     offline_freq : int, default 1
         frequency of offline FE evaluations
+
     Attributes
     ----------
     lambda_functions
