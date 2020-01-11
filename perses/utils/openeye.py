@@ -11,6 +11,11 @@ from openeye import oechem,oegraphsim
 from openmoltools.openeye import iupac_to_oemol, generate_conformers
 import simtk.unit as unit
 import numpy as np
+import logging
+
+logging.basicConfig(level = logging.NOTSET)
+_logger = logging.getLogger("utils.openeye")
+_logger.setLevel(logging.INFO)
 
 def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     """
@@ -294,11 +299,13 @@ def generate_unique_atom_names(molecule):
 
     if len(set(atom_names)) == atom_count:
         # one name per atom therefore unique
+        _logger.info(f'molecule {molecule.GetTitle()} has unique atom names already')
         return molecule 
     else:
         # generating new atom names
         from collections import defaultdict
         from simtk.openmm.app.element import Element
+        _logger.info(f'molecule {molecule.GetTitle()} does not have unique atom names. Generating now...')
         element_counts = defaultdict(int)
         for atom in molecule.GetAtoms():
             element = Element.getByAtomicNumber(atom.GetAtomicNum())
