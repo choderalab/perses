@@ -194,12 +194,11 @@ class RelativeFEPSetup(object):
         if 'complex' in phases or 'solvent' in phases:
             self._nonbonded_method = app.PME
             _logger.info(f"Detected complex or solvent phases: setting PME nonbonded method.")
-        elif 'vacuum' in phases:
+        else:
             self._nonbonded_method = app.NoCutoff
             _logger.info(f"Detected vacuum phase: setting noCutoff nonbonded method.")
 
         # Select barostat
-        # TODO: Does this need to omit this barostat for the vacuum phase?
         from simtk.openmm.app import NoCutoff, CutoffNonPeriodic
         NONPERIODIC_NONBONDED_METHODS = [NoCutoff, CutoffNonPeriodic]
         if pressure is not None:
@@ -322,6 +321,11 @@ class RelativeFEPSetup(object):
             # need to change nonbonded cutoff and remove barostat for vacuum leg
             _logger.info(f"assgning noCutoff to nonbonded_method")
             self._nonbonded_method = app.NoCutoff
+
+            self._system_generator.barostat = None
+            _logger.info(f'Removing barostat for vacuum phase')
+            self._system_generator.forcefield_kwargs['nonbondedMethod'] = self._nonbonded_method
+            _logger.info(f'Setting nonbondedMethod to NoCutoff for vacuum phase')
 
             _logger.info(f"calling SystemGenerator to create ligand systems.")
 
