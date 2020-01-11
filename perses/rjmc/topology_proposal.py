@@ -2319,7 +2319,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Default atom and bond expressions for MCSS
         if atom_expr is None:
             _logger.info(f'Setting the atom expression to {map_strength}')
-            _logger.info(type(map_strength))
             if map_strength == 'default':
                 self.atom_expr = DEFAULT_ATOM_EXPRESSION
             elif map_strength == 'weak':

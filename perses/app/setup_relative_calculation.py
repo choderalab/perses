@@ -277,7 +277,7 @@ def run_setup(setup_options):
 
     if "timestep" in setup_options:
         timestep = setup_options['timestep'] * unit.femtoseconds
-        _logger.info(f"\ttimestep: {timestep}fs.")
+        _logger.info(f"\ttimestep: {timestep}.")
     else:
         timestep = 1.0 * unit.femtoseconds
         _logger.info(f"\tno timestep detected: setting default as 1.0fs.")
@@ -333,7 +333,6 @@ def run_setup(setup_options):
                                           temperature=temperature, solvent_padding=solvent_padding_angstroms,
                                           atom_map=atom_map, neglect_angles = setup_options['neglect_angles'], anneal_14s = setup_options['anneal_1,4s'],
                                           small_molecule_forcefield=setup_options['small_molecule_forcefield'], small_molecule_parameters_cache=setup_options['small_molecule_parameters_cache'])
-        _logger.info(f"\n\n\n")
 
         _logger.info(f"\twriting pickle output...")
         with open(os.path.join(os.getcwd(), trajectory_directory, setup_pickle_file), 'wb') as f:
