@@ -566,9 +566,10 @@ class RelativeFEPSetup(object):
             PDBFile.writeFile(topology, positions, outfile)
 
         modeller = app.Modeller(topology, positions)
-        hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
-        modeller.delete(hs)
-        modeller.addHydrogens(forcefield=self._system_generator.forcefield)
+        # retaining protein protonation from input files
+        #hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
+        #modeller.delete(hs)
+        #modeller.addHydrogens(forcefield=self._system_generator.forcefield)
         if not vacuum:
             _logger.info(f"\tpreparing to add solvent")
             modeller.addSolvent(self._system_generator.forcefield, model=model, padding=self._padding, ionicStrength=0.15*unit.molar)
