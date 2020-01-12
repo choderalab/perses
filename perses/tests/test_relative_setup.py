@@ -165,6 +165,63 @@ def test_run_cdk2_iterations_repex():
 
         # TODO: Check output
 
+def test_host_guest_repex():
+    """
+    Ensure that we can instantiate and run a repex relative free energy calculation a host:guest system
+    """
+    # Source files directory
+    setup_directory = resource_filename("perses", "data/host-guest/CB8-G3")
+
+    # First, create cache containing host mol2
+    print(f'Ensuring host is parameterized in all available force fields...')
+    from openforcefield.topology import Molecule
+    host = Molecule.from_file(os.path.join(setup_directory, 'host.mol2'))
+    cache = os.path.join(setup_directory, 'cache.json')
+    from openmmforcefields.generators import SystemGenerator
+    for forcefield in SystemGenerator.SMALL_MOLECULE_FORCEFIELDS:
+        print(forcefield)
+        generator = SystemGenerator(molecules=host, cache=cache, small_molecule_forcefield=forcefield)
+        generator.create_system(host.to_topology().to_openmm())
+
+    # Enter a temporary directory
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Move to temporary directory
+        os.chdir(tmpdirname)
+        print(f'Running example in temporary directory: {tmpdirname}')
+
+        # Get options
+        from perses.app.setup_relative_calculation import getSetupOptions
+        yaml_filename = os.path.join(setup_directory, "repex.yaml")
+        setup_options = getSetupOptions(yaml_filename)
+
+        # DEBUG: Print traceback for any UserWarnings
+        show_warning_stacktraces = False
+        if show_warning_stacktraces:
+            import traceback
+            import warnings
+            _old_warn = warnings.warn
+            def warn(*args, **kwargs):
+                tb = traceback.extract_stack()
+                _old_warn(*args, **kwargs)
+                print("".join(traceback.format_list(tb)[:-1]))
+            warnings.warn = warn
+
+        # Update options
+        setup_options['scheduler_address'] = None
+        for parameter in ['protein_pdb', 'ligand_file', 'small_molecule_parameters_cache']:
+            setup_options[parameter] = os.path.join(setup_directory, setup_options[parameter])
+        for parameter in ['trajectory_directory', 'trajectory_prefix', 'save_setup_pickle_as']:
+            setup_options[parameter] = os.path.join(tmpdirname, setup_options[parameter])
+
+        # Run setup
+        setup_dict = setup_relative_calculation.run_setup(setup_options)
+
+        # Run an iteration
+        n_iterations = 1
+        setup_dict['hybrid_samplers']['complex'].run(n_iterations=n_iterations)
+
+        # TODO: Check output
 
 if __name__=="__main__":
     test_run_cdk2_iterations_repex()
