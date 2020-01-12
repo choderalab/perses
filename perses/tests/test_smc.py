@@ -51,7 +51,8 @@ def sMC_setup():
     fe_setup = RelativeFEPSetup(ligand_input = f"{os.getcwd()}/test.smi",
                                 old_ligand_index = 0,
                                 new_ligand_index = 1,
-                                forcefield_files = ['gaff.xml'],
+                                forcefield_files = [],
+                                small_molecule_forcefield = 'gaff-2.11',
                                 phases = ['vacuum'])
 
     hybrid_factory = HybridTopologyFactory(topology_proposal = fe_setup._vacuum_topology_proposal,
@@ -232,7 +233,8 @@ def test_create_endstates():
     fe_setup = RelativeFEPSetup(ligand_input = f"{os.getcwd()}/test.smi",
                                 old_ligand_index = 0,
                                 new_ligand_index = 1,
-                                forcefield_files = ['gaff.xml'],
+                                forcefield_files = [],
+                                small_molecule_forcefield = 'gaff-2.11',
                                 phases = ['vacuum'])
 
     hybrid_factory = HybridTopologyFactory(topology_proposal = fe_setup._vacuum_topology_proposal,
