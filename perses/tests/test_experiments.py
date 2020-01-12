@@ -71,7 +71,7 @@ def test_BuildProposalNetwork():
                                      processor = 'cpu')
         network = BuildProposalNetwork(parallelism = _parallelism)
         from pkg_resources import resource_filename
-        smiles_filename = resource_filename("perses", os.path.join("tests", "test.smi"))
+        smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
         network.setup_engines(ligand_input = smiles_filename,
                               ligand_indices = [0,1],
                               receptor_filename = None,
