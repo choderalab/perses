@@ -54,6 +54,7 @@ class BuildProposalNetwork(object):
                          'phases': ['vacuum', 'solvent', 'complex'],
                          'forcefield_files': ['amber/protein.ff14SB.xml', 'amber/tip3p_standard.xml', 'amber/tip3p_HFE_multivalent.xml'],
                          'small_molecule_forcefield' : 'openff-1.0.0',
+                         'small_molecule_parameters_cache' : 'cache.json',
                          'neglect_angles': False,
                          'anneal_14s': False,
                          'water_model': 'tip3p',
@@ -803,6 +804,7 @@ class BuildProposalNetwork(object):
 
         self.system_generator = SystemGenerator(forcefields=self.proposal_arguments['forcefield_files'],
                                                 small_molecule_forcefield=self.proposal_arguments['small_molecule_forcefield'],
+                                                cache=self.proposal_arguments['small_molecule_parameters_cache'],
                                                 molecules=self.molecules,
                                                 barostat=barostat,
                                                 forcefield_kwargs=forcefield_kwargs)
