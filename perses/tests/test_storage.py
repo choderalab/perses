@@ -136,7 +136,7 @@ def test_write_object():
 def run_sampler(sampler, niterations):
     sampler.run(niterations)
 
-@skipIf(running_on_github_actions', "Skip slow test on GH Actions.")
+@skipIf(running_on_github_actions, "Skip slow test on GH Actions.")
 def test_storage_with_samplers():
     """Test storage layer inside all samplers.
     """
