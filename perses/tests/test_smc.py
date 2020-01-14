@@ -48,7 +48,8 @@ def sMC_setup():
     """
     function to setup local sMC
     """
-    fe_setup = RelativeFEPSetup(ligand_input = f"{os.getcwd()}/test.smi",
+    smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+    fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,
                                 new_ligand_index = 1,
                                 forcefield_files = ['gaff.xml'],
@@ -229,7 +230,8 @@ def test_create_endstates():
     """
     test the creation of unsampled endstates
     """
-    fe_setup = RelativeFEPSetup(ligand_input = f"{os.getcwd()}/test.smi",
+    smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+    fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,
                                 new_ligand_index = 1,
                                 forcefield_files = ['gaff.xml'],
