@@ -31,11 +31,13 @@ import perses.bias.bias_engine as bias_engine
 import perses.rjmc.geometry as geometry
 import perses.annihilation.ncmc_switching as ncmc_switching
 
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
+
 ################################################################################
 # TEST MCMCSAMPLER
 ################################################################################
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip analysis test on TRAVIS.  Currently broken")
+@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
 def test_valence():
     """
     Test valence-only test system.
@@ -72,9 +74,9 @@ def test_valence():
             f.description = "Testing MultiTargetDesign sampler with %s transfer free energy from vacuum -> %s" % (testsystem_name, environment)
             yield f
 
-def test_testsystems_travis():
+def test_testsystems_gh_actions():
     """
-    Test samplers on basic test systems for travis.
+    Test samplers on basic test systems for GH Actions.
     """
     # These tests have to work for the first paper.
     testsystem_names = ['ValenceSmallMoleculeLibraryTestSystem', 'AlkanesTestSystem', 'FusedRingsTestSystem', 'T4LysozymeInhibitorsTestSystem']

@@ -19,7 +19,7 @@ from perses.dispersed.utils import *
 from openmmtools.states import ThermodynamicState, CompoundThermodynamicState, SamplerState
 from perses.annihilation.lambda_protocol import RelativeAlchemicalState, LambdaProtocol
 #######################
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 #default arguments
 lambda_protocol = 'default'
@@ -43,7 +43,7 @@ os.system(f"mkdir {trajectory_directory}")
 #######################
 
 @nottest
-@skipIf(istravis, "Skip helper function on travis")
+@skipIf(running_on_github_actions, "Skip helper function on GH Actions")
 def sMC_setup():
     """
     function to setup local sMC

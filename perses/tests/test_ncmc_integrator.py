@@ -16,7 +16,7 @@ from functools import partial
 from unittest import skipIf
 import os
 
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 ################################################################################
 # CONSTANTS
@@ -142,14 +142,14 @@ def check_harmonic_oscillator_ncmc(ncmc_nsteps=50, ncmc_integrator="VV"):
         msg += 'w_r = %s\n' % str(w_r)
         raise Exception(msg)
 
-#@skipIf(istravis, "Skip expensive test on travis")
-#def test_ncmc_integrator_harmonic_oscillator():
-#    """
-#    Check NCMC integrator switching works for 0, 1, and 50 switching steps with a harmonic oscillator.
-#
-#    """
-#    for integrator_type in ["VV", "GHMC"]:
-#        for ncmc_nsteps in [0, 1, 50]:
-#            f = partial(check_harmonic_oscillator_ncmc, ncmc_nsteps, ncmc_integrator=integrator_type)
-#            f.description = "Testing %s NCMC switching using harmonic oscillator with %d NCMC steps" % (integrator_type, ncmc_nsteps)
-#            yield f
+@skipIf(running_on_github_actions, "Skip expensive test on GH Actions")
+def test_ncmc_integrator_harmonic_oscillator():
+   """
+   Check NCMC integrator switching works for 0, 1, and 50 switching steps with a harmonic oscillator.
+
+   """
+   for integrator_type in ["VV", "GHMC"]:
+       for ncmc_nsteps in [0, 1, 50]:
+           f = partial(check_harmonic_oscillator_ncmc, ncmc_nsteps, ncmc_integrator=integrator_type)
+           f.description = "Testing %s NCMC switching using harmonic oscillator with %d NCMC steps" % (integrator_type, ncmc_nsteps)
+           yield f

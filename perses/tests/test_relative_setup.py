@@ -8,7 +8,7 @@ import mdtraj as md
 from openmmtools import states, alchemy, testsystems, cache
 import yaml
 from unittest import skipIf
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 default_forward_functions = {
         'lambda_sterics' : 'lambda',
@@ -40,7 +40,7 @@ def generate_example_waterbox_states(temperature=300.0*unit.kelvin, pressure=1.0
     return cpd_thermodynamic_state, sampler_state, water_ts.topology
 
 ## TODO fails as integrator not bound to context
-#@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip analysis test on TRAVIS.  Currently broken")
+#@skipIf(running_on_github_actions, "Skip analysis test on GH Actions.  Currently broken")
 #def test_run_nonequilibrium_switching_move():
 #    """
 #    Test that the NonequilibriumSwitchingMove changes lambda from 0 to 1 in multiple iterations
@@ -69,7 +69,7 @@ def generate_example_waterbox_states(temperature=300.0*unit.kelvin, pressure=1.0
 #        assert context.getParameter("lambda_sterics") == 1.0
 #        assert integrator.getGlobalVariableByName("lambda") == 1.0
 
-@skipIf(os.environ.get("TRAVIS", None) == 'true', "Skip slow test on TRAVIS.")
+@skipIf(running_on_github_actions, "Skip slow test on GH Actions.")
 def test_run_cdk2_iterations():
     """
     Ensure that we can instantiate and run the cdk2 ligands in vacuum

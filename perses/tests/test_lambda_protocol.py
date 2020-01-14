@@ -6,7 +6,7 @@ from unittest import skipIf
 from nose.tools import raises
 import os
 
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 #############################################
 # TESTS

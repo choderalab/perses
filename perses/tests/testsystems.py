@@ -57,7 +57,7 @@ from openmmtools.states import ThermodynamicState, SamplerState
 # TEST SYSTEMS
 ################################################################################
 
-istravis = os.environ.get('TRAVIS', None) == 'true'
+running_on_github_actions = os.environ.get('GITHUB_ACTIONS', None) == 'true'
 
 class PersesTestSystem(object):
     """
