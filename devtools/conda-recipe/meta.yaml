@@ -40,6 +40,7 @@ requirements:
     - progressbar2
     - parmed
     - tqdm
+    #- openmm-forcefields # uncomment once openmm-forcefields package is pushed to conda
 
 about:
   home: https://github.com/choderalab/perses
