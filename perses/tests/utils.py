@@ -45,11 +45,14 @@ ENERGY_THRESHOLD = 1e-1
 @contextlib.contextmanager
 def enter_temp_directory():
     """Create and enter a temporary directory; used as context manager."""
+    import tempfile
     temp_dir = tempfile.mkdtemp()
+    import os
     cwd = os.getcwd()
     os.chdir(temp_dir)
     yield temp_dir
     os.chdir(cwd)
+    import shutil
     shutil.rmtree(temp_dir)
 
 # TODO: Move some of these utility routines to openmoltools.
