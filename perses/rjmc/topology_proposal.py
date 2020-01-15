@@ -59,6 +59,10 @@ DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization  | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
 STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
+#specific to proteins
+PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
+PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
+
 ################################################################################
 # LOGGER
 ################################################################################
@@ -66,7 +70,7 @@ STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("proposal_generator")
-_logger.setLevel(logging.INFO)
+_logger.setLevel(logging.DEBUG)
 
 ################################################################################
 # UTILITIES
@@ -987,6 +991,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         This base class is not meant to be invoked directly.
         """
+        from perses.utils.smallmolecules import render_atom_mapping
         _logger.debug(f"Instantiating PolymerProposalEngine")
         super(PolymerProposalEngine,self).__init__(system_generator, proposal_metadata=proposal_metadata, verbose=verbose, always_change=always_change)
         self._chain_id = chain_id # chain identifier defining polymer to be modified
@@ -995,7 +1000,10 @@ class PolymerProposalEngine(ProposalEngine):
                         # Note this does not include PRO since there's a problem with OpenMM's template DEBUG
         self._aggregate = aggregate # ?????????
 
-    def propose(self, current_system, current_topology, current_metadata=None):
+    def propose(self,
+                current_system,
+                current_topology,
+                current_metadata=None):
         """
         Generate a TopologyProposal
 
@@ -1034,21 +1042,28 @@ class PolymerProposalEngine(ProposalEngine):
         metadata = current_metadata
         if metadata is None:
             metadata = dict()
+
         # old_chemical_state_key : str
+        _logger.debug(f"\tcomputing state key of old topology...")
         old_chemical_state_key = self.compute_state_key(old_topology)
         _logger.debug(f"\told chemical state key for chain {self._chain_id}: {old_chemical_state_key}")
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
         _logger.debug(f"\tchoosing mutant...")
         index_to_new_residues, metadata = self._choose_mutant(old_topology, metadata)
+        _logger.debug(f"\t\tindex to new residues: {index_to_new_residues}")
 
         # residue_map : list(tuples : simtk.openmm.app.topology.Residue (existing residue), str (three letter name of proposed residue))
+        _logger.debug(f"\tgenerating residue map...")
         residue_map = self._generate_residue_map(old_topology, index_to_new_residues)
+        _logger.debug(f"\t\tresidue map: {residue_map}")
 
         for (res, new_name) in residue_map:
             if res.name == new_name:
+                #remove the index_to_new_residues entries where the topology is already mutated
                 del(index_to_new_residues[res.index])
         if len(index_to_new_residues) == 0:
+            _logger.debug(f"\t\tno mutation detected in this proposal; generating old proposal")
             atom_map = dict()
             for atom in old_topology.atoms():
                 atom_map[atom.index] = atom.index
@@ -1063,6 +1078,8 @@ class PolymerProposalEngine(ProposalEngine):
         for res in old_topology.residues():
             res.modified_aa = True if res.index in index_to_new_residues.keys() else False
 
+        _logger.debug(f"\tfinal index_to_new_residues: {index_to_new_residues}")
+        _logger.debug(f"\tfinding excess and missing atoms/bonds...")
         # Identify differences between old topology and proposed changes
         # excess_atoms : list(simtk.openmm.app.topology.Atom) atoms from existing residue not in new residue
         # excess_bonds : list(tuple (simtk.openmm.app.topology.Atom, simtk.openmm.app.topology.Atom)) bonds from existing residue not in new residue
@@ -1077,7 +1094,14 @@ class PolymerProposalEngine(ProposalEngine):
         new_topology = self._add_new_atoms(new_topology, missing_atoms, missing_bonds, residue_map)
 
         # index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
-        atom_map = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
+        _logger.debug(f"\tconstructing atom map for TopologyProposal...")
+        atom_map, old_res_to_oemol_map, new_res_to_oemol_map = self._construct_atom_map(residue_map, old_topology, index_to_new_residues, new_topology)
+
+        _logger.debug(f"\tadding indices of the 'C' backbone atom in the next residue and the 'N' atom in the previous")
+        extra_atom_map = self._find_adjacent_special_atoms(old_topology, new_topology, list(index_to_new_residues.keys())[0])
+        atom_map.update(extra_atom_map)
+
+        #TODO: check to make sure all of the atoms are contiguous?
 
         # new_chemical_state_key : str
         new_chemical_state_key = self.compute_state_key(new_topology)
@@ -1089,19 +1113,41 @@ class PolymerProposalEngine(ProposalEngine):
         # Build system
         new_system = self._system_generator.build_system(new_topology)
 
+        #make constraint repairs
+        atom_map = SmallMoleculeSetProposalEngine._constraint_repairs(atom_map, old_system, new_system, old_topology, new_topology)
+        _logger.debug(f"\tafter constraint repairs, the atom map is as such: {atom_map}")
+
+        old_res_name = [res.name for res in old_topology.residues() if res.index == [index_to_new_residues.keys()][0]][0]
+        new_res_name = [index_to_new_residues.values()][0]
+
+
         # Adjust logp_propose based on HIS presence
-        his_residues = ['HID', 'HIE']
-        old_residue = residue_map[0][0]
-        proposed_residue = residue_map[0][1]
-        if old_residue.name in his_residues and proposed_residue not in his_residues:
-            logp_propose = math.log(2)
-        elif old_residue.name not in his_residues and proposed_residue in his_residues:
-            logp_propose = math.log(0.5)
-        else:
-            logp_propose = 0.0
+        # his_residues = ['HID', 'HIE']
+        # old_residue = residue_map[0][0]
+        # proposed_residue = residue_map[0][1]
+        # if old_residue.name in his_residues and proposed_residue not in his_residues:
+        #     logp_propose = math.log(2)
+        # elif old_residue.name not in his_residues and proposed_residue in his_residues:
+        #     logp_propose = math.log(0.5)
+        # else:
+        #     logp_propose = 0.0
 
         # Create TopologyProposal.
-        topology_proposal = TopologyProposal(new_topology=new_topology, new_system=new_system, old_topology=old_topology, old_system=old_system, old_chemical_state_key=old_chemical_state_key, new_chemical_state_key=new_chemical_state_key, logp_proposal=logp_propose, new_to_old_atom_map=atom_map)
+        old_networkx_molecule = NetworkXMolecule(mol_oemol = current_mol, mol_residue = current_topology, residue_to_oemol_map = old_res_to_oemol_map)
+        new_networkx_molecule = NetworkXMolecule(mol_oemol = proposed_mol, mol_residue = new_topology, residue_to_oemol_map = new_res_to_oemol_map)
+        topology_proposal = TopologyProposal(logp_proposal = 0.,
+                                             new_to_old_atom_map = atom_map,
+                                             old_topology = old_topology,
+                                             new_topology = new_topology,
+                                             old_system = old_system,
+                                             new_system = new_system,
+                                             old_alchemical_atoms = list(old_res_to_oemol_map.keys()) + list(extra_atom_map.values()),
+                                             old_chemical_state_key = old_chemical_state_key,
+                                             new_chemical_state_key = new_chemical_state_key,
+                                             old_residue_name = old_res_name,
+                                             new_residue_name = new_res_name,
+                                             old_networkx_residue = old_networkx_molecule,
+                                             new_networkx_molecule = new_networkx_molecule)
 
         # Check that old_topology and old_system have same number of atoms.
         old_topology_natoms = old_topology.getNumAtoms()  # number of topology atoms
@@ -1130,6 +1176,54 @@ class PolymerProposalEngine(ProposalEngine):
             raise Exception(msg)
 
         return topology_proposal
+
+    def _find_adjacent_special_atoms(old_topology, new_topology, mutated_residue_index):
+        """
+        return the atom maps of the next residue C and N atoms in the new topology compared to the old topology
+
+        Arguments
+        ---------
+        old_topology : simtk.openmm.app.Topology object
+            topology of the old system
+        new_topology : simtk.openmm.app.Topology object
+            topology of the new object
+        mutated_residue_index : int
+            index of the residue being mutated
+
+        Returns
+        -------
+        new_to_old_map : dict
+            dict of extra C and N indices
+        """
+        #pull the correct chains
+        chain_id = self._chain_id
+        new_chain = [chain for chain in new_topology.chains() if chain.id == chain_id][0]
+        old_chain = [chain for chain in old_topology.chains() if chain.id == chain_id][0]
+
+        prev_res_index, next_res_index = mutated_residue_index - 1, mutated_residue_index + 1
+
+        new_next_res = [res for res in new_chain.residues() if res.index == next_res_index][0]
+        old_next_res = [res for res in old_chain.residues() if res.index == next_res_index][0]
+
+        new_prev_res = [res for res in new_chain.residues() if res.index == prev_res_index][0]
+        old_prev_res = [res for res in old_chain.residues() if res.index == prev_res_index][0]
+
+        new_next_res_N_index = [atom.index for atom in new_next_res.atoms() if atom.name.replace(" ", "") == 'N']
+        old_next_res_N_index = [atom.index for atom in old_next_res.atoms() if atom.name.replace(" ", "") == 'N']
+
+        new_prev_res_C_index = [atom.index for atom in new_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
+        old_prev_res_C_index = [atom.index for atom in old_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
+
+        for _list in [new_next_res_N_index, old_next_res_N_index, new_prev_res_C_index, old_prev_res_C_index]:
+            assert len(_list) == 1, f"atoms in the next or prev residue are not uniquely named"
+
+        new_to_old_map = {new_next_res_N_index[0]: old_next_res_N_index[0],
+                          new_prev_res_C_index[0]: old_prev_res_C_index[0]}
+
+        return new_to_old_map
+
+
+
 
     def _choose_mutant(self, topology, metadata):
         """
@@ -1182,6 +1276,7 @@ class PolymerProposalEngine(ProposalEngine):
             The original Topology object to be processed
         residue_map : list(tuples)
             simtk.openmm.app.topology.Residue (existing residue), str (three letter residue name of proposed residue)
+
         Returns
         -------
         excess_atoms : list(simtk.openmm.app.topology.Atom)
@@ -1397,21 +1492,36 @@ class PolymerProposalEngine(ProposalEngine):
         """
         return residue.name == other_residue.name and residue.index == other_residue.index and residue.chain.id == other_residue.chain.id and residue.id == other_residue.id
 
-    def _construct_atom_map(self, residue_map, old_topology, index_to_new_residues, new_topology):
+    def _construct_atom_map(self,
+                            residue_map,
+                            old_topology,
+                            index_to_new_residues,
+                            new_topology):
         """
         Construct atom map (key: index to new residue, value: index to old residue) to supply as an argument to the TopologyProposal.
+
         Arguments
         ---------
         residue_map : list(tuples)
             simtk.openmm.app.topology.Residue, str (three letter residue name of new residue)
         old_topology : simtk.openmm.app.Topology
-        index_to_new_residues : dict, key : int (index) , value : str (three letter name of proposed residue)
+            topology of old system
+        index_to_new_residues : dict
+            key : int (index) , value : str (three letter name of proposed residue)
         new_topology : simtk.openmm.app.Topology
+            topology of new system
+
         Returns
         -------
-        atom_map : dict, key: int (index
+        adjusted_atom_map : dict, key: int (index
             new residues have all correct atoms and bonds for desired mutation
+        old_res_to_oemol_map : dict
+            key: int (index);  value: int (index)
+        new_res_to_oemol_map : dict
+            key: int (index);  value: int (index)
         """
+        from perses.utils.openeye import createOEMolFromSDF
+        from pkg_resources import resource_filename
 
         # atom_map : dict, key : int (index of atom in old topology) , value : int (index of same atom in new topology)
         atom_map = dict()
@@ -1419,26 +1529,6 @@ class PolymerProposalEngine(ProposalEngine):
         # atoms with an old_index attribute should be mapped
         # k : int
         # atom : simtk.openmm.app.topology.Atom
-        def match_backbone(old_residue, new_residue, atom_name):
-            """
-            Forcibly including CA and N in the map even if they don't meet
-            matching criteria
-            """
-            found_old_atom = False
-            for atom in old_residue.atoms():
-                if atom.name == atom_name:
-                    old_atom = atom
-                    found_old_atom = True
-                    break
-            assert found_old_atom
-            found_new_atom = False
-            for atom in new_residue.atoms():
-                if atom.name == atom_name:
-                    new_atom = atom
-                    found_new_atom = True
-                    break
-            assert found_new_atom
-            return new_atom.index, old_atom.index
 
         # old_to_new_residues : dict, key : str old residue name, key : simtk.openmm.app.topology.Residue new residue
         old_to_new_residues = {}
@@ -1447,32 +1537,38 @@ class PolymerProposalEngine(ProposalEngine):
                 if old_residue.index == new_residue.index:
                     old_to_new_residues[old_residue.name] = new_residue
                     break
+        _logger.debug(f"\t\told_to_new_residues: {old_to_new_residues}")
 
         # modified_residues : dict, key : index of old residue, value : proposed residue
         modified_residues = dict()
         for map_entry in residue_map:
             old_residue = map_entry[0]
             modified_residues[old_residue.index] = old_to_new_residues[old_residue.name]
+        _logger.debug(f"\t\tmodified residues: {modified_residues}")
 
         # old_residues : dict, key : index of old residue, value : old residue
         old_residues = dict()
         for residue in old_topology.residues():
             if residue.index in index_to_new_residues.keys():
                 old_residues[residue.index] = residue
-
-        # Create initial atom map for atoms in new topology that are not part of modified residues
-        for atom in new_topology.atoms():
-            if atom.residue in modified_residues.values():
-                continue
-            try:
-                atom_map[atom.index] = atom.old_index
-            except AttributeError:
-                pass
+        _logger.debug(f"\t\t\told residues: {old_residues}")
 
         # Update atom map with atom mappings for residues that have been modified
-        for index in index_to_new_residues.keys():
+        for index in index_to_new_residues.keys(): #note, index_to_new_residues only include residues that are modified in this iteration
             old_res = old_residues[index]
             new_res = modified_residues[index]
+
+            old_res_name = old_res.name
+            new_res_name = new_res.name
+
+            #make correction for HIS
+            his_templates = ['HIE', 'HID']
+            if old_res_name in his_templates:
+                old_res_name = 'HIS'
+            elif new_res_name in his_templates:
+                new_res_name = 'HIS'
+            else:
+                pass
 
             # Save index of first atom in old residue and new residue
             for atom in old_res.atoms():
@@ -1482,19 +1578,92 @@ class PolymerProposalEngine(ProposalEngine):
                 first_atom_index_new = atom.index
                 break
 
-            old_oemol_res = FFAllAngleGeometryEngine.oemol_from_residue(old_res)
-            new_oemol_res = FFAllAngleGeometryEngine.oemol_from_residue(new_res)
+            old_oemol_res = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{old_res_name}.pdb")), add_hydrogens = True)
+            new_oemol_res = createOEMolFromSDF(resource_filename('perses', os.path.join('data', 'amino_acid_templates', f"{new_res_name}.pdb")), add_hydrogens = True)
+
+            old_res_to_oemol_map = {atom.index: old_oemol_res.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in old_res.atoms()}
+            new_res_to_oemol_map = {atom.index: new_oemol_res.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in new_res.atoms()}
+
+            #fix atom names
+            for atom in old_oemol_res.GetAtoms():
+                name_with_spaces = atom.GetName()
+                name_without_spaces = name_with_spaces.replace(" ", "")
+                atom.SetName(name_without_spaces)
+
+            for atom in new_oemol_res.GetAtoms():
+                name_with_spaces = atom.GetName()
+                name_without_spaces = name_with_spaces.replace(" ", "")
+                atom.SetName(name_without_spaces)
+
+            #initialize_the atom map
+            local_atom_map = {}
+
+            #now remove backbones in both molecules and map them separately
+            backbone_atoms = ['C', 'CA', 'N', 'O', 'H', 'HA', "H'"]
+            for atom in new_oemol_res.GetAtoms():
+                if atom.GetName() in backbone_atoms:
+                    try: #to get the backbone atom with the same naem in the old_oemol_res
+                        old_corresponding_backbones = [_atom for _atom in old_oemol_res.GetAtoms() if _atom.GetName() == atom.GetName()]
+                        assert len(old_corresponding_backbones) == 1, f"there can only be one corresponding backbone in the old molecule"
+                        old_corresponding_backbone = old_corresponding_backbones[0]
+                        if not atom.GetName() == "H'": #throw out the extra H
+                            local_atom_map[atom.GetIdx()] = old_corresponding_backbone.GetIdx()
+                        assert new_oemol_res.DeleteAtom(atom), f"failed to delete new_oemol atom {atom}"
+                        assert old_oemol_res.DeleteAtom(old_corresponding_backbone), f"failed to delete old_oemol atom {old_corresponding_backbone}"
+                    except Exception as e:
+                        raise Exception(f"failed to map the backbone separately: {e}")
+
+            #assert the names are unique:
+            if not len(set([atom.GetName() for atom in old_oemol_res.GetAtoms()])) == len([atom.GetName() for atom in old_oemol_res.GetAtoms()]):
+                _logger.warning(f"\t\t\tthe sidechain atoms in the old res are not uniquely named")
+                return {}
+            elif not len(set([atom.GetName() for atom in new_oemol_res.GetAtoms()])) == len([atom.GetName() for atom in new_oemol_res.GetAtoms()]):
+                _logger.warning(f"\t\t\tthe sidechain atoms in the new res are not uniquely named")
+                return {}
+
             # local_atom_map : dict, key : index of atom in new residue, value : index of atom in old residue.
-            local_atom_map = self._get_mol_atom_matches(old_oemol_res, new_oemol_res, first_atom_index_old, first_atom_index_new)
-            for backbone_name in ['CA','N']:
-                new_index, old_index = match_backbone(old_residues[index], modified_residues[index], backbone_name)
-                local_atom_map[new_index] = old_index
-            atom_map.update(local_atom_map)
-        return atom_map
+            # PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree
+            # PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
+
+            #now we can get the mol atom map of the sidechain
+            #NOTE: since the sidechain oemols are NOT zero-indexed anymore, we need to match by name (since they are unique identifiers)
+            local_atom_map_nonstereo_sidechain = SmallMoleculeSetProposalEngine._get_mol_atom_map(old_oemol_res,
+                                                                                                  new_oemol_res,
+                                                                                                  atom_expr = PROTEIN_ATOM_EXPRESSION,
+                                                                                                  bond_expr = PROTEIN_BOND_EXPRESSION,
+                                                                                                  allow_ring_breaking = True,
+                                                                                                  matching_criterion = 'name')
+
+            #return nothing if the CB is not mapped
+            old_to_new_atoms = {old_oemol_res.GetAtom(oechem.OEHasAtomIdx(old_idx)): new_oemol_res.GetAtom(oechem.OEHasAtomIdx(new_idx)) for old_idx, new_idx in local_atom_map_nonstereo_sidechain.items()}
+            old_to_new_atom_names = {(key.GetName(), val.GetName()) for key, val in old_to_new_atoms.items()}
+            if ('CB', 'CB') not in old_to_new_atom_names:
+                local_atom_map_nonstereo_sidechain = {}
+
+            #preserve chirality of the sidechain
+            local_atom_map_stereo_sidechain = SmallMoleculeSetProposalEngine.preserve_chirality(old_oemol_res, new_oemol_res, local_atom_map_nonstereo_sidechain)
+
+            #update the local map
+            local_atom_map.update(local_atom_map_nonstereo_sidechain)
+            _logger.debug(f"\t\t\tthe local atom map is {local_atom_map}")
+
+            map_atoms_label_new = [(new_oemol_atoms[idx_new], old_oemol_atoms[idx_old]) for idx_new, idx_old in local_atom_map.items()]
+            map_atom_names = [(atom1.GetName(), atom2.GetName()) for atom1, atom2 in map_atoms_label_new]
+            _logger.debug(f"\t\t\tthe mapped atom names are: {map_atom_names}")
+
+            #now we have to update the atom map indices
+            _logger.debug(f"\t\t\tadjusting the atom map with topology indices...")
+            adjusted_atom_map = {}
+            for (key, value) in mol_atom_map.items():
+                adjusted_atom_map[key + first_atom_index_new] = value + first_atom_index_old
+
+            #and all of the environment atoms should already be handled
+        return adjusted_atom_map, old_res_to_oemol_map, new_res_to_oemol_map
 
     def _get_mol_atom_matches(self, current_molecule, proposed_molecule, first_atom_index_old, first_atom_index_new):
         """
         Given two molecules, returns the mapping of atoms between them.
+
         Arguments
         ---------
         current_molecule : openeye.oechem.oemol object
@@ -1687,28 +1856,54 @@ class PointMutationEngine(PolymerProposalEngine):
 
     def _choose_mutant(self, topology, metadata):
         """
-        Method to
+        Method to choose a mutant.
+
+        Arguments
+        ---------
+        topology : simtk.openmm.app.Topology
+            topology of the protein
+        metadata : dict
+            metadata associated with mutant choice
+
+        Returns
+        -------
+        index_to_new_residues : dict
+            dict of {index: new_residue}
+        metadata : dict
+            input metadata
         """
         chain_id = self._chain_id
-        old_key = self._compute_mutant_key(topology, chain_id)
-        index_to_new_residues = self._undo_old_mutants(topology, chain_id, old_key)
-        if index_to_new_residues and not self._aggregate:  # Starting state is mutant and mutations should not be aggregated
+
+        _logger.debug(f"\t\tcomputing old mutant key...")
+        old_key = self._compute_mutant_key(topology, chain_id) #compute the key of the given topology and the appropriate chain
+        _logger.debug(f"\t\t\told mutant key: {old_key}")
+
+        _logger.debug(f"\t\tcomputing index_to_new_residues...")
+        index_to_new_residues = self._undo_old_mutants(topology, chain_id, old_key) #pull the index: new residues that are different from WT
+        _logger.debug(f"\t\t\tindex_to_new_residues: {index_to_new_residues}")
+
+        if index_to_new_residues != {} and not self._aggregate:  # Starting state is mutant and mutations should not be aggregated
+            _logger.debug(f"\t\tthe starting state is a mutant, but mutations are not being aggregated.")
             pass  # At this point, index_to_new_residues contains mutations that need to be undone. This iteration will result in WT,
         else:  # Starting state is WT or starting state is mutant and mutations should be aggregated
+            _logger.debug(f"\t\tthe starting state is WT or mutant, and mutations can aggregate.")
             index_to_new_residues = dict()
             if self._allowed_mutations is not None:
+                _logger.debug(f"\t\tthe allowed mutations are prespecified as {self._allowed_mutations}; generating index_to_new_residues...")
                 allowed_mutations = self._allowed_mutations
                 index_to_new_residues = self._choose_mutation_from_allowed(topology, chain_id, allowed_mutations, index_to_new_residues, old_key)
             else:
                 # index_to_new_residues : dict, key : int (index) , value : str (three letter residue name)
+                #TODO: check _propose_mutation
                 index_to_new_residues = self._propose_mutation(topology, chain_id, index_to_new_residues)
+            _logger.debug(f"\t\t\tindex_to_new_residues: {index_to_new_residues}")
         # metadata['mutations'] : list(str (three letter WT residue name - index - three letter MUT residue name) )
         metadata['mutations'] = self._save_mutations(topology, index_to_new_residues)
         return index_to_new_residues, metadata
 
     def _undo_old_mutants(self, topology, chain_id, old_key):
         """
-        Function to find the residue indices in the chain_id with residues that are different from WT.  This is a dict of form {idx : res.name}
+        Function to find the residue indices in the chain_id with residues that are different from WT.  This is a dict of form {idx : res.name}.
 
         Arguments
         ---------
@@ -1725,22 +1920,32 @@ class PointMutationEngine(PolymerProposalEngine):
             dict of {index: new_residue}
         """
         index_to_new_residues = dict()
-        if old_key == 'WT':
+        if old_key == 'WT': #there are no mutants, so return an empty dict
             return index_to_new_residues
+
+        #search for appropriate chain
+        found_chain = False
         for chain in topology.chains():
             if chain.id == chain_id:
+                found_chain = True
                 break
+        if not found_chain:
+            raise Exception(f"chain id {chain_id} was not found in the topology")
+
         residue_id_to_index = {residue.id : residue.index for residue in chain.residues()}
+
         for mutant in old_key.split('-'):
-            old_res = mutant[:3]
-            residue_id = mutant[3:-3]
-            index_to_new_residues[residue_id_to_index[residue_id]] = old_res
+            old_res = mutant[:3] #3 letter old res
+            residue_id = mutant[3:-3] #id of res
+            index_to_new_residues[residue_id_to_index[residue_id]] = old_res #update the index to new res ONLY for mutated residues
+
         return index_to_new_residues
 
     def _choose_mutation_from_allowed(self, topology, chain_id, allowed_mutations, index_to_new_residues, old_key):
         """
         Used when allowed mutations have been specified
         Assume (for now) uniform probability of selecting each specified mutant
+
         Arguments
         ---------
         topology : simtk.openmm.app.Topology
@@ -1753,6 +1958,7 @@ class PointMutationEngine(PolymerProposalEngine):
             contains information to mutate back to WT as starting point for new mutants
         old_key : str
             chemical_state_key for old topology
+
         Returns
         -------
         index_to_new_residues : dict
@@ -1768,9 +1974,11 @@ class PointMutationEngine(PolymerProposalEngine):
                 chain = anychain
                 chain_found = True
                 break
+
         if not chain_found:
             chains = [chain.id for chain in topology.chains()]
             raise Exception("Chain '%s' not found in Topology. Chains present are: %s" % (chain_id, str(chains)))
+
         residue_id_to_index = {residue.id : residue.index for residue in chain.residues()}
 
         # Define location probabilities and propose a location/mutant state
@@ -1807,14 +2015,14 @@ class PointMutationEngine(PolymerProposalEngine):
         # If the proposed state is the same as the current state
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         if old_key == 'WT' and proposed_location == len(allowed_mutations):
-            # Choose WT
+            # Choose WT and return empty index_to_new_residues
             return index_to_new_residues
         elif old_key != 'WT':
             for mutant in old_key.split('-'):
                 residue_id = mutant[3:-3]
                 new_res = mutant[-3:]
                 if allowed_mutations.index((residue_id, new_res)) == proposed_location:
-                    return index_to_new_residues
+                    return index_to_new_residues #it is already mutated
 
         residue_id = allowed_mutations[proposed_location][0]
         residue_name = allowed_mutations[proposed_location][1]
@@ -1833,8 +2041,9 @@ class PointMutationEngine(PolymerProposalEngine):
 
         # Check if mutated residue's name is same as residue's name in old topology
         if original_residue.name in ['HID', 'HIE']:
-            original_residue.name = 'HIS'
-        if original_residue.name == residue_name:
+            # original_residue.name = 'HIS'
+            pass
+        if original_residue.name == residue_name: #there is no mutation to be done
             return index_to_new_residues
 
         # Save proposed mutation to index_to_new_residues
@@ -1842,15 +2051,16 @@ class PointMutationEngine(PolymerProposalEngine):
         index_to_new_residues[residue_id_to_index[residue_id]] = residue_name
 
         # Randomly choose HIS template ('HIS' does not exist as a template)
-        if residue_name == 'HIS':
-            his_state = ['HIE','HID']
-            his_prob = [1/len(his_state)] * len(his_state)
-            his_choice = np.random.choice(range(len(his_state)), p=his_prob)
-            index_to_new_residues[residue_id_to_index[residue_id]] = his_state[his_choice]
+        # if residue_name == 'HIS':
+        #     his_state = ['HIE','HID']
+        #     his_prob = [1/len(his_state)] * len(his_state)
+        #     his_choice = np.random.choice(range(len(his_state)), p=his_prob)
+        #     index_to_new_residues[residue_id_to_index[residue_id]] = his_state[his_choice]
         return index_to_new_residues
 
     def _propose_mutation(self, topology, chain_id, index_to_new_residues):
         """
+
         Arguments
         ---------
         topology : simtk.openmm.app.Topology
@@ -1905,7 +2115,8 @@ class PointMutationEngine(PolymerProposalEngine):
         # original_residue : simtk.openmm.app.topology.Residue
         original_residue = chain_residues[proposed_location]
         if original_residue.name in ['HIE', 'HID']:
-            original_residue.name = 'HIS'
+            #original_residue.name = 'HIS'
+            pass
 
         if self._residues_allowed_to_mutate is None:
             proposed_location = original_residue.index
@@ -1929,10 +2140,11 @@ class PointMutationEngine(PolymerProposalEngine):
 
         # Randomly choose HIS template ('HIS' does not exist as a template)
         if aminos[proposed_amino_index] == 'HIS':
-            his_state = ['HIE','HID']
-            his_prob = [1 / len(his_state)] * len(his_state)
-            his_choice = np.random.choice(range(len(his_state)), p=his_prob)
-            index_to_new_residues[proposed_location] = his_state[his_choice]
+            # his_state = ['HIE','HID']
+            # his_prob = [1 / len(his_state)] * len(his_state)
+            # his_choice = np.random.choice(range(len(his_state)), p=his_prob)
+            # index_to_new_residues[proposed_location] = his_state[his_choice]
+            pass
         return index_to_new_residues
 
     def _mutable_residues(self, chain):
@@ -1956,8 +2168,19 @@ class PointMutationEngine(PolymerProposalEngine):
         """
         return [r.name+'-'+str(r.id)+'-'+index_to_new_residues[r.index] for r in topology.residues() if r.index in index_to_new_residues]
 
-    def _compute_mutant_key(self, topology, chain_id):
+    def _compute_mutant_key(self,
+                            topology,
+                            chain_id):
         """
+        Compute the key of a mutant topology
+
+        Arguments
+        ---------
+        topology : simtk.openmm.app.Topology
+            topology of the protein
+
+        chain_id : str
+            chain id in the topology to be computed
 
         """
         mutant_key = ''
@@ -1976,6 +2199,7 @@ class PointMutationEngine(PolymerProposalEngine):
         if chain is None:
             raise Exception(f"Chain {chain_id} not found.  Available chains are {anychains}")
 
+        #pull the appropriate wt chain
         for anywt_chain in wildtype.chains():
             anywt_chains.append(anywt_chain)
             if anywt_chain.id == chain_id:
@@ -1985,12 +2209,12 @@ class PointMutationEngine(PolymerProposalEngine):
         if not wt_chain:
             raise Exception(f"Chain {chain_id} not found.  Available chains are {anywt_chains}")
 
-        assert len(wt_chain.residues()) == len(chain.residues()), f"the wt chain and the topology chain do not have the same number of residues."
+        assert len(list(wt_chain.residues())) == len(list(chain.residues())), f"the wt chain and the topology chain do not have the same number of residues."
         for wt_res, res in zip(wt_chain.residues(), chain.residues()):
             if wt_res.name != res.name:
                 if mutant_key:
-                    mutant_key+='-' # add a hyphen space for every residue that is different between the wt chain and the topology chain
-                mutant_key += str(wt_res.name)+str(res.id)+str(res.name)
+                    mutant_key += '-' # add a hyphen space for every residue that is different between the wt chain and the topology chain
+                mutant_key += str(wt_res.name)+str(res.id)+str(res.name) #mutant key has the form for each residue: (wt_res_name, res.id, res_name)
         if not mutant_key:
             mutant_key = 'WT'
         return mutant_key
@@ -2062,10 +2286,11 @@ class PeptideLibraryEngine(PolymerProposalEngine):
             # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
             index_to_new_residues[residue_index] = residue_name
             if residue_name == 'HIS':
-                his_state = ['HIE','HID']
-                his_prob = np.array([0.5 for i in range(len(his_state))])
-                his_choice = np.random.choice(range(len(his_state)),p=his_prob)
-                index_to_new_residues[residue_index] = his_state[his_choice]
+                # his_state = ['HIE','HID']
+                # his_prob = np.array([0.5 for i in range(len(his_state))])
+                # his_choice = np.random.choice(range(len(his_state)),p=his_prob)
+                # index_to_new_residues[residue_index] = his_state[his_choice]
+                pass
 
         # index_to_new_residues : dict, key : int (index of residue, 0-indexed), value : str (three letter residue name)
         return index_to_new_residues, metadata
@@ -2438,7 +2663,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         super(SmallMoleculeSetProposalEngine, self).__init__(system_generator, proposal_metadata=proposal_metadata, always_change=always_change)
 
-    def propose(self, current_system, current_topology, current_mol=None, proposed_mol=None, current_metadata=None):
+    def propose(self,
+                current_system,
+                current_topology,
+                current_mol = None,
+                proposed_mol = None,
+                preserve_chirality = True,
+                current_metadata = None):
         """
         Propose the next state, given the current state
 
@@ -2454,6 +2685,8 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             If specified, use this OEMol instead of converting from topology
         proposed_mol : OEMol, optional, default=None
             If specified, use this OEMol instead of converting from topology
+        preserve_chirality : bool, default True
+            whether to preserve the chirality of the small molecule
 
         Returns
         -------
@@ -2518,6 +2751,7 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             mol_atom_map = self._get_mol_atom_map(current_mol, proposed_mol, atom_expr=self.atom_expr,
                                                   bond_expr=self.bond_expr, verbose=self.verbose,
                                                   allow_ring_breaking=self._allow_ring_breaking)
+
         else:
             _logger.info(f"atom map is pre-determined as {mol_atom_map}")
             mol_atom_map = self._atom_map
@@ -2782,12 +3016,31 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return False # no rings in molecule1 are broken in molecule2
 
     @staticmethod
-    def preserves_rings(match, current_mol, proposed_mol):
-        """Returns True if the transformation allows ring systems to be broken or created."""
-        pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
-        target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
+    def preserves_rings(match,
+                        current_mol,
+                        proposed_mol,
+                        matching_criterion = 'index'):
+        """
+        Returns True if the transformation allows ring systems to be broken or created.
 
-        pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
+        Arguments
+        ---------
+        match : oechem.OEMCSSearch.Match iter
+            entry in oechem.OEMCSSearch.Match object
+        current_mol : openeye.oechem.oemol object
+        proposed_mol : openeye.oechem.oemol object
+        matching_criterion : str, default 'index'
+            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
+            allowables: ['index', 'name']
+
+        Returns
+        -------
+        breaks_ring : bool
+            whether the transformation breaks the ring
+
+        """
+        pattern_to_target_map = SmallMoleculeSetProposalEngine._create_pattern_to_target_map(current_mol, proposed_mol, match, matching_criterion)
+
         if SmallMoleculeSetProposalEngine.breaks_rings_in_transformation(current_mol, proposed_mol, pattern_to_target_map):
             return False
 
@@ -2798,20 +3051,161 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return True
 
     @staticmethod
-    def rank_degenerate_maps(old_mol, new_mol, matches):
+    def _create_pattern_to_target_map(current_mol, proposed_mol, match, matching_criterion = 'index'):
+        """
+        Create a dict of {pattern_atom: target_atom}
+
+        Arguments
+        ---------
+        current_mol : openeye.oechem.oemol object
+        proposed_mol : openeye.oechem.oemol object
+        match : oechem.OEMCSSearch.Match iter
+            entry in oechem.OEMCSSearch.Match object
+        matching_criterion : str, default 'index'
+            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
+            allowables: ['index', 'name']
+
+        Returns
+        -------
+        pattern_to_target_map : dict
+            {pattern_atom: target_atom}
+        """
+        if matching_criterion == 'index':
+            pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
+            target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
+            pattern_to_target_map = { pattern_atoms[matchpair.pattern.GetIdx()] : target_atoms[matchpair.target.GetIdx()] for matchpair in match.GetAtoms() }
+        elif matching_criterion == 'name':
+            pattern_atoms = {atom.GetName(): atom for atom in current_mol.GetAtoms()}
+            target_atoms = {atom.GetName(): atom for atom in proposed_mol.GetAtoms()}
+            pattern_to_target_map = {pattern_atoms[matchpair.pattern.GetName()]: target_atoms[matchpair.target.GetName()] for matchpair in match.GetAtoms()}
+        else:
+            raise Exception(f"matching criterion {matching_criterion} is not currently supported")
+        return pattern_to_target_map
+
+
+    @staticmethod
+    def check_molecule_name_uniqueness(molecule):
+        """
+        check that the oemol has unique name identifiers
+
+        Arguments
+        ---------
+        molecule : openeye.oechem.oemol
+            molecule to check
+
+        Returns
+        -------
+        validated : bool
+            whether the names are unique identifiers
+        """
+        if not len(set([atom.GetName() for atom in molecule.GetAtoms()])) == len([atom.GetName() for atom in molecule.GetAtoms()]):
+            _logger.warning(f"\t\t\tthe molecule atoms are not uniquely named")
+            return False
+        else:
+            return True
+
+
+    @staticmethod
+    def preserve_chirality(current_mol, proposed_mol, new_to_old_atom_map):
+        """
+        filters the new_to_old_atom_map for chirality preservation
+        The current scheme is implemented as follows:
+        for atom_new, atom_old in new_to_old.items():
+            if atom_new is R/S and atom_old is undefined:
+                # we presume that one of the atom neighbors is being changed, so map it accordingly
+            elif atom_new is undefined and atom_old is R/S:
+                # we presume that one of the atom neighbors is not being mapped, so map it accordingly
+            elif atom_new is R/S and atom_old is R/S:
+                # we presume nothing is changing
+            elif atom_new is S/R and atom_old is R/S:
+                # we presume that one of the neighbors is changing
+                # check if all of the neighbors are being mapped:
+                    if True, flip two
+                    else: do nothing
+        """
+        pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
+        target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
+        for new_index, old_index in new_to_old_atom_map.items():
+            if target_atoms[new_index].IsChiral() and not pattern_atoms[old_index].IsChiral():
+                #make sure that not all the neighbors are being mapped
+                #get neighbor indices:
+                neighbor_indices = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms()]
+                if all(nbr in set(list(new_to_old_atom_map.keys())) for nbr in neighbor_indices):
+                    _logger.warning(f"the atom map cannot be reconciled with chirality preservation!  It is advisable to conduct a manual atom map.")
+                    return {}
+                else:
+                    #try to remove a hydrogen
+                    hydrogen_maps = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms() if atom.GetAtomicNum() == 1]
+                    if hydrogen_maps != []:
+                        del new_to_old_atom_map[hydrogen_maps[0]]
+                    else:
+                        _logger.warning(f"there may be a geometry problem!  It is advisable to conduct a manual atom map.")
+            elif not target_atoms[new_index].IsChiral() and pattern_atoms[old_index].IsChiral():
+                #we have to assert that one of the neighbors is being deleted
+                neighbor_indices = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms()]
+                if any(nbr_idx not in list(new_to_old_atom_map.keys()) for nbr_idx in neighbor_indices):
+                    pass
+                else:
+                    _logger.warning(f"the atom map cannot be reconciled with chirality preservation since no hydrogens can be deleted!  It is advisable to conduct a manual atom map.")
+                    return {}
+            elif target_atoms[new_index].IsChiral() and pattern_atoms[old_index].IsChiral() and oechem.OEPerceiveCIPStereo(current_mol, pattern_atoms[old_index]) == oechem.OEPerceiveCIPStereo(proposed_mol, target_atoms[new_index]):
+                #check if all the atoms are mapped
+                neighbor_indices = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms()]
+                if all(nbr in set(list(new_to_old_atom_map.keys())) for nbr in neighbor_indices):
+                    pass
+                else:
+                    _logger.warning(f"the atom map cannot be reconciled with chirality preservation since all atom neighbors are being mapped!  It is advisable to conduct a manual atom map.")
+                    return {}
+            elif target_atoms[new_index].IsChiral() and pattern_atoms[old_index].IsChiral() and oechem.OEPerceiveCIPStereo(current_mol, pattern_atoms[old_index]) != oechem.OEPerceiveCIPStereo(proposed_mol, target_atoms[new_index]):
+                neighbor_indices = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms()]
+                if all(nbr in set(list(new_to_old_atom_map.keys())) for nbr in neighbor_indices):
+                    _logger.warning(f"the atom map cannot be reconciled with chirality preservation since all atom neighbors are being mapped!  It is advisable to conduct a manual atom map.")
+                    return {}
+                else:
+                    #try to remove a hydrogen
+                    hydrogen_maps = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms() if atom.GetAtomicNum() == 1]
+                    if hydrogen_maps != []:
+                        del new_to_old_atom_map[hydrogen_maps[0]]
+                    else:
+                        _logger.warning(f"there may be a geometry problem.  It is advisable to conduct a manual atom map.")
+
+            return new_to_old_atom_map
+
+
+    @staticmethod
+    def rank_degenerate_maps(old_mol,
+                             new_mol,
+                             matches,
+                             matching_criterion = 'index'):
         """
         If the atom/bond expressions for maximal substructure is relaxed, then the maps with the highest scores will likely be degenerate.
         Consequently, it is important to reduce the degeneracy with other tests.
 
         This test will give each match a score wherein every atom matching with the same atomic number (in aromatic rings) will
         receive a +1 score.
+
+        Arguments
+        ---------
+        old_mol : openeye.oechem.oemol object
+        new_mol : openeye.oechem.oemol object
+        matches : oechem.OEMCSSearch.Match objects
+            the MCS match oemol objects of the old_mol to new_mol map
+        matching_criterion : str, default 'index'
+            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
+            allowables: ['index', 'name']
+
+        Returns
+        -------
+        top_aliph_matches : dict of {int: oechem.OEMCSSearch.Match}
+            {index: oechem.OEMCSSearch.Match}
         """
         score_list = {}
         for idx, match in enumerate(matches):
             counter_arom, counter_aliph = 0, 0
-            for matchpair in match.GetAtoms():
-                old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
-                old_atom, new_atom = old_mol.GetAtom(oechem.OEHasAtomIdx(old_index)), new_mol.GetAtom(oechem.OEHasAtomIdx(new_index))
+            pattern_to_target_map = SmallMoleculeSetProposalEngine._create_pattern_to_target_map(old_mol, new_mol, match, matching_criterion)
+            for pattern_atom, target_atom in pattern_to_target_map.items():
+                old_index, new_index = pattern_atom.GetIdx(), target_atom.GetIdx()
+                old_atom, new_atom = pattern_atom, target_atom
 
                 if old_atom.IsAromatic() and new_atom.IsAromatic(): #if both are aromatic
                     if old_atom.GetAtomicNum() == new_atom.GetAtomicNum():
@@ -2834,22 +3228,36 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return top_aliph_matches
 
     @staticmethod
-    def hydrogen_mapping_exceptions(old_mol, new_mol, match):
+    def hydrogen_mapping_exceptions(old_mol,
+                                    new_mol,
+                                    match,
+                                    matching_criterion):
         """
         Returns an atom map that omits hydrogen-to-nonhydrogen atom maps AND X-H to Y-H where element(X) != element(Y)
         or aromatic(X) != aromatic(Y)
+
+        Arguments
+        ---------
+        old_mol : openeye.oechem.oemol object
+        new_mol : openeye.oechem.oemol object
+        match : oechem.OEMCSSearch.Match iter
+        matching_criterion : str, default 'index'
+            whether the pattern to target map is chosen based on atom indices or names (which should be uniquely defined)
+            allowables: ['index', 'name']
+
         """
         new_to_old_atom_map = {}
-
-        for matchpair in match.GetAtoms():
-            old_index, new_index = matchpair.pattern.GetIdx(), matchpair.target.GetIdx()
-            old_atom, new_atom = old_mol.GetAtom(oechem.OEHasAtomIdx(old_index)), new_mol.GetAtom(oechem.OEHasAtomIdx(new_index))
+        pattern_to_target_map = SmallMoleculeSetProposalEngine._create_pattern_to_target_map(old_mol, new_mol, match, matching_criterion)
+        for pattern_atom, target_atom in pattern_to_target_map.items():
+            old_index, new_index = pattern_atom.GetIdx(), target_atom.GetIdx()
+            old_atom, new_atom = pattern_atom, target_atom
 
             #Check if a hydrogen was mapped to a non-hydroden (basically the xor of is_h_a and is_h_b)
             if (old_atom.GetAtomicNum() == 1) != (new_atom.GetAtomicNum() == 1):
                 continue
 
             new_to_old_atom_map[new_index] = old_index
+
         return new_to_old_atom_map
 
 
@@ -2891,7 +3299,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         return atom_map
 
     @staticmethod
-    def _get_mol_atom_map(current_molecule, proposed_molecule, atom_expr=None, bond_expr=None, verbose=False, allow_ring_breaking=True):
+    def _get_mol_atom_map(current_molecule,
+                          proposed_molecule,
+                          atom_expr=None,
+                          bond_expr=None,
+                          verbose=False,
+                          allow_ring_breaking=True,
+                          matching_criterion = 'index'):
         """
         Given two molecules, returns the mapping of atoms between them using the match with the greatest number of atoms
 
@@ -2903,11 +3317,19 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
              The proposed new molecule
         allow_ring_breaking : bool, optional, default=True
              If False, will check to make sure rings are not being broken or formed.
+        matching_criterion : str, default 'index'
+            the best atom map is pulled based on some ranking criterion;
+            if 'index', the best atom map is chosen based on the map with the maximum number of atom index matches
+            if 'name', the best atom map is chosen based on the map with the maximum number of atom name matches
+            else, raise exception.
+            NOTE: the matching criterion pulls pattern and target matches based on indices or names;
+            if 'names' is chosen, it is first asserted that the current_molecule and proposed_molecule have atoms that are uniquely named.
+
 
         Returns
         -------
-        matches : list of match
-            list of the matches between the molecules
+        top_match : dict
+            new_to_old_atom_map
         """
         if atom_expr is None:
             _logger.warning('atom_expr not set. using DEFAULT')
@@ -2916,49 +3338,83 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
             _logger.warning('atom_expr not set. using DEFAULT')
             bond_expr = DEFAULT_BOND_EXPRESSION
 
+        if matching_criterion == 'name':
+            #assert the names are unique:
+            for _mol in [current_molecule, proposed_molecule]:
+                if SmallMoleculeSetProposalEngine.check_molecule_name_uniqueness(current_molecule):
+                    pass
+                else:
+                    _logger.warning(f"\tname uniqueness assertion failed. returning empty top_match dict")
+                    return {}
+
         # this ensures that the hybridization of the oemols is done for correct atom mapping
         oechem.OEAssignHybridization(current_molecule)
         oechem.OEAssignHybridization(proposed_molecule)
+
+        # retrieve graph mols
         oegraphmol_current = oechem.OEGraphMol(current_molecule) # pattern molecule
         oegraphmol_proposed = oechem.OEGraphMol(proposed_molecule) # target molecule
+
         #mcs = oechem.OEMCSSearch(oechem.OEMCSType_Exhaustive)
         mcs = oechem.OEMCSSearch(oechem.OEMCSType_Approximate)
         mcs.Init(oegraphmol_current, atom_expr, bond_expr)
         mcs.SetMCSFunc(oechem.OEMCSMaxBondsCompleteCycles())
         unique = False
         matches = [m for m in mcs.Match(oegraphmol_proposed, unique)]
+        _logger.debug(f"\tnumber of matches: {len(matches)}")
 
         if allow_ring_breaking is False:
             # Filter the matches to remove any that allow ring breaking
-            matches = [m for m in matches if SmallMoleculeSetProposalEngine.preserves_rings(m, oegraphmol_current, oegraphmol_proposed)]
+            matches = [m for m in matches if SmallMoleculeSetProposalEngine.preserves_rings(m, oegraphmol_current, oegraphmol_proposed, matching_criterion = matching_criterion)]
 
         if not matches:
             #raise Exception(f"There are no atom map matches that preserve rings!  It is advisable to conduct a manual atom mapping.")
             _logger.warn(f"There are no atom map matches that preserve the ring!  It is advisable to conduct a manual atom map.")
             return {}
 
-        top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches) #remove the matches with the lower rank score (filter out bad degeneracies)
+        try:
+            top_matches = SmallMoleculeSetProposalEngine.rank_degenerate_maps(current_molecule, proposed_molecule, matches, matching_criterion) #remove the matches with the lower rank score (filter out bad degeneracies)
+        except Exception as e:
+            _logger.warning(f"\t rank_degenerate_maps: {e}")
+            top_matches = matches
+
         _logger.debug(f"\tthere are {len(top_matches)} top matches")
         max_num_atoms = max([match.NumAtoms() for match in top_matches])
         _logger.debug(f"\tthe max number of atom matches is: {max_num_atoms}; there are {len([m for m in top_matches if m.NumAtoms() == max_num_atoms])} matches herein")
         new_top_matches = [m for m in top_matches if m.NumAtoms() == max_num_atoms]
-        new_to_old_atom_maps = [SmallMoleculeSetProposalEngine.hydrogen_mapping_exceptions(current_molecule, proposed_molecule, match) for match in new_top_matches]
+        new_to_old_atom_maps = [SmallMoleculeSetProposalEngine.hydrogen_mapping_exceptions(current_molecule, proposed_molecule, match, matching_criterion) for match in new_top_matches]
         _logger.debug(f"\tnew to old atom maps with most atom hits: {new_to_old_atom_maps}")
+
 
         #now all else is equal; we will choose the map with the highest overlap of atom indices
         index_overlap_numbers = []
-        for map in new_to_old_atom_maps:
-            hit_number = 0
-            for key, value in map.items():
-                if key == value:
-                    hit_number += 1
-            index_overlap_numbers.append(hit_number)
+        if matching_criterion == 'index':
+            for map in new_to_old_atom_maps:
+                hit_number = 0
+                for key, value in map.items():
+                    if key == value:
+                        hit_number += 1
+                index_overlap_numbers.append(hit_number)
+        elif matching_criterion == 'name':
+            for map in new_to_old_atom_maps:
+                hit_number = 0
+                map_tuples = list(map.items())
+                atom_map = {atom_new: atom_old for atom_new, atom_old in zip(list(proposed_molecule.GetAtoms()), list(current_molecule.GetAtoms())) if (atom_new.GetIdx(), atom_old.GetIdx()) in map_tuples}
+                for key, value in atom_map.items():
+                    if key.GetName() == value.GetName():
+                        hit_number += 1
+                index_overlap_numbers.append(hit_number)
+        else:
+            raise Exception(f"the ranking criteria {ranking_criteria} is not supported.")
 
         max_index_overlap_number = max(index_overlap_numbers)
+        _logger.debug(f"\tmax index overlap num: {max_index_overlap_number}")
         max_index = index_overlap_numbers.index(max_index_overlap_number)
         _logger.debug(f"\tchose {new_to_old_atom_maps[max_index]}")
 
-        return new_to_old_atom_maps[max_index]
+        top_match = new_to_old_atom_maps[max_index]
+
+        return top_match
 
     def _propose_molecule(self, system, topology, molecule_smiles, exclude_self=False):
         """
@@ -3712,3 +4168,64 @@ class NetworkXMolecule(object):
                     self.graph.edges[index_rev_a, index_rev_b]['oemol_bond'] = bond
             except Exception as e:
                 pass
+
+    @staticmethod
+    def _generate_amino_acid_chirality(oemol, res_name):
+        """
+        render a dict of amino acid chirality and set the stereochemistry of an oemol
+
+        Arguments
+        ---------
+        oemol : oechem.OEmol
+            the oemol of an amino acid
+        res_name : str
+            code of the residue
+
+        Returns
+        -------
+        oemol : oechem.OEmol
+            oemol with atom chirality set
+
+        """
+        #check to make sure there is a backbone
+        backbone_names = ['C', 'O', 'CA', 'H', 'N']
+        oemol_backbone_atoms = [atom for atom in oemol.GetAtoms() if atom.GetName() in backbone_names]
+        oemol_backbone_atom_names = [a.GetName() for a in oemol_backbone_atoms]
+        assert len(oemol_backbone_atoms) == len(backbone_names) and set(oemol_backbone_atoms) == set(backbone_names), f"the oemol backbone atoms ({oemol_backbone_atom_names}) and template backbone atoms ({backbone_names}) do not match."
+
+        #define a template dict
+        aa_stereocenters = {'ALA': [('CA', 'R')],
+                            'ARG': [('CA', 'R')],
+                            'ASN': [('CA', 'R')],
+                            'ASP': [('CA', 'R')],
+                            'CYS': [('CA', 'S')],
+                            'GLN': [('CA', 'R')],
+                            'GLU': [('CA', 'R')],
+                            'GLY': [('CA', 'R')],
+                            'HIS': [('CA', 'R')],
+                            'ILE': [('CA', 'R'), ('CB', 'S')],
+                            'LEU': [('CA', 'R')],
+                            'LYS': [('CA', 'R')],
+                            'MET': [('CA', 'R')],
+                            'PHE': [('CA', 'R')],
+                            'SER': [('CA', 'R')],
+                            'THR': [('CA', 'R'), ('CB', 'R')],
+                            'TRP': [('CA', 'R')],
+                            'TYR': [('CA', 'R')],
+                            'VAL': [('CA', 'R')],
+                            }
+        #now we can iterate through the oemol atoms and specify the stereochemistry
+        renders = {'R': (oechem.OEAtomStereo_Right, oechem.OECIPAtomStereo_R),
+                   'S': (oechem.OEAtomStereo_Left, oechem.OECIPAtomStereo_S)}
+        for atom in oemol.GetAtoms():
+            _stereocenters = {tup[0]: tup[1] for tup in aa_stereocenters[res_name]}
+            if atom.GetName() in list(_stereocenters.keys()):
+                #then we add the specified chirality
+                atom.SetStereo(list(atom.GetAtoms()), oechem.OEAtomStereo_Tetra, renders[_stereocenters[atom.GetName()]][0])
+                oechem.OESetCIPStereo(oemol, atom, renders[_stereocenters[atom.GetName()]][1])
+                atom.SetChiral(True)
+            else:
+                atom.SetChiral(False)
+                pass #the stereochemistry is not defined
+
+        return oemol

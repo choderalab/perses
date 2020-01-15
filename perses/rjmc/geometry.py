@@ -678,105 +678,6 @@ class FFAllAngleGeometryEngine(GeometryEngine):
 
         return logp_proposal, new_positions, rjmc_info, atoms_with_positions_reduced_potential, final_context_reduced_potential, neglected_angle_terms, omitted_growth_terms
 
-    @staticmethod
-    def _oemol_from_residue(res, verbose=True):
-        """
-        Get an OEMol from a residue, even if that residue
-        is polymeric. In the latter case, external bonds
-        are replaced by hydrogens.
-
-        Parameters
-        ----------
-        res : app.Residue
-            The residue in question
-        verbose : bool, optional, default=False
-            If True, will print verbose output.
-
-        Returns
-        -------
-        oemol : openeye.oechem.OEMol
-            an oemol representation of the residue with topology indices
-        """
-        # TODO: Deprecate this
-        from simtk.openmm import app
-
-        # TODO: This seems to be broken. Can we fix it?
-        from openmoltools.forcefield_generators import generateOEMolFromTopologyResidue
-        external_bonds = list(res.external_bonds())
-        for bond in external_bonds:
-            _logger.debug(f"\t\t\texternal_bonds : {[(atom1.name, atom2.name) for (atom1, atom2) in external_bonds]}")
-        new_atoms = {}
-        highest_index = 0
-        if external_bonds:
-            _logger.debug(f"\t\t\tthere exist external bonds; creating topology copy")
-            new_topology = app.Topology()
-            new_chain = new_topology.addChain(0)
-            new_res = new_topology.addResidue("new_res", new_chain)
-            for atom in res.atoms():
-                _logger.debug(f"\t\t\t\tplacing atom {atom.name} with id {atom.id} and index {atom.index}")
-                new_atom = new_topology.addAtom(atom.name, atom.element, new_res, atom.id)
-                new_atom.index = atom.index
-                new_atoms[atom] = new_atom
-                highest_index = max(highest_index, atom.index)
-
-            for bond in res.internal_bonds():
-                new_topology.addBond(new_atoms[bond[0]], new_atoms[bond[1]])
-
-            #we will assert that there are only 2 external bonds (one on either side of the C or N backbone),
-            #   which will be added to the new topology since they are anchor atoms
-            _logger.debug(f"\t\t\titerating over external bonds...")
-            assert len(list(res.external_bonds())) == 2, f"there are more than 2 external bonds on the residue.  This is not allowed for protein mutations"
-            for bond in res.external_bonds():
-                _logger.debug(f"\t\t\t\texternal bond atoms are {bond[0].name} and {bond[1].name} with indices {bond[0].index} and {bond[1].index}, respectively")
-                internal_atom = [atom for atom in bond if atom.residue==res][0]
-                external_atom = [atom for atom in bond if atom.residue != res][0]
-                _logger.debug(f"\t\t\tthe internal atom is {internal_atom.name} with index {internal_atom.index}")
-                _logger.debug(f"\t\t\tthe external atom is {external_atom.name} with index {external_atom.index}")
-                assert external_atom.name in ['N', 'C'], f"the external atom name {external_atom.name} is not either N or C.  Is it a backbone atom?"
-
-                new_external_atom = new_topology.addAtom(external_atom.name + "_anchor", external_atom.element, new_res)
-
-                new_external_atom.index = external_atom.index
-                new_atoms[external_atom] = new_external_atom
-                highest_index = max(highest_index, new_external_atom.index)
-
-                #then just add the bond
-                new_topology.addBond(new_external_atom, new_atoms[internal_atom])
-
-            #now we can cap the external atoms with hydrogens, which should be N and C
-            for atom in new_atoms.values():
-                if atom.name == 'N_anchor':
-                    #it has a valency of 3, so add cap hydrogens
-                    for idx in range(2):
-                        highest_index += 1
-                        new_hydrogen = new_topology.addAtom('H_anchor', app.Element.getByAtomicNumber(1))
-                        new_hydrogen.index = highest_index
-
-                        #add the bond
-                        new_topology.addBond(new_hydrogen, atom)
-
-                elif atom.name == 'C_anchor':
-                    #it has a valency of 4, so add the cap hydrogens
-                    for idx in range(3):
-                        highest_index += 1
-                        new_hydrogen = new_topology.addAtom('H_anchor', app.Element.getByAtomicNumber(1), new_res)
-                        new_hydrogen.index = highest_index
-
-                        #add the bond
-                        new_topology.addBond(new_hydrogen, atom)
-                else:
-                    pass
-
-            res_to_use = new_res
-            oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
-            oechem.OEAddExplicitHydrogens(oemol)
-        else:
-            res_to_use = res
-
-        oemol = generateOEMolFromTopologyResidue(res_to_use, geometry=False)
-        oechem.OEAddExplicitHydrogens(oemol)
-        return oemol
-
 
     def _define_no_nb_system(self,
                              system,
@@ -2283,6 +2184,7 @@ class GeometrySystemGenerator(object):
         for _node in self.networkx_structure.graph.nodes(data = True):
             _logger.debug(f"\t\t\t\tquerying node {_node[0]}")
             if _node[1]['oechem_atom'].IsChiral():
+                assert(_node[1]['oechem_atom']).HasStereoSpecified, f"atom {_node[1]['oechem_atom']} is chiral, but the chirality is not specified."
                 _stereo = stereo = oechem.OEPerceiveCIPStereo(self.networkx_structure.mol_oemol, _node[1]['oechem_atom'])
                 #_logger.debug(f"\t\t\t\t\tis chiral with CIP: {CIP_perceptions[_stereo]}")
                 #get the neighbors
