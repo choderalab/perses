@@ -182,7 +182,7 @@ class SequentialMonteCarlo():
 
         #instantiate nonequilibrium work dicts: the keys indicate from which equilibrium thermodynamic state the neq_switching is conducted FROM (as opposed to TO)
         self.cumulative_work = {'forward': [], 'reverse': []}
-        self._neq_timers = copy.deepcopy()
+        self._neq_timers = copy.deepcopy(self._eq_timers)
         self.incremental_work = copy.deepcopy(self.cumulative_work)
         self.shadow_work = copy.deepcopy(self.cumulative_work)
         self.total_jobs = {'forward': 0, 'reverse': 0} #the total number of jobs that have been run in either direction

@@ -57,21 +57,27 @@ def test_BuildProposalNetwork():
     #                                resources = None,
     #                                proposal_parameters = None,
     #                                simulation_parameters = _simulation_parameters)
-    _parallelism = Parallelism()
-    _parallelism.activate_client(library = None,
-                                 num_processes = 1,
-                                 timeout = 1800,
-                                 processor = 'cpu')
-    network = BuildProposalNetwork(parallelism = _parallelism)
-    network.setup_engines(ligand_input = os.path.join(os.getcwd(), 'test.smi'),
-                          ligand_indices = [0,1],
-                          receptor_filename = None,
-                          graph_connectivity = 'fully_connected',
-                          proposal_parameters = {'phases': ['vacuum', 'solvent']},
-                          simulation_parameters = _simulation_parameters)
-    network.create_network()
-    print(vars(network))
-    return network
+
+    from perses.tests.utils import enter_temp_directory
+    with enter_temp_directory() as tmpdirname:
+        print(f'Running example in temporary directory: {tmpdirname}')
+
+        _parallelism = Parallelism()
+        _parallelism.activate_client(library = None,
+                                     num_processes = 1,
+                                     timeout = 1800,
+                                     processor = 'cpu')
+        network = BuildProposalNetwork(parallelism = _parallelism)
+        from pkg_resources import resource_filename
+        smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+        network.setup_engines(ligand_input = smiles_filename,
+                              ligand_indices = [0,1],
+                              receptor_filename = None,
+                              graph_connectivity = 'fully_connected',
+                              proposal_parameters = {'phases': ['vacuum', 'solvent']},
+                              simulation_parameters = _simulation_parameters)
+        network.create_network()
+        print(vars(network))
 
 if __name__ == "__main__":
     test_BuildProposalNetwork()

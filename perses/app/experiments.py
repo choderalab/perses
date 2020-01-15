@@ -11,7 +11,7 @@ from perses.samplers.multistate import HybridSAMSSampler, HybridRepexSampler
 from perses.annihilation.relative import HybridTopologyFactory
 from perses.app.relative_setup import NonequilibriumSwitchingFEP, RelativeFEPSetup
 from perses.annihilation.lambda_protocol import LambdaProtocol
-from perses.rjmc.topology_proposal import TopologyProposal, SystemGenerator,SmallMoleculeSetProposalEngine
+from perses.rjmc.topology_proposal import TopologyProposal, SmallMoleculeSetProposalEngine
 from perses.rjmc.geometry import FFAllAngleGeometryEngine
 from perses.app.simulation import Simulation
 
@@ -52,7 +52,9 @@ class BuildProposalNetwork(object):
                          'hmass': 4 * unit.amus,
                          'map_strength': 'default',
                          'phases': ['vacuum', 'solvent', 'complex'],
-                         'forcefield_files': ['gaff.xml', 'amber14/protein.ff14SB.xml', 'amber14/tip3p.xml'],
+                         'forcefield_files': ['amber/protein.ff14SB.xml', 'amber/tip3p_standard.xml', 'amber/tip3p_HFE_multivalent.xml'],
+                         'small_molecule_forcefield' : 'openff-1.0.0',
+                         'small_molecule_parameters_cache' : 'cache.json',
                          'neglect_angles': False,
                          'anneal_14s': False,
                          'water_model': 'tip3p',
@@ -75,7 +77,7 @@ class BuildProposalNetwork(object):
                                       'n_steps_per_move_application': 1,
                                       'reassign_velocities': False,
                                       'n_restart_attempts': 20,
-                                      'splitting': "V R R R O R R R V",
+                                      'splitting': "V R O R V",
                                       'constraint_tolerance' : 1e-6,
                                       'offline_freq': 10,
 
@@ -631,19 +633,19 @@ class BuildProposalNetwork(object):
                 self.smiles_list = load_smi(self.ligand_input, index = self.ligand_indices)
 
                 #create a ligand data list to hold all ligand oemols, systems, positions, topologies
+                from openforcefield.topology import Molecule
+                self.molecules = list() # openforcefield Molecule objects
                 for smiles in self.smiles_list:
                     _logger.debug(f"creating oemol, system, positions, and openmm.Topology for smiles: {smiles}...")
+                    # TODO: Should we avoid createSystemFromSMILES?
                     oemol, system, positions, topology = createSystemFromSMILES(smiles, title=smiles)
                     self.ligand_oemol_pos_top.append([oemol, positions])
-
-                #pull all of the oemols (in order) to make an appropriate ffxml
-                mol_list = [_tuple[0] for _tuple in self.ligand_oemol_pos_top]
-                self.ligand_ffxml = forcefield_generators.generateForceFieldFromMolecules(mol_list)
+                    self.molecules.append(Molecule.from_openeye(oemol))
 
                 #now make all of the oemol titles 'MOL'
                 [self.ligand_oemol_pos_top[i][0].SetTitle("MOL") for i in range(len(self.ligand_oemol_pos_top))]
 
-                #the last thing to do is to make ligand topologies
+                #make ligand topologies
                 ligand_topologies = [forcefield_generators.generateTopologyFromOEMol(data[0]) for data in self.ligand_oemol_pos_top]
 
                 [self.ligand_oemol_pos_top[i].append(topology) for i, topology in enumerate(ligand_topologies)]
@@ -656,6 +658,9 @@ class BuildProposalNetwork(object):
                 [oemol.SetTitle("MOL") for oemol in oemols]
                 self.smiles_list = [ oechem.OECreateSmiString(oemol, oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens) for oemol in oemols]
                 self.ligand_oemol_pos_top = [[oemol, position, forcefield_generators.generateTopologyFromOEMol(oemol)] for oemol, position in zip(oemols, positions)]
+                # Create openforcefield Molecule objects
+                from openforcefield.topology import Molecule
+                self.molecules = [ Molecule.from_openeye(oemol) for oemol in oemols ]
 
         else:
             raise Exception(f"the ligand input can only be a string pointing to an .sdf or .smi file.  Aborting!")
@@ -783,27 +788,26 @@ class BuildProposalNetwork(object):
         """
         Wrap the process for generating a dict of system generators for each phase.
         """
+        from openmmforcefields.generators import SystemGenerator
+
+        barostat = None
         if self.proposal_arguments['pressure'] is not None:
             if self.nonbonded_method == app.PME:
                 barostat = openmm.MonteCarloBarostat(self.proposal_arguments['pressure'],
                                                      self.proposal_arguments['temperature'],
                                                      50)
-            else:
-                barostat = None
-            self.system_generator = SystemGenerator(self.proposal_arguments['forcefield_files'],
-                                                    barostat=barostat,
-                                                     forcefield_kwargs={'removeCMMotion': False,
-                                                                        'nonbondedMethod': self.nonbonded_method,
-                                                                        'constraints' : app.HBonds,
-                                                                        'hydrogenMass' : self.proposal_arguments['hmass']})
-        else:
-            self.system_generator = SystemGenerator(forcefield_files,
-                                                    forcefield_kwargs={'removeCMMotion': False,
-                                                                       'nonbondedMethod': self.nonbonded_method,
-                                                                       'constraints' : app.HBonds,
-                                                                       'hydrogenMass' : self.proposal_arguments['hmass']})
 
-        self.system_generator._forcefield.loadFile(StringIO(self.ligand_ffxml))
+        forcefield_kwargs = {'removeCMMotion': False,
+                           'nonbondedMethod': self.nonbonded_method,
+                           'constraints' : app.HBonds,
+                           'hydrogenMass' : self.proposal_arguments['hmass']}
+
+        self.system_generator = SystemGenerator(forcefields=self.proposal_arguments['forcefield_files'],
+                                                small_molecule_forcefield=self.proposal_arguments['small_molecule_forcefield'],
+                                                cache=self.proposal_arguments['small_molecule_parameters_cache'],
+                                                molecules=self.molecules,
+                                                barostat=barostat,
+                                                forcefield_kwargs=forcefield_kwargs)
 
     def _setup_complex_phase(self, ligand_oemol, ligand_positions, ligand_topology):
         """
@@ -878,10 +882,10 @@ class BuildProposalNetwork(object):
         modeller = app.Modeller(topology, positions)
         hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
         modeller.delete(hs)
-        modeller.addHydrogens(forcefield = self.system_generator._forcefield)
+        modeller.addHydrogens(forcefield = self.system_generator.forcefield)
         if not vacuum:
             _logger.info(f"\tpreparing to add solvent")
-            modeller.addSolvent(self.system_generator._forcefield,
+            modeller.addSolvent(self.system_generator.forcefield,
                                 model=model,
                                 padding = self.proposal_arguments['solvent_padding'],
                                 ionicStrength = 0.15*unit.molar)
@@ -891,7 +895,7 @@ class BuildProposalNetwork(object):
         solvated_positions = modeller.getPositions()
 
         solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
-        solvated_system = self.system_generator.build_system(solvated_topology)
+        solvated_system = self.system_generator.create_system(solvated_topology)
         return solvated_topology, solvated_positions, solvated_system
 
     def _generate_solvent_topologies(self, topology_proposal, old_positions):
@@ -948,7 +952,7 @@ class BuildProposalNetwork(object):
         new_solvated_ligand_omm_topology.setPeriodicBoxVectors(old_solvated_topology.getPeriodicBoxVectors())
 
         # create the new ligand system:
-        new_solvated_system = self.system_generator.build_system(new_solvated_ligand_omm_topology)
+        new_solvated_system = self.system_generator.create_system(new_solvated_ligand_omm_topology)
 
         new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
@@ -1011,8 +1015,8 @@ class BuildProposalNetwork(object):
         new_ligand_topology = new_ligand_topology.to_openmm()
 
         # create the new ligand system:
-        old_ligand_system = system_generator.build_system(old_ligand_topology)
-        new_ligand_system = system_generator.build_system(new_ligand_topology)
+        old_ligand_system = system_generator.create_system(old_ligand_topology)
+        new_ligand_system = system_generator.create_system(new_ligand_topology)
 
         new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
                                old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
@@ -1154,11 +1158,12 @@ class BuildProposalNetwork(object):
 
         if 'vacuum' in self.proposal_arguments['phases']:
             _logger.debug(f"\t\tvacuum:")
-            vacuum_system_generator = SystemGenerator(self.proposal_arguments['forcefield_files'],
-                                                      forcefield_kwargs={'removeCMMotion': False,
-                                                                         'nonbondedMethod': app.NoCutoff,
-                                                                         'constraints' : app.HBonds})
-            vacuum_system_generator._forcefield.loadFile(StringIO(self.ligand_ffxml))
+            # Create modified SystemGenerator for vacuum systems
+            # TODO: Should we instead allow SystemGenerator.create_system() to override kwargs?
+            #       Or perhaps it should recognize whether the Topology object is periodic or not?
+            vacuum_system_generator = copy.deepcopy(self.system_generator)
+            vacuum_system_generator.forcefield_kwargs['nonbondedMethod'] = app.NoCutoff
+
             if 'complex' not in self.proposal_arguments['phases'] and 'solvent' not in self.proposal_arguments['phases']:
                 vacuum_ligand_topology, vacuum_ligand_positions, vacuum_ligand_system = self._solvate(current_topology,
                                                                                                       current_positions,
