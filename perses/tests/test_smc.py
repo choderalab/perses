@@ -48,6 +48,7 @@ def sMC_setup():
     """
     function to setup local sMC
     """
+    from pkg_resources import resource_filename    
     smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
     fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,
