@@ -58,10 +58,8 @@ def test_BuildProposalNetwork():
     #                                proposal_parameters = None,
     #                                simulation_parameters = _simulation_parameters)
 
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        # Move to temporary directory
-        os.chdir(tmpdirname)
+    from perses.tests.utils import enter_temp_directory
+    with enter_temp_directory() as tmpdirname:
         print(f'Running example in temporary directory: {tmpdirname}')
 
         _parallelism = Parallelism()
