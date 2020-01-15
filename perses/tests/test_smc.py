@@ -48,7 +48,7 @@ def sMC_setup():
     """
     function to setup local sMC
     """
-    from pkg_resources import resource_filename    
+    from pkg_resources import resource_filename
     smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
     fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,
@@ -232,6 +232,7 @@ def test_create_endstates():
     """
     test the creation of unsampled endstates
     """
+    from pkg_resources import resource_filename        
     smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
     fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,
