@@ -135,6 +135,25 @@ def show_topology(topology):
         output += '\n'
     print(output)
 
+def render_single_molecule(filename, molecule, width=1200, height=600):
+    """
+    simple function to create an oemol image
+
+    Arguments
+    ---------
+    filename : str
+        The PDF filename to write to.
+    molecule : openeye.oechem.OEMol
+        molecule
+    width : int, optional, default=1200
+        Width in pixels
+    height : int, optional, default=1200
+        Height in pixels
+    """
+    from openeye import oechem, oedepict
+    oedepict.OEPrepareDepiction(molecule)
+    oedepict.OERenderMolecule(filename, molecule)
+
 def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, width=1200, height=600):
     """
     Render the atom mapping to a PDF file.
@@ -187,7 +206,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         atom.SetRxnRole(oechem.OERxnRole_Reactant)
     for atom in new_atoms_2:
         atom.SetRxnRole(oechem.OERxnRole_Product)
-    
+
     core1 = oechem.OEAtomBondSet()
     core2 = oechem.OEAtomBondSet()
     # add all atoms to the set
@@ -203,9 +222,9 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
         core1.RemoveAtom(new_atoms_1[index1])
         core2.RemoveAtom(new_atoms_2[index2])
         if new_atoms_1[index1].GetAtomicNum() != new_atoms_2[index2].GetAtomicNum():
-            # this means the element type is changing   
+            # this means the element type is changing
             core_change.AddAtom(new_atoms_1[index1])
-            core_change.AddAtom(new_atoms_2[index2])            
+            core_change.AddAtom(new_atoms_2[index2])
         index += 1
     # Set up image options
     itf = oechem.OEInterface()
@@ -228,7 +247,7 @@ def render_atom_mapping(filename, molecule1, molecule2, new_to_old_atom_map, wid
     # Depict reaction with component highlights
     oechem.OEGenerate2DCoordinates(rmol)
     rdisp = oedepict.OE2DMolDisplay(rmol, opts)
-    
+
     oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPink),oedepict.OEHighlightStyle_Stick, core1)
     oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEPurple),oedepict.OEHighlightStyle_Stick, core2)
     oedepict.OEAddHighlighting(rdisp, oechem.OEColor(oechem.OEGreen),oedepict.OEHighlightStyle_Stick, core_change)

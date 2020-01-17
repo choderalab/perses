@@ -35,6 +35,13 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     molecule = oechem.OEMol()
     oechem.OESmilesToMol(molecule, smiles)
 
+    #create unique atom names
+    if len([atom.GetName() for atom in molecule.GetAtoms()]) > len(set([atom.GetName() for atom in molecule.GetAtoms()])):
+        #the atom names are not unique
+        molecule = generate_unique_atom_names(molecule)
+    else:
+        pass
+
     # Set title.
     molecule.SetTitle(title)
 
@@ -222,7 +229,7 @@ def describe_oemol(mol):
         description += "%8d %8d\n" % (bond.GetBgnIdx(), bond.GetEndIdx())
     return description
 
-def createOEMolFromSDF(sdf_filename, index=0):
+def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens = True):
     """
     Load an SDF file into an OEMol. Since SDF files can contain multiple molecules, an index can be provided as well.
 
@@ -245,13 +252,29 @@ def createOEMolFromSDF(sdf_filename, index=0):
     mol_list = [oechem.OEMol(mol) for mol in ifs.GetOEMols()]
     # we'll always take the first for now
 
+    #check molecule unique names
+    renamed_mol_list = []
+    for mol_index, molecule in enumerate(mol_list):
+        #create unique atom names
+        if len([atom.GetName() for atom in molecule.GetAtoms()]) > len(set([atom.GetName() for atom in molecule.GetAtoms()])):
+            #the atom names are not unique
+            molecule_fixed = generate_unique_atom_names(molecule)
+        else:
+            molecule_fixed = molecule
+
+        renamed_mol_list.append(molecule_fixed)
+        
     # Assign aromaticity and hydrogens.
-    for molecule in mol_list:
+    for molecule in renamed_mol_list:
         oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
         oechem.OEAssignHybridization(molecule)
-        oechem.OEAddExplicitHydrogens(molecule)
+        if add_hydrogens:
+            oechem.OEAddExplicitHydrogens(molecule)
 
-    mol_to_return = mol_list[index]
+        #perceive chirality
+        oechem.OEPerceiveChiral(molecule)
+
+    mol_to_return = renamed_mol_list[index]
     return mol_to_return
 
 def calculate_mol_similarity(molA, molB):
@@ -273,3 +296,39 @@ def createSMILESfromOEMol(molecule):
     smiles = oechem.OECreateSmiString(molecule,
                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
     return smiles
+
+def generate_unique_atom_names(molecule):
+    """
+    Check if an oemol has unique atom names, and if not, then assigns them
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol object
+        oemol object to check
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol object
+        oemol, either unchanged if atom names are already unique, or newly generated atom names
+    """
+    atom_names = []
+
+    atom_count = 0
+    for atom in molecule.GetAtoms():
+        atom_names.append(atom.GetName())
+        atom_count += 1
+
+    if len(set(atom_names)) == atom_count:
+        # one name per atom therefore unique
+        _logger.info(f'molecule {molecule.GetTitle()} has unique atom names already')
+        return molecule
+    else:
+        # generating new atom names
+        from collections import defaultdict
+        from simtk.openmm.app.element import Element
+        _logger.info(f'molecule {molecule.GetTitle()} does not have unique atom names. Generating now...')
+        element_counts = defaultdict(int)
+        for atom in molecule.GetAtoms():
+            element = Element.getByAtomicNumber(atom.GetAtomicNum())
+            element_counts[element._symbol] += 1
+            name = element._symbol + str(element_counts[element._symbol])
+            atom.SetName(name)
+        return molecule
