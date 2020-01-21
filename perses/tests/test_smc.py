@@ -48,10 +48,13 @@ def sMC_setup():
     """
     function to setup local sMC
     """
-    fe_setup = RelativeFEPSetup(ligand_input = f"{os.getcwd()}/test.smi",
+    from pkg_resources import resource_filename
+    smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+    fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,
                                 new_ligand_index = 1,
-                                forcefield_files = ['gaff.xml'],
+                                forcefield_files = [],
+                                small_molecule_forcefield = 'gaff-2.11',
                                 phases = ['vacuum'])
 
     hybrid_factory = HybridTopologyFactory(topology_proposal = fe_setup._vacuum_topology_proposal,
@@ -229,10 +232,13 @@ def test_create_endstates():
     """
     test the creation of unsampled endstates
     """
-    fe_setup = RelativeFEPSetup(ligand_input = f"{os.getcwd()}/test.smi",
+    from pkg_resources import resource_filename        
+    smiles_filename = resource_filename("perses", os.path.join("data", "test.smi"))
+    fe_setup = RelativeFEPSetup(ligand_input = smiles_filename,
                                 old_ligand_index = 0,
                                 new_ligand_index = 1,
-                                forcefield_files = ['gaff.xml'],
+                                forcefield_files = [],
+                                small_molecule_forcefield = 'gaff-2.11',
                                 phases = ['vacuum'])
 
     hybrid_factory = HybridTopologyFactory(topology_proposal = fe_setup._vacuum_topology_proposal,

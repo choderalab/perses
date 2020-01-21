@@ -1352,35 +1352,32 @@ def _get_capped_amino_acid(amino_acid='ALA'):
     saveamberparm system {amino_acid}.prmtop {amino_acid}.inpcrd
     quit
     """.format(amino_acid=amino_acid)
-    cwd = os.getcwd()
-    temp_dir = tempfile.mkdtemp()
-    os.chdir(temp_dir)
-    tleap_file = open('tleap_commands', 'w')
-    tleap_file.writelines(tleapstr)
-    tleap_file.close()
-    tleap_cmd_str = "tleap -f %s " % tleap_file.name
+    from perses.tests.utils import enter_temp_directory
+    with enter_temp_directory() as tmpdirname:
+        tleap_file = open('tleap_commands', 'w')
+        tleap_file.writelines(tleapstr)
+        tleap_file.close()
+        tleap_cmd_str = "tleap -f %s " % tleap_file.name
 
-    #call tleap, log output to logger
-    output = getoutput(tleap_cmd_str)
-    logging.debug(output)
+        #call tleap, log output to logger
+        output = getoutput(tleap_cmd_str)
+        logging.debug(output)
 
-    prmtop = app.AmberPrmtopFile("{amino_acid}.prmtop".format(amino_acid=amino_acid))
-    inpcrd = app.AmberInpcrdFile("{amino_acid}.inpcrd".format(amino_acid=amino_acid))
-    topology = prmtop.topology
-    positions = inpcrd.positions
+        prmtop = app.AmberPrmtopFile("{amino_acid}.prmtop".format(amino_acid=amino_acid))
+        inpcrd = app.AmberInpcrdFile("{amino_acid}.inpcrd".format(amino_acid=amino_acid))
+        topology = prmtop.topology
+        positions = inpcrd.positions
 
-    debug = False
-    if debug:
-        system = prmtop.createSystem()
-        integrator = openmm.VerletIntegrator(1)
-        context = openmm.Context(system, integrator)
-        context.setPositions(positions)
-        openmm.LocalEnergyMinimizer.minimize(context)
-        state = context.getState(getEnergy=True)
-        print("%s energy: %s" % (amino_acid, str(state.getPotentialEnergy())))
+        debug = False
+        if debug:
+            system = prmtop.createSystem()
+            integrator = openmm.VerletIntegrator(1)
+            context = openmm.Context(system, integrator)
+            context.setPositions(positions)
+            openmm.LocalEnergyMinimizer.minimize(context)
+            state = context.getState(getEnergy=True)
+            print("%s energy: %s" % (amino_acid, str(state.getPotentialEnergy())))
 
-    os.chdir(cwd)
-    shutil.rmtree(temp_dir)
     return topology, positions
 
 def _tleap_all():

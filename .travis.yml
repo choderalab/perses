@@ -58,6 +58,13 @@ script:
   - conda install --yes --use-local ${PACKAGENAME}-dev
   # Install testing dependencies
   - conda install --yes --quiet nose nose-timer
+  # Install openmm-forcefields via pip (until available via omnia)
+  - conda install --yes tinydb "openforcefield>=0.6.0" "openforcefields>=1.0.0"
+  - pip install git+https://github.com/openmm/openmm-forcefields.git
+  # Workaround for https://github.com/openmm/openmm/pull/2511
+  # TODO: Remove this when OpenMM builds including https://github.com/openmm/openmm/pull/2511 are released
+  - echo "Overwriting OpenMM forcefield.py with fix from https://github.com/openmm/openmm/pull/2511"
+  - wget -q https://raw.githubusercontent.com/openmm/openmm/4f48402f1be3e0f049ae0e8595db638d297b0d75/wrappers/python/simtk/openmm/app/forcefield.py -O `python -c "from simtk.openmm.app import forcefield; print(forcefield.__file__)"`
   # Install desired OpenMM version
   - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda install --yes -c omnia openmm; fi
   - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda install --yes -c omnia/label/beta openmm; fi
@@ -69,7 +76,6 @@ script:
 env:
   global:
     - ORGNAME="omnia"
-    - OE_LICENSE="$HOME/oe_license.txt"
     - PACKAGENAME="perses"
     # Location of decrypted OpenEye license file
     - OE_LICENSE="$HOME/oe_license.txt"
