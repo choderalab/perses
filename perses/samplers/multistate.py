@@ -29,7 +29,7 @@ class HybridCompatibilityMixin(object):
         self._hybrid_factory = hybrid_factory
         super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
 
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,lambda_schedule=None,lambda_protocol=LambdaProtocol(),endstates=True):
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100, n_samplers=None, lambda_schedule=None, lambda_protocol=LambdaProtocol(), endstates=True):
 
         from perses.dispersed import feptasks
 
@@ -46,6 +46,14 @@ class HybridCompatibilityMixin(object):
 
         context_cache = cache.ContextCache()
 
+        if n_samplers is None:
+            logger.info(f'n_samplers not defined, setting to match n_states, {n_states}') 
+            n_samplers = n_states
+        elif n_samplers > n_states:
+            logger.warning(f'More sampler states: {n_samplers} requested greater than number of states: {n_states}. Setting n_samplers to n_states: {n_states}')
+            n_samplers = n_states
+
+        # TODO this feels like it should be somewhere else... just not sure where. Maybe into lambda_protocol
         if lambda_schedule is None:
             lambda_schedule = np.linspace(0.,1.,n_states)
         else:
@@ -68,6 +76,17 @@ class HybridCompatibilityMixin(object):
             sampler_state_list.append(copy.deepcopy(sampler_state))
 
         reporter = storage_file
+
+        # making sure number of sampler states equals n_samplers
+        if len(sampler_state_list) == n_samplers:
+            continue
+        else:
+            # picking roughly evenly spaced sampler states
+            # if n_samplers == 1, then it will pick the first in the list
+            idx = np.round(np.linspace(0, len(sampler_state_list) - 1, n_samplers)).astype(int)
+            sampler_state_list = [state for i,state in enumerate(sampler_state_list) if i in idx]
+
+        assert len(sampler_state_list) == n_samplers 
 
         if endstates:
             # generating unsampled endstates
