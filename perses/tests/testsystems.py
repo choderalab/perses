@@ -1718,10 +1718,15 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # skipping molecules with undefined stereocenters
         d_smiles_to_oemol = {}
         for i, smiles in enumerate(molecules):
-            try:
-                d_smiles_to_oemol[smiles] = smiles_to_oemol(smiles, "MOL_%d" % i)
-            except Warning:
-                print(f'Molecle {i}, failed due to unspecified stereochemistry: {smiles}')
+            errfs = oechem.oeosstream()
+            oechem.OEThrow.SetOutputStream(errfs)
+            oechem.OEThrow.Clear()
+            mol = smiles_to_oemol(smiles, "MOL_%d" % i)
+            if 'Failed due to unspecified stereochemistry' in (errfs.str().decode("UTF-8")):
+                # can't handle strings with undefined stereochemistry so throwing them out of test
+                molecules.remove(smiles)
+            else:
+               d_smiles_to_oemol[smiles] = mol 
         # ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
         #
         # f = open('clinical-kinase-inhibitors.xml', 'w')
