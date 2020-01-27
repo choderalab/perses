@@ -46,6 +46,7 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
     oechem.OEAssignHybridization(molecule)
     oechem.OEAddExplicitHydrogens(molecule)
+    oechem.OEPerceiveChiral(molecule)
 
     # Create atom names.
     oechem.OETriposAtomNames(molecule)
@@ -251,6 +252,7 @@ def createOEMolFromSDF(sdf_filename, index=0):
         oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
         oechem.OEAssignHybridization(molecule)
         oechem.OEAddExplicitHydrogens(molecule)
+        oechem.OEPerceiveChiral(molecule)
 
     mol_to_return = mol_list[index]
     return mol_to_return
@@ -271,7 +273,6 @@ def calculate_mol_similarity(molA, molB):
     return oegraphsim.OETanimoto(fpA, fpB)
 
 def createSMILESfromOEMol(molecule):
-    smiles = oechem.OECreateSmiString(molecule,
                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
     return smiles
 
