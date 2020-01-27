@@ -1722,7 +1722,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             oechem.OEThrow.SetOutputStream(errfs)
             oechem.OEThrow.Clear()
             mol = smiles_to_oemol(smiles, "MOL_%d" % i)
-            if 'Failed due to unspecified stereochemistry' not in (errfs.str().decode("UTF-8")):
+            if 'Failed due to unspecified stereochemistry' not in (errfs.str().decode("ISO-8859-1")):
                 # can't handle strings with undefined stereochemistry so throwing them out of test
                 d_smiles_to_oemol[smiles] = mol 
                
