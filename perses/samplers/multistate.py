@@ -29,7 +29,10 @@ class HybridCompatibilityMixin(object):
         self._hybrid_factory = hybrid_factory
         super(HybridCompatibilityMixin, self).__init__(*args, **kwargs)
 
-    def setup(self, n_states, temperature, storage_file, minimisation_steps=100, n_replicas=None, lambda_schedule=None, lambda_protocol=LambdaProtocol(), endstates=True):
+    def setup(self, n_states, temperature, storage_file, minimisation_steps=100,
+              n_replicas=None, lambda_schedule=None,
+              lambda_protocol=LambdaProtocol(), endstates=True):
+
 
         from perses.dispersed import feptasks
 
@@ -78,9 +81,7 @@ class HybridCompatibilityMixin(object):
         reporter = storage_file
 
         # making sure number of sampler states equals n_replicas
-        if len(sampler_state_list) == n_replicas:
-            continue
-        else:
+        if len(sampler_state_list) != n_replicas:
             # picking roughly evenly spaced sampler states
             # if n_replicas == 1, then it will pick the first in the list
             idx = np.round(np.linspace(0, len(sampler_state_list) - 1, n_replicas)).astype(int)
