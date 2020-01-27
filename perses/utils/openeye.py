@@ -280,17 +280,17 @@ def createSMILESfromOEMol(molecule):
 
 def generate_unique_atom_names(molecule):
     """
-    Check if an oemol has unique atom names, and if not, then assigns them 
+    Check if an oemol has unique atom names, and if not, then assigns them
 
     Parameters
     ----------
     molecule : openeye.oechem.OEMol object
-        oemol object to check 
+        oemol object to check
 
     Returns
     -------
     molecule : openeye.oechem.OEMol object
-        oemol, either unchanged if atom names are already unique, or newly generated atom names 
+        oemol, either unchanged if atom names are already unique, or newly generated atom names
     """
     atom_names = []
 
@@ -302,7 +302,7 @@ def generate_unique_atom_names(molecule):
     if len(set(atom_names)) == atom_count:
         # one name per atom therefore unique
         _logger.info(f'molecule {molecule.GetTitle()} has unique atom names already')
-        return molecule 
+        return molecule
     else:
         # generating new atom names
         from collections import defaultdict
@@ -315,3 +315,30 @@ def generate_unique_atom_names(molecule):
             name = element._symbol + str(element_counts[element._symbol])
             atom.SetName(name)
         return molecule
+
+
+def has_undefined_stereocenters(mol):
+    """
+    Check that _if_ a molecule has a stereocenter, the stereochemistry is defined
+    if no stereocenter then will return False too
+
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol object
+        oemol object to check
+
+    Returns
+    -------
+    bool : True if undefined Stereochemistry
+           False if no stereochemistry or all stereocenter's are labelled
+    """
+    oechem.OEPerceiveChiral(mol)
+    for atom in mol.GetAtoms():
+        if atom.IsChiral():
+            if not atom.HasStereoSpecified():
+                return True # we have a stereocenter with no stereochemistry!
+    for bond in mol.GetBonds():
+        if bond.IsChiral():
+            if not bond.HasStereoSpecified():
+                return True #we have a geometric isomer that isn't specified!
+    return False # nothing bad found

@@ -1708,7 +1708,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # # Parametrize and generate residue templates for small molecule set
         from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
         from io import StringIO
-        from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
+        from perses.utils.openeye import smiles_to_oemol, extractPositionsFromOEMol, has_undefined_stereocenters
         forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
         # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
         # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
@@ -1717,17 +1717,15 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         # skipping molecules with undefined stereocenters
         d_smiles_to_oemol = {}
+        good_molecules = []
         for i, smiles in enumerate(molecules):
-            errfs = oechem.oeosstream()
-            oechem.OEThrow.SetOutputStream(errfs)
-            oechem.OEThrow.Clear()
-            mol = smiles_to_oemol(smiles, "MOL_%d" % i)
-            if 'Failed due to unspecified stereochemistry' not in (errfs.str().decode("ISO-8859-1")):
-                # can't handle strings with undefined stereochemistry so throwing them out of test
-                d_smiles_to_oemol[smiles] = mol 
-               
-        print(f'{len(molecules) - len(list(d_smiles_to_oemol.keys()))} molecules removed from test due to unspecified stereochemistry')
-        molecules = list(d_smiles_to_oemol.keys())
+            mol = smiles_to_oemol(smiles, f"MOL_{i}")
+            if has_undefined_stereocenters(mol):
+                print(f"MOL_{i} has undefined stereochemistry so leaving out of test")
+            else:
+                d_smiles_to_oemol[smiles] = mol
+                good_molecules.append(smiles)
+
         # ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
         #
         # f = open('clinical-kinase-inhibitors.xml', 'w')
@@ -1739,7 +1737,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # forcefield.loadFile(StringIO(ffxml))
 
         # Create molecule in vacuum.
-        smiles = molecules[0] # getting the first smiles that works 
+        smiles = good_molecules[0] # getting the first smiles that works
         print("smiles: ", smiles)
         molecule = smiles_to_oemol(smiles)
 
@@ -1759,7 +1757,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         if not premapped_json_dict:
             for environment in environments:
-                proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
+                proposal_engines[environment] = SmallMoleculeSetProposalEngine(good_molecules, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
         else:
             atom_mapper = SmallMoleculeAtomMapper.from_json(premapped_json_dict)
             for environment in environments:
