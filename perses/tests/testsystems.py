@@ -1722,11 +1722,12 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
             oechem.OEThrow.SetOutputStream(errfs)
             oechem.OEThrow.Clear()
             mol = smiles_to_oemol(smiles, "MOL_%d" % i)
-            if 'Failed due to unspecified stereochemistry' in (errfs.str().decode("UTF-8")):
+            if 'Failed due to unspecified stereochemistry' not in (errfs.str().decode("UTF-8")):
                 # can't handle strings with undefined stereochemistry so throwing them out of test
-                molecules.remove(smiles)
-            else:
-               d_smiles_to_oemol[smiles] = mol 
+                d_smiles_to_oemol[smiles] = mol 
+               
+        print(f'{len(molecules) - len(list(d_smiles_to_oemol.keys()))} molecules removed from test due to unspecified stereochemistry')
+        molecules = list(d_smiles_to_oemol.keys())
         # ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
         #
         # f = open('clinical-kinase-inhibitors.xml', 'w')
@@ -1738,7 +1739,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # forcefield.loadFile(StringIO(ffxml))
 
         # Create molecule in vacuum.
-        smiles = list(d_smiles_to_oemol.keys())[0] # getting the first smiles that works 
+        smiles = molecules[0] # getting the first smiles that works 
         print("smiles: ", smiles)
         molecule = smiles_to_oemol(smiles)
 
