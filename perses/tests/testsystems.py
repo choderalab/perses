@@ -1733,7 +1733,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # forcefield.loadFile(StringIO(ffxml))
 
         # Create molecule in vacuum.
-        smiles = d_smiles_to_oemol.keys()[0] # getting the first smiles that works 
+        smiles = list(d_smiles_to_oemol.keys())[0] # getting the first smiles that works 
         print("smiles: ", smiles)
         molecule = smiles_to_oemol(smiles)
 
