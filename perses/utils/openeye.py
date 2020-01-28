@@ -104,16 +104,16 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
     return molecule
 
 
-def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
+def OEMol_to_omm_ff(oemol, small_molecule_forcefield='gaff-2.11'):
     """
-    Convert an openeye.oechem.OEMol to a openmm system, positions and topology
+    Convert an openeye.oechem.OEMol to a OpenMM System, positions and topology
 
     Parameters
     ----------
     oemol : openeye.oechem.OEMol object
         input molecule to convert
-    data_filename : str, default 'data/gaff2.xml'
-        path to .xml forcefield file, default is gaff2.xml in perses package
+    small_molecule_forcefield : str, optional, default='gaff-2.11'
+        Force field to use for SystemGenerator
 
     Return
     ------
@@ -122,21 +122,29 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     topology : openmm.topology
 
     """
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    from perses.utils.data import get_data_filename
+    # Create openforcefield Molecule
+    from openforcefield.topology import Molecule
+    molecule = Molecule.from_openeye(oemol)
 
-    gaff_xml_filename = get_data_filename(data_filename)
-    system_generator = topology_proposal.SystemGenerator([gaff_xml_filename])
-    topology = forcefield_generators.generateTopologyFromOEMol(molecule)
-    system = system_generator.build_system(topology)
-    positions = extractPositionsFromOEMol(molecule)
+    # Create Topology
+    topology = molecule.to_topology().to_openmm()
+
+    # Create OpenMM System
+    from openmmforcefields.generators import SystemGenerator
+    generator = SystemGenerator(small_molecule_forcefield=small_molecule_forcefield,
+                                forcefield_kwargs=forcefield_kwargs,
+                                molecules=molecule)
+    system = generator.create_system(topology)
+
+    # Generate conformer
+    molecule.generate_conformers(n_conformers=1)
+    positions = molecule.conformers[0]
 
     return system, positions, topology
 
 def createSystemFromIUPAC(iupac_name):
     """
-    Create an openmm system out of an oemol
+    Create an OpenMM System from an IUPAC name
 
     Parameters
     ----------
@@ -278,17 +286,17 @@ def createSMILESfromOEMol(molecule):
 
 def generate_unique_atom_names(molecule):
     """
-    Check if an oemol has unique atom names, and if not, then assigns them 
+    Check if an oemol has unique atom names, and if not, then assigns them
 
     Parameters
     ----------
     molecule : openeye.oechem.OEMol object
-        oemol object to check 
+        oemol object to check
 
     Returns
     -------
     molecule : openeye.oechem.OEMol object
-        oemol, either unchanged if atom names are already unique, or newly generated atom names 
+        oemol, either unchanged if atom names are already unique, or newly generated atom names
     """
     atom_names = []
 
@@ -300,7 +308,7 @@ def generate_unique_atom_names(molecule):
     if len(set(atom_names)) == atom_count:
         # one name per atom therefore unique
         _logger.info(f'molecule {molecule.GetTitle()} has unique atom names already')
-        return molecule 
+        return molecule
     else:
         # generating new atom names
         from collections import defaultdict

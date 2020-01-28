@@ -22,7 +22,6 @@ requirements:
     - scipy
     - pymbar
     - openmm
-    - parmed
     - openmoltools >=0.8.4
     - openmmtools
     - numba
@@ -38,9 +37,8 @@ requirements:
     - distributed
     - yank
     - progressbar2
-    - parmed
     - tqdm
-    #- openmm-forcefields # uncomment once openmm-forcefields package is pushed to conda
+    - openmm-forcefields
 
 about:
   home: https://github.com/choderalab/perses
