@@ -22,7 +22,6 @@ requirements:
     - scipy
     - pymbar
     - openmm
-    - parmed
     - openmoltools >=0.8.4
     - openmmtools
     - numba
