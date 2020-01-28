@@ -88,6 +88,8 @@ def getSetupOptions(filename):
         if 'beta_factor' not in setup_options:
             setup_options['beta_factor'] = 0.8
             _logger.info(f"\t\t\tbeta_factor not specified: default to 0.8.")
+        if 'n_replicas' not in setup_options:
+            setup_options['n_replicas'] = 1
     elif setup_options['fe_type'] == 'repex':
         _logger.info(f"\t\tfe_type: repex")
         if 'offline-freq' not in setup_options:
@@ -519,7 +521,7 @@ def run_setup(setup_options):
                                                hybrid_factory=htf[phase], online_analysis_interval=setup_options['offline-freq'],
                                                online_analysis_minimum_iterations=10,flatness_criteria=setup_options['flatness-criteria'],
                                                gamma0=setup_options['gamma0'])
-                hss[phase].setup(n_states=n_states, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
+                hss[phase].setup(n_states=n_states, n_replicas=n_replicas, temperature=temperature,storage_file=reporter,lambda_protocol=lambda_protocol,endstates=endstates)
             elif setup_options['fe_type'] == 'repex':
                 hss[phase] = HybridRepexSampler(mcmc_moves=mcmc.LangevinSplittingDynamicsMove(timestep=timestep,
                                                                                              collision_rate=5.0 / unit.picosecond,
