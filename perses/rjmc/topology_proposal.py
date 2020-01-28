@@ -70,7 +70,7 @@ PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("proposal_generator")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.WARNING)
 
 ################################################################################
 # UTILITIES
@@ -826,12 +826,14 @@ class TopologyProposal(object):
         self._unique_new_atoms = list(set(range(self._new_topology.getNumAtoms()))-set(self._new_to_old_atom_map.keys()))
         self._unique_old_atoms = list(set(range(self._old_topology.getNumAtoms()))-set(self._new_to_old_atom_map.values()))
         self._old_alchemical_atoms = set(old_alchemical_atoms) if (old_alchemical_atoms is not None) else {atom for atom in range(old_system.getNumParticles())}
-        self._new_alchemical_atoms = set(self._old_to_new_atom_map.values()).union(self._unique_new_atoms)
+        self._new_alchemical_atoms = set([self._old_to_new_atom_map[old_alch_atom] for old_alch_atom in self._old_alchemical_atoms if old_alch_atom in list(self._new_to_old_atom_map.values())]).union(set(self._unique_new_atoms))
+        #self._new_alchemical_atoms = set(self._old_to_new_atom_map.values()).union(self._unique_new_atoms)
         self._old_environment_atoms = set(range(old_system.getNumParticles())) - self._old_alchemical_atoms
         self._new_environment_atoms = set(range(new_system.getNumParticles())) - self._new_alchemical_atoms
         self._metadata = metadata
         self._old_networkx_residue = old_networkx_residue
         self._new_networkx_residue = new_networkx_residue
+        self._core_new_to_old_atom_map = {new_atom: old_atom for new_atom, old_atom in self._new_to_old_atom_map.items() if new_atom in self._new_alchemical_atoms and old_atom in self._old_alchemical_atoms}
 
     @property
     def new_topology(self):
@@ -893,6 +895,9 @@ class TopologyProposal(object):
     @property
     def metadata(self):
         return self._metadata
+    @property
+    def core_new_to_old_atom_map(self):
+        return self._core_new_to_old_atom_map
 
 class ProposalEngine(object):
     """
@@ -1096,6 +1101,7 @@ class PolymerProposalEngine(ProposalEngine):
 
         # Delete excess atoms and bonds from old topology
         excess_atoms_bonds = excess_atoms + excess_bonds
+        _logger.debug(f"\t excess atoms bonds: {excess_atoms_bonds}")
         new_topology = self._delete_atoms(old_topology, excess_atoms_bonds)
 
         # Add missing atoms and bonds to new topology
@@ -1199,6 +1205,10 @@ class PolymerProposalEngine(ProposalEngine):
             msg = "Some new atoms in TopologyProposal.new_to_old_atom_map are not in span of old atoms (1..%d):\n" % natoms_new
             msg += str(topology_proposal.new_to_old_atom_map)
             raise Exception(msg)
+
+        #validate the old/new system matches
+        #assert PolymerProposalEngine.validate_core_atoms_with_system(topology_proposal)
+
 
         return topology_proposal, local_atom_map_stereo_sidechain, new_oemol_res, old_oemol_res
 
@@ -1323,6 +1333,8 @@ class PolymerProposalEngine(ProposalEngine):
         # residue : simtk.openmm.app.topology.Residue (existing residue)
         for k, (residue, replace_with) in enumerate(residue_map):
             # Load residue template for residue to replace with
+            if replace_with =='HIS':
+                replace_with = 'HIE'
             template = self._templates[replace_with]
 
             # template_atom_names : dict, key : template atom index, value : template atom name
@@ -1570,15 +1582,17 @@ class PolymerProposalEngine(ProposalEngine):
         for old_residue in old_topology.residues():
             for new_residue in new_topology.residues():
                 if old_residue.index == new_residue.index:
-                    old_to_new_residues[old_residue.name] = new_residue
+                    #old_to_new_residues[old_residue.name] = new_residue
+                    old_to_new_residues[old_residue] = new_residue
                     break
-        _logger.debug(f"\t\told_to_new_residues: {old_to_new_residues}")
+        #_logger.debug(f"\t\told_to_new_residues: {old_to_new_residues}")
 
         # modified_residues : dict, key : index of old residue, value : proposed residue
         modified_residues = dict()
+
         for map_entry in residue_map:
             old_residue = map_entry[0]
-            modified_residues[old_residue.index] = old_to_new_residues[old_residue.name]
+            modified_residues[old_residue.index] = old_to_new_residues[old_residue]
         _logger.debug(f"\t\tmodified residues: {modified_residues}")
 
         # old_residues : dict, key : index of old residue, value : old residue
@@ -1591,6 +1605,7 @@ class PolymerProposalEngine(ProposalEngine):
         # Update atom map with atom mappings for residues that have been modified
         assert len(index_to_new_residues) == 1, f"index_to_new_residues is not of length 1"
         index = list(index_to_new_residues.keys())[0]
+        #old_res = old_residues[index]
         old_res = old_residues[index]
         new_res = modified_residues[index]
         _logger.debug(f"\t\t\told res: {old_res.name}; new res: {new_res.name}")
@@ -1646,6 +1661,7 @@ class PolymerProposalEngine(ProposalEngine):
         #create bookkeeping dictionaries
         old_res_to_oemol_map = {atom.index: old_oemol_res.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in old_res.atoms()}
         new_res_to_oemol_map = {atom.index: new_oemol_res.GetAtom(oechem.OEHasAtomName(atom.name)).GetIdx() for atom in new_res.atoms()}
+
         _logger.debug(f"\t\t\told_res_to_oemol_map: {old_res_to_oemol_map}")
         _logger.debug(f"\t\t\tnew_res_to_oemol_map: {new_res_to_oemol_map}")
 
@@ -1667,7 +1683,12 @@ class PolymerProposalEngine(ProposalEngine):
             if atom.GetName() in backbone_atoms:
                 try: #to get the backbone atom with the same naem in the old_oemol_res
                     old_corresponding_backbones = [_atom for _atom in old_oemol_res.GetAtoms() if _atom.GetName() == atom.GetName()]
-                    assert len(old_corresponding_backbones) == 1, f"there can only be one corresponding backbone in the old molecule"
+                    if old_corresponding_backbones == []:
+                        #this is an exception when the old oemol res is a glycine.  if this is the case, then we do not map HA2 or HA3
+                        assert set(['HA2', 'HA3']).issubset([_atom.GetName() for _atom in old_oemol_res.GetAtoms()]), f"old oemol residue is not a GLY template"
+                        #we have to map HA3 to HA (old, new)
+                        old_corresponding_backbones = [_atom for _atom in old_oemol_res.GetAtoms() if _atom.GetName() == 'HA3' and atom.GetName() == 'HA']
+                    assert len(old_corresponding_backbones) == 1, f"there can only be one corresponding backbone in the old molecule; corresponding backbones: {[atom.GetName() for atom in old_corresponding_backbones]}"
                     old_corresponding_backbone = old_corresponding_backbones[0]
                     if not atom.GetName() == "H'": #throw out the extra H
                         local_atom_map[atom.GetIdx()] = old_corresponding_backbone.GetIdx()
@@ -1692,6 +1713,8 @@ class PolymerProposalEngine(ProposalEngine):
         _logger.debug(f"\t\t\tlocal atom map nonstereo sidechain: {local_atom_map_nonstereo_sidechain}")
 
         #preserve chirality of the sidechain
+        # _logger.warning(f"\t\t\told oemols: {[atom.GetIdx() for atom in old_oemol_res.GetAtoms()]}")
+        # _logger.warning(f"\t\t\tnew oemols: {[atom.GetIdx() for atom in new_oemol_res.GetAtoms()]}")
         local_atom_map_stereo_sidechain = SmallMoleculeSetProposalEngine.preserve_chirality(old_oemol_res, new_oemol_res, local_atom_map_nonstereo_sidechain)
 
         _logger.debug(f"\t\t\tlocal atom map stereo sidechain: {local_atom_map_stereo_sidechain}")
@@ -1834,6 +1857,105 @@ class PolymerProposalEngine(ProposalEngine):
             chemical_state_key += res.name
 
         return chemical_state_key
+
+    @staticmethod
+    def validate_core_atoms_with_system(topology_proposal):
+        """
+        Utility function to ensure that the valence terms and nonbonded exceptions do not change between alchemical and environment atoms.
+
+        Arguments
+        ---------
+        topology_proposal : TopologyProposal
+            topology proposal
+
+        Returns
+        -------
+        validated : bool
+            whether the assertion is validated
+        """
+        old_system, new_system = topology_proposal.old_system, topology_proposal.new_system
+
+        #check if there are bonds between non alchemical atoms and core atoms in both systems
+        old_alchemical_to_nonalchemical_bonds = []
+        new_alchemical_to_nonalchemical_bonds = []
+
+        #loop over old topology
+        for bond in topology_proposal.old_topology.bonds():
+            if bond[0].index in topology_proposal._old_alchemical_atoms and bond[1].index in topology_proposal.old_environment_atoms:
+                old_alchemical_to_nonalchemical_bonds.append((bond[0], bond[1]))
+            elif bond[1].index in topology_proposal._old_alchemical_atoms and bond[0].index in topology_proposal.old_environment_atoms:
+                old_alchemical_to_nonalchemical_bonds.append((bond[1], bond[0]))
+            else:
+                pass
+
+        #loop over new topology
+        for bond in topology_proposal.new_topology.bonds():
+            if bond[0].index in topology_proposal._new_alchemical_atoms and bond[1].index in topology_proposal.new_environment_atoms:
+                new_alchemical_to_nonalchemical_bonds.append((bond[0], bond[1]))
+            elif bond[1].index in topology_proposal._new_alchemical_atoms and bond[0].index in topology_proposal.new_environment_atoms:
+                new_alchemical_to_nonalchemical_bonds.append((bond[1], bond[0]))
+            else:
+                pass
+
+        assert len(old_alchemical_to_nonalchemical_bonds) == len(new_alchemical_to_nonalchemical_bonds), f"the number of alchemical to nonalchemical bonds in old and new topologies is not equal"
+
+        #assert that all of the alchemical atoms (bonded to nonalchemical atoms) are 'core'
+        new_to_old_pair = {}
+        for alch_atom, nonalch_atom in old_alchemical_to_nonalchemical_bonds:
+            assert alch_atom.index in list(topology_proposal.core_new_to_old_atom_map.values()), f"the old alchemical atom ({alch_atom.index}) is not a core atom!"
+            assert nonalch_atom.index in topology_proposal.old_environment_atoms, f"the nonalchemical atom ({nonalch_atom.index}) is not an environment atom!"
+            appropriate_new_bonds = [bond for bond in new_alchemical_to_nonalchemical_bonds if bond[0].index == topology_proposal.old_to_new_atom_map[alch_atom.index] and bond[1].index == topology_proposal.old_to_new_atom_map[nonalch_atom.index]]
+            assert len(appropriate_new_bonds) == 1, f"there is no match between the old bond to the new bond"
+            new_to_old_pair[appropriate_new_bonds[0]] = (alch_atom, nonalch_atom)
+
+
+        #if there is at least one alchemical to nonalchemical bond, then we should check the system...
+        old_forces = {force.__class__.__name__ : force for force in [old_system.getForce(index) for index in range(old_system.getNumForces())]}
+        new_forces = {force.__class__.__name__ : force for force in [new_system.getForce(index) for index in range(new_system.getNumForces())]}
+        assert set(list(old_forces.keys())) == set(list(new_forces.keys())), f"the old and new forces do not match: {old_forces, new_forces}"
+
+        for new_bond, old_bond in new_to_old_pair.items():
+            new_atom_idx1, new_atom_idx2 = new_bond[0].index, new_bond[1].index
+            old_atom_idx1, old_atom_idx2 = old_bond[0].index, old_bond[1].index
+            _logger.debug(f"\titerating through new atoms {new_atom_idx1, new_atom_idx2} with old atoms {old_atom_idx1, old_atom_idx2}")
+
+            if 'HarmonicBondForce' in list(old_forces.keys()):
+                old_bond_terms = [param for param in [old_forces['HarmonicBondForce'].getBondParameters(bond_index) for bond_index in range(old_forces['HarmonicBondForce'].getNumBonds())] if set((old_atom_idx1, old_atom_idx2)) == set(param[:2])]
+                new_bond_terms = [param for param in [new_forces['HarmonicBondForce'].getBondParameters(bond_index) for bond_index in range(new_forces['HarmonicBondForce'].getNumBonds())] if set((new_atom_idx1, new_atom_idx2)) == set(param[:2])]
+                assert all(old_bond_term[2:] == new_bond_term[2:] for old_bond_term, new_bond_term in zip(old_bond_terms, new_bond_terms)), f"the bond terms do not match. old terms: {old_bond_terms}; new terms: {new_bond_terms}"
+            if 'HarmonicAngleForce' in list(old_forces.keys()):
+                old_angle_terms = [param for param in [old_forces['HarmonicAngleForce'].getAngleParameters(angle_index) for angle_index in range(old_forces['HarmonicAngleForce'].getNumAngles())] if set((old_atom_idx1, old_atom_idx2)).issubset(set(param[:3]))]
+                new_angle_terms = [param for param in [new_forces['HarmonicAngleForce'].getAngleParameters(angle_index) for angle_index in range(new_forces['HarmonicAngleForce'].getNumAngles())] if set((new_atom_idx1, new_atom_idx2)).issubset(set(param[:3]))]
+                assert len(old_angle_terms) == len(new_angle_terms), f"the number of old angle and new angle terms do not match: \n{old_angle_terms}\n{new_angle_terms}"
+                #assert set([tuple(old_term[3:]) for old_term in old_angle_terms]) == set([tuple(new_term[3:]) for new_term in new_angle_terms]), f"the old and new angle terms, respectively, do not match: {old_angle_terms, new_angle_terms}"
+
+            if "PeriodicTorsionForce" in list(old_forces.keys()):
+                old_torsion_terms = [param for param in [old_forces['PeriodicTorsionForce'].getTorsionParameters(torsion_index) for torsion_index in range(old_forces['PeriodicTorsionForce'].getNumTorsions())] if set((old_atom_idx1, old_atom_idx2)).issubset(set(param[:4]))]
+                new_torsion_terms = [param for param in [new_forces['PeriodicTorsionForce'].getTorsionParameters(torsion_index) for torsion_index in range(new_forces['PeriodicTorsionForce'].getNumTorsions())] if set((new_atom_idx1, new_atom_idx2)).issubset(set(param[:4]))]
+                assert len(old_torsion_terms) == len(new_torsion_terms), f"the number of old torsion and new torsion terms do not match: \n{old_torsion_terms}\n{new_torsion_terms}"
+                #assert set([tuple(old_term[4:]) for old_term in old_torsion_terms]) == set([tuple(new_term[4:]) for new_term in new_torsion_terms]), f"the old and new torsion terms, respectively, do not match: {old_torsion_terms, new_torsion_terms}"
+
+        if "NonbondedForce" in list(old_forces.keys()):
+            #make sure that the environment atoms do not change params
+            for new_idx, old_idx in topology_proposal.new_to_old_atom_map.items():
+                if new_idx in topology_proposal._new_environment_atoms:
+                    new_params = new_forces['NonbondedForce'].getParticleParameters(new_idx)[1:]
+                    old_params = old_forces['NonbondedForce'].getParticleParameters(old_idx)[1:]
+                    assert new_params == old_params, f"the environment new_to_old pair {new_idx, old_idx} do not have the same nonbonded params: {new_params, old_params}"
+
+            #then we have to check the exceptions between env atoms and between env-core atoms
+            old_exceptions = {set(old_forces['NonbondedForce'].getExceptionParameters(idx)[:2]):old_forces['NonbondedForce'].getExceptionParameters(idx)[2:] for idx in range(old_forces['NonbondedForce'].getNumExceptions())}
+            for new_exception_idx in range(new_forces['NonbondedForce'].getNumExceptions()):
+                new_exception_parms = new_forces['NonbondedForce'].getExceptionParameters(new_exception_idx)
+                new_exception_pair = new_exception_parms[:2]
+                if set(new_exception_pair).issubset(topology_proposal._new_environment_atoms) or len(set(new_exception_pair).intersection(topology_proposal._new_environment_atoms)) == 1:
+                    old_exception_pair = (topology_proposal.new_to_old_atom_map[new_exception_pair[0]], topology_proposal.new_to_old_atom_map[new_exception_pair[1]])
+                    old_exception_params = old_exceptions[set(old_exception_pair)]
+                    assert new_exception_parms == old_exception_params, f"new exception params of new env atoms {new_exception_pair} is not equal to the exception params of old env pair {old_exception_pair}"
+
+        return True
+
+
 
 class PointMutationEngine(PolymerProposalEngine):
     """
@@ -3202,7 +3324,12 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         """
         pattern_atoms = { atom.GetIdx() : atom for atom in current_mol.GetAtoms() }
         target_atoms = { atom.GetIdx() : atom for atom in proposed_mol.GetAtoms() }
+        # _logger.warning(f"\t\t\told oemols: {pattern_atoms}")
+        # _logger.warning(f"\t\t\tnew oemols: {target_atoms}")
+        copied_new_to_old_atom_map = copy.deepcopy(new_to_old_atom_map)
+
         for new_index, old_index in new_to_old_atom_map.items():
+
             if target_atoms[new_index].IsChiral() and not pattern_atoms[old_index].IsChiral():
                 #make sure that not all the neighbors are being mapped
                 #get neighbor indices:
@@ -3213,8 +3340,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 else:
                     #try to remove a hydrogen
                     hydrogen_maps = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms() if atom.GetAtomicNum() == 1]
-                    if hydrogen_maps != []:
-                        del new_to_old_atom_map[hydrogen_maps[0]]
+                    mapped_hydrogens = [_idx for _idx in hydrogen_maps if _idx in list(new_to_old_atom_map.keys())]
+                    if mapped_hydrogens != []:
+                        del copied_new_to_old_atom_map[mapped_hydrogens[0]]
                     else:
                         _logger.warning(f"there may be a geometry problem!  It is advisable to conduct a manual atom map.")
             elif not target_atoms[new_index].IsChiral() and pattern_atoms[old_index].IsChiral():
@@ -3241,12 +3369,13 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
                 else:
                     #try to remove a hydrogen
                     hydrogen_maps = [atom.GetIdx() for atom in target_atoms[new_index].GetAtoms() if atom.GetAtomicNum() == 1]
-                    if hydrogen_maps != []:
-                        del new_to_old_atom_map[hydrogen_maps[0]]
+                    mapped_hydrogens = [_idx for _idx in hydrogen_maps if _idx in list(new_to_old_atom_map.keys())]
+                    if mapped_hydrogens != []:
+                        del copied_new_to_old_atom_map[mapped_hydrogens[0]]
                     else:
                         _logger.warning(f"there may be a geometry problem.  It is advisable to conduct a manual atom map.")
 
-            return new_to_old_atom_map
+        return copied_new_to_old_atom_map #was this really an indentation error?
 
 
     @staticmethod
@@ -4265,6 +4394,16 @@ class NetworkXMolecule(object):
                 pass
 
         _logger.debug(f"\tgraph nodes: {self.graph.nodes()}")
+
+    def remove_oemols_from_graph(self):
+        """
+        Remove oemol atoms and bonds from the graph
+        """
+        for atom in self.graph.nodes(data=True):
+            atom[1]['oechem_atom'] = None
+        for bond in self.graph.edges(data=True):
+            bond[2]['oemol_bond'] = None
+
 
     @staticmethod
     def _generate_amino_acid_chirality(oemol, res_name):

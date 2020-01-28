@@ -21,7 +21,7 @@ from openeye import oechem, oeomega
 import logging
 logging.basicConfig(level = logging.NOTSET)
 _logger = logging.getLogger("geometry")
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.WARNING)
 
 
 
@@ -2186,7 +2186,8 @@ class GeometrySystemGenerator(object):
             _logger.debug(f"\t\t\t\tquerying node {_node[0]}")
             _logger.debug(f"\t\t\t\tnode attributes: {_node[1]}")
             if _node[1]['oechem_atom'].IsChiral():
-                assert(_node[1]['oechem_atom']).HasStereoSpecified, f"atom {_node[1]['oechem_atom']} is chiral, but the chirality is not specified."
+                _logger.debug(f"\t\t\t\tnode is chiral...")
+                assert(_node[1]['oechem_atom']).HasStereoSpecified(oechem.OEAtomStereo_Tetrahedral), f"atom {_node[1]['oechem_atom']} is chiral, but the chirality is not specified."
                 _stereo = stereo = oechem.OEPerceiveCIPStereo(self.networkx_structure.mol_oemol, _node[1]['oechem_atom'])
                 #_logger.debug(f"\t\t\t\t\tis chiral with CIP: {CIP_perceptions[_stereo]}")
                 #get the neighbors
@@ -2200,8 +2201,9 @@ class GeometrySystemGenerator(object):
                     nbrs_top.append(nbr)
                     nbrs_oemol.append(self.networkx_structure.residue_to_oemol_map[nbr])
                     nbrs.append(self.networkx_structure.graph.nodes[nbr]['oechem_atom'])
-                _logger.debug(f"\t\t\t\t\tquerying neighbors: {nbrs_top}")
+                _logger.debug(f"\t\t\t\t\tquerying neighbors: {nbrs_top} with data: {[self.networkx_structure.graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]}")
                 growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
+                _logger.debug(f"\t\t\t\t\tthe growth index of the neighbors is {growth_idx}")
                 if growth_idx > 0:
 
                     if len(list(self.networkx_structure.graph[_node[0]])) == 4:
@@ -2243,39 +2245,44 @@ class GeometrySystemGenerator(object):
                         _logger.debug(f"\t\t\t\t\tgrowth index of node: {_node_growth_index}")
                         _logger.debug(f"\t\t\t\t\tgrowth indices of neighbors: {_nbr_to_growth_index_tuple}")
 
-                        #find p1:
-                        p1_target_growth_index = min(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] > _node_growth_index)
-                        p1 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p1_target_growth_index][0] #take the first hit
+                        if [tup[1] for tup in _nbr_to_growth_index_tuple].count(0) == 3:
+                            _logger.warning(f"\t\t\t\t\tchiral atom {_node[1]['openmm_atom']} with neighbors {[self.networkx_structure.graph.nodes[lst_nbr]['openmm_atom'] for lst_nbr in nbrs_top]} is surrounded by 3 core neighbors.  omitting chirality bias torsion")
+                        else:
 
-                        #find p2:
-                        p2 = _node[0]
+                            #find p1:
+                            p1_target_growth_index = min(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] > _node_growth_index)
+                            p1 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p1_target_growth_index][0] #take the first hit
 
-                        #find p3:
-                        p3_target_growth_index = max(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] <= _node_growth_index)
-                        p3 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p3_target_growth_index][0] #take the first hit
+                            #find p2:
+                            p2 = _node[0]
 
-                        #find p4:
-                        p4_target_growth_index = min(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] > p1_target_growth_index)
-                        p4 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p4_target_growth_index][0] #take the first hit
-                        _logger.debug(f"\t\t\t\t\tgrowth index carrying this improper: {p4_target_growth_index}")
+                            #find p3:
+                            p3_target_growth_index = max(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] <= _node_growth_index)
+                            p3 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p3_target_growth_index][0] #take the first hit
 
-                        #now convert p1-p4 to oemol indices
-                        oemol_indices = [self.networkx_structure.residue_to_oemol_map[q] for q in [p1, p2, p3, p4]]
+                            #find p4:
+                            p4_target_growth_index = min(tup[1] for tup in _nbr_to_growth_index_tuple if tup[1] > p1_target_growth_index)
+                            p4 = [q[0] for q in _nbr_to_growth_index_tuple if q[1] == p4_target_growth_index][0] #take the first hit
+                            _logger.debug(f"\t\t\t\t\tgrowth index carrying this improper: {p4_target_growth_index}")
 
-                        #calculate the improper torsion
-                        # coords is dict of {idx: (x_0, y_0, z_0)}
-                        phase = coordinate_numba.cartesian_to_internal(np.array(coords[oemol_indices[0]], dtype = 'float64'),
-                                                                       np.array(coords[oemol_indices[1]], dtype = 'float64'),
-                                                                       np.array(coords[oemol_indices[2]], dtype = 'float64'),
-                                                                       np.array(coords[oemol_indices[3]], dtype = 'float64'))[2]
-                        adjusted_phase = self.adjust_phase(phase = phase)
-                        growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
+                            #now convert p1-p4 to oemol indices
+                            oemol_indices = [self.networkx_structure.residue_to_oemol_map[q] for q in [p1, p2, p3, p4]]
+
+                            #calculate the improper torsion
+                            # coords is dict of {idx: (x_0, y_0, z_0)}
+                            phase = coordinate_numba.cartesian_to_internal(np.array(coords[oemol_indices[0]], dtype = 'float64'),
+                                                                           np.array(coords[oemol_indices[1]], dtype = 'float64'),
+                                                                           np.array(coords[oemol_indices[2]], dtype = 'float64'),
+                                                                           np.array(coords[oemol_indices[3]], dtype = 'float64'))[2]
+                            adjusted_phase = self.adjust_phase(phase = phase)
+                            growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
 
 
-                        _torsion_index = torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, adjusted_phase, k, p4_target_growth_index])
-                        self.extra_torsion_terms[_torsion_index] = (p1, p2, p3, p4, [periodicity, adjusted_phase, k, p4_target_growth_index])
-                        _logger.debug(f"\t\t\t\t\t{(p1, p2, p3, p4)}, phase : {adjusted_phase}")
+                            _torsion_index = torsion_force.addTorsion(p1, p2, p3, p4, [periodicity, adjusted_phase, k, p4_target_growth_index])
+                            self.extra_torsion_terms[_torsion_index] = (p1, p2, p3, p4, [periodicity, adjusted_phase, k, p4_target_growth_index])
+                            _logger.debug(f"\t\t\t\t\t{(p1, p2, p3, p4)}, phase : {adjusted_phase}")
                     else:
+                        #the atom of interest must have 4 substitutents to be chiral; TODO: chirality can also be maintained with >4 atoms.
                         pass
 
         return torsion_force
