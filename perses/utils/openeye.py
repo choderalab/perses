@@ -105,16 +105,16 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
     return molecule
 
 
-def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
+def OEMol_to_omm_ff(oemol, small_molecule_forcefield='gaff-2.11'):
     """
     Convert an openeye.oechem.OEMol to a openmm system, positions and topology
 
     Parameters
     ----------
     oemol : openeye.oechem.OEMol object
-        input molecule to convert
-    data_filename : str, default 'data/gaff2.xml'
-        path to .xml forcefield file, default is gaff2.xml in perses package
+        OEMol to create vacuum system from
+    small_molecule_forcefield : str, optional, default='gaff-2.11'
+        The small molecule force field to use for SystemGenerator
 
     Return
     ------
@@ -123,6 +123,10 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     topology : openmm.topology
 
     """
+    # Create openforcefield Molecule
+    from openforcefield.topology import Molecule
+    molecule = Molecule.from_openeye(oemol)
+
     # Create Topology
     topology = molecule.to_topology().to_openmm()
 
