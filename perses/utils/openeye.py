@@ -123,10 +123,6 @@ def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     topology : openmm.topology
 
     """
-    from perses.rjmc import topology_proposal
-    from openmoltools import forcefield_generators
-    from perses.utils.data import get_data_filename
-
     # Create Topology
     topology = molecule.to_topology().to_openmm()
 
