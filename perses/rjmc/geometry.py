@@ -658,8 +658,12 @@ class FFAllAngleGeometryEngine(GeometryEngine):
         _logger.info(f"sum of energies: {atoms_with_positions_reduced_potential + reduced_potential_energy}")
         _logger.info(f"magnitude of difference in the energies: {abs(final_context_reduced_potential - atoms_with_positions_reduced_potential - reduced_potential_energy)}")
 
-        energy_mismatch_ratio = (atoms_with_positions_reduced_potential + reduced_potential_energy) / (final_context_reduced_potential)
+        #the below assertion is no longer applicable since biasing forces are unaccounted for in the atoms_with_positions_system/context
+        #TODO: resurrect some validation scheme in the future for systems with exotic parametrizations
+
+        #energy_mismatch_ratio = (atoms_with_positions_reduced_potential + reduced_potential_energy) / (final_context_reduced_potential)
         #assert (energy_mismatch_ratio < ENERGY_MISMATCH_RATIO_THRESHOLD + 1) and (energy_mismatch_ratio > 1 - ENERGY_MISMATCH_RATIO_THRESHOLD)  , f"The ratio of the calculated final energy to the true final energy is {energy_mismatch_ratio}"
+
 
         # Final log proposal:
         _logger.info("Final logp_proposal: {}".format(logp_proposal))
@@ -2187,7 +2191,7 @@ class GeometrySystemGenerator(object):
             _logger.debug(f"\t\t\t\tnode attributes: {_node[1]}")
             if _node[1]['oechem_atom'].IsChiral():
                 _logger.debug(f"\t\t\t\tnode is chiral...")
-                assert(_node[1]['oechem_atom']).HasStereoSpecified(oechem.OEAtomStereo_Tetrahedral), f"atom {_node[1]['oechem_atom']} is chiral, but the chirality is not specified."
+                assert(_node[1]['oechem_atom']).HasStereoSpecified(), f"atom {_node[1]['oechem_atom']} is chiral, but the chirality is not specified."
                 _stereo = stereo = oechem.OEPerceiveCIPStereo(self.networkx_structure.mol_oemol, _node[1]['oechem_atom'])
                 #_logger.debug(f"\t\t\t\t\tis chiral with CIP: {CIP_perceptions[_stereo]}")
                 #get the neighbors
@@ -2209,27 +2213,6 @@ class GeometrySystemGenerator(object):
                     if len(list(self.networkx_structure.graph[_node[0]])) == 4:
                         _logger.debug(f"\t\t\t\t\tthe number of neighbors is 4; proceeding")
                         # TODO: handle chiral centers where the valency of the chiral center > 4
-
-                        # #specify the atom order for calculating the angle
-                        # contains_H = False
-                        # for i, nbr in enumerate(nbrs): #replace H (if exists) with the chiral center
-                        #     if nbr.GetAtomicNum() == 1:
-                        #         nbrs_top[i] = self.networkx_structure.reverse_residue_to_oemol_map[nbr.GetIdx()]
-                        #         nbrs_oemol[i] = nbr.GetIdx()
-                        #         contains_H = True
-                        #         break
-                        # if not contains_H: #replace the first neighbor with a chiral center if H does not exst
-                        #     nbrs_top[0] = _node
-                        #     nbrs_oemol[0] = _node['oechem_atom'].GetIdx()
-                        #
-                        # #calculate the improper torsion
-                        # # coords is dict of {idx: (x_0, y_0, z_0)}
-                        # phase = coordinate_numba.cartesian_to_internal(np.array(coords[nbrs_oemol[0]], dtype = 'float64'),
-                        #                                                np.array(coords[nbrs_oemol[1]], dtype = 'float64'),
-                        #                                                np.array(coords[nbrs_oemol[2]], dtype = 'float64'),
-                        #                                                np.array(coords[nbrs_oemol[3]], dtype = 'float64'))[2]
-                        # adjusted_phase = self.adjust_phase(phase = phase)
-                        # growth_idx = self._calculate_growth_idx(nbrs_top, growth_indices)
 
                         #specify the atom order for calculating the angle
 

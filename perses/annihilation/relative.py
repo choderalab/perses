@@ -463,7 +463,7 @@ class HybridTopologyFactory(object):
             hybrid_idx = self._new_to_hybrid_map[atom_idx]
             atom_classes['unique_new_atoms'].add(hybrid_idx)
 
-        #The the core atoms:
+        #The core atoms:
         core_atoms = []
         for new_idx, old_idx in self._topology_proposal._core_new_to_old_atom_map.items():
             new_to_hybrid_idx, old_to_hybrid_index = self._new_to_hybrid_map[new_idx], self._old_to_hybrid_map[old_idx]

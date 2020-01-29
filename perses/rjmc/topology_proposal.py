@@ -1207,6 +1207,7 @@ class PolymerProposalEngine(ProposalEngine):
             raise Exception(msg)
 
         #validate the old/new system matches
+        # TODO: create more rigorous checks for this validation either in TopologyProposal or in the HybridTopologyFactory
         #assert PolymerProposalEngine.validate_core_atoms_with_system(topology_proposal)
 
 
@@ -4403,65 +4404,3 @@ class NetworkXMolecule(object):
             atom[1]['oechem_atom'] = None
         for bond in self.graph.edges(data=True):
             bond[2]['oemol_bond'] = None
-
-
-    @staticmethod
-    def _generate_amino_acid_chirality(oemol, res_name):
-        """
-        render a dict of amino acid chirality and set the stereochemistry of an oemol
-
-        Arguments
-        ---------
-        oemol : oechem.OEmol
-            the oemol of an amino acid
-        res_name : str
-            code of the residue
-
-        Returns
-        -------
-        oemol : oechem.OEmol
-            oemol with atom chirality set
-
-        """
-        #check to make sure there is a backbone
-        backbone_names = ['C', 'O', 'CA', 'H', 'N']
-        oemol_backbone_atoms = [atom for atom in oemol.GetAtoms() if atom.GetName() in backbone_names]
-        oemol_backbone_atom_names = [a.GetName() for a in oemol_backbone_atoms]
-        assert len(oemol_backbone_atoms) == len(backbone_names) and set(oemol_backbone_atoms) == set(backbone_names), f"the oemol backbone atoms ({oemol_backbone_atom_names}) and template backbone atoms ({backbone_names}) do not match."
-
-        #define a template dict
-        aa_stereocenters = {'ALA': [('CA', 'R')],
-                            'ARG': [('CA', 'R')],
-                            'ASN': [('CA', 'R')],
-                            'ASP': [('CA', 'R')],
-                            'CYS': [('CA', 'S')],
-                            'GLN': [('CA', 'R')],
-                            'GLU': [('CA', 'R')],
-                            'GLY': [('CA', 'R')],
-                            'HIS': [('CA', 'R')],
-                            'ILE': [('CA', 'R'), ('CB', 'S')],
-                            'LEU': [('CA', 'R')],
-                            'LYS': [('CA', 'R')],
-                            'MET': [('CA', 'R')],
-                            'PHE': [('CA', 'R')],
-                            'SER': [('CA', 'R')],
-                            'THR': [('CA', 'R'), ('CB', 'R')],
-                            'TRP': [('CA', 'R')],
-                            'TYR': [('CA', 'R')],
-                            'VAL': [('CA', 'R')],
-                            }
-        #now we can iterate through the oemol atoms and specify the stereochemistry
-        renders = {'R': (oechem.OEAtomStereo_Right, oechem.OECIPAtomStereo_R),
-                   'S': (oechem.OEAtomStereo_Left, oechem.OECIPAtomStereo_S)}
-        for atom in oemol.GetAtoms():
-            _stereocenters = {tup[0]: tup[1] for tup in aa_stereocenters[res_name]}
-            if atom.GetName() in list(_stereocenters.keys()):
-                #then we add the specified chirality
-                atom.SetStereo(list(atom.GetAtoms()), oechem.OEAtomStereo_Tetra, renders[_stereocenters[atom.GetName()]][0])
-                oechem.OESetCIPStereo(oemol, atom, renders[_stereocenters[atom.GetName()]][1])
-                atom.SetChiral(True)
-            else:
-                atom.SetChiral(False)
-                pass #the stereochemistry is not defined
-
-        return oemol
