@@ -131,6 +131,8 @@ def OEMol_to_omm_ff(oemol, small_molecule_forcefield='gaff-2.11'):
 
     # Create OpenMM System
     from openmmforcefields.generators import SystemGenerator
+    from simtk.openmm import app
+    forcefield_kwargs = { 'nonbondedMethod' : app.NoCutoff }
     generator = SystemGenerator(small_molecule_forcefield=small_molecule_forcefield,
                                 forcefield_kwargs=forcefield_kwargs,
                                 molecules=molecule)
