@@ -46,6 +46,7 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
     oechem.OEAssignHybridization(molecule)
     oechem.OEAddExplicitHydrogens(molecule)
+    oechem.OEPerceiveChiral(molecule)
 
     # Create atom names.
     oechem.OETriposAtomNames(molecule)
@@ -104,16 +105,16 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
     return molecule
 
 
-def OEMol_to_omm_ff(oemol, small_molecule_forcefield='gaff-2.11'):
+def OEMol_to_omm_ff(molecule, data_filename='data/gaff2.xml'):
     """
-    Convert an openeye.oechem.OEMol to a OpenMM System, positions and topology
+    Convert an openeye.oechem.OEMol to a openmm system, positions and topology
 
     Parameters
     ----------
     oemol : openeye.oechem.OEMol object
         input molecule to convert
-    small_molecule_forcefield : str, optional, default='gaff-2.11'
-        Force field to use for SystemGenerator
+    data_filename : str, default 'data/gaff2.xml'
+        path to .xml forcefield file, default is gaff2.xml in perses package
 
     Return
     ------
@@ -122,9 +123,9 @@ def OEMol_to_omm_ff(oemol, small_molecule_forcefield='gaff-2.11'):
     topology : openmm.topology
 
     """
-    # Create openforcefield Molecule
-    from openforcefield.topology import Molecule
-    molecule = Molecule.from_openeye(oemol)
+    from perses.rjmc import topology_proposal
+    from openmoltools import forcefield_generators
+    from perses.utils.data import get_data_filename
 
     # Create Topology
     topology = molecule.to_topology().to_openmm()
@@ -146,7 +147,7 @@ def OEMol_to_omm_ff(oemol, small_molecule_forcefield='gaff-2.11'):
 
 def createSystemFromIUPAC(iupac_name):
     """
-    Create an OpenMM System from an IUPAC name
+    Create an openmm system out of an oemol
 
     Parameters
     ----------
@@ -261,6 +262,7 @@ def createOEMolFromSDF(sdf_filename, index=0):
         oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
         oechem.OEAssignHybridization(molecule)
         oechem.OEAddExplicitHydrogens(molecule)
+        oechem.OEPerceiveChiral(molecule)
 
     mol_to_return = mol_list[index]
     return mol_to_return
@@ -323,3 +325,30 @@ def generate_unique_atom_names(molecule):
             name = element._symbol + str(element_counts[element._symbol])
             atom.SetName(name)
         return molecule
+
+
+def has_undefined_stereocenters(mol):
+    """
+    Check that _if_ a molecule has a stereocenter, the stereochemistry is defined
+    if no stereocenter then will return False too
+
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol object
+        oemol object to check
+
+    Returns
+    -------
+    bool : True if undefined Stereochemistry
+           False if no stereochemistry or all stereocenter's are labelled
+    """
+    oechem.OEPerceiveChiral(mol)
+    for atom in mol.GetAtoms():
+        if atom.IsChiral():
+            if not atom.HasStereoSpecified():
+                return True # we have a stereocenter with no stereochemistry!
+    for bond in mol.GetBonds():
+        if bond.IsChiral():
+            if not bond.HasStereoSpecified():
+                return True #we have a geometric isomer that isn't specified!
+    return False # nothing bad found
