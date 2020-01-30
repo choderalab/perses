@@ -22,7 +22,7 @@ from perses.tests.utils import validate_endstate_energies
 from openmoltools import forcefield_generators
 from perses.utils.openeye import *
 from perses.app.utils import *
-from perses.dispersed.utils import generalized_worker_class_instantiation, generalized_worker_class_instantiation, call_worker_class_method
+from perses.dispersed.utils import generalized_worker_class_instantiation, call_worker_class_method
 import mdtraj as md
 import simtk.openmm.app as app
 import simtk.openmm as openmm
@@ -33,13 +33,13 @@ import copy
 from perses.app.relative_setup import DaskClient
 
 logging.basicConfig(level = logging.NOTSET)
-_logger = logging.getLogger("BuildProposalNetwork")
+_logger = logging.getLogger("NetworkBuilder")
 _logger.setLevel(logging.DEBUG)
 
 ENERGY_THRESHOLD = 1e-4
 from openmmtools.constants import kB
 
-class BuildProposalNetwork(object):
+class NetworkBuilder(object):
     """
     Create a NetworkX graph representing the set of chemical states to be sampled.
     Vertices represent nonalchemical states (i.e. ligands/protein mutants).
@@ -152,8 +152,13 @@ class BuildProposalNetwork(object):
     supported_connectivities = {'fully_connected': generate_fully_connected_adjacency_matrix} #we can add other options later, but this is a good vanilla one to start with
 
     def __init__(self,
-                 parallelism):
-
+                 parallelism,
+                 ligand_input,
+                 ligand_indices = None,
+                 receptor_filename = None,
+                 graph_connectivity = 'fully_connected',
+                 proposal_parameters = None,
+                 simulation_parameters = ('repex', None)):
         """
         Initialize NetworkX graph and build connectivity with a `graph_connectivity` input.
 
@@ -162,38 +167,6 @@ class BuildProposalNetwork(object):
         parallelism : perses.dispersed.Parallelism object (activated)
             parallelism to perform edge calculations
 
-        TODO:
-        1. change the name of 'proposal_arguments' to something more appropriate.
-        2. allow custom atom mapping for all edges in graph.  currently, we can only specify one of three mapping schemes for all molecules
-        3. if 'receptor_filename' is None, remove complex phase from the proposal arguments; otherwise, the 'phases' will have to be specified explicitly
-        4. parallelize setup by defining `resources`
-        5. update `manipulate_edge_post_hoc`
-        """
-        self.parallelism = parallelism
-        assert hasattr(self.parallelism, 'client'), f"the parallelism object must be activated (i.e. have a client)"
-        _logger.info(f"Initialization complete.")
-
-    def setup_engines(self,
-                      ligand_input,
-                      ligand_indices = None,
-                      receptor_filename = None,
-                      graph_connectivity = 'fully_connected',
-                      proposal_parameters = None,
-                      simulation_parameters = ('repex', None)):
-        """
-        This is a simple startup method that calls the following internal methods:
-            1. _parse_ligand_input
-            2. _create_proposal_parameters
-            3. _create_connectivity_matrix
-            4. _validate_simulation_parameters
-            5. _create_system_generator
-            6. SmallMoleculeSetProposalEngine
-            7. FFAllAngleGeometryEngine
-
-        This is part of the setup before the `create_network` method can be called
-
-        Arguments
-        ----------
         ligand_input : str
             the name of the ligand file (any openeye supported format)
             this can either be an .sdf or list of .sdf files, or a list of SMILES strings
@@ -241,7 +214,17 @@ class BuildProposalNetwork(object):
                 #if dict is None, then default 'repex' parameters will be used
             elif type(simulation_parameters) == dict, each entry is a {(int, int): {<phase>: (<simulation_flavor>, dict(params))}};
                 if an transformation entry is missing, it is defaulted as above
+
+        TODO:
+        1. change the name of 'proposal_arguments' to something more appropriate.
+        2. allow custom atom mapping for all edges in graph.  currently, we can only specify one of three mapping schemes for all molecules
+        3. if 'receptor_filename' is None, remove complex phase from the proposal arguments; otherwise, the 'phases' will have to be specified explicitly
+        4. parallelize setup by defining `resources`
+        5. update `manipulate_edge_post_hoc`
         """
+        self.parallelism = parallelism
+        assert hasattr(self.parallelism, 'client'), f"the parallelism object must be activated (i.e. have a client)"
+
         self.ligand_input = ligand_input
         self.ligand_indices = ligand_indices
         self.receptor_filename = receptor_filename
@@ -275,7 +258,13 @@ class BuildProposalNetwork(object):
                                                         neglect_angles = self.proposal_arguments['neglect_angles'],
                                                         use_14_nonbondeds = not self.proposal_arguments['anneal_14s'])
 
-    def create_network(self):
+        #create the Network
+        self._create_network()
+
+        _logger.info(f"Network construction complete.")
+
+
+    def _create_network(self):
         """
         This is the main function of the class.  It builds a networkx graph on all of the transformations.
         """
@@ -296,7 +285,7 @@ class BuildProposalNetwork(object):
                 _kwargs.append(_kwarg_dict)
         num_runs = len(_kwargs)
 
-        #create BuildProposalNetwork objects on the workers
+        #create NetworkBuilder objects on the workers
         remote_worker = True if self.parallelism.client is not None else self
         _class = None if remote_worker == True else self
         creation_validations = self.parallelism.run_all(func = generalized_worker_class_instantiation,
@@ -313,7 +302,7 @@ class BuildProposalNetwork(object):
         run_futures = self.parallelism.deploy(func = call_worker_class_method,
                                               arguments = tuple([[remote_worker] * num_runs,
                                                                 ['build_network_object'] * num_runs,
-                                                                ['create_network_edge'] * num_runs,
+                                                                ['_create_network_edge'] * num_runs,
                                                                 _kwargs]),
                                               workers = list(self.parallelism.workers.values()))
         self.parallelism.progress(run_futures)
@@ -384,7 +373,7 @@ class BuildProposalNetwork(object):
         success : bool
             whether the intended edge was added and validated
         """
-        success = self.create_network_edge(start_index = start_index,
+        success = self._create_network_edge(start_index = start_index,
                                         end_index = end_index,
                                         weight = np.exp(log_weight),
                                         edge_simulation_parameters = edge_simulation_parameters)
@@ -393,13 +382,13 @@ class BuildProposalNetwork(object):
 
         return success
 
-    def create_network_edge(self,
+    def _create_network_edge(self,
                             start_index,
                             end_index,
                             weight,
                             edge_simulation_parameters):
         """
-        This is a function to create the necessary parameters for a network edge;
+        This is a method to create the necessary parameters for a network edge;
         this method can be called on a remote worker directly
 
         Arguments
@@ -447,7 +436,7 @@ class BuildProposalNetwork(object):
                       }
 
 
-        if i == j:
+        if i == j: #we refuse to make a transformation from a node to itself
             if not np.isinf(log_weight):
                 _logger.warning(f"\tthe log weight of the self-transition for ligand {i} is not -np.inf; treating as such...")
                 returnables.update({'adjacency_matrix_log_weight' : -np.inf})
@@ -1064,11 +1053,17 @@ class BuildProposalNetwork(object):
         return added_valence_energy, subtracted_valence_energy
 
 
-    def _generate_proposals(self, current_oemol, proposed_oemol, current_positions, current_topology):
+    def _generate_proposals(self,
+                            current_oemol,
+                            proposed_oemol,
+                            current_positions,
+                            current_topology):
         """
         Create topology and geometry proposals for a ligand in every specified phase.
         If complex is specified, the topology proposal is recycled for all phases; else, the proposal is conducted
         in solvent and recycled for vacuum.  If the only phase is vacuum, then we generate a single proposal without recycling.
+
+        This method requires some refactoring...perhaps use classes to generate the phases...
 
         Arguments
         ---------
@@ -1209,6 +1204,233 @@ class BuildProposalNetwork(object):
 
         return proposals
 
+class RelativeTransformationPhase():
+    """
+    Base class for generating different phases of relative calculations
+    """
+    def __init__(self,
+                 system_generator,
+                 proposal_engine,
+                 nonbonded_method
+                 ):
+        """
+        Define miscellaneous attributes needed for all phase transforms
+        """
+    def run_setup(self, topology_proposal = None):
+        """
+        Wrapper method for setup generation for all phases
+        """
+        if topology_proposal is None:
+            self._run_topology_setup(**kwargs)
+        else:
+            self._run_normal_setup(**kwargs)
+
+    def _run_normal_setup(self):
+        old_ligand_topology, new_ligand_topology, old_ligand_positions = self._extract_from_topology_proposal(topology_proposal, old_topology, new_topology, old_positions)
+        returnable_dict = self._run_topology_setup()
+        return returnable_dict
+
+
+    def _solvate(self, topology, positions, model = 'tip3p', vacuum = False):
+        """
+        solvate a topology, position and return a topology, position, and system
+
+        Argumnts
+        --------
+        topology : simtk.openmm.Topology
+            topology of the object to be solvated
+        positions : unit.Quantity(np.ndarray(), units = units.nanometers)
+            positions of the complex
+        model : str, default 'tip3p'
+            solvent model to use for solvation
+        vacuum : bool, default False
+            whether to prepare system in vacuum
+
+        Returns
+        -------
+        solvated_topology : app.Topology
+            Topology of the system with added waters
+        solvated_positions : [n + 3(n_waters), 3] ndarray of Quantity nm
+            Solvated positions
+        solvated_system : openmm.System
+            The parameterized system, containing a barostat if one was specified.
+        """
+        modeller = app.Modeller(topology, positions)
+        if not vacuum:
+            _logger.info(f"\tpreparing to add solvent")
+            modeller.addSolvent(self.system_generator.forcefield,
+                                model=model,
+                                padding = self.proposal_arguments['solvent_padding'],
+                                ionicStrength = 0.15*unit.molar)
+        else:
+            _logger.info(f"\tSkipping solvation of vacuum perturbation")
+        solvated_topology = modeller.getTopology()
+        solvated_positions = modeller.getPositions()
+
+        solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
+        solvated_system = self.system_generator.create_system(solvated_topology)
+        return solvated_topology, solvated_positions, solvated_system
+
+    def _extract_from_topology_proposal(topology_proposal, old_positions):
+        old_md_topology = md.Topology.from_openmm(topology_proposal.old_topology)
+        new_md_topology = md.Topology.from_openmm(topology_proposal.new_topology)
+
+        atom_map = topology_proposal.old_to_new_atom_map
+
+        old_mol_start_index, old_mol_len = self.proposal_engine._find_mol_start_index(old_md_topology.to_openmm())
+        new_mol_start_index, new_mol_len = self.proposal_engine._find_mol_start_index(new_md_topology.to_openmm())
+
+        old_pos = unit.Quantity(np.zeros([len(old_positions), 3]), unit=unit.nanometers)
+        old_pos[:, :] = old_positions
+        old_ligand_positions = old_pos[old_mol_start_index:(old_mol_start_index + old_mol_len), :]
+
+        # subset the topologies:
+        old_ligand_topology = old_md_topology.subset(old_md_topology.select("resname == 'MOL' ")).to_openmm()
+        new_ligand_topology = new_md_topology.subset(new_md_topology.select("resname == 'MOL' ")).to_openmm()
+
+        return old_ligand_topology, new_ligand_topology, old_ligand_positions
+
+    def _wrap_topology_and_geometry_proposals():
+        complex_topology_proposal = self.proposal_engine.propose(current_system = solvated_complex_system,
+                                                                 current_topology = solvated_complex_topology,
+                                                                 current_mol = current_oemol,
+                                                                 proposed_mol = proposed_oemol)
+
+        proposed_solvated_complex_positions, complex_logp_proposal = self.geometry_engine.propose(complex_topology_proposal,
+                                                                                                  solvated_complex_positions,
+                                                                                                  self.beta)
+        complex_logp_reverse = self.geometry_engine.logp_reverse(complex_topology_proposal,
+                                                         proposed_solvated_complex_positions,
+                                                         solvated_complex_positions, self.beta)
+
+        complex_added_valence_energy, complex_subtracted_valence_energy = self._handle_valence_energies(complex_topology_proposal)
+        complex_forward_neglected_angles = self.geometry_engine.forward_neglected_angle_terms
+        complex_reverse_neglected_angles = self.geometry_engine.reverse_neglected_angle_terms
+
+        returnable_dict = {'topology_proposal': complex_topology_proposal,
+                           'current_positions': solvated_complex_positions,
+                           'proposed_positions': proposed_solvated_complex_positions,
+                           'logp_proposal': complex_logp_proposal,
+                           'logp_reverse': complex_logp_reverse,
+                           'added_valence_energy': complex_added_valence_energy,
+                           'subtracted_valence_energy': complex_subtracted_valence_energy,
+                           'forward_neglected_angles': complex_forward_neglected_angles,
+                           'reverse_neglected_angles': complex_reverse_neglected_angles}
+
+        return returnable_dict
+
+
+
+
+
+
+
+class ComplexTransformationPhase(RelativeTransformationPhase):
+    """
+    Complex specific transformation subclass
+    """
+    def __init__(self,
+                 system_generator):
+        """
+        First instantiate the RelativeTransformationPhase super class
+        """
+        super(ComplexTransformationPhase, self).__init__(system_generator)
+
+    def _run_topology_setup():
+
+        #setup complex phase
+        complex_md_topology, complex_topology, complex_positions = self._setup_complex_phase(ligand_oemol = current_oemol,
+                                                                                             ligand_positions = current_positions,
+                                                                                             ligand_topology = md.Topology.from_openmm(current_topology))
+
+        solvated_complex_topology, solvated_complex_positions, solvated_complex_system = self._solvate(complex_topology,
+                                                                                                       complex_positions,
+                                                                                                       model = self.proposal_arguments['water_model'],
+                                                                                                       vacuum = False)
+        solvated_complex_md_topology = md.Topology.from_openmm(solvated_complex_topology)
+
+        returnable_dict = self._wrap_topology_and_geometry_proposals()
+        return returnable_dict
+
+        def _run_normal_setup():
+            old_ligand_topology, new_ligand_topology, old_ligand_positions = _extract_from_topology_proposal(topology_proposal, old_topology, new_topology, old_positions)
+            returnable_dict = _run_topology_setup()
+            return returnable_dict
+
+    def _setup_complex_phase(self, ligand_oemol, ligand_positions, ligand_topology):
+        """
+        Creates complex positions and topology given ligand positions and topology.
+
+        Arguments
+        ---------
+        ligand_oemol : oechem.oemol object
+            oemol of ligand (this is only necessary for .sdf-type receptor files)
+        ligand_positions : unit.Quantity(np.ndarray(), units = units.nanometers)
+            positions of the ligand
+        ligand_topology : mdtraj.Topology
+            md topology of the ligand
+
+        Returns
+        -------
+        complex_md_topology : mdtraj.Topology
+            complex mdtraj topology
+        complex_topology : simtk.openmm.Topology
+            complex openmm topology
+        complex_positions : unit.Quantity(np.ndarray(), units = units.nanometers)
+            positions of the complex
+        """
+        if self.receptor_filename[-3:] == 'pdb':
+            with open(self.receptor_filename, 'r') as pdbfile:
+                receptor_pdb = app.PDBFile(pdbfile)
+            receptor_positions = receptor_pdb.positions
+            receptor_topology = receptor_pdb.topology
+            receptor_mdtraj_topology = md.Topology.from_openmm(receptor_topology)
+
+        elif self.receptor_filename[:-4] == 'mol2':
+            receptor_mol = createOEMolFromSDF(self.receptor_filename)
+            receptor_positions = extractPositionsFromOEMol(receptor_mol)
+            receptor_topology = self._receptor_topology_old = forcefield_generators.generateTopologyFromOEMol(receptor_mol)
+            receptor_mdtraj_topology = md.Topology.from_openmm(receptor_topology)
+
+        complex_md_topology = receptor_mdtraj_topology.join(ligand_topology)
+        complex_topology = complex_md_topology.to_openmm()
+        n_atoms_complex = complex_topology.getNumAtoms()
+        n_atoms_receptor = receptor_topology.getNumAtoms()
+
+        complex_positions = unit.Quantity(np.zeros([n_atoms_complex, 3]), unit=unit.nanometers)
+        complex_positions[:n_atoms_receptor, :] = receptor_positions
+        complex_positions[n_atoms_receptor:, :] = ligand_positions
+
+        return complex_md_topology, complex_topology, complex_positions
+
+
+
+class ExplicitWaterTransformationPhase(RelativeTransformationPhase):
+    """
+    Complex specific transformation subclass
+    """
+    def __init__(self,
+                 system_generator):
+        """
+        First instantiate the RelativeTransformationPhase super class
+        """
+        super(ExplicitWaterTransformationPhase, self).__init__(system_generator)
+
+    def _run_topology_setup():
+        solvated_ligand_topology, solvated_ligand_positions, solvated_ligand_system = self._solvate(current_topology,
+                                                                                                    current_positions,
+                                                                                                    model = self.proposal_arguments['water_model'],
+                                                                                                    vacuum = False)
+        returnable_dict = self._wrap_topology_and_geometry_proposals()
+        return returnable_dict
+
+    def _run_normal_setup():
+
+
+
+
+
+
 
 class Experiment():
     """
@@ -1216,7 +1438,7 @@ class Experiment():
     """
 
     def __init__(self,
-                 #BuildProposalNetwork params
+                 #NetworkBuilder params
                  ligand_input,
                  ligand_indices = None,
                  receptor_filename = None,

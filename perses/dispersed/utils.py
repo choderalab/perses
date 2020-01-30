@@ -520,7 +520,7 @@ def generalized_worker_class_instantiation(remote_worker,
                                            remote_worker_class_name,
                                            tethering_class):
     """
-    Function to call on a remote worker that makes the specified class a worker variable.
+    Function to call on a remote worker that makes the specified class a worker attribute.
 
     Arguments
     ---------
