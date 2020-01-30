@@ -11,6 +11,11 @@ from openeye import oechem,oegraphsim
 from openmoltools.openeye import iupac_to_oemol, generate_conformers
 import simtk.unit as unit
 import numpy as np
+import logging
+
+logging.basicConfig(level = logging.NOTSET)
+_logger = logging.getLogger("utils.openeye")
+_logger.setLevel(logging.INFO)
 
 def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     """
@@ -49,9 +54,13 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
     oechem.OEAssignHybridization(molecule)
     oechem.OEAddExplicitHydrogens(molecule)
+    oechem.OEPerceiveChiral(molecule)
 
     # Create atom names.
     oechem.OETriposAtomNames(molecule)
+
+    #perceive chirality before attempting omega geometry proposal
+    assert oechem.OEPerceiveChiral(mol), f"chirality perception failed"
 
     # Assign geometry
     omega = oeomega.OEOmega()
@@ -59,8 +68,6 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     omega.SetIncludeInput(False)
     omega.SetStrictStereo(True)
 
-    #perceive chirality
-    oechem.OEPerceiveChiral(molecule)
     omega(molecule)
 
     return molecule
@@ -263,7 +270,7 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens = True):
             molecule_fixed = molecule
 
         renamed_mol_list.append(molecule_fixed)
-        
+
     # Assign aromaticity and hydrogens.
     for molecule in renamed_mol_list:
         oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
@@ -272,7 +279,8 @@ def createOEMolFromSDF(sdf_filename, index=0, add_hydrogens = True):
             oechem.OEAddExplicitHydrogens(molecule)
 
         #perceive chirality
-        oechem.OEPerceiveChiral(molecule)
+        assert oechem.OE3DToInternalStereo(molecule), f"the stereochemistry perception from 3D coordinates failed"
+        assert not has_undefined_stereocenters(molecule), f"there is an atom with an undefined stereochemistry"
 
     mol_to_return = renamed_mol_list[index]
     return mol_to_return
@@ -332,3 +340,27 @@ def generate_unique_atom_names(molecule):
             name = element._symbol + str(element_counts[element._symbol])
             atom.SetName(name)
         return molecule
+
+def has_undefined_stereocenters(mol):
+    """
+    Check that _if_ a molecule has a stereocenter, the stereochemistry is defined
+    if no stereocenter then will return False too
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol object
+        oemol object to check
+    Returns
+    -------
+    bool : True if undefined Stereochemistry
+           False if no stereochemistry or all stereocenter's are labelled
+    """
+    assert oechem.OEPerceiveChiral(mol), f"chirality perception failed"
+    for atom in mol.GetAtoms():
+        if atom.IsChiral():
+            if not atom.HasStereoSpecified():
+                return True # we have a stereocenter with no stereochemistry!
+    for bond in mol.GetBonds():
+        if bond.IsChiral():
+            if not bond.HasStereoSpecified():
+                return True #we have a geometric isomer that isn't specified!
+    return False # nothing bad found
