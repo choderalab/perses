@@ -232,11 +232,11 @@ class RelativeFEPSetup(object):
             for spectator_file in self._spectator_filenames:
                 assert spectator_file[-3:] == 'sdf', 'Spectator molecules must be provided as a .sdf file, in the correct frame of reference of the protein system'
                 _logger.info(f'Setting up spectator {spectator_file}')
-                spectator_mol = createOEMolFromSDF(spectator_filename)
+                spectator_mol = createOEMolFromSDF(spectator_file)
                 spectator_mol = generate_unique_atom_names(spectator_mol)
                 self._spectator_molecules.append(spectator_mol)
                 # add this to a small molecule register
-                molecules.append(Molecule.from_openeye(spectator_mol))
+                molecules.append(Molecule.from_openeye(spectator_mol,allow_undefined_stereo=True))
                 self._spectator_positions.append(extractPositionsFromOEMol(spectator_mol))
                 spectator_topology = forcefield_generators.generateTopologyFromOEMol(spectator_mol)
                 self._spectator_md_topologies.append(md.Topology.from_openmm(spectator_topology))
@@ -430,7 +430,7 @@ class RelativeFEPSetup(object):
         self._complex_topology_old = self._complex_md_topology_old.to_openmm()
 
         if self._spectator_filenames:
-            for spectator in self._spectator_md_topologies:
+            for spectator_topology in self._spectator_md_topologies:
                 _logger.debug(f'Appending spectator to complex topology')
                 self._complex_md_topology_old = self._complex_md_topology_old.join(spectator_topology)
 
