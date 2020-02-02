@@ -427,19 +427,31 @@ class RelativeFEPSetup(object):
             raise ValueError("You need to provide either a protein pdb or a receptor mol2 to run a complex simulation.")
 
         self._complex_md_topology_old = self._receptor_md_topology_old.join(self._ligand_md_topology_old)
+
+        n_atoms_spectators = 0
+        if self._spectator_filenames:
+            for i, spectator_topology in enumerate(self._spectator_md_topologies,1):
+                _logger.debug(f'Appending spectator number {i} to complex topology')
+                self._complex_md_topology_old = self._complex_md_topology_old.join(spectator_topology)
+                n_atoms_spectators += spectator_topology.n_atoms
         self._complex_topology_old = self._complex_md_topology_old.to_openmm()
 
-        if self._spectator_filenames:
-            for spectator_topology in self._spectator_md_topologies:
-                _logger.debug(f'Appending spectator to complex topology')
-                self._complex_md_topology_old = self._complex_md_topology_old.join(spectator_topology)
-
-        n_atoms_complex_old = self._complex_topology_old.getNumAtoms()
+        n_atoms_total_old = self._complex_topology_old.getNumAtoms()
         n_atoms_protein_old = self._receptor_topology_old.getNumAtoms()
+        n_atoms_ligand_old = n_atoms_total_old - n_atoms_protein_old - n_atoms_spectators
 
-        self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_complex_old, 3]), unit=unit.nanometers)
+        self._complex_positions_old = unit.Quantity(np.zeros([n_atoms_total_old, 3]), unit=unit.nanometers)
         self._complex_positions_old[:n_atoms_protein_old, :] = self._receptor_positions_old
-        self._complex_positions_old[n_atoms_protein_old:, :] = self._ligand_positions_old
+        self._complex_positions_old[n_atoms_protein_old:n_atoms_protein_old+n_atoms_ligand_old, :] = self._ligand_positions_old
+
+        if self._spectator_filenames:
+            start = n_atoms_protein_old+n_atoms_ligand_old
+            for i, spectator_positions in enumerate(self._spectator_positions,1):
+                _logger.info(f'Updating positions of spectator number {i} to complex positions')
+                n_atoms_spectator, _ = np.shape(spectator_positions)
+                _logger.debug(f'Number of spectator atoms: {n_atoms_spectator}')
+                self._complex_positions_old[start:start+n_atoms_spectator, :] = spectator_positions
+                start += n_atoms_spectator
 
     def _generate_solvent_topologies(self, topology_proposal, old_positions):
         """
