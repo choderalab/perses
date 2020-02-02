@@ -45,6 +45,7 @@ def check_platform(platform):
     Check whether we can construct a simulation using this platform.
     From https://github.com/choderalab/integrator-benchmark/blob/bb307e6ebf476b652e62e41ae49730f530732da3/benchmark/testsystems/configuration.py#L17
     """
+    from openmmtools.testsystems import HarmonicOscillator
     try:
         integrator = openmm.VerletIntegrator(1.0)
         testsystem = HarmonicOscillator()
@@ -92,6 +93,7 @@ def configure_platform(platform_name='Reference', fallback_platform_name='CPU'):
         "Warning: Returning {} platform instead of requested platform {}".format(fallback_platform_name, platform_name))
         platform = fallback_platform
 
+    print(f"conducting subsequent work with the following platform: {platform.getName()}")
     return platform
 
 #########
