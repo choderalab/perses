@@ -51,8 +51,9 @@ def check_platform(platform):
         testsystem = HarmonicOscillator()
         context = openmm.Context(testsystem.system, integrator, platform)
         del context, testsystem, integrator
-    except Exception:
-        print('Desired platform not supported')
+    except Exception as e:
+        print(f'Desired platform not supported. exception raised: {e}')
+        raise Exception(e)
 
 
 def configure_platform(platform_name='Reference', fallback_platform_name='CPU'):
