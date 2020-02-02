@@ -1211,11 +1211,17 @@ class RelativeTransformationPhase():
     def __init__(self,
                  system_generator,
                  proposal_engine,
-                 nonbonded_method
+                 nonbonded_method,
+                 proposal_arguments
                  ):
         """
         Define miscellaneous attributes needed for all phase transforms
         """
+        self.system_generator = system_generator
+        self.proposal_engine = proposal_engine
+        self.nonbonded_method = nonbonded_method
+        self.proposal_arguments = proposal_arguments
+
     def run_setup(self, topology_proposal = None):
         """
         Wrapper method for setup generation for all phases
@@ -1267,11 +1273,11 @@ class RelativeTransformationPhase():
         solvated_topology = modeller.getTopology()
         solvated_positions = modeller.getPositions()
 
-        solvated_positions = unit.quantity.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
+        solvated_positions = unit.Quantity(value = np.array([list(atom_pos) for atom_pos in solvated_positions.value_in_unit_system(unit.md_unit_system)]), unit = unit.nanometers)
         solvated_system = self.system_generator.create_system(solvated_topology)
         return solvated_topology, solvated_positions, solvated_system
 
-    def _extract_from_topology_proposal(topology_proposal, old_positions):
+    def _extract_from_topology_proposal(topology_proposal, old_positions, new_positions):
         old_md_topology = md.Topology.from_openmm(topology_proposal.old_topology)
         new_md_topology = md.Topology.from_openmm(topology_proposal.new_topology)
 
@@ -1280,13 +1286,22 @@ class RelativeTransformationPhase():
         old_mol_start_index, old_mol_len = self.proposal_engine._find_mol_start_index(old_md_topology.to_openmm())
         new_mol_start_index, new_mol_len = self.proposal_engine._find_mol_start_index(new_md_topology.to_openmm())
 
+        #pull old ligand positions
         old_pos = unit.Quantity(np.zeros([len(old_positions), 3]), unit=unit.nanometers)
         old_pos[:, :] = old_positions
         old_ligand_positions = old_pos[old_mol_start_index:(old_mol_start_index + old_mol_len), :]
 
+        #pull new ligand positions
+        new_pos =
+
+
         # subset the topologies:
         old_ligand_topology = old_md_topology.subset(old_md_topology.select("resname == 'MOL' ")).to_openmm()
         new_ligand_topology = new_md_topology.subset(new_md_topology.select("resname == 'MOL' ")).to_openmm()
+
+        # pull the new_to_old_atom_map
+        new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
+                               old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
 
         return old_ligand_topology, new_ligand_topology, old_ligand_positions
 
