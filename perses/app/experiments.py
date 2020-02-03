@@ -869,9 +869,9 @@ class NetworkBuilder(object):
             The parameterized system, containing a barostat if one was specified.
         """
         modeller = app.Modeller(topology, positions)
-        hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
-        modeller.delete(hs)
-        modeller.addHydrogens(forcefield = self.system_generator.forcefield)
+        # hs = [atom for atom in modeller.topology.atoms() if atom.element.symbol in ['H'] and atom.residue.name not in ['MOL','OLD','NEW']]
+        # modeller.delete(hs)
+        # modeller.addHydrogens(forcefield = self.system_generator.forcefield)
         if not vacuum:
             _logger.info(f"\tpreparing to add solvent")
             modeller.addSolvent(self.system_generator.forcefield,
@@ -1211,37 +1211,76 @@ class RelativeTransformationPhase():
     def __init__(self,
                  system_generator,
                  proposal_engine,
-                 nonbonded_method,
-                 proposal_arguments
+                 geometry_engine,
+                 proposal_arguments,
+                 **kwargs
                  ):
         """
-        Define miscellaneous attributes needed for all phase transforms
+        Define some attributes necessary for RelativeTransformationPhase
         """
         self.system_generator = system_generator
         self.proposal_engine = proposal_engine
-        self.nonbonded_method = nonbonded_method
+        self.geometry_engine = geometry_engine
         self.proposal_arguments = proposal_arguments
+        self.__dict__.update(kwargs)
+
 
     def run_setup(self, topology_proposal = None):
         """
-        Wrapper method for setup generation for all phases
+        Callable method to wrap the setup.  This handles cases where a previous phase's topology_proposal both is and isn't present.
+
+        Arguments
+        ---------
+        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+            topology proposal of a previous phase
+
+        Returns
+        -------
+        proposal_dictionary : dict
+            dictionary of necessary attributes to put on transformation edge
         """
         if topology_proposal is None:
-            self._run_topology_setup(**kwargs)
+            proposal_dictionary = self._run_topology_setup() #when there is no topology proposal
         else:
-            self._run_normal_setup(**kwargs)
+            proposal_dictionary = self._run_normal_setup(topology_proposal) #when there is a topology proposal
 
-    def _run_normal_setup(self):
-        old_ligand_topology, new_ligand_topology, old_ligand_positions = self._extract_from_topology_proposal(topology_proposal, old_topology, new_topology, old_positions)
-        returnable_dict = self._run_topology_setup()
+        return proposal_dictionary
+
+    def _run_topology_setup(self):
+        """
+        Dummy method when there is no topology proposal present (i.e. we must make one).
+
+        Returns
+        -------
+        returnable_dict : dict
+            dictionary of necessary attributes to put on transformation edge
+        """
+        returnable_dict = {}
+        return returnable_dict
+
+    def _run_normal_setup(self, topology_proposal):
+        """
+        Dummy Method run when there is a topology proposal present.
+
+        Arguments
+        ---------
+        topology_proposal : perses.rjmc.topology_proposal.TopologyProposal
+            topology proposal of a previous phase
+
+        Returns
+        -------
+        returnable_dict : dict
+            dictionary of necessary attributes to put on transformation edge
+        """
+        returnable_dict = {}
         return returnable_dict
 
 
     def _solvate(self, topology, positions, model = 'tip3p', vacuum = False):
         """
-        solvate a topology, position and return a topology, position, and system
+        solvate a topology, position, and return a topology, position, and system
 
-        Argumnts
+        Arguments
         --------
         topology : simtk.openmm.Topology
             topology of the object to be solvated
@@ -1277,7 +1316,13 @@ class RelativeTransformationPhase():
         solvated_system = self.system_generator.create_system(solvated_topology)
         return solvated_topology, solvated_positions, solvated_system
 
-    def _extract_from_topology_proposal(topology_proposal, old_positions, new_positions):
+    def _extract_from_topology_proposal(self, topology_proposal, old_positions, new_positions):
+        """
+        Generalized method for extracting necessary old/new ligand topologies, old/new ligand positions, and a new_to_old_atom_map between two ligands from a topology proposal.
+        This method is called within self._run_normal_setup
+
+        """
+
         old_md_topology = md.Topology.from_openmm(topology_proposal.old_topology)
         new_md_topology = md.Topology.from_openmm(topology_proposal.new_topology)
 
@@ -1292,20 +1337,27 @@ class RelativeTransformationPhase():
         old_ligand_positions = old_pos[old_mol_start_index:(old_mol_start_index + old_mol_len), :]
 
         #pull new ligand positions
-        new_pos =
+        new_pos = unit.Quantity(np.zeros([len(new_positions), 3]), unit=unit.nanometers)
+        new_pos[:,:] = new_positions
+        new_ligand_positions = new_pos[new_mol_start_index: (new_mol_start_index + new_mol_len), :]
 
 
-        # subset the topologies:
+
+        # subset the topologies in vacuum...
         old_ligand_topology = old_md_topology.subset(old_md_topology.select("resname == 'MOL' ")).to_openmm()
         new_ligand_topology = new_md_topology.subset(new_md_topology.select("resname == 'MOL' ")).to_openmm()
 
-        # pull the new_to_old_atom_map
+        # pull the new_to_old_atom_map in vacuum
         new_to_old_atom_map = {atom_map[x] - new_mol_start_index: x - old_mol_start_index for x in
-                               old_complex.select("resname == 'MOL' ") if x in atom_map.keys()}
+                               old_md_topology.select("resname == 'MOL' ") if x in atom_map.keys()}
 
-        return old_ligand_topology, new_ligand_topology, old_ligand_positions
+        return old_ligand_topology, new_ligand_topology, old_ligand_positions, new_ligand_positions, new_to_old_atom_map
 
     def _wrap_topology_and_geometry_proposals():
+        """
+        make a topology proposal and a geometry proposal (forward/reverse)
+        returns a returnable dict of information from the proposals.
+        """
         complex_topology_proposal = self.proposal_engine.propose(current_system = solvated_complex_system,
                                                                  current_topology = solvated_complex_topology,
                                                                  current_mol = current_oemol,
@@ -1334,6 +1386,41 @@ class RelativeTransformationPhase():
 
         return returnable_dict
 
+    def _wrap_from_topology_proposal():
+        """
+        Generalized method for
+        """
+        old_mol_start_index, old_mol_len = self.proposal_engine._find_mol_start_index(old_solvated_complex_topology.to_openmm())
+        new_mol_start_index, new_mol_len = self.proposal_engine._find_mol_start_index(new_solvated_complex_topology.to_openmm())
+
+        adjusted_new_to_old_atom_map = {x + new_mol_start_index: new_to_old_atom_map[x] + old_mol_start_index for x in new_solvated_complex_topology.select("resname == 'MOL' ") if x in new_to_old_atom_map.keys()}
+
+        #now to create a topology proposal for this...
+        topology_proposal = TopologyProposal(logp_proposal=logp_proposal, new_to_old_atom_map=adjusted_new_to_old_atom_map,
+            old_topology=old_solvated_complex_topology, new_topology=new_solvated_complex_topology,
+            old_system=old_solvated_complex_system, new_system=new_solvated_complex_system,
+            old_alchemical_atoms= range(old_mol_start_index, old_mol_len),
+            old_chemical_state_key = 'A', new_chemical_state_key = 'B',
+            old_residue_name = self.proposal_engine._residue_name, new_residue_name=self._residue_name)
+
+        returnable_dict = {'topology_proposal': topology_proposal,
+                           'current_positions': old_complex_positions,
+                           'proposed_positions': new_complex_positions,
+                           #'logp_proposal': complex_logp_proposal,
+                           #'logp_reverse': complex_logp_reverse,
+                           #'added_valence_energy': complex_added_valence_energy,
+                           #'subtracted_valence_energy': complex_subtracted_valence_energy,
+                           #'forward_neglected_angles': complex_forward_neglected_angles,
+                           #'reverse_neglected_angles': complex_reverse_neglected_angles
+                           }
+        return returnable_dict
+
+
+    def _build_topology_proposal():
+        """
+        from vacuum old/new topologies, a new_to_old map, and some extraneous shit, build a topology proposal
+        """
+
 
 
 
@@ -1353,11 +1440,11 @@ class ComplexTransformationPhase(RelativeTransformationPhase):
 
     def _run_topology_setup():
 
-        #setup complex phase
-        complex_md_topology, complex_topology, complex_positions = self._setup_complex_phase(ligand_oemol = current_oemol,
-                                                                                             ligand_positions = current_positions,
+        #setup complex phase (which is not solvated)
+        complex_md_topology, complex_topology, complex_positions = self._setup_complex_phase(ligand_positions = current_positions,
                                                                                              ligand_topology = md.Topology.from_openmm(current_topology))
 
+        #solvate the complex phase
         solvated_complex_topology, solvated_complex_positions, solvated_complex_system = self._solvate(complex_topology,
                                                                                                        complex_positions,
                                                                                                        model = self.proposal_arguments['water_model'],
@@ -1365,14 +1452,33 @@ class ComplexTransformationPhase(RelativeTransformationPhase):
         solvated_complex_md_topology = md.Topology.from_openmm(solvated_complex_topology)
 
         returnable_dict = self._wrap_topology_and_geometry_proposals()
+
         return returnable_dict
 
         def _run_normal_setup():
-            old_ligand_topology, new_ligand_topology, old_ligand_positions = _extract_from_topology_proposal(topology_proposal, old_topology, new_topology, old_positions)
-            returnable_dict = _run_topology_setup()
+            """
+            if we already have a topology proposal (in vacuum), then we will use that atom map and expand it!!!
+            """
+            old_ligand_topology, new_ligand_topology, old_ligand_positions, new_ligand_positions, new_to_old_atom_map = _extract_from_topology_proposal(topology_proposal, old_topology, new_topology, old_positions)
+
+            old_complex_md_topology, old_complex_topology, old_complex_positions = self._setup_complex_phase(ligand_positions = old_ligand_positions,
+                                                                                                             ligand_topology = old_ligand_topology)
+            new_complex_md_topology, new_complex_topology, new_complex_positions = self._setup_complex_phase(ligand_positions = new_ligand_positions,
+                                                                                                             ligand_topology = new_ligand_topology)
+            old_solvated_complex_topology, old_solvated_complex_positions, old_solvated_complex_system = self._solvate(old_complex_topology,
+                                                                                                           old_complex_positions,
+                                                                                                           model = self.proposal_arguments['water_model'],
+                                                                                                           vacuum = False)
+
+            new_solvated_complex_topology, new_solvated_complex_positions, new_solvated_complex_system = self._solvate(new_complex_topology,
+                                                                                                           new_complex_positions,
+                                                                                                           model = self.proposal_arguments['water_model'],
+                                                                                                           vacuum = False)
+            returnable_dict = self._wrap_from_topology_proposal()
+
             return returnable_dict
 
-    def _setup_complex_phase(self, ligand_oemol, ligand_positions, ligand_topology):
+    def _setup_complex_phase(self, ligand_positions, ligand_topology):
         """
         Creates complex positions and topology given ligand positions and topology.
 
@@ -1422,7 +1528,7 @@ class ComplexTransformationPhase(RelativeTransformationPhase):
 
 class ExplicitWaterTransformationPhase(RelativeTransformationPhase):
     """
-    Complex specific transformation subclass
+    Explicit water specific transformation subclass
     """
     def __init__(self,
                  system_generator):
@@ -1440,6 +1546,59 @@ class ExplicitWaterTransformationPhase(RelativeTransformationPhase):
         return returnable_dict
 
     def _run_normal_setup():
+        old_ligand_topology, new_ligand_topology, old_ligand_positions, new_ligand_positions, new_to_old_atom_map = _extract_from_topology_proposal(topology_proposal, old_topology, new_topology, old_positions)
+        old_solvated_topology, old_solvated_positions, old_solvated_system = self._solvate(old_ligand_topology,
+                                                                                           old_ligand_positions,
+                                                                                           model = self.proposal_arguments['water_model'],
+                                                                                           vacuum = False)
+        new_solvated_topology, new_solvated_positions, new_solvated_system = self._solvate(new_ligand_topology,
+                                                                                           new_ligand_positions,
+                                                                                           model = self.proposal_arguments['water_model'],
+                                                                                           vacuum = False)
+
+        returnable_dict = self._wrap_from_topology_proposal()
+        return returnable_dict
+
+
+class VacuumTransformationPhase(RelativeTransformationPhase):
+    """
+    vacuum relative transformation subclass
+    """
+    def __init__(self, system_generator):
+        super(VacuumTransformationPhase, self).__init__(system_generator)
+
+    def _run_topology_setup():
+
+        vacuum_ligand_topology, vacuum_ligand_positions, vacuum_ligand_system = self._solvate(current_topology,
+                                                                                                    current_positions,
+                                                                                                    model = self.proposal_arguments['water_model'],
+                                                                                                    vacuum = True)
+        returnable_dict = self._wrap_topology_and_geometry_proposals()
+        return returnable_dict
+
+    def _run_normal_setup():
+        old_ligand_topology, new_ligand_topology, old_ligand_positions, new_ligand_positions, new_to_old_atom_map = _extract_from_topology_proposal(topology_proposal, old_topology, new_topology, old_positions)
+        old_vacuum_topology, old_vacuum_positions, old_vacuum_system = self._solvate(old_ligand_topology,
+                                                                                           old_ligand_positions,
+                                                                                           model = self.proposal_arguments['water_model'],
+                                                                                           vacuum = True)
+        new_vacuum_topology, new_vacuum_positions, new_vacuum_system = self._solvate(new_ligand_topology,
+                                                                                           new_ligand_positions,
+                                                                                           model = self.proposal_arguments['water_model'],
+                                                                                           vacuum = True)
+
+        returnable_dict = self._wrap_from_topology_proposal()
+        return returnable_dict
+
+
+
+
+
+
+
+
+
+
 
 
 
