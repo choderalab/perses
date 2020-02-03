@@ -51,12 +51,13 @@ WEAK_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
 # default atom expression, requires same aromaticitiy and hybridization
 # bonds need to match in bond order
 # ethane to ethene wouldn't map, CH3 to NH2 would map but CH3 to HC=O wouldn't
+
 DEFAULT_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_IntType
 DEFAULT_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 # strong requires same hybridization AND the same atom type
 # bonds are same as default, require them to match in bond order
-STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
+STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization  | oechem.OEExprOpts_HvyDegree | oechem.OEExprOpts_DefaultAtoms
 STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 ################################################################################
@@ -1078,7 +1079,11 @@ class PolymerProposalEngine(ProposalEngine):
         new_topology.setPeriodicBoxVectors(current_topology.getPeriodicBoxVectors())
 
         # Build system
-        new_system = self._system_generator.build_system(new_topology)
+        # TODO: Remove build_system() branch once we convert entirely to new openmm-forcefields SystemBuilder
+        if hasattr(self._system_generator, 'create_system'):
+            new_system = self._system_generator.create_system(new_topology)
+        else:
+            new_system = self._system_generator.build_system(new_topology)
 
         # Adjust logp_propose based on HIS presence
         his_residues = ['HID', 'HIE']
@@ -2315,7 +2320,6 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         # Default atom and bond expressions for MCSS
         if atom_expr is None:
             _logger.info(f'Setting the atom expression to {map_strength}')
-            _logger.info(type(map_strength))
             if map_strength == 'default':
                 self.atom_expr = DEFAULT_ATOM_EXPRESSION
             elif map_strength == 'weak':
@@ -2439,7 +2443,11 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
 
         # Generate an OpenMM System from the proposed Topology
         _logger.info(f"proceeding to build the new system from the new topology...")
-        new_system = self._system_generator.build_system(new_topology)
+        # TODO: Remove build_system() branch once we convert entirely to new openmm-forcefields SystemBuilder
+        if hasattr(self._system_generator, 'create_system'):
+            new_system = self._system_generator.create_system(new_topology)
+        else:
+            new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
         _logger.info(f"determining atom map between old and new molecules...")
@@ -3150,7 +3158,11 @@ class PremappedSmallMoleculeSetProposalEngine(SmallMoleculeSetProposalEngine):
         new_mol_start_index, len_new_mol = self._find_mol_start_index(new_topology)
 
         # Generate an OpenMM System from the proposed Topology
-        new_system = self._system_generator.build_system(new_topology)
+        # TODO: Remove build_system() branch once we convert entirely to new openmm-forcefields SystemBuilder
+        if hasattr(self._system_generator, 'create_system'):
+            new_system = self._system_generator.create_system(new_topology)
+        else:
+            new_system = self._system_generator.build_system(new_topology)
 
         # Determine atom mapping between old and new molecules
         mol_atom_maps = self._atom_mapper.get_atom_maps(current_mol_smiles, proposed_mol_smiles)

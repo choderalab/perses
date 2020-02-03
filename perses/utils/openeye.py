@@ -11,6 +11,11 @@ from openeye import oechem,oegraphsim
 from openmoltools.openeye import iupac_to_oemol, generate_conformers
 import simtk.unit as unit
 import numpy as np
+import logging
+
+logging.basicConfig(level = logging.NOTSET)
+_logger = logging.getLogger("utils.openeye")
+_logger.setLevel(logging.INFO)
 
 def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     """
@@ -41,6 +46,7 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
     oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
     oechem.OEAssignHybridization(molecule)
     oechem.OEAddExplicitHydrogens(molecule)
+    oechem.OEPerceiveChiral(molecule)
 
     # Create atom names.
     oechem.OETriposAtomNames(molecule)
@@ -246,6 +252,7 @@ def createOEMolFromSDF(sdf_filename, index=0):
         oechem.OEAssignAromaticFlags(molecule, oechem.OEAroModelOpenEye)
         oechem.OEAssignHybridization(molecule)
         oechem.OEAddExplicitHydrogens(molecule)
+        oechem.OEPerceiveChiral(molecule)
 
     mol_to_return = mol_list[index]
     return mol_to_return
@@ -269,3 +276,69 @@ def createSMILESfromOEMol(molecule):
     smiles = oechem.OECreateSmiString(molecule,
                              oechem.OESMILESFlag_DEFAULT | oechem.OESMILESFlag_Hydrogens)
     return smiles
+
+
+def generate_unique_atom_names(molecule):
+    """
+    Check if an oemol has unique atom names, and if not, then assigns them 
+
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol object
+        oemol object to check 
+
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol object
+        oemol, either unchanged if atom names are already unique, or newly generated atom names 
+    """
+    atom_names = []
+
+    atom_count = 0
+    for atom in molecule.GetAtoms():
+        atom_names.append(atom.GetName())
+        atom_count += 1
+
+    if len(set(atom_names)) == atom_count:
+        # one name per atom therefore unique
+        _logger.info(f'molecule {molecule.GetTitle()} has unique atom names already')
+        return molecule 
+    else:
+        # generating new atom names
+        from collections import defaultdict
+        from simtk.openmm.app.element import Element
+        _logger.info(f'molecule {molecule.GetTitle()} does not have unique atom names. Generating now...')
+        element_counts = defaultdict(int)
+        for atom in molecule.GetAtoms():
+            element = Element.getByAtomicNumber(atom.GetAtomicNum())
+            element_counts[element._symbol] += 1
+            name = element._symbol + str(element_counts[element._symbol])
+            atom.SetName(name)
+        return molecule
+
+
+def has_undefined_stereocenters(mol):
+    """
+    Check that _if_ a molecule has a stereocenter, the stereochemistry is defined
+    if no stereocenter then will return False too
+
+    Parameters
+    ----------
+    molecule : openeye.oechem.OEMol object
+        oemol object to check
+
+    Returns
+    -------
+    bool : True if undefined Stereochemistry
+           False if no stereochemistry or all stereocenter's are labelled
+    """
+    oechem.OEPerceiveChiral(mol)
+    for atom in mol.GetAtoms():
+        if atom.IsChiral():
+            if not atom.HasStereoSpecified():
+                return True # we have a stereocenter with no stereochemistry!
+    for bond in mol.GetBonds():
+        if bond.IsChiral():
+            if not bond.HasStereoSpecified():
+                return True #we have a geometric isomer that isn't specified!
+    return False # nothing bad found

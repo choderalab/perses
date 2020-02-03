@@ -1352,35 +1352,32 @@ def _get_capped_amino_acid(amino_acid='ALA'):
     saveamberparm system {amino_acid}.prmtop {amino_acid}.inpcrd
     quit
     """.format(amino_acid=amino_acid)
-    cwd = os.getcwd()
-    temp_dir = tempfile.mkdtemp()
-    os.chdir(temp_dir)
-    tleap_file = open('tleap_commands', 'w')
-    tleap_file.writelines(tleapstr)
-    tleap_file.close()
-    tleap_cmd_str = "tleap -f %s " % tleap_file.name
+    from perses.tests.utils import enter_temp_directory
+    with enter_temp_directory() as tmpdirname:
+        tleap_file = open('tleap_commands', 'w')
+        tleap_file.writelines(tleapstr)
+        tleap_file.close()
+        tleap_cmd_str = "tleap -f %s " % tleap_file.name
 
-    #call tleap, log output to logger
-    output = getoutput(tleap_cmd_str)
-    logging.debug(output)
+        #call tleap, log output to logger
+        output = getoutput(tleap_cmd_str)
+        logging.debug(output)
 
-    prmtop = app.AmberPrmtopFile("{amino_acid}.prmtop".format(amino_acid=amino_acid))
-    inpcrd = app.AmberInpcrdFile("{amino_acid}.inpcrd".format(amino_acid=amino_acid))
-    topology = prmtop.topology
-    positions = inpcrd.positions
+        prmtop = app.AmberPrmtopFile("{amino_acid}.prmtop".format(amino_acid=amino_acid))
+        inpcrd = app.AmberInpcrdFile("{amino_acid}.inpcrd".format(amino_acid=amino_acid))
+        topology = prmtop.topology
+        positions = inpcrd.positions
 
-    debug = False
-    if debug:
-        system = prmtop.createSystem()
-        integrator = openmm.VerletIntegrator(1)
-        context = openmm.Context(system, integrator)
-        context.setPositions(positions)
-        openmm.LocalEnergyMinimizer.minimize(context)
-        state = context.getState(getEnergy=True)
-        print("%s energy: %s" % (amino_acid, str(state.getPotentialEnergy())))
+        debug = False
+        if debug:
+            system = prmtop.createSystem()
+            integrator = openmm.VerletIntegrator(1)
+            context = openmm.Context(system, integrator)
+            context.setPositions(positions)
+            openmm.LocalEnergyMinimizer.minimize(context)
+            state = context.getState(getEnergy=True)
+            print("%s energy: %s" % (amino_acid, str(state.getPotentialEnergy())))
 
-    os.chdir(cwd)
-    shutil.rmtree(temp_dir)
     return topology, positions
 
 def _tleap_all():
@@ -1984,7 +1981,7 @@ def test_AnalyticalBeadSystems(transformation=[[3,4], [4,5], [3,5]], num_iterati
         assert (work_reverse_stddev <= WORK_STDDEV_THRESHOLD), "reverse work stddev {} exceeds threshold {}".format(work_reverse_stddev, WORK_STDDEV_THRESHOLD)
         assert np.all(abs(work_sum) <= WORK_SUM_THRESHOLD), "sum of works {} exceeds threshold {}".format(work_sum, WORK_SUM_THRESHOLD)
 
-def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'propane', proposed_mol_name = 'octane', num_iterations = 10, neglect_angles = True):
+def test_logp_forward_check_for_vacuum_topology_proposal(current_mol_name = 'propane', proposed_mol_name = 'butane', num_iterations = 10, neglect_angles = True):
     """
     Generate a test vacuum topology proposal, current positions, and new positions triplet
     from two IUPAC molecule names.  Assert that the logp_forward < 1e3.

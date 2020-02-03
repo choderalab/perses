@@ -45,6 +45,9 @@ import tempfile
 import copy
 from openmmtools.constants import kB
 from perses.rjmc.topology_proposal import SystemGenerator
+from unittest import skipIf
+from perses.dispersed.utils import minimize #updated minimizer
+from openmmtools.states import ThermodynamicState, SamplerState
 
 # TODO: Use dummy system generator to work around SystemGenerator issues
 #from perses.rjmc.topology_proposal import DummySystemGenerator
@@ -53,6 +56,8 @@ from perses.rjmc.topology_proposal import SystemGenerator
 ################################################################################
 # TEST SYSTEMS
 ################################################################################
+
+istravis = os.environ.get('TRAVIS', None) == 'true'
 
 class PersesTestSystem(object):
     """
@@ -976,7 +981,7 @@ class AblImatinibResistanceTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize(self)
+        minimize_wrapper(self)
 
 class AblAffinityTestSystem(PersesTestSystem):
     """
@@ -1181,7 +1186,7 @@ class AblAffinityTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize(self)
+        minimize_wrapper(self)
 
 class AblImatinibProtonationStateTestSystem(PersesTestSystem):
     """
@@ -1396,7 +1401,7 @@ class AblImatinibProtonationStateTestSystem(PersesTestSystem):
         self.designer = designer
 
         # This system must currently be minimized.
-        minimize(self)
+        minimize_wrapper(self)
         print('AblImatinibProtonationStateTestSystem initialized.')
 
 class ImidazoleProtonationStateTestSystem(PersesTestSystem):
@@ -1612,7 +1617,7 @@ class ImidazoleProtonationStateTestSystem(PersesTestSystem):
 
         print('ImidazoleProtonationStateTestSystem initialized.')
 
-def minimize(testsystem):
+def minimize_wrapper(testsystem):
     """
     Minimize all structures in test system.
 
@@ -1628,20 +1633,12 @@ def minimize(testsystem):
     """
     for environment in testsystem.environments:
         print("Minimizing '%s'..." % environment)
-        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context = openmm.Context(testsystem.systems[environment], integrator)
-        context.setPositions(testsystem.positions[environment])
-        print ("Initial energy is %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
-        TOL = 1.0
-        MAX_STEPS = 50
-        openmm.LocalEnergyMinimizer.minimize(context, TOL, MAX_STEPS)
-        print ("Final energy is   %12.3f kcal/mol" % (context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole))
-        # Update positions.
-        testsystem.positions[environment] = context.getState(getPositions=True).getPositions(asNumpy=True)
-        # Update sampler states.
-        testsystem.mcmc_samplers[environment].sampler_state.positions = testsystem.positions[environment]
-        # Clean up.
-        del context, integrator
+        thermostate = ThermodynamicState(system = testsystem.systems[environment], temperature = 300.0 * unit.kelvin) #minimizer is temperature-independent
+        sampler_state = SamplerState(positions = testsystem.positions[environment])
+        minimize(thermostate, sampler_state)
+
+        testsystem.positions[environment] = sampler_state.positions
+        testsystem.mcmc_samplers[environment].sampler_state = sampler_state
 
 class SmallMoleculeLibraryTestSystem(PersesTestSystem):
     """
@@ -1711,13 +1708,24 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # # Parametrize and generate residue templates for small molecule set
         from openmoltools.forcefield_generators import generateForceFieldFromMolecules, generateTopologyFromOEMol, gaffTemplateGenerator
         from io import StringIO
-        from perses.utils.openeye import smiles_to_oemol,extractPositionsFromOEMol
+        from perses.utils.openeye import smiles_to_oemol, extractPositionsFromOEMol, has_undefined_stereocenters
         forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
         # clinical_kinase_inhibitors_filename = resource_filename('perses', 'data/clinical-kinase-inhibitors.xml')
         # forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml', clinical-kinase-inhibitors_filename)
         from openmoltools import forcefield_generators ## IVY
         forcefield.registerTemplateGenerator(gaffTemplateGenerator) ## IVY
-        d_smiles_to_oemol = {smiles : smiles_to_oemol(smiles, "MOL_%d" % i)for i, smiles in enumerate(molecules)}
+
+        # skipping molecules with undefined stereocenters
+        d_smiles_to_oemol = {}
+        good_molecules = []
+        for i, smiles in enumerate(molecules):
+            mol = smiles_to_oemol(smiles, f"MOL_{i}")
+            if has_undefined_stereocenters(mol):
+                print(f"MOL_{i} has undefined stereochemistry so leaving out of test")
+            else:
+                d_smiles_to_oemol[smiles] = mol
+                good_molecules.append(smiles)
+
         # ffxml, failed_molecule_list = generateForceFieldFromMolecules(list(d_smiles_to_oemol.values()), ignoreFailures=True)
         #
         # f = open('clinical-kinase-inhibitors.xml', 'w')
@@ -1729,17 +1737,8 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
         # forcefield.loadFile(StringIO(ffxml))
 
         # Create molecule in vacuum.
-        smiles = molecules[0]  # current sampler state ## IVY add this back in
-        # smiles = 'C5=C(C1=CN=CC=C1)N=C(NC2=C(C=CC(=C2)NC(C3=CC=C(C=C3)CN4CCN(CC4)C)=O)C)N=C5'  ## IVY delete this Imatinib
-        # smiles = 'Cc1ccc(cc1C#Cc2cnc3n2nccc3)C(=O)Nc4ccc(c(c4)C(F)(F)F)CN5CCN(CC5)C'
-        # smiles = 'Cc1c2cnc(nc2n(c(=O)c1C(=O)C)C3CCCC3)Nc4ccc(cn4)N5CCNCC5' # palbociclib
-        # smiles = 'Cc1c2cnc(nc2n(c(=O)c1C(=O)C)C3CCCC3)Nc4ccc(cn4)N5CCNCC5'
-        # smiles = 'C[C@@H]1CCN(C[C@@H]1[N@](C)c2c3cc[nH]c3ncn2)C(=O)CC#N'
-        # smiles = 'CC1=C(C=C(C=C1)NC2=NC=CC(=N2)N(C)C3=CC4=NN(C(=C4C=C3)C)C)S(=O)(=O)N' # Pazopanib
+        smiles = good_molecules[0] # getting the first smiles that works
         print("smiles: ", smiles)
-        # smiles = sanitizeSMILES([smiles])[0]
-        # print("sanitized: ", smiles)
-        # molecule = smiles_to_oemol(smiles, title=d_smiles_to_oemol[smiles].GetTitle())
         molecule = smiles_to_oemol(smiles)
 
         topologies['vacuum'] = generateTopologyFromOEMol(molecule)
@@ -1758,7 +1757,7 @@ class SmallMoleculeLibraryTestSystem(PersesTestSystem):
 
         if not premapped_json_dict:
             for environment in environments:
-                proposal_engines[environment] = SmallMoleculeSetProposalEngine(molecules, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
+                proposal_engines[environment] = SmallMoleculeSetProposalEngine(good_molecules, system_generators[environment], residue_name=d_smiles_to_oemol[smiles].GetTitle())
         else:
             atom_mapper = SmallMoleculeAtomMapper.from_json(premapped_json_dict)
             for environment in environments:
@@ -1826,7 +1825,7 @@ class AlkanesTestSystem(SmallMoleculeLibraryTestSystem):
 
 class KinaseInhibitorsTestSystem(SmallMoleculeLibraryTestSystem):
     """
-    Library of clinical kinase inhibitors in various solvent environments.
+    Library of clinical kinase inhibitors in various solvent environments.  This is often problematic.
     """
     def __init__(self, **kwargs):
         # Read SMILES from CSV file of clinical kinase inhibitors.
@@ -2405,7 +2404,7 @@ def test_testsystems():
     """
     Test instantiation of all test systems.
     """
-    testsystem_names = ['T4LysozymeInhibitorsTestSystem', 'KinaseInhibitorsTestSystem', 'AlkanesTestSystem', 'AlanineDipeptideTestSystem']
+    testsystem_names = [ 'KinaseInhibitorsTestSystem', 'T4LysozymeInhibitorsTestSystem','AlkanesTestSystem', 'AlanineDipeptideTestSystem']
     niterations = 2 # number of iterations to run
     for testsystem_name in testsystem_names:
         import perses.tests.testsystems
