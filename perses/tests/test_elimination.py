@@ -64,67 +64,69 @@ def simulate_hybrid(hybrid_system,functions, lambda_value, positions, nsteps=100
 
 def generate_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
     """
-    Generate a test topology proposal and positions for the hybrid test.
+    Generate a partial self-mapping test topology proposal and positions for a small molecule in vacuum.
     """
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
+    # Create molecules
+    from openforcefield.topology import Molecule
+    mol = Molecule.from_iupac(mol_name)
+    refmol = Molecule.from_iupac(ref_mol_name)
 
-    from perses.utils.openeye import createSystemFromIUPAC
-    from openmoltools.openeye import iupac_to_oemol, generate_conformers
+    # Generate initial positions
+    mol.generate_conformers()
+    positions = mol.conformers[0]
 
+    # Create vacuum system
+    from openmmforcefields.generators import SystemGenerator
+    generator = SystemGenerator(small_molecule_forcefield='gaff-2.11', cache='cache.json', molecules=[mol,refmol])
+    topology = mol.to_topology().to_openmm()
+    system = generator.create_system(topology)
 
-    mol = iupac_to_oemol(mol_name)
-    mol = generate_conformers(mol, max_confs=1)
-    m, system, positions, topology = createSystemFromIUPAC(mol_name)
+    # Map one of the rings
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol.to_openeye(), refmol.to_openeye())
 
-    refmol = iupac_to_oemol(ref_mol_name)
-    refmol = generate_conformers(refmol, max_confs=1)
-
-    #map one of the rings
-    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
-
-    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
-    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
+    # Now use the mapped atoms to generate a new and old system with identical atoms mapped.
+    # This will result in the same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
     effective_atom_map = {value : value for value in atom_map.values()}
 
-    #make a topology proposal with the appropriate data:
-    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
+    # Create a topology proposal
+    from perses.rjmc.topology_proposal import TopologyProposal
+    topology_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
 
-    return top_proposal, positions
+    return topology_proposal, positions
 
 def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+    """
+    Generate a partial self-mapping test topology proposal and positions for a solvated small molecule in solvent.
+    """
+    from openforcefield.topology import Molecule
+    mol = Molecule.from_iupac(mol_name)
+    refmol = Molecule.from_iupac(ref_mol_name)
 
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-    import simtk.openmm.app as app
-    from openmoltools import forcefield_generators
+    # Generate initial positions
+    mol.generate_conformers()
+    positions = mol.conformers[0]
 
-    from perses.utils.openeye import createSystemFromIUPAC
-    from perses.utils.data import get_data_filename
-    from openmoltools.openeye import iupac_to_oemol, generate_conformers
+    # Create vacuum system
+    from openmmforcefields.generators import SystemGenerator
+    generator = SystemGenerator(forcefields=['amber/tip3p_standard.xml'], small_molecule_forcefield='gaff-2.11', cache='cache.json', molecules=[mol,refmol])
+    topology = mol.to_topology().to_openmm()
+    unsolv_system = generator.create_system(topology)
 
+    # Map one of the rings
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol.to_openeye(), refmol.to_openeye())
 
-
-    mol = iupac_to_oemol(mol_name)
-    mol = generate_conformers(mol, max_confs=1)
-    m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
-
-    refmol = iupac_to_oemol(ref_mol_name)
-    refmol = generate_conformers(refmol, max_confs=1)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-    #map one of the rings
-    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
-
-    #now use the mapped atoms to generate a new and old system with identical atoms mapped. This will result in the
-    #same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
+    # Now use the mapped atoms to generate a new and old system with identical atoms mapped.
+    # This will result in the same molecule with the same positions for lambda=0 and 1, and ensures a contiguous atom map
     effective_atom_map = {value : value for value in atom_map.values()}
 
-    modeller = app.Modeller(top, pos)
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    # Solvate the system
+    modeller = app.Modeller(topology, positions)
+    modeller.addSolvent(generator.forcefield, model='tip3p', padding=4.0*unit.angstrom)
     topology = modeller.getTopology()
     positions = modeller.getPositions()
-    system = forcefield.createSystem(topology, nonbondedMethod=app.PME)
+    system = generator.create_system(topology)
 
     n_atoms_old_system = unsolv_system.getNumParticles()
     n_atoms_after_solvation = system.getNumParticles()
@@ -132,51 +134,49 @@ def generate_solvated_hybrid_test_topology(mol_name="naphthalene", ref_mol_name=
     for i in range(n_atoms_old_system, n_atoms_after_solvation):
         effective_atom_map[i] = i
 
-    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
+    # Create a topology proposal
+    from perses.rjmc.topology_proposal import TopologyProposal
+    topology_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
 
-    return top_proposal, positions
-
+    return topology_proposal, positions
 
 def generate_solvated_hybrid_topology(mol_name="naphthalene", ref_mol_name="benzene"):
+    """
+    Generate a standard topology proposal and positions for a solvated small molecule in solvent.
+    """
+    from openforcefield.topology import Molecule
+    mol = Molecule.from_iupac(mol_name)
+    refmol = Molecule.from_iupac(ref_mol_name)
 
-    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine, TopologyProposal
-    import simtk.openmm.app as app
-    from openmoltools import forcefield_generators
+    # Generate initial positions
+    mol.generate_conformers()
+    positions = mol.conformers[0]
 
-    from perses.utils.openeye import createSystemFromIUPAC
-    from openmoltools.openeye import iupac_to_oemol, generate_conformers
-    from perses.utils.data import get_data_filename
+    # Create vacuum system
+    from openmmforcefields.generators import SystemGenerator
+    generator = SystemGenerator(forcefields=['amber/tip3p_standard.xml'], small_molecule_forcefield='gaff-2.11', cache='cache.json', molecules=[mol,refmol])
+    topology = mol.to_topology().to_openmm()
+    unsolv_system = generator.create_system(topology)
 
-    mol = iupac_to_oemol(mol_name)
-    mol = generate_conformers(mol, max_confs=1)
-    m, unsolv_system, pos, top = createSystemFromIUPAC(mol_name)
+    # Map one of the rings
+    from perses.rjmc.topology_proposal import SmallMoleculeSetProposalEngine
+    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol.to_openeye(), refmol.to_openeye())
 
-    refmol = iupac_to_oemol(ref_mol_name)
-    refmol = generate_conformers(refmol, max_confs=1)
-
-    gaff_xml_filename = get_data_filename("data/gaff.xml")
-    forcefield = app.ForceField(gaff_xml_filename, 'tip3p.xml')
-    forcefield.registerTemplateGenerator(forcefield_generators.gaffTemplateGenerator)
-    #map one of the rings
-    atom_map = SmallMoleculeSetProposalEngine._get_mol_atom_map(mol, refmol)
-
-    effective_atom_map = atom_map
-
-    modeller = app.Modeller(top, pos)
-    modeller.addSolvent(forcefield, model='tip3p', padding=9.0*unit.angstrom)
+    # Solvate the system
+    modeller = app.Modeller(topology, positions)
+    modeller.addSolvent(generator.forcefield, model='tip3p', padding=4.0*unit.angstrom)
     topology = modeller.getTopology()
     positions = modeller.getPositions()
-    system = forcefield.createSystem(topology, nonbondedMethod=app.PME)
+    system = generator.create_system(topology)
 
     n_atoms_old_system = unsolv_system.getNumParticles()
     n_atoms_after_solvation = system.getNumParticles()
 
-    for i in range(n_atoms_old_system, n_atoms_after_solvation):
-        effective_atom_map[i] = i
+    # Create a topology proposal
+    from perses.rjmc.topology_proposal import TopologyProposal
+    topology_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
 
-    top_proposal = TopologyProposal(new_topology=topology, new_system=system, old_topology=topology, old_system=system, new_to_old_atom_map=effective_atom_map, new_chemical_state_key="n1", old_chemical_state_key='n2')
-
-    return top_proposal, positions
+    return topology_proposal, positions
 
 def check_alchemical_hybrid_elimination_bar(topology_proposal, positions, ncmc_nsteps=50, NSIGMA_MAX=6.0, geometry=False):
     """

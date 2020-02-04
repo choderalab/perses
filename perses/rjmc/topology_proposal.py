@@ -2839,6 +2839,9 @@ class SmallMoleculeSetProposalEngine(ProposalEngine):
         -------
         matches : list of match
             list of the matches between the molecules
+
+        # TODO: Document return values: Is this a map of OEAtoms?
+
         """
         if atom_expr is None:
             _logger.warning('atom_expr not set. using DEFAULT')

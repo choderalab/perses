@@ -7,8 +7,7 @@ Utility functions for simulations using openeye toolkits
 __author__ = 'John D. Chodera'
 
 
-from openeye import oechem,oegraphsim
-from openmoltools.openeye import iupac_to_oemol, generate_conformers
+from openeye import oechem, oegraphsim
 import simtk.unit as unit
 import numpy as np
 import logging
@@ -60,7 +59,6 @@ def smiles_to_oemol(smiles, title='MOL',max_confs=1):
 
     return molecule
 
-
 def extractPositionsFromOEMol(molecule,units=unit.angstrom):
     """
     Get a molecules coordinates from an openeye.oemol
@@ -103,7 +101,6 @@ def giveOpenmmPositionsToOEMol(positions, molecule):
     molecule.SetCoords(coords)
 
     return molecule
-
 
 def OEMol_to_omm_ff(oemol, small_molecule_forcefield='gaff-2.11'):
     """
@@ -156,7 +153,7 @@ def createSystemFromIUPAC(iupac_name):
 
     Returns
     -------
-    molecule : openeye.oechem.OEMol
+    oemol : openeye.oechem.OEMol
         OEMol molecule
     system : openmm.System object
         OpenMM system
@@ -167,15 +164,13 @@ def createSystemFromIUPAC(iupac_name):
     """
 
     # Create OEMol
-    # TODO write our own of this function so we can be sure of the oe flags that are being used
-    molecule = iupac_to_oemol(iupac_name)
-
-    molecule = generate_conformers(molecule, max_confs=1)
+    from openmoltools.openeye import iupac_to_oemol
+    oemol = iupac_to_oemol(iupac_name)
 
     # generate openmm system, positions and topology
-    system, positions, topology = OEMol_to_omm_ff(molecule)
+    system, positions, topology = OEMol_to_omm_ff(oemol)
 
-    return (molecule, system, positions, topology)
+    return (oemol, system, positions, topology)
 
 def createSystemFromSMILES(smiles,title='MOL'):
     """
@@ -325,7 +320,6 @@ def generate_unique_atom_names(molecule):
             name = element._symbol + str(element_counts[element._symbol])
             atom.SetName(name)
         return molecule
-
 
 def has_undefined_stereocenters(mol):
     """
