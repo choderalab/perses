@@ -60,8 +60,11 @@ STRONG_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization  | oechem.OEExprOpts_Hv
 STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 
 #specific to proteins
-PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
-PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
+# PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
+# PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
+PROTEIN_ATOM_EXPRESSION = STRONG_ATOM_EXPRESSION
+PROTEIN_ATOM_EXPRESSION = STRONG_BOND_EXPRESSION
+
 
 ################################################################################
 # LOGGER
