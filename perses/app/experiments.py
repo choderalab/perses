@@ -259,12 +259,12 @@ class NetworkBuilder(object):
                                                         use_14_nonbondeds = not self.proposal_arguments['anneal_14s'])
 
         #create the Network
-        self._create_network()
+        self._create_ligand_network()
 
         _logger.info(f"Network construction complete.")
 
 
-    def _create_network(self):
+    def _create_ligand_network(self):
         """
         This is the main function of the class.  It builds a networkx graph on all of the transformations.
         """
@@ -383,10 +383,12 @@ class NetworkBuilder(object):
         return success
 
     def _create_network_edge(self,
-                            start_index,
-                            end_index,
+                            current_mol_oemol, current_mol_positions, current_mol_topology,
+                            proposed_mol_oemol, proposed_mol_positions, proposed_mol_topology,
+                            end_m,
                             weight,
-                            edge_simulation_parameters):
+                            edge_simulation_parameters,
+                            ):
         """
         This is a method to create the necessary parameters for a network edge;
         this method can be called on a remote worker directly
@@ -443,13 +445,13 @@ class NetworkBuilder(object):
             return returnables
 
         if not np.isinf(log_weight):
-            current_oemol, current_positions, current_topology = self.ligand_oemol_pos_top[i]
-            proposed_oemol, proposed_positions, proposed_topology = self.ligand_oemol_pos_top[j]
+            # current_mol_oemol, current_mol_positions, current_mol_topology = self.ligand_oemol_pos_top[i]
+            # proposed_mol_oemol, proposed__mol_positions, proposed_mol_topology = self.ligand_oemol_pos_top[j]
             _logger.info(f"\tcreating topology and geometry proposals.")
-            proposals =  self._generate_proposals(current_oemol = current_oemol,
-                                                  proposed_oemol = proposed_oemol,
-                                                  current_positions = current_positions,
-                                                  current_topology = current_topology)
+            proposals =  self._generate_proposals(current_oemol = current_mol_oemol,
+                                                  proposed_oemol = proposed_mol_oemol,
+                                                  current_positions = current_mol_positions,
+                                                  current_topology = current_mol_topology)
             returnables.update({'proposals': proposals})
             #self.network.edges[i,j]['proposals'] = proposals
 
