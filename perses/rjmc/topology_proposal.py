@@ -63,7 +63,7 @@ STRONG_BOND_EXPRESSION = oechem.OEExprOpts_DefaultBonds
 # PROTEIN_ATOM_EXPRESSION = oechem.OEExprOpts_Hybridization | oechem.OEExprOpts_EqAromatic
 # PROTEIN_BOND_EXPRESSION = oechem.OEExprOpts_Aromaticity
 PROTEIN_ATOM_EXPRESSION = STRONG_ATOM_EXPRESSION
-PROTEIN_ATOM_EXPRESSION = STRONG_BOND_EXPRESSION
+PROTEIN_BOND_EXPRESSION = STRONG_BOND_EXPRESSION
 
 
 ################################################################################
@@ -1251,22 +1251,22 @@ class PolymerProposalEngine(ProposalEngine):
         assert new_prev_res.name == old_prev_res.name, f"the new residue left adjacent to mutation res (name {new_prev_res.name}) is not the name of the old residue left adjacent to mutation res (name {old_prev_res.name})"
         assert new_next_res.name == new_next_res.name, f"the new residue right adjacent to mutation res (name {new_next_res.name}) is not the name of the old residue right adjacent to mutation res (name {old_next_res.name})"
 
-        new_next_res_to_old_next_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_next_res.atoms(), old_next_res.atoms())}
-        new_prev_res_to_old_prev_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_prev_res.atoms(), old_prev_res.atoms())}
+        # new_next_res_to_old_next_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_next_res.atoms(), old_next_res.atoms())}
+        # new_prev_res_to_old_prev_res_map = {new_atom.index : old_atom.index for new_atom, old_atom in zip(new_prev_res.atoms(), old_prev_res.atoms())}
 
-        # new_next_res_N_index = [atom.index for atom in new_next_res.atoms() if atom.name.replace(" ", "") == 'N']
-        # old_next_res_N_index = [atom.index for atom in old_next_res.atoms() if atom.name.replace(" ", "") == 'N']
-        #
-        # new_prev_res_C_index = [atom.index for atom in new_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
-        # old_prev_res_C_index = [atom.index for atom in old_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
-        #
-        # for _list in [new_next_res_N_index, old_next_res_N_index, new_prev_res_C_index, old_prev_res_C_index]:
-        #     assert len(_list) == 1, f"atoms in the next or prev residue are not uniquely named"
-        #
-        # new_to_old_map = {new_next_res_N_index[0]: old_next_res_N_index[0],
-        #                   new_prev_res_C_index[0]: old_prev_res_C_index[0]}
+        new_next_res_N_index = [atom.index for atom in new_next_res.atoms() if atom.name.replace(" ", "") == 'N']
+        old_next_res_N_index = [atom.index for atom in old_next_res.atoms() if atom.name.replace(" ", "") == 'N']
 
-        new_to_old_map = new_next_res_to_old_next_res_map.update(new_prev_res_to_old_prev_res_map)
+        new_prev_res_C_index = [atom.index for atom in new_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
+        old_prev_res_C_index = [atom.index for atom in old_prev_res.atoms() if atom.name.replace(" ", "") == 'C']
+        
+        for _list in [new_next_res_N_index, old_next_res_N_index, new_prev_res_C_index, old_prev_res_C_index]:
+            assert len(_list) == 1, f"atoms in the next or prev residue are not uniquely named"
+
+        new_to_old_map = {new_next_res_N_index[0]: old_next_res_N_index[0],
+                          new_prev_res_C_index[0]: old_prev_res_C_index[0]}
+
+        #new_to_old_map = new_next_res_to_old_next_res_map.update(new_prev_res_to_old_prev_res_map)
         return new_to_old_map
 
 
